@@ -30,7 +30,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderPreservingTracker.Info;
 import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.CoerceExpression;
@@ -110,7 +110,7 @@ public class GroupByCompiler {
 
             @Override
             public String getScanAttribName() {
-                return BaseScannerRegionObserver.UNGROUPED_AGG;
+                return BaseScannerRegionObserverConstants.UNGROUPED_AGG;
             }
         };
         
@@ -135,11 +135,11 @@ public class GroupByCompiler {
         
         public String getScanAttribName() {
             if (isUngroupedAggregate) {
-                return BaseScannerRegionObserver.UNGROUPED_AGG;
+                return BaseScannerRegionObserverConstants.UNGROUPED_AGG;
             } else if (isOrderPreserving) {
-                return BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
+                return BaseScannerRegionObserverConstants.KEY_ORDERED_GROUP_BY_EXPRESSIONS;
             } else {
-                return BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS;
+                return BaseScannerRegionObserverConstants.UNORDERED_GROUP_BY_EXPRESSIONS;
             }
         }
         

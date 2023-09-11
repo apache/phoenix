@@ -21,8 +21,8 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.hbase.index.BaseIndexCodec;
 import org.apache.phoenix.hbase.index.ValueGetter;
-import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexCodec;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.IndexUpdate;
@@ -34,7 +34,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DO_TRANSFORMING;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.DO_TRANSFORMING;
 
 /**
  * Phoenix-based {@link IndexCodec}. Manages all the logic of how to cleanup an index (

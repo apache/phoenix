@@ -25,18 +25,14 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.monitoring.MetricType;
-import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.SystemFunctionSplitPolicy;
-import org.apache.phoenix.schema.SystemStatsSplitPolicy;
-import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.schema.TableProperty;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
@@ -302,6 +298,37 @@ public interface QueryConstants {
     int DIVERGED_VIEW_BASE_COLUMN_COUNT = -100;
     int BASE_TABLE_BASE_COLUMN_COUNT = -1;
 
+    // String constants for the server side class names, so that we don't need the server jar
+    // on the client side
+    final String METADATA_SPLIT_POLICY_CLASSNAME = "org.apache.phoenix.schema.MetaDataSplitPolicy";
+    final String SYSTEM_STATS_SPLIT_POLICY_CLASSNAME = "org.apache.phoenix.schema.SystemStatsSplitPolicy";
+    final String SYSTEM_FUNCTION_SPLIT_POLICY_CLASSNAME = "org.apache.phoenix.schema.SystemFunctionSplitPolicy";
+    final String SYSTEM_TASK_SPLIT_POLICY_CLASSNAME = "org.apache.phoenix.schema.SystemTaskSplitPolicy";
+    final String INDEX_REGION_SPLIT_POLICY_CLASSNAME = "org.apache.phoenix.hbase.index.IndexRegionSplitPolicy";
+
+
+    final String GLOBAL_INDEX_CHECKER_CLASSNAME = "org.apache.phoenix.index.GlobalIndexChecker";
+    final String INDEX_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.hbase.index.IndexRegionObserver";
+    final String PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME = "org.apache.phoenix.index.PhoenixTransactionalIndexer";
+    final String LOCAL_INDEX_SPLITTER_CLASSNAME = "org.apache.hadoop.hbase.regionserver.LocalIndexSplitter";
+
+    final String INDEXER_CLASSNAME = "org.apache.phoenix.hbase.index.Indexer";
+    final String SCAN_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.ScanRegionObserver";
+    final String UNGROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver";
+    final String GROUPED_AGGREGATE_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.GroupedAggregateRegionObserver";
+    final String SERVER_CACHING_ENDPOINT_IMPL_CLASSNAME = "org.apache.phoenix.coprocessor.ServerCachingEndpointImpl";
+
+    final String MULTI_ROW_MUTATION_ENDPOINT_CLASSNAME = "org.apache.hadoop.hbase.coprocessor.MultiRowMutationEndpoint";
+    final String INDEX_HALF_STORE_FILE_READER_GENERATOR_CLASSNAME = "org.apache.hadoop.hbase.regionserver.IndexHalfStoreFileReaderGenerator";
+    final String META_DATA_ENDPOINT_IMPL_CLASSNAME = "org.apache.phoenix.coprocessor.MetaDataEndpointImpl";
+    final String META_DATA_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.MetaDataRegionObserver";
+    final String SEQUENCE_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.SequenceRegionObserver";
+    final String TASK_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.TaskRegionObserver";
+    final String TASK_META_DATA_ENDPOINT_CLASSNAME = "org.apache.phoenix.coprocessor.TaskMetaDataEndpoint";
+    final String CHILD_LINK_META_DATA_ENDPOINT_CLASSNAME = "org.apache.phoenix.coprocessor.ChildLinkMetaDataEndpoint";
+    final String PHOENIX_TTL_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver";
+    final String SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME = "org.apache.phoenix.coprocessor.SystemCatalogRegionObserver";
+
     // custom TagType
     byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
     /**
@@ -398,7 +425,7 @@ public interface QueryConstants {
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             // Install split policy to prevent a tenant's metadata from being split across regions.
-            TableDescriptorBuilder.SPLIT_POLICY + "='" + MetaDataSplitPolicy.class.getName() +
+            TableDescriptorBuilder.SPLIT_POLICY + "='" + METADATA_SPLIT_POLICY_CLASSNAME +
             "',\n" + TRANSACTIONAL + "=" + Boolean.FALSE;
 
     String CREATE_STATS_TABLE_METADATA =
@@ -415,7 +442,7 @@ public interface QueryConstants {
             + COLUMN_FAMILY + ","+ GUIDE_POST_KEY+"))\n" +
             // Install split policy to prevent a physical table's stats from being split
             // across regions.
-            TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemStatsSplitPolicy.class.getName() + "',\n" + 
+            TableDescriptorBuilder.SPLIT_POLICY + "='" + SYSTEM_STATS_SPLIT_POLICY_CLASSNAME + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE;
 
     String CREATE_SEQUENCE_METADATA =
@@ -463,7 +490,7 @@ public interface QueryConstants {
             HConstants.VERSIONS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"+
             // Install split policy to prevent a tenant's metadata from being split across regions.
-            TableDescriptorBuilder.SPLIT_POLICY + "='" + SystemFunctionSplitPolicy.class.getName() +
+            TableDescriptorBuilder.SPLIT_POLICY + "='" + SYSTEM_FUNCTION_SPLIT_POLICY_CLASSNAME +
             "',\n" + TRANSACTIONAL + "=" + Boolean.FALSE;
 
     String CREATE_LOG_METADATA =
@@ -555,7 +582,7 @@ public interface QueryConstants {
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TASK_TABLE_TTL + ",\n" +     // 10 days
             TableDescriptorBuilder.SPLIT_POLICY + "='"
-                + SystemTaskSplitPolicy.class.getName() + "',\n" +
+                + SYSTEM_TASK_SPLIT_POLICY_CLASSNAME + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
 
@@ -584,7 +611,7 @@ public interface QueryConstants {
             ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
             ColumnFamilyDescriptorBuilder.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" +     // 90 days
             TableDescriptorBuilder.SPLIT_POLICY + "='"
-            + SystemTaskSplitPolicy.class.getName() + "',\n" +
+            + SYSTEM_TASK_SPLIT_POLICY_CLASSNAME + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
 }

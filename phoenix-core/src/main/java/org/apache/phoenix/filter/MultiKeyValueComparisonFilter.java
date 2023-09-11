@@ -34,7 +34,7 @@ import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 
 
@@ -284,7 +284,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
                 Bytes.writeByteArray(output, essentialCF);
             }
         } catch (Throwable t) { // Catches incompatibilities during reading/writing and doesn't retry
-            ServerUtil.throwIOException("MultiKeyValueComparisonFilter failed during writing", t);
+            ClientUtil.throwIOException("MultiKeyValueComparisonFilter failed during writing", t);
         }
     }
 

@@ -36,7 +36,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.BaseTerminalExpression;
@@ -666,7 +666,7 @@ public class ProjectionCompiler {
                 throw new RuntimeException(e);
             }
         }
-        context.getScan().setAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
+        context.getScan().setAttribute(BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX, stream.toByteArray());
     }
 
     private static class SelectClauseVisitor extends ExpressionCompiler {

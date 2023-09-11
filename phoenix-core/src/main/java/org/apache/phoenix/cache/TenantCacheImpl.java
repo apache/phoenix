@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
+import org.apache.phoenix.coprocessorclient.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
@@ -73,7 +73,7 @@ public class TenantCacheImpl implements TenantCache {
         private long size;
         private Closeable closeable;
 
-        public CacheEntry(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr, 
+        public CacheEntry(ImmutableBytesPtr cacheId, ImmutableBytesWritable cachePtr,
                 ServerCacheFactory cacheFactory, byte[] txState, MemoryChunk chunk,
                 boolean usePersistentCache, boolean useProtoForIndexMaintainer,
                 int clientVersion) throws SQLException {

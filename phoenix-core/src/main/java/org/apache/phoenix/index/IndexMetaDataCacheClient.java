@@ -29,8 +29,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ScanRanges;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -138,19 +138,19 @@ public class IndexMetaDataCacheClient {
             if (table.getTransformingNewTable() != null) {
                 boolean disabled = table.getTransformingNewTable().isIndexStateDisabled();
                 if (!disabled) {
-                    mutation.setAttribute(BaseScannerRegionObserver.DO_TRANSFORMING, TRUE_BYTES);
+                    mutation.setAttribute(BaseScannerRegionObserverConstants.DO_TRANSFORMING, TRUE_BYTES);
                 }
             }
             ScanUtil.annotateMutationWithMetadataAttributes(table, mutation);
             if (attribValue != null) {
                 mutation.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
-                mutation.setAttribute(BaseScannerRegionObserver.CLIENT_VERSION,
+                mutation.setAttribute(BaseScannerRegionObserverConstants.CLIENT_VERSION,
                         Bytes.toBytes(MetaDataProtocol.PHOENIX_VERSION));
                 if (txState.length > 0) {
-                    mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                    mutation.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, txState);
                 }
             } else if (!hasIndexMetaData && txState.length > 0) {
-                mutation.setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                mutation.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, txState);
             }
         }
         return cache;

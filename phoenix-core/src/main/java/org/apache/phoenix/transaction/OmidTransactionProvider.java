@@ -28,8 +28,6 @@ import org.apache.omid.transaction.HBaseOmidClientConfiguration;
 import org.apache.omid.transaction.HBaseTransactionManager;
 import org.apache.omid.transaction.TTable;
 import org.apache.omid.tso.client.OmidClientConfiguration;
-import org.apache.phoenix.coprocessor.OmidGCProcessor;
-import org.apache.phoenix.coprocessor.OmidTransactionalProcessor;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.ConnectionInfo;
@@ -111,12 +109,12 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
 
     @Override
     public String getCoprocessorClassName() {
-        return OmidTransactionalProcessor.class.getName();
+        return "org.apache.phoenix.coprocessor.OmidTransactionalProcessor";
     }
 
     @Override
     public String getGCCoprocessorClassName() {
-        return OmidGCProcessor.class.getName();
+        return "org.apache.phoenix.coprocessor.OmidGCProcessor";
     }
 
     @Override

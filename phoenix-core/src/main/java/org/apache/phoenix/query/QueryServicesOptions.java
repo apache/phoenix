@@ -114,6 +114,7 @@ import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATI
 import static org.apache.phoenix.query.QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
+import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 
 import java.util.Map.Entry;
 
@@ -124,7 +125,6 @@ import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ClientRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
@@ -133,7 +133,6 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
-
 
 /**
  * Options for {@link QueryServices}.
@@ -841,7 +840,7 @@ public class QueryServicesOptions {
     }
 
     public QueryServicesOptions setWALEditCodec(String walEditCodec) {
-        return set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, walEditCodec);
+        return set(WAL_EDIT_CODEC_ATTRIB, walEditCodec);
     }
 
     public QueryServicesOptions setStatsHistogramDepthBytes(long byteDepth) {
@@ -965,7 +964,6 @@ public class QueryServicesOptions {
         config.setLong(INDEX_REBUILD_TASK_INITIAL_DELAY, waitTime);
         return this;
     }
-
 
     public QueryServicesOptions setSequenceCacheSize(long sequenceCacheSize) {
         config.setLong(SEQUENCE_CACHE_SIZE_ATTRIB, sequenceCacheSize);

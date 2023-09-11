@@ -19,7 +19,7 @@
 package org.apache.phoenix.parse;
 
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.function.FunctionExpression;
@@ -91,8 +91,8 @@ public class PhoenixRowTimestampParseNode extends FunctionParseNode {
             }
         }, emptyColumnFamilyName, emptyColumnName);
         List<Expression> expressionList = Arrays.asList(new Expression[] {emptyColumnExpression});
-        context.getScan().setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
-        context.getScan().setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
+        context.getScan().setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
+        context.getScan().setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
         return new PhoenixRowTimestampFunction(expressionList);
     }
 }

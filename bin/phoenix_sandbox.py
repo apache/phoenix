@@ -28,14 +28,14 @@ import phoenix_utils
 phoenix_utils.setPath()
 
 base_dir = os.path.join(phoenix_utils.current_dir, '..')
-phoenix_target_dir = os.path.join(base_dir, 'phoenix-core', 'target')
+phoenix_target_dir = os.path.join(base_dir, 'phoenix-tests', 'target')
 
 cp_file_path = os.path.join(phoenix_target_dir, 'cached_classpath.txt')
 
 
 if not os.path.exists(cp_file_path):
     sys.stderr.write("cached_classpath.txt is not present under "
-                + "phoenix-core/target, please rebuild the project first\n")
+                + "phoenix-tests/target, please rebuild the project first\n")
     sys.exit(1)
 
 logging_config = os.path.join(base_dir, 'bin', 'sandbox-log4j2.properties')

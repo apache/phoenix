@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_QUERY_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIMEOUT_COUNTER;
@@ -69,9 +69,9 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
-import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
+import org.apache.phoenix.coprocessorclient.UngroupedAggregateRegionObserverHelper;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
@@ -84,7 +84,6 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.join.HashCacheClient;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -112,6 +111,7 @@ import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -123,7 +123,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -210,7 +209,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             scan.setFilter(null); // Remove any filter
             scan.setRaw(true); // Traverse (and subsequently clone) all KeyValues
             // Pass over PTable so we can re-write rows according to the row key schema
-            scan.setAttribute(BaseScannerRegionObserver.UPGRADE_DESC_ROW_KEY, UngroupedAggregateRegionObserver.serialize(table));
+            scan.setAttribute(BaseScannerRegionObserverConstants.UPGRADE_DESC_ROW_KEY, UngroupedAggregateRegionObserverHelper.serialize(table));
         } else {
             FilterableStatement statement = plan.getStatement();
             RowProjector projector = plan.getProjector();
@@ -301,13 +300,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
 
             if (perScanLimit != null) {
-                if (scan.getAttribute(BaseScannerRegionObserver.INDEX_FILTER) == null) {
+                if (scan.getAttribute(BaseScannerRegionObserverConstants.INDEX_FILTER) == null) {
                     ScanUtil.andFilterAtEnd(scan, new PageFilter(perScanLimit));
                 } else {
                     // if we have an index filter and a limit, handle the limit after the filter
                     // we cast the limit to a long even though it passed as an Integer so that
                     // if we need extend this in the future the serialization is unchanged
-                    scan.setAttribute(BaseScannerRegionObserver.INDEX_LIMIT,
+                    scan.setAttribute(BaseScannerRegionObserverConstants.INDEX_LIMIT,
                             Bytes.toBytes((long) perScanLimit));
                 }
             }
@@ -331,10 +330,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         ScanUtil.andFilterAtEnd(scan, new PageFilter(plan.getLimit()));
                     }
             }
-            scan.setAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME, new byte[]{table.getEncodingScheme().getSerializedMetadataValue()});
-            scan.setAttribute(BaseScannerRegionObserver.IMMUTABLE_STORAGE_ENCODING_SCHEME, new byte[]{table.getImmutableStorageScheme().getSerializedMetadataValue()});
+            scan.setAttribute(BaseScannerRegionObserverConstants.QUALIFIER_ENCODING_SCHEME, new byte[]{table.getEncodingScheme().getSerializedMetadataValue()});
+            scan.setAttribute(BaseScannerRegionObserverConstants.IMMUTABLE_STORAGE_ENCODING_SCHEME, new byte[]{table.getImmutableStorageScheme().getSerializedMetadataValue()});
             // we use this flag on the server side to determine which value column qualifier to use in the key value we return from server.
-            scan.setAttribute(BaseScannerRegionObserver.USE_NEW_VALUE_COLUMN_QUALIFIER, Bytes.toBytes(true));
+            scan.setAttribute(BaseScannerRegionObserverConstants.USE_NEW_VALUE_COLUMN_QUALIFIER, Bytes.toBytes(true));
             // When analyzing the table, there is no look up for key values being done.
             // So there is no point setting the range.
             if (!ScanUtil.isAnalyzeTable(scan)) {
@@ -400,9 +399,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
             if (minMaxQualifiers.getFirst() != null) {
-                scan.setAttribute(BaseScannerRegionObserver.MIN_QUALIFIER,
+                scan.setAttribute(BaseScannerRegionObserverConstants.MIN_QUALIFIER,
                     Bytes.toBytes(minMaxQualifiers.getFirst()));
-                scan.setAttribute(BaseScannerRegionObserver.MAX_QUALIFIER,
+                scan.setAttribute(BaseScannerRegionObserverConstants.MAX_QUALIFIER,
                     Bytes.toBytes(minMaxQualifiers.getSecond()));
                 ScanUtil.setQualifierRangesOnFilter(scan, minMaxQualifiers);
             }
@@ -567,7 +566,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         scanId = new UUID(ThreadLocalRandom.current().nextLong(), ThreadLocalRandom.current().nextLong()).toString();
         
         initializeScan(plan, perScanLimit, offset, scan);
-        this.useStatsForParallelization = PhoenixConfigurationUtil.getStatsForParallelizationProp(context.getConnection(), table);
+        this.useStatsForParallelization = ScanUtil.getStatsForParallelizationProp(context.getConnection(), table);
         ScansWithRegionLocations scansWithRegionLocations = getParallelScans();
         this.scans = scansWithRegionLocations.getScans();
         this.regionLocations = scansWithRegionLocations.getRegionLocations();
@@ -724,7 +723,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 }
             }
             if (regionLocation.getServerName() != null) {
-                newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                newScan.setAttribute(BaseScannerRegionObserverConstants.SCAN_REGION_SERVER,
                     regionLocation.getServerName().getVersionedBytes());
             }
             parallelScans.addNewScan(plan, newScan, true, regionLocation);
@@ -1116,7 +1115,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                                 regionInfo.getStartKey(), regionInfo.getEndKey(),
                                 newScan.getStartRow(), newScan.getStopRow());
                             if (regionLocation.getServerName() != null) {
-                                newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                                newScan.setAttribute(BaseScannerRegionObserverConstants.SCAN_REGION_SERVER,
                                     regionLocation.getServerName().getVersionedBytes());
                             }
                             boolean lastOfNew = newScanIdx == newScans.size() - 1;
@@ -1165,7 +1164,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                     ScanUtil.setLocalIndexAttributes(newScan, keyOffset, regionInfo.getStartKey(),
                         regionInfo.getEndKey(), newScan.getStartRow(), newScan.getStopRow());
                     if (regionLocation.getServerName() != null) {
-                        newScan.setAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER,
+                        newScan.setAttribute(BaseScannerRegionObserverConstants.SCAN_REGION_SERVER,
                             regionLocation.getServerName().getVersionedBytes());
                     }
                     boolean lastOfNew = newScanIdx == newScans.size() - 1;
@@ -1405,7 +1404,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         previousScan.setScan(scanPair.getFirst());
                     } catch (ExecutionException e) {
                         try { // Rethrow as SQLException
-                            throw ServerUtil.parseServerException(e);
+                            throw ClientUtil.parseServerException(e);
                         } catch (StaleRegionBoundaryCacheException | HashJoinCacheNotFoundException e2){
                             // Catch only to try to recover from region boundary cache being out of date
                             if (!clearedCache) { // Clear cache once so that we rejigger job based on new boundaries
@@ -1480,7 +1479,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             }
             toThrow = e;
         } catch (Exception e) {
-            toThrow = ServerUtil.parseServerException(e);
+            toThrow = ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (!success) {
@@ -1488,18 +1487,18 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                         close();
                     } catch (Exception e) {
                         if (toThrow == null) {
-                            toThrow = ServerUtil.parseServerException(e);
+                            toThrow = ClientUtil.parseServerException(e);
                         } else {
-                            toThrow.setNextException(ServerUtil.parseServerException(e));
+                            toThrow.setNextException(ClientUtil.parseServerException(e));
                         }
                     } finally {
                         try {
                             SQLCloseables.closeAll(allIterators);
                         } catch (Exception e) {
                             if (toThrow == null) {
-                                toThrow = ServerUtil.parseServerException(e);
+                                toThrow = ClientUtil.parseServerException(e);
                             } else {
-                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                                toThrow.setNextException(ClientUtil.parseServerException(e));
                             }
                         }
                     }

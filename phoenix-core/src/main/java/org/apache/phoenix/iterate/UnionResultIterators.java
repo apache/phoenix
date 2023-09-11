@@ -30,7 +30,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.ClientUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -87,15 +87,15 @@ public class UnionResultIterators implements ResultIterators {
                             iterator.close();
                         } catch (Exception e) {
                             if (toThrow == null) {
-                                toThrow = ServerUtil.parseServerException(e);
+                                toThrow = ClientUtil.parseServerException(e);
                             } else {
-                                toThrow.setNextException(ServerUtil.parseServerException(e));
+                                toThrow.setNextException(ClientUtil.parseServerException(e));
                             }
                         }
                     }
                 }
             } catch (Exception e) {
-                toThrow = ServerUtil.parseServerException(e);
+                toThrow = ClientUtil.parseServerException(e);
             } finally {
                 setMetricsInParentContext();
                 if (toThrow != null) {

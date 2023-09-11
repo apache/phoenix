@@ -26,25 +26,20 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
-import org.apache.phoenix.coprocessor.generated.TaskMetaDataProtos
-    .TaskMetaDataService;
-import org.apache.hadoop.hbase.ipc.RpcCall;
-import org.apache.hadoop.hbase.ipc.RpcUtil;
-import org.apache.hadoop.hbase.security.User;
+import org.apache.phoenix.coprocessor.generated.TaskMetaDataProtos.TaskMetaDataService;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -62,67 +57,8 @@ import edu.umd.cs.findbugs.annotations.SuppressWarnings;
     justification="Not possible to avoid")
 public class Task {
     public static final Logger LOGGER = LoggerFactory.getLogger(Task.class);
-    private static void mutateSystemTaskTable(PhoenixConnection conn, PreparedStatement stmt, boolean accessCheckEnabled)
-            throws IOException {
-        // we need to mutate SYSTEM.TASK with HBase/login user if access is enabled.
-        if (accessCheckEnabled) {
-            User.runAsLoginUser(new PrivilegedExceptionAction<Void>() {
-                @Override
-                public Void run() throws Exception {
-                    final RpcCall rpcContext = RpcUtil.getRpcContext();
-                    // setting RPC context as null so that user can be reset
-                    try {
-                        RpcUtil.setRpcContext(null);
-                        stmt.execute();
-                        conn.commit();
-                    } catch (SQLException e) {
-                        throw new IOException(e);
-                    } finally {
-                        // setting RPC context back to original context of the RPC
-                        RpcUtil.setRpcContext(rpcContext);
-                    }
-                    return null;
-                }
-            });
-        }
-        else {
-            try {
-                stmt.execute();
-                conn.commit();
-            } catch (SQLException e) {
-                throw new IOException(e);
-            }
-        }
-    }
 
-    private static List<Mutation> getMutationsForSystemTaskTable(
-            PhoenixConnection conn, PreparedStatement stmt,
-            boolean accessCheckEnabled) throws IOException {
-        // we need to mutate SYSTEM.TASK with HBase/login user if access is enabled.
-        if (accessCheckEnabled) {
-            return User.runAsLoginUser(() -> {
-                final RpcCall rpcContext = RpcUtil.getRpcContext();
-                // setting RPC context as null so that user can be reset
-                try {
-                    RpcUtil.setRpcContext(null);
-                    return executeStatementAndGetTaskMutations(conn, stmt);
-                } catch (SQLException e) {
-                    throw new IOException(e);
-                } finally {
-                    // setting RPC context back to original context of the RPC
-                    RpcUtil.setRpcContext(rpcContext);
-                }
-            });
-        } else {
-            try {
-                return executeStatementAndGetTaskMutations(conn, stmt);
-            } catch (SQLException e) {
-                throw new IOException(e);
-            }
-        }
-    }
-
-    private static List<Mutation> executeStatementAndGetTaskMutations(
+    protected static List<Mutation> executeStatementAndGetTaskMutations(
             PhoenixConnection conn, PreparedStatement stmt)
             throws SQLException {
         stmt.execute();
@@ -132,7 +68,7 @@ public class Task {
         return iterator.next().getSecond();
     }
 
-    private static  PreparedStatement setValuesToAddTaskPS(PreparedStatement stmt, PTable.TaskType taskType,
+    protected static PreparedStatement setValuesToAddTaskPS(PreparedStatement stmt, PTable.TaskType taskType,
             String tenantId, String schemaName, String tableName, String taskStatus, String data,
             Integer priority, Timestamp startTs, Timestamp endTs) throws SQLException {
         stmt.setByte(1, taskType.getSerializedValue());
@@ -180,25 +116,9 @@ public class Task {
         return stmt;
     }
 
-    /**
-     * Execute and commit upsert query on SYSTEM.TASK
-     * This method should be used only from server side. Client should use
-     * {@link #getMutationsForAddTask(SystemTaskParams)} instead of direct
-     * upsert commit.
-     *
-     * @param systemTaskParams Task params with various task related arguments
-     * @throws IOException If something goes wrong while preparing mutations
-     *     or committing transactions
-     */
-    public static void addTask(SystemTaskParams systemTaskParams)
+    protected static PreparedStatement addTaskAndGetStatement(
+            SystemTaskParams systemTaskParams, PhoenixConnection connection)
             throws IOException {
-        addTaskAndGetStatement(systemTaskParams, systemTaskParams.getConn(),
-            true);
-    }
-
-    private static PreparedStatement addTaskAndGetStatement(
-            SystemTaskParams systemTaskParams, PhoenixConnection connection,
-            boolean shouldCommit) throws IOException {
         PreparedStatement stmt;
         try {
             stmt = connection.prepareStatement("UPSERT INTO " +
@@ -214,25 +134,19 @@ public class Task {
                     PhoenixDatabaseMetaData.TASK_DATA +
                     " ) VALUES(?,?,?,?,?,?,?,?,?)");
             stmt = setValuesToAddTaskPS(stmt, systemTaskParams.getTaskType(),
-                systemTaskParams.getTenantId(),
-                systemTaskParams.getSchemaName(),
-                systemTaskParams.getTableName(),
-                systemTaskParams.getTaskStatus(), systemTaskParams.getData(),
-                systemTaskParams.getPriority(), systemTaskParams.getStartTs(),
-                systemTaskParams.getEndTs());
+                    systemTaskParams.getTenantId(),
+                    systemTaskParams.getSchemaName(),
+                    systemTaskParams.getTableName(),
+                    systemTaskParams.getTaskStatus(), systemTaskParams.getData(),
+                    systemTaskParams.getPriority(), systemTaskParams.getStartTs(),
+                    systemTaskParams.getEndTs());
             LOGGER.info("Adding task type: {} , tableName: {} , taskStatus: {}"
-                + " , startTs: {} , endTs: {}", systemTaskParams.getTaskType(),
-                systemTaskParams.getTableName(),
-                systemTaskParams.getTaskStatus(), systemTaskParams.getStartTs(),
-                systemTaskParams.getEndTs());
+                            + " , startTs: {} , endTs: {}", systemTaskParams.getTaskType(),
+                    systemTaskParams.getTableName(),
+                    systemTaskParams.getTaskStatus(), systemTaskParams.getStartTs(),
+                    systemTaskParams.getEndTs());
         } catch (SQLException e) {
             throw new IOException(e);
-        }
-        // if query is getting executed by client, do not execute and commit
-        // mutations
-        if (shouldCommit) {
-            mutateSystemTaskTable(connection, stmt,
-                systemTaskParams.isAccessCheckEnabled());
         }
         return stmt;
     }
@@ -245,12 +159,12 @@ public class Task {
         // create new connection as we do not want to mix up mutationState
         // with existing connection
         try (PhoenixConnection newConnection =
-                QueryUtil.getConnectionOnServer(curConn.getClientInfo(), conf)
-                    .unwrap(PhoenixConnection.class)) {
+                     QueryUtil.getConnectionOnServer(curConn.getClientInfo(), conf)
+                             .unwrap(PhoenixConnection.class)) {
             PreparedStatement statement = addTaskAndGetStatement(
-                systemTaskParams, newConnection, false);
-            return getMutationsForSystemTaskTable(newConnection,
-                statement, systemTaskParams.isAccessCheckEnabled());
+                    systemTaskParams, newConnection);
+            return executeStatementAndGetTaskMutations(newConnection,
+                    statement);
         }
     }
 
@@ -280,30 +194,10 @@ public class Task {
             MetaDataResponse result = results.values().iterator().next();
             return MetaDataMutationResult.constructFromProto(result);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } catch (Throwable t) {
             throw new SQLException(t);
         }
-    }
-
-    public static void deleteTask(PhoenixConnection conn, PTable.TaskType taskType, Timestamp ts, String tenantId,
-            String schemaName, String tableName, boolean accessCheckEnabled) throws IOException {
-        PreparedStatement stmt = null;
-        try {
-            stmt = conn.prepareStatement("DELETE FROM " +
-                    PhoenixDatabaseMetaData.SYSTEM_TASK_NAME +
-                    " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = ? AND " +
-                    PhoenixDatabaseMetaData.TASK_TS + " = ? AND " +
-                    PhoenixDatabaseMetaData.TENANT_ID + (tenantId == null ? " IS NULL " : " = '" + tenantId + "'") + " AND " +
-                    PhoenixDatabaseMetaData.TABLE_SCHEM + (schemaName == null ? " IS NULL " : " = '" + schemaName + "'") + " AND " +
-                    PhoenixDatabaseMetaData.TABLE_NAME + " = ?");
-            stmt.setByte(1, taskType.getSerializedValue());
-            stmt.setTimestamp(2, ts);
-            stmt.setString(3, tableName);
-        } catch (SQLException e) {
-            throw new IOException(e);
-        }
-        mutateSystemTaskTable(conn, stmt, accessCheckEnabled);
     }
 
     private static List<TaskRecord> populateTasks(Connection connection, String taskQuery)

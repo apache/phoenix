@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
 
 import java.io.IOException;
 import java.util.ArrayList;

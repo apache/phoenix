@@ -18,7 +18,7 @@
 package org.apache.phoenix.monitoring;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtilHelper;
 import org.apache.phoenix.query.QueryServices;
 
 /**
@@ -39,7 +39,7 @@ public class SizeHistogram extends RangeHistogram {
     }
 
     private static long[] initializeRanges(Configuration conf) {
-        long[] ranges = PhoenixConfigurationUtil.getLongs(conf,
+        long[] ranges = PhoenixConfigurationUtilHelper.getLongs(conf,
                 QueryServices.PHOENIX_HISTOGRAM_SIZE_RANGES);
         return ranges != null ? ranges : DEFAULT_RANGE;
     }

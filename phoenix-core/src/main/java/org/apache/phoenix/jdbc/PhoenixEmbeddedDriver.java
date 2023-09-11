@@ -30,7 +30,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.concurrent.Immutable;
 
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;

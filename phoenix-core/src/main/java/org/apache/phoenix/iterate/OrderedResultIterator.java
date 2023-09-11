@@ -39,9 +39,9 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
@@ -308,7 +308,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
             resultIteratorReady = true;
             this.byteSize = queueEntries.getByteSize();
         } catch (IOException e) {
-            ServerUtil.createIOException(e.getMessage(), e);
+            ClientUtil.createIOException(e.getMessage(), e);
         } finally {
             delegate.close();
         }

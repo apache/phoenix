@@ -49,7 +49,6 @@ import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -975,21 +974,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Object value = PBoolean.INSTANCE.toObject(ptr);
         return value.equals(Boolean.TRUE);
     }
-    public void deleteRowIfAgedEnough(byte[] indexRowKey, long ts, long ageThreshold,
-                                      boolean singleVersion, Region region) throws IOException {
-        if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
-            Delete del;
-            if (singleVersion) {
-                del = buildRowDeleteMutation(indexRowKey,
-                        IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
-            } else {
-                del = buildRowDeleteMutation(indexRowKey,
-                        IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-            }
-            Mutation[] mutations = new Mutation[]{del};
-            region.batchMutate(mutations);
+
+    public Boolean isAgedEnough(long ts, long ageThreshold) {
+        return (EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold;
+    }
+
+    public Delete createDelete(byte[] indexRowKey, long ts, boolean singleVersion) {
+        if (singleVersion) {
+            return buildRowDeleteMutation(indexRowKey,
+                    IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
+        } else {
+            return buildRowDeleteMutation(indexRowKey,
+                    IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
         }
     }
+
     /*
      * return the view index id from the index row key
      */

@@ -23,8 +23,8 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.cache.IndexMetaDataCache;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
@@ -38,12 +38,12 @@ public class PhoenixIndexMetaData implements IndexMetaData {
     private final boolean hasLocalIndexes;
     
     public static boolean isIndexRebuild(Map<String,byte[]> attributes) {
-        return attributes.get(BaseScannerRegionObserver.REPLAY_WRITES)
-                == BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES;
+        return attributes.get(BaseScannerRegionObserverConstants.REPLAY_WRITES)
+                == BaseScannerRegionObserverConstants.REPLAY_INDEX_REBUILD_WRITES;
     }
     
     public static ReplayWrite getReplayWrite(Map<String,byte[]> attributes) {
-        return ReplayWrite.fromBytes(attributes.get(BaseScannerRegionObserver.REPLAY_WRITES));
+        return ReplayWrite.fromBytes(attributes.get(BaseScannerRegionObserverConstants.REPLAY_WRITES));
     }
     
     public PhoenixIndexMetaData(IndexMetaDataCache indexMetaDataCache, Map<String, byte[]> attributes) throws IOException {

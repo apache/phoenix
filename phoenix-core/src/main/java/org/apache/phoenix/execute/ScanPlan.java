@@ -21,11 +21,16 @@ package org.apache.phoenix.execute;
 import static org.apache.phoenix.util.ScanUtil.isPacingScannersPossible;
 import static org.apache.phoenix.util.ScanUtil.isRoundRobinPossible;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -36,12 +41,10 @@ import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.ScanRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.BaseResultIterators;
 import org.apache.phoenix.iterate.ChunkedResultIterator;
@@ -109,7 +112,7 @@ public class ScanPlan extends BaseQueryPlan {
         this.allowPageFilter = allowPageFilter;
         boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
         if (isOrdered) { // TopN
-            ScanRegionObserver.serializeIntoScan(context.getScan(),
+            serializeScanRegionObserverIntoScan(context.getScan(),
                 limit == null ? -1 : QueryUtil.getOffsetLimit(limit, offset),
                 orderBy.getOrderByExpressions(), projector.getEstimatedRowByteSize());
             ScanUtil.setClientVersion(context.getScan(), MetaDataProtocol.PHOENIX_VERSION);
@@ -126,6 +129,30 @@ public class ScanPlan extends BaseQueryPlan {
         }
         this.actualOutputOrderBy = convertActualOutputOrderBy(orderBy, context);
         this.rowOffset = rowOffset;
+    }
+
+    // Static because called from tests
+    public static void serializeScanRegionObserverIntoScan(Scan scan, int limit,
+                                         List<OrderByExpression> orderByExpressions, int estimatedRowSize) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream(); // TODO: size?
+        try {
+            DataOutputStream output = new DataOutputStream(stream);
+            WritableUtils.writeVInt(output, limit);
+            WritableUtils.writeVInt(output, estimatedRowSize);
+            WritableUtils.writeVInt(output, orderByExpressions.size());
+            for (OrderByExpression orderingCol : orderByExpressions) {
+                orderingCol.write(output);
+            }
+            scan.setAttribute(BaseScannerRegionObserverConstants.TOPN, stream.toByteArray());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } finally {
+            try {
+                stream.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     private static boolean isSerial(StatementContext context, FilterableStatement statement,
@@ -246,7 +273,7 @@ public class ScanPlan extends BaseQueryPlan {
     @Override
     protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
         // Set any scan attributes before creating the scanner, as it will be too late afterwards
-        scan.setAttribute(BaseScannerRegionObserver.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
+        scan.setAttribute(BaseScannerRegionObserverConstants.NON_AGGREGATE_QUERY, QueryConstants.TRUE);
         ResultIterator scanner;
         TableRef tableRef = this.getTableRef();
         PTable table = tableRef.getTable();

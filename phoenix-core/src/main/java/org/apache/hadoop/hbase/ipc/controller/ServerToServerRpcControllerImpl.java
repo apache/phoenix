@@ -21,10 +21,10 @@ package org.apache.hadoop.hbase.ipc.controller;
 import com.google.protobuf.RpcController;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.util.List;
@@ -53,7 +53,7 @@ public class ServerToServerRpcControllerImpl extends ServerRpcController impleme
     public ServerToServerRpcControllerImpl(
             Configuration conf) {
         super();
-        this.priority = PhoenixRpcSchedulerFactory.getServerSidePriority(conf);
+        this.priority = IndexUtil.getServerSidePriority(conf);
     }
 
     @Override

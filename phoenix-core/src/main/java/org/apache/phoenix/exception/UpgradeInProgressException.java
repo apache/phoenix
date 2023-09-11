@@ -18,7 +18,7 @@
 package org.apache.phoenix.exception;
 
 
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 
 public class UpgradeInProgressException extends RetriableUpgradeException {
     public UpgradeInProgressException(String upgradeFrom, String upgradeTo) {

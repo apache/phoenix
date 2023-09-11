@@ -36,7 +36,7 @@ import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -191,8 +191,7 @@ public class QueryCompiler {
             return;
         }
         long maxLookBackAgeInMillis =
-            BaseScannerRegionObserver.getMaxLookbackInMillis(conn.getQueryServices().
-            getConfiguration());
+            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conn.getQueryServices().getConfiguration());
         long now = EnvironmentEdgeManager.currentTimeMillis();
         if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
             throw new SQLExceptionInfo.Builder(

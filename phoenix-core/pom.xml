@@ -118,40 +118,6 @@
           <outputDirectory>${antlr-output.dir}/org/apache/phoenix/parse</outputDirectory>
         </configuration>
       </plugin>
-      <!-- Run with -Dmaven.test.skip.exec=true to build -tests.jar without running 
-        tests (this is needed for upstream projects whose tests need this jar simply for 
-        compilation) -->
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>prepare-package
-            </phase>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-            <configuration>
-              <archive>
-                <manifest>
-                  <mainClass>org.apache.phoenix.util.GeneratePerformanceData</mainClass>
-                </manifest>
-              </archive>
-            </configuration>
-          </execution>
-        </executions>
-        <configuration>
-          <!-- Exclude these 2 packages, because their dependency _binary_ files 
-            include the sources, and Maven 2.2 appears to add them to the sources to compile, 
-            weird -->
-          <excludes>
-            <exclude>org/apache/jute/**</exclude>
-            <exclude>org/apache/zookeeper/**</exclude>
-            <exclude>**/*.jsp</exclude>
-            <exclude>log4j.properties</exclude>
-          </excludes>
-        </configuration>
-      </plugin>
       <!-- Setup eclipse -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -162,10 +128,6 @@
             <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
           </buildcommands>
         </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-failsafe-plugin</artifactId>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -261,6 +223,7 @@
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
       <optional>true</optional>
     </dependency>
+
     <!-- Hadoop dependencies -->
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -270,44 +233,6 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-auth</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-yarn-api</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs-client</artifactId>
-    </dependency>
-
-    <!-- Hadoop test dependencies -->
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-minikdc</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
-      <type>test-jar</type>
-      <classifier>tests</classifier>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-common</artifactId>
-      <scope>test</scope>
-      <type>test-jar</type>
-    </dependency>
 
     <!-- HBase dependencies -->
     <dependency>
@@ -316,31 +241,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-mapreduce</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-metrics-api</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-metrics</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-protocol</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-protocol-shaded</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-client</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-server</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -354,30 +259,13 @@
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
     </dependency>
-
-    <!-- HBase test dependencies -->
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-it</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
+      <artifactId>hbase-protocol</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-common</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-server</artifactId>
-      <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-testing-util</artifactId>
-      <scope>test</scope>
+      <artifactId>hbase-protocol-shaded</artifactId>
     </dependency>
 
     <!-- HBase Adjacent Dependencies -->
@@ -398,8 +286,8 @@
       <artifactId>zookeeper</artifactId>
     </dependency>
     <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper-jute</artifactId>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper-jute</artifactId>
     </dependency>
 
     <!-- Transaction dependencies -->
@@ -407,10 +295,6 @@
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-hbase-client</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-hbase-coprocessor</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.omid</groupId>
@@ -439,24 +323,6 @@
     <dependency>
       <groupId>org.apache.omid</groupId>
       <artifactId>omid-codahale-metrics</artifactId>
-    </dependency>
-
-    <!-- Omid test dependencies -->
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.omid</groupId>
-      <artifactId>omid-tso-server</artifactId>
-      <scope>test</scope>
-      <type>test-jar</type>
-    </dependency>
-    <dependency>
-      <groupId>com.google.inject</groupId>
-      <artifactId>guice</artifactId>
-      <scope>test</scope>
     </dependency>
 
     <!-- Other dependencies -->
@@ -526,11 +392,6 @@
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
-      <artifactId>commons-compress</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
     </dependency>
     <dependency>
@@ -568,43 +429,6 @@
     <dependency>
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
-    </dependency>
-
-    <!-- Other test dependencies -->
-    <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-api</artifactId>
-        <scope>test</scope>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-core</artifactId>
-        <scope>test</scope>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-slf4j-impl</artifactId>
-        <scope>test</scope>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-1.2-api</artifactId>
-        <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.hamcrest</groupId>
-      <artifactId>hamcrest-core</artifactId>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

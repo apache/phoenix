@@ -20,7 +20,7 @@ package org.apache.phoenix.monitoring.connectionqueryservice;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtilHelper;
 import org.apache.phoenix.monitoring.RangeHistogram;
 import org.apache.phoenix.query.QueryServices;
 
@@ -36,7 +36,7 @@ public class ConnectionQueryServicesHistogram extends RangeHistogram {
     }
 
     private static long[] initializeRanges(Configuration conf) {
-        long[] ranges = PhoenixConfigurationUtil.getLongs(
+        long[] ranges = PhoenixConfigurationUtilHelper.getLongs(
                 conf, CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES);
         return ranges != null ? ranges : DEFAULT_RANGE;
     }

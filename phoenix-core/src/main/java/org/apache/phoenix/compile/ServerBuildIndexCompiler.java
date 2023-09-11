@@ -21,8 +21,8 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -132,25 +132,25 @@ public class ServerBuildIndexCompiler {
             // that will be passed as a mutation attribute for the scanned mutations that will be applied on
             // the index table possibly remotely
             if (index.getIndexType() == PTable.IndexType.LOCAL) {
-                scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
+                scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
             } else {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
-                scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
+                scan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES, TRUE_BYTES);
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
-                scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGING, TRUE_BYTES);
+                scan.setAttribute(BaseScannerRegionObserverConstants.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 // Serialize page row size only if we're overriding, else use server side value
                 String rebuildPageRowSize =
                         connection.getQueryServices().getProps()
                                 .get(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS);
                 if (rebuildPageRowSize != null) {
-                    scan.setAttribute(BaseScannerRegionObserver.INDEX_REBUILD_PAGE_ROWS,
+                    scan.setAttribute(BaseScannerRegionObserverConstants.INDEX_REBUILD_PAGE_ROWS,
                         Bytes.toBytes(Long.parseLong(rebuildPageRowSize)));
                 }
                 BaseQueryPlan.serializeViewConstantsIntoScan(scan, dataTable);
                 addEmptyColumnToScan(scan, indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifier());
             }
             if (dataTable.isTransactional()) {
-                scan.setAttribute(BaseScannerRegionObserver.TX_STATE, connection.getMutationState().encodeTransaction());
+                scan.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, connection.getMutationState().encodeTransaction());
             }
 
             // Go through MutationPlan abstraction so that we can create local indexes

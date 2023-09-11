@@ -16,6 +16,7 @@
 package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -31,25 +32,20 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnNameTrackingExpressionCompiler;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.TableInfo;
-import org.apache.phoenix.coprocessor.WhereConstantParser;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.TableInfo;
+import org.apache.phoenix.coprocessorclient.WhereConstantParser;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
@@ -76,7 +72,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
@@ -249,7 +245,7 @@ public class ViewUtil {
     /**
      * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the immediate related tables/views.
      */
-    private static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
+    protected static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
             byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp)
             throws IOException {
         if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
@@ -362,107 +358,6 @@ public class ViewUtil {
             return result!=null; 
         }
     }
-
-    /**
-     * Attempt to drop an orphan child view i.e. a child view for which we see a
-     * {@code parent->child } entry
-     * in SYSTEM.CHILD_LINK/SYSTEM.CATALOG (as a child) but for whom the parent no longer exists.
-     * @param env Region Coprocessor environment
-     * @param tenantIdBytes tenantId of the parent
-     * @param schemaName schema of the parent
-     * @param tableOrViewName parent table/view name
-     * @param sysCatOrSysChildLink SYSTEM.CATALOG or SYSTEM.CHILD_LINK which is used to find the
-     *                             {@code parent->child } linking rows
-     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
-     * @throws SQLException thrown if there is an error getting a connection to the server or
-     * an error retrieving the PTable for a child view
-     */
-    public static void dropChildViews(RegionCoprocessorEnvironment env, byte[] tenantIdBytes,
-            byte[] schemaName, byte[] tableOrViewName, byte[] sysCatOrSysChildLink)
-            throws IOException, SQLException {
-        Table hTable = null;
-        try {
-            hTable = ServerUtil.getHTableForCoprocessorScan(env, SchemaUtil.getPhysicalTableName(
-                            sysCatOrSysChildLink, env.getConfiguration()));
-        } catch (Exception e){
-            logger.error("ServerUtil.getHTableForCoprocessorScan error!", e);
-        }
-        // if the SYSTEM.CATALOG or SYSTEM.CHILD_LINK doesn't exist just return
-        if (hTable==null) {
-            return;
-        }
-
-        TableViewFinderResult childViewsResult;
-        try {
-            childViewsResult = findImmediateRelatedViews(
-                    hTable,
-                    tenantIdBytes,
-                    schemaName,
-                    tableOrViewName,
-                    LinkType.CHILD_TABLE,
-                    HConstants.LATEST_TIMESTAMP);
-        } finally {
-            hTable.close();
-        }
-
-        for (TableInfo viewInfo : childViewsResult.getLinks()) {
-            byte[] viewTenantId = viewInfo.getTenantId();
-            byte[] viewSchemaName = viewInfo.getSchemaName();
-            byte[] viewName = viewInfo.getTableName();
-            if (logger.isDebugEnabled()) {
-                logger.debug("dropChildViews : " + Bytes.toString(schemaName) + "."
-                        + Bytes.toString(tableOrViewName) + " -> "
-                        + Bytes.toString(viewSchemaName) + "." + Bytes.toString(viewName)
-                        + "with tenant id :" + Bytes.toString(viewTenantId));
-            }
-            Properties props = new Properties();
-            PTable view = null;
-            if (viewTenantId != null && viewTenantId.length != 0)
-                props.setProperty(TENANT_ID_ATTRIB, Bytes.toString(viewTenantId));
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(props,
-                    env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                try {
-                    // Ensure that the view to be dropped has some ancestor that no longer exists
-                    // (and thus will throw a TableNotFoundException). Otherwise, if we are looking
-                    // at an orphan parent->child link, then the view might actually be a legitimate
-                    // child view on another table/view and we should obviously not drop it
-                    view = PhoenixRuntime.getTableNoCache(connection,
-                            SchemaUtil.getTableName(viewSchemaName, viewName));
-                } catch (TableNotFoundException expected) {
-                    // Expected for an orphan view since some ancestor was dropped earlier
-                    logger.info("Found an expected orphan parent->child link keyed by the parent."
-                            + " Parent Tenant Id: '" + Bytes.toString(tenantIdBytes)
-                            + "'. Parent Schema Name: '" + Bytes.toString(schemaName)
-                            + "'. Parent Table/View Name: '" + Bytes.toString(tableOrViewName)
-                            + "'. Will attempt to drop this child view with ViewInfo: '"
-                            + viewInfo + "'.");
-                }
-                if (view != null) {
-                    logger.error("Found an orphan parent->child link keyed by this parent or"
-                            + " its descendant. Parent Tenant Id: '" + Bytes.toString(tenantIdBytes)
-                            + "'. Parent Schema Name: '" + Bytes.toString(schemaName)
-                            + "'. Parent Table/View Name: '" + Bytes.toString(tableOrViewName)
-                            + "'. There currently exists a legitimate view of the same name whose"
-                            + " parent hierarchy exists. View Info: '" + viewInfo
-                            + "'. Ignoring this view and not attempting to drop it.");
-                    continue;
-                }
-
-                MetaDataClient client = new MetaDataClient(connection);
-                org.apache.phoenix.parse.TableName viewTableName =
-                        org.apache.phoenix.parse.TableName.create(Bytes.toString(viewSchemaName),
-                                Bytes.toString(viewName));
-                try {
-                    client.dropTable(new DropTableStatement(viewTableName, PTableType.VIEW, true,
-                            true, true));
-                } catch (TableNotFoundException e) {
-                    logger.info("Ignoring view " + viewTableName
-                            + " as it has already been dropped");
-                }
-            }
-        }
-    }
-
 
     /**
      * Determines whether we should use SYSTEM.CATALOG or SYSTEM.CHILD_LINK to find
@@ -974,19 +869,19 @@ public class ViewUtil {
                         PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES,
                         extendedCellBuilder,
                         parentUpdateCacheFreqBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                        MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
                 MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
                         PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES,
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                        MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
                 MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
                         PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                         PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES,
                         extendedCellBuilder,
                         parentPhoenixTTLBytes,
-                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+                        MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 
         }

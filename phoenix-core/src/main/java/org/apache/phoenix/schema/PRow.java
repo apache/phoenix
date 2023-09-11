@@ -23,8 +23,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.Mutation;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 
 /**
  * 

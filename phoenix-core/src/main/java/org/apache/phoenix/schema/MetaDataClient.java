@@ -105,9 +105,9 @@ import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDA
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
-import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
-import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.RUN_UPDATE_STATS_ASYNC_ATTRIB;
+import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.INDEX_NAME;
+import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.REBUILD_ALL;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
@@ -158,7 +158,7 @@ import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.DelegateQueryServices;
 import org.apache.phoenix.schema.task.SystemTaskParams;
@@ -190,12 +190,13 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.ServerBuildIndexCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementNormalizer;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
-import org.apache.phoenix.schema.transform.Transform;
+import org.apache.phoenix.schema.transform.TransformClient;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
@@ -281,7 +282,6 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.UpgradeUtil;
@@ -4060,7 +4060,7 @@ public class MetaDataClient {
                 MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
                 changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
 
-                boolean isTransformNeeded = Transform.checkIsTransformNeeded(metaProperties, schemaName, table, tableName, null, tenantIdToUse, connection);
+                boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName, table, tableName, null, tenantIdToUse, connection);
                 if (isTransformNeeded) {
                     // We can add a support for these later. For now, not supported.
                     if (MetaDataUtil.hasLocalIndexTable(connection, physicalTableName.getBytes())) {
@@ -4261,7 +4261,7 @@ public class MetaDataClient {
                 PTable transformingNewTable = null;
                 if (isTransformNeeded) {
                    try {
-                       transformingNewTable = Transform.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+                       transformingNewTable = TransformClient.addTransform(connection, tenantIdToUse, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
                     } catch (SQLException ex) {
                        connection.rollback();
                        throw ex;
@@ -4952,7 +4952,7 @@ public class MetaDataClient {
             Map<String, List<Pair<String, Object>>> properties=new HashMap<>(statement.getProps().size());;
             MetaProperties metaProperties = loadStmtProperties(statement.getProps(),properties,table,false);
 
-            boolean isTransformNeeded = Transform.checkIsTransformNeeded(metaProperties, schemaName, table, indexName, dataTableName, tenantId, connection);
+            boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName, table, indexName, dataTableName, tenantId, connection);
             MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
             boolean changingPhoenixTableProperty= evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
 
@@ -5020,7 +5020,7 @@ public class MetaDataClient {
                                 .setSchemaName(schemaName).setTableName(indexName).build().buildException();
                     }
                     try {
-                        Transform.addTransform(connection, tenantId, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+                        TransformClient.addTransform(connection, tenantId, table, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
                     } catch (SQLException ex) {
                         connection.rollback();
                         throw ex;
@@ -5928,7 +5928,7 @@ public class MetaDataClient {
         } catch (Throwable throwable) {
             // To change perms, the user must have ADMIN perms on that scope, otherwise it throws ADE
             // Wrap around ADE and other exceptions to PhoenixIOException
-            throw ServerUtil.parseServerException(throwable);
+            throw ClientUtil.parseServerException(throwable);
         }
 
         return new MutationState(0, 0, connection);

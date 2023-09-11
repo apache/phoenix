@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_MINOR_VERSION;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD_PROTO;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_MINOR_VERSION;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
@@ -36,33 +36,27 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.hbase.ArrayBackedTag;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.PhoenixTagType;
-import org.apache.hadoop.hbase.PrivateCellUtil;
-import org.apache.hadoop.hbase.RawCell;
-import org.apache.hadoop.hbase.Tag;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.regionserver.Region;
-import org.apache.hadoop.hbase.regionserver.Store;
+import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -83,12 +77,11 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
@@ -99,13 +92,11 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.RowKeyExpressionVisitor;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
-import org.apache.phoenix.hbase.index.OffsetCell;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -147,6 +138,12 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 public class IndexUtil {
     public static final String INDEX_COLUMN_NAME_SEP = ":";
     public static final byte[] INDEX_COLUMN_NAME_SEP_BYTES = Bytes.toBytes(INDEX_COLUMN_NAME_SEP);
+
+    public static final String CODEC_CLASS_NAME_KEY = "org.apache.hadoop.hbase.index.codec.class";
+    public static final String PHOENIX_INDEX_BUILDER_CLASSNAME = "org.apache.phoenix.index.PhoenixIndexBuilder";
+
+    /** Configuration key for the {@link org.apache.phoenix.hbase.index.builder.IndexBuilder} to use */
+    public static final String INDEX_BUILDER_CONF_KEY = "index.builder";
 
     private final static Cache<String, Boolean> indexNameGlobalIndexCheckerEnabledMap =
         CacheBuilder.newBuilder()
@@ -324,7 +321,7 @@ public class IndexUtil {
             TableDescriptor desc = connection.getQueryServices().getTableDescriptor(index.getBytes());
 
             if (desc != null) {
-                if (desc.hasCoprocessor(GlobalIndexChecker.class.getName())) {
+                if (desc.hasCoprocessor(QueryConstants.GLOBAL_INDEX_CHECKER_CLASSNAME)) {
                     result = true;
                 }
             }
@@ -439,7 +436,7 @@ public class IndexUtil {
     }
 
     public static ColumnReference[] deserializeDataTableColumnsToJoin(Scan scan) {
-        byte[] columnsBytes = scan.getAttribute(BaseScannerRegionObserver.DATA_TABLE_COLUMNS_TO_JOIN);
+        byte[] columnsBytes = scan.getAttribute(BaseScannerRegionObserverConstants.DATA_TABLE_COLUMNS_TO_JOIN);
         if (columnsBytes == null) return null;
         ByteArrayInputStream stream = new ByteArrayInputStream(columnsBytes); // TODO: size?
         try {
@@ -481,7 +478,7 @@ public class IndexUtil {
     }
 
     public static byte[][] deserializeViewConstantsFromScan(Scan scan) {
-        byte[] bytes = scan.getAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS);
+        byte[] bytes = scan.getAttribute(BaseScannerRegionObserverConstants.VIEW_CONSTANTS);
         if (bytes == null) return null;
         ByteArrayInputStream stream = new ByteArrayInputStream(bytes); // TODO: size?
         try {
@@ -504,7 +501,7 @@ public class IndexUtil {
     }
     
     public static KeyValueSchema deserializeLocalIndexJoinSchemaFromScan(final Scan scan) {
-        byte[] schemaBytes = scan.getAttribute(BaseScannerRegionObserver.LOCAL_INDEX_JOIN_SCHEMA);
+        byte[] schemaBytes = scan.getAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_JOIN_SCHEMA);
         if (schemaBytes == null) return null;
         ByteArrayInputStream stream = new ByteArrayInputStream(schemaBytes); // TODO: size?
         try {
@@ -526,7 +523,7 @@ public class IndexUtil {
     public static TupleProjector getTupleProjector(Scan scan, ColumnReference[] dataColumns) {
         if (dataColumns != null && dataColumns.length != 0) {
             KeyValueSchema keyValueSchema = deserializeLocalIndexJoinSchemaFromScan(scan); 
-            boolean storeColsInSingleCell = scan.getAttribute(BaseScannerRegionObserver.COLUMNS_STORED_IN_SINGLE_CELL) != null;
+            boolean storeColsInSingleCell = scan.getAttribute(BaseScannerRegionObserverConstants.COLUMNS_STORED_IN_SINGLE_CELL) != null;
             QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
             ImmutableStorageScheme immutableStorageScheme = EncodedColumnsUtil.getImmutableStorageScheme(scan);
             Expression[] colExpressions = storeColsInSingleCell ? new SingleCellColumnExpression[dataColumns.length] : new KeyValueColumnExpression[dataColumns.length];
@@ -592,16 +589,6 @@ public class IndexUtil {
         result.add(keyValue);
     }
 
-    public static void wrapResultUsingOffset(List<Cell> result, final int offset) throws IOException {
-        ListIterator<Cell> itr = result.listIterator();
-        while (itr.hasNext()) {
-            final Cell cell = itr.next();
-            // TODO: Create DelegateCell class instead
-            Cell newCell = new OffsetCell(cell, offset);
-            itr.set(newCell);
-        }
-    }
-
     public static String getIndexColumnExpressionStr(PColumn col) {
         return col.getExpressionStr() == null ? IndexUtil.getCaseSensitiveDataColumnFullName(col.getName().getString())
                 : col.getExpressionStr();
@@ -627,16 +614,6 @@ public class IndexUtil {
                 .toArray(new byte[viewConstants.size()][]);
     }
 
-    public static void writeLocalUpdates(Region region, final List<Mutation> mutations, boolean skipWAL) throws IOException {
-        if(skipWAL) {
-            for (Mutation m : mutations) {
-                m.setDurability(Durability.SKIP_WAL);
-            }
-        }
-        region.batchMutate(
-            mutations.toArray(new Mutation[mutations.size()]));
-    }
-    
     public static MetaDataMutationResult updateIndexState(String indexTableName, long minTimeStamp,
             Table metaTable, PIndexState newState) throws Throwable {
         byte[] indexTableKey = SchemaUtil.getTableKeyFromFullName(indexTableName);
@@ -688,10 +665,6 @@ public class IndexUtil {
         return true;
     }
 
-    public static boolean isLocalIndexStore(Store store) {
-        return store.getColumnFamilyDescriptor().getNameAsString().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
-    }
-    
     public static PTable getPDataTable(Connection conn, TableDescriptor tableDesc) throws SQLException {
         String dataTableName = Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
         String physicalTableName = tableDesc.getTableName().getNameAsString();
@@ -818,53 +791,6 @@ public class IndexUtil {
         }
     }
 
-    /**
-     * Set Cell Tags to delete markers with source of operation attribute.
-     * @param miniBatchOp miniBatchOp
-     * @throws IOException IOException
-     */
-    public static void setDeleteAttributes(
-            MiniBatchOperationInProgress<Mutation> miniBatchOp)
-            throws IOException {
-        for (int i = 0; i < miniBatchOp.size(); i++) {
-            Mutation m = miniBatchOp.getOperation(i);
-            if (!(m instanceof Delete)) {
-                // Ignore if it is not Delete type.
-                continue;
-            }
-            byte[] sourceOpAttr =
-                    m.getAttribute(QueryServices.SOURCE_OPERATION_ATTRIB);
-            if (sourceOpAttr == null) {
-                continue;
-            }
-            Tag sourceOpTag = new ArrayBackedTag(
-                    PhoenixTagType.SOURCE_OPERATION_TAG_TYPE, sourceOpAttr);
-            List<Cell> updatedCells = new ArrayList<>();
-            for (CellScanner cellScanner = m.cellScanner();
-                 cellScanner.advance();) {
-                Cell cell = cellScanner.current();
-                RawCell rawCell = (RawCell) cell;
-                List<Tag> tags = new ArrayList<>();
-                Iterator<Tag> tagsIterator = rawCell.getTags();
-                while (tagsIterator.hasNext()) {
-                    tags.add(tagsIterator.next());
-                }
-                tags.add(sourceOpTag);
-                // TODO: PrivateCellUtil's IA is Private.
-                // HBASE-25328 adds a builder methodfor creating Tag which
-                // will be LP with IA.coproc
-                Cell updatedCell = PrivateCellUtil.createCell(cell, tags);
-                updatedCells.add(updatedCell);
-            }
-            m.getFamilyCellMap().clear();
-            // Clear and add new Cells to the Mutation.
-            for (Cell cell : updatedCells) {
-                Delete d = (Delete) m;
-                d.add(cell);
-            }
-        }
-    }
-
     public static boolean isCoveredGlobalIndex(final PTable table) {
         return table.getIndexType() == PTable.IndexType.GLOBAL;
     }
@@ -893,6 +819,57 @@ public class IndexUtil {
             }
         }
         return ts;
+    }
+
+    public static int getIndexPriority(Configuration conf) {
+        return conf.getInt(QueryServices.INDEX_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_PRIORITY);
+    }
+
+    public static int getMetadataPriority(Configuration conf) {
+        return conf.getInt(QueryServices.METADATA_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_PRIORITY);
+    }
+
+    public static int getServerSidePriority(Configuration conf) {
+        return conf.getInt(QueryServices.SERVER_SIDE_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_SERVER_SIDE_PRIORITY);
+    }
+
+    public static void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
+        List<Cell> cellList = m.getFamilyCellMap().get(emptyCF);
+        if (cellList == null) {
+            return;
+        }
+        Iterator<Cell> cellIterator = cellList.iterator();
+        while (cellIterator.hasNext()) {
+            Cell cell = cellIterator.next();
+            if (Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+                    emptyCQ, 0, emptyCQ.length) == 0) {
+                cellIterator.remove();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Enable indexing on the given table
+     * @param descBuilder {@link TableDescriptor} for the table on which indexing should be enabled
+     * @param indexBuilderClassName class name to use when building the index for this table
+     * @param properties map of custom configuration options to make available to your
+     *          {@link org.apache.phoenix.hbase.index.builder.IndexBuilder} on the server-side
+     * @param priority TODO
+     * @throws IOException the Indexer coprocessor cannot be added
+     */
+    public static void enableIndexing(TableDescriptorBuilder descBuilder, String indexBuilderClassName,
+            Map<String, String> properties, int priority) throws IOException {
+        if (properties == null) {
+            properties = new HashMap<String, String>();
+        }
+        properties.put(IndexUtil.INDEX_BUILDER_CONF_KEY, indexBuilderClassName);
+        descBuilder.setCoprocessor(
+                CoprocessorDescriptorBuilder
+                        .newBuilder(QueryConstants.INDEX_REGION_OBSERVER_CLASSNAME)
+                        .setPriority(priority)
+                        .setProperties(properties)
+                        .build());
     }
 
     public static List<Cell> readColumnsFromRow(Put row, Set<ColumnReference> cols) {

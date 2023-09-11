@@ -18,8 +18,8 @@
 package org.apache.phoenix.util;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
-import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.CURRENT_CLIENT_VERSION;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.getVersion;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
@@ -97,6 +97,7 @@ import javax.annotation.Nullable;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -123,18 +124,15 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
-import org.apache.hadoop.hbase.regionserver.LocalIndexSplitter;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
-import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -249,7 +247,7 @@ public class UpgradeUtil {
             admin.createTable(desc);
             copyTable(conn, PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, tableName);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
     
@@ -264,7 +262,7 @@ public class UpgradeUtil {
             admin.disableTable(tableName);
             admin.deleteTable(tableName);
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -317,7 +315,7 @@ public class UpgradeUtil {
         } catch (SQLException e) {
             throw e;
         } catch (Exception e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } finally {
             try {
                 if (scanner != null) scanner.close();
@@ -433,7 +431,7 @@ public class UpgradeUtil {
                 if (!droppedLocalIndexes) {
                     List<TableDescriptor> localIndexTables = admin.listTableDescriptors(
                             Pattern.compile(MetaDataUtil.LOCAL_INDEX_TABLE_PREFIX+".*"));
-                    String localIndexSplitter = LocalIndexSplitter.class.getName();
+                    String localIndexSplitter = QueryConstants.LOCAL_INDEX_SPLITTER_CLASSNAME;
                     for (TableDescriptor table : localIndexTables) {
                         TableDescriptor dataTableDesc = admin.getDescriptor(TableName.valueOf(MetaDataUtil.getLocalIndexUserTableName(table.getTableName().getNameAsString())));
                         TableDescriptorBuilder dataTableDescBuilder = TableDescriptorBuilder.newBuilder(dataTableDesc);
@@ -850,7 +848,7 @@ public class UpgradeUtil {
                         success = true;
                         return true;
                     } catch (InterruptedException e) {
-                        throw ServerUtil.parseServerException(e);
+                        throw ClientUtil.parseServerException(e);
                     } finally {
                         try {
                             scanner.close();
@@ -878,7 +876,7 @@ public class UpgradeUtil {
                         }
                     }
                 } catch (IOException e) {
-                    throw ServerUtil.parseServerException(e);
+                    throw ClientUtil.parseServerException(e);
                 } finally {
                     try {
                         seqTable.close();
@@ -889,7 +887,7 @@ public class UpgradeUtil {
             }
             return false;
         } catch (IOException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         } finally {
             try {
                 sysTable.close();
@@ -2076,7 +2074,7 @@ public class UpgradeUtil {
                     + " (" + PhoenixDatabaseMetaData.TENANT_ID + ","
                     + PhoenixDatabaseMetaData.TABLE_SCHEM + ","
                     + PhoenixDatabaseMetaData.TABLE_NAME + ","
-                    + MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
+                    + MetaDataEndpointImplConstants.ROW_KEY_ORDER_OPTIMIZABLE + " BOOLEAN"
                     + ") VALUES ( ?, ?, ?, TRUE)");
                 try (PreparedStatement upsSyscatStmt = globalConn.prepareStatement(upsSyscat)) {
                     int param = 0;
@@ -2265,7 +2263,7 @@ public class UpgradeUtil {
     public static void addRowKeyOrderOptimizableCell(List<Mutation> tableMetadata, byte[] tableHeaderRowKey, long clientTimeStamp) {
         Put put = new Put(tableHeaderRowKey, clientTimeStamp);
         put.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                MetaDataEndpointImpl.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, PBoolean.INSTANCE.toBytes(true));
+                MetaDataEndpointImplConstants.ROW_KEY_ORDER_OPTIMIZABLE_BYTES, PBoolean.INSTANCE.toBytes(true));
         tableMetadata.add(put);
     }
 

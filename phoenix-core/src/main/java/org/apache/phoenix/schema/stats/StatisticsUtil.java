@@ -16,7 +16,8 @@
  * limitations under the License.
  */
 package org.apache.phoenix.schema.stats;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ANALYZE_TABLE;
+
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ANALYZE_TABLE;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 
@@ -35,8 +36,8 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -240,11 +241,11 @@ public class StatisticsUtil {
         if (statsProps != null) {
             Object gp_width = statsProps.get(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB);
             if (gp_width != null) {
-                scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
+                scan.setAttribute(BaseScannerRegionObserverConstants.GUIDEPOST_WIDTH_BYTES, PLong.INSTANCE.toBytes(gp_width));
             }
             Object gp_per_region = statsProps.get(QueryServices.STATS_GUIDEPOST_PER_REGION_ATTRIB);
             if (gp_per_region != null) {
-                scan.setAttribute(BaseScannerRegionObserver.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
+                scan.setAttribute(BaseScannerRegionObserverConstants.GUIDEPOST_PER_REGION, PInteger.INSTANCE.toBytes(gp_per_region));
             }
         }
     }

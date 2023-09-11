@@ -17,33 +17,13 @@ package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
-
-import java.util.Map;
 
 /**
  * Utility functions shared between IndexRegionObserver and MutationState for annotating the
  * HBase WAL with Phoenix-level metadata about mutations.
  */
 public class WALAnnotationUtil {
-
-    public static void appendMutationAttributesToWALKey(WALKey key,
-                                        IndexRegionObserver.BatchMutateContext context) {
-        if (context != null && context.getOriginalMutations().size() > 0) {
-            Mutation firstMutation = context.getOriginalMutations().get(0);
-            Map<String, byte[]> attrMap = firstMutation.getAttributesMap();
-            for (MutationState.MutationMetadataType metadataType :
-                MutationState.MutationMetadataType.values()) {
-                String metadataTypeKey = metadataType.toString();
-                if (attrMap.containsKey(metadataTypeKey)) {
-                    IndexRegionObserver.appendToWALKey(key, metadataTypeKey,
-                        attrMap.get(metadataTypeKey));
-                }
-            }
-        }
-    }
 
     /**
      * Add metadata about a mutation onto the attributes of the mutation. This will be written as

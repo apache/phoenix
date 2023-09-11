@@ -38,7 +38,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.HashCache;
-import org.apache.phoenix.coprocessor.ServerCachingProtocol.ServerCacheFactory;
+import org.apache.phoenix.coprocessorclient.ServerCachingProtocol.ServerCacheFactory;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -47,8 +47,8 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ResultUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
 import org.iq80.snappy.CorruptionException;
@@ -77,7 +77,7 @@ public class HashCacheFactory implements ServerCacheFactory {
                 uncompressed, 0);
             return new HashCacheImpl(uncompressed, chunk, clientVersion);
         } catch (CorruptionException e) {
-            throw ServerUtil.parseServerException(e);
+            throw ClientUtil.parseServerException(e);
         }
     }
 
@@ -159,7 +159,7 @@ public class HashCacheFactory implements ServerCacheFactory {
             List<Tuple> ret = hashCache.get(hashKey);
             if (singleValueOnly && ret != null && ret.size() > 1) {
                 SQLException ex = new SQLExceptionInfo.Builder(SQLExceptionCode.SINGLE_ROW_SUBQUERY_RETURNS_MULTIPLE_ROWS).build().buildException();
-                ServerUtil.throwIOException(ex.getMessage(), ex);
+                ClientUtil.throwIOException(ex.getMessage(), ex);
             }
             
             return ret;

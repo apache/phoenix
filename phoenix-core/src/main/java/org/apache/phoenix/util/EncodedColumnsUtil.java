@@ -28,7 +28,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.expression.DelegateExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -66,17 +66,17 @@ public class EncodedColumnsUtil {
     
     public static boolean useNewValueColumnQualifier(Scan s) {
         // null check for backward compatibility
-        return s.getAttribute(BaseScannerRegionObserver.USE_NEW_VALUE_COLUMN_QUALIFIER) != null;
+        return s.getAttribute(BaseScannerRegionObserverConstants.USE_NEW_VALUE_COLUMN_QUALIFIER) != null;
     }
     
     public static QualifierEncodingScheme getQualifierEncodingScheme(Scan s) {
         // null check for backward compatibility
-        return s.getAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME) == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : QualifierEncodingScheme.fromSerializedValue(s.getAttribute(BaseScannerRegionObserver.QUALIFIER_ENCODING_SCHEME)[0]);
+        return s.getAttribute(BaseScannerRegionObserverConstants.QUALIFIER_ENCODING_SCHEME) == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : QualifierEncodingScheme.fromSerializedValue(s.getAttribute(BaseScannerRegionObserverConstants.QUALIFIER_ENCODING_SCHEME)[0]);
     }
     
     public static ImmutableStorageScheme getImmutableStorageScheme(Scan s) {
         // null check for backward compatibility
-        return s.getAttribute(BaseScannerRegionObserver.IMMUTABLE_STORAGE_ENCODING_SCHEME) == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : ImmutableStorageScheme.fromSerializedValue(s.getAttribute(BaseScannerRegionObserver.IMMUTABLE_STORAGE_ENCODING_SCHEME)[0]);
+        return s.getAttribute(BaseScannerRegionObserverConstants.IMMUTABLE_STORAGE_ENCODING_SCHEME) == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : ImmutableStorageScheme.fromSerializedValue(s.getAttribute(BaseScannerRegionObserverConstants.IMMUTABLE_STORAGE_ENCODING_SCHEME)[0]);
     }
 
     /**
@@ -111,11 +111,11 @@ public class EncodedColumnsUtil {
 
     public static Pair<Integer, Integer> getMinMaxQualifiersFromScan(Scan scan) {
         Integer minQ = null, maxQ = null;
-        byte[] minQualifier = scan.getAttribute(BaseScannerRegionObserver.MIN_QUALIFIER);
+        byte[] minQualifier = scan.getAttribute(BaseScannerRegionObserverConstants.MIN_QUALIFIER);
         if (minQualifier != null) {
             minQ = Bytes.toInt(minQualifier);
         }
-        byte[] maxQualifier = scan.getAttribute(BaseScannerRegionObserver.MAX_QUALIFIER);
+        byte[] maxQualifier = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_QUALIFIER);
         if (maxQualifier != null) {
             maxQ = Bytes.toInt(maxQualifier);
         }

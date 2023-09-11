@@ -56,13 +56,13 @@ public class ConnectionUtil {
     public static Connection getInputConnection(final Configuration conf, final Properties props)
             throws SQLException {
         Preconditions.checkNotNull(conf);
-        String zkQuorumOverride = PhoenixConfigurationUtil.getInputClusterZkQuorum(conf);
+        String zkQuorumOverride = PhoenixConfigurationUtilHelper.getInputClusterZkQuorum(conf);
         if (zkQuorumOverride != null) {
             return DriverManager.getConnection("jdbc:phoenix+zk:" + zkQuorumOverride,
                 PropertiesUtil.combineProperties(props, conf));
         } else {
             // FIXME find some better way to get tests working
-            String zkQuorumForTest = PhoenixConfigurationUtil.getZKQuorum(conf);
+            String zkQuorumForTest = PhoenixConfigurationUtilHelper.getZKQuorum(conf);
             if (zkQuorumForTest != null && (zkQuorumForTest.contains(TEST_PARAM)
                     || zkQuorumForTest.equals(PhoenixRuntime.CONNECTIONLESS))) {
                 return DriverManager.getConnection("jdbc:phoenix+zk:" + zkQuorumForTest,
@@ -106,13 +106,13 @@ public class ConnectionUtil {
     public static Connection getOutputConnection(final Configuration conf, Properties props,
             Set<String> withoutTheseProps) throws SQLException {
         Preconditions.checkNotNull(conf);
-        String zkQuorumOverride = PhoenixConfigurationUtil.getOutputClusterZkQuorum(conf);
+        String zkQuorumOverride = PhoenixConfigurationUtilHelper.getOutputClusterZkQuorum(conf);
         if (zkQuorumOverride != null) {
             return DriverManager.getConnection("jdbc:phoenix+zk:" + zkQuorumOverride,
                 PropertiesUtil.combineProperties(props, conf));
         } else {
             // FIXME find some better way to get tests working
-            String zkQuorumForTest = PhoenixConfigurationUtil.getZKQuorum(conf);
+            String zkQuorumForTest = PhoenixConfigurationUtilHelper.getZKQuorum(conf);
             if (zkQuorumForTest != null && (zkQuorumForTest.contains(TEST_PARAM)
                     || zkQuorumForTest.equals(PhoenixRuntime.CONNECTIONLESS))) {
                 return DriverManager.getConnection("jdbc:phoenix:" + zkQuorumForTest,

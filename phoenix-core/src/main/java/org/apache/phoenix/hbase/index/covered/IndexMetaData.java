@@ -18,7 +18,7 @@
 package org.apache.phoenix.hbase.index.covered;
 
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver.ReplayWrite;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ReplayWrite;
 import org.apache.phoenix.util.ScanUtil;
 
 public interface IndexMetaData {

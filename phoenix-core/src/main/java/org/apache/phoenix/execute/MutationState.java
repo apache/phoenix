@@ -64,18 +64,17 @@ import org.apache.htrace.Span;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
-import org.apache.phoenix.index.PhoenixIndexBuilder;
-import org.apache.phoenix.index.PhoenixIndexFailurePolicy;
-import org.apache.phoenix.index.PhoenixIndexFailurePolicy.MutateCommand;
+import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper;
+import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper.MutateCommand;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
@@ -112,6 +111,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -119,7 +119,6 @@ import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.WALAnnotationUtil;
@@ -749,7 +748,7 @@ public class MutationState implements SQLCloseable {
                 // TODO: use our ServerCache
                 for (Mutation mutation : rowMutations) {
                     if (onDupKeyBytes != null) {
-                        mutation.setAttribute(PhoenixIndexBuilder.ATOMIC_OP_ATTRIB, onDupKeyBytes);
+                        mutation.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB, onDupKeyBytes);
                     }
                 }
                 rowMutationsPertainingToIndex = rowMutations;
@@ -1000,7 +999,7 @@ public class MutationState implements SQLCloseable {
                 } else if (mutation instanceof Put) {
                     upsertsize += temp;
                     upsertCounter++;
-                    if (mutation.getAttribute(PhoenixIndexBuilder.ATOMIC_OP_ATTRIB) != null) {
+                    if (mutation.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null) {
                         atomicUpsertsize += temp;
                     }
                     allDeletesMutations = false;
@@ -1365,7 +1364,7 @@ public class MutationState implements SQLCloseable {
                             final ImmutableBytesWritable finalindexMetaDataPtr =
                                     indexMetaDataPtr;
                             final PTable finalPTable = table;
-                            PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
+                            PhoenixIndexFailurePolicyHelper.doBatchWithRetries(new MutateCommand() {
                                 @Override
                                 public void doMutation() throws IOException {
                                     try {
@@ -1387,7 +1386,7 @@ public class MutationState implements SQLCloseable {
                                 private IOException
                                 updateTableRegionCacheIfNecessary(IOException ioe) {
                                     SQLException sqlE =
-                                            ServerUtil.parseLocalOrRemoteServerException(ioe);
+                                            ClientUtil.parseLocalOrRemoteServerException(ioe);
                                     if (sqlE != null
                                             && sqlE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND
                                             .getErrorCode()) {
@@ -1398,7 +1397,7 @@ public class MutationState implements SQLCloseable {
                                                     connection, finalPTable, mutationBatch,
                                                     finalindexMetaDataPtr);
                                         } catch (SQLException e) {
-                                            return ServerUtil.createIOException(
+                                            return ClientUtil.createIOException(
                                                     "Exception during updating index meta data cache",
                                                     ioe);
                                         }
@@ -1437,8 +1436,8 @@ public class MutationState implements SQLCloseable {
                     }
                     areAllBatchesSuccessful = true;
                 } catch (Exception e) {
-                    long serverTimestamp = ServerUtil.parseServerTimestamp(e);
-                    SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
+                    long serverTimestamp = ClientUtil.parseServerTimestamp(e);
+                    SQLException inferredE = ClientUtil.parseServerExceptionOrNull(e);
                     if (inferredE != null) {
                         if (shouldRetry
                                 && retryCount == 0
@@ -1461,7 +1460,7 @@ public class MutationState implements SQLCloseable {
 
                             continue;
                         } else if (inferredE.getErrorCode() == SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
-                            iwe = PhoenixIndexFailurePolicy.getIndexWriteException(inferredE);
+                            iwe = PhoenixIndexFailurePolicyHelper.getIndexWriteException(inferredE);
                             if (iwe != null && !shouldRetryIndexedMutation) {
                                 // For an index write failure, the data table write succeeded,
                                 // so when we retry we need to set REPLAY_WRITES
@@ -1469,8 +1468,8 @@ public class MutationState implements SQLCloseable {
                                 for (Mutation m : mutationBatchList.get(0)) {
                                     if (!PhoenixIndexMetaData.isIndexRebuild(
                                             m.getAttributesMap())){
-                                        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                                                BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
+                                        m.setAttribute(BaseScannerRegionObserverConstants.REPLAY_WRITES,
+                                                BaseScannerRegionObserverConstants.REPLAY_ONLY_INDEX_WRITES
                                         );
                                     }
                                     PhoenixKeyValueUtil.setTimestamp(m, serverTimestamp);
@@ -1548,9 +1547,9 @@ public class MutationState implements SQLCloseable {
                             hTable.close();
                         } catch (IOException e) {
                             if (sqlE != null) {
-                                sqlE.setNextException(ServerUtil.parseServerException(e));
+                                sqlE.setNextException(ClientUtil.parseServerException(e));
                             } else {
-                                sqlE = ServerUtil.parseServerException(e);
+                                sqlE = ClientUtil.parseServerException(e);
                             }
                         }
                         if (sqlE != null) { throw sqlE; }
@@ -1725,7 +1724,7 @@ public class MutationState implements SQLCloseable {
                         if (tableInfo.getOrigTableRef().getTable().getIndexType()
                                 != PTable.IndexType.UNCOVERED_GLOBAL) {
                             Put put = new Put(m.getRow());
-                            put.addColumn(emptyCF, emptyCQ, IndexRegionObserver.getMaxTimestamp(m),
+                            put.addColumn(emptyCF, emptyCQ, IndexUtil.getMaxTimestamp(m),
                                     QueryConstants.UNVERIFIED_BYTES);
                             // The Delete gets marked as unverified in Phase 1 and gets deleted on Phase 3.
                             addToMap(unverifiedIndexMutations, tableInfo, put);
@@ -1735,12 +1734,12 @@ public class MutationState implements SQLCloseable {
                         // deleted only after their data table rows are deleted
                         addToMap(verifiedOrDeletedIndexMutations, tableInfo, m);
                     } else if (m instanceof Put) {
-                        long timestamp = IndexRegionObserver.getMaxTimestamp(m);
+                        long timestamp = IndexUtil.getMaxTimestamp(m);
 
                         // Phase 1 index mutations are set to unverified
                         // Send entire mutation with the unverified status
                         // Remove the empty column prepared by Index codec as we need to change its value
-                        IndexRegionObserver.removeEmptyColumn(m, emptyCF, emptyCQ);
+                        IndexUtil.removeEmptyColumn(m, emptyCF, emptyCQ);
                         ((Put) m).addColumn(emptyCF, emptyCQ, timestamp,
                                 QueryConstants.UNVERIFIED_BYTES);
                         addToMap(unverifiedIndexMutations, tableInfo, m);
@@ -2228,7 +2227,7 @@ public class MutationState implements SQLCloseable {
             }
             // Concatenate ON DUPLICATE KEY bytes to allow multiple
             // increments of the same row in the same commit batch.
-            this.onDupKeyBytes = PhoenixIndexBuilder.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
+            this.onDupKeyBytes = PhoenixIndexBuilderHelper.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
             statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
             return true;
         }

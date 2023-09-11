@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYN_COLS_METADATA_CELL_QUALIFIER;
+import static org.apache.phoenix.coprocessorclient.ScanRegionObserverConstants.DYN_COLS_METADATA_CELL_QUALIFIER;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 

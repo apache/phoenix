@@ -20,7 +20,6 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -38,9 +37,6 @@ import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PTinyint;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
@@ -48,29 +44,19 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TagUtil;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.ipc.HBaseRpcController;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos.AdminService;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.ipc.RemoteException;
-import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -82,7 +68,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.LinkType;
-import org.apache.phoenix.schema.PTable.ViewType;
+
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -929,39 +915,6 @@ public class MetaDataUtil {
             delSeqStmt.executeUpdate();
         }
     }
-    
-    /**
-     * This function checks if all regions of a table is online
-     * @param conf
-     * @param table
-     * @return true when all regions of a table are online
-     */
-    public static boolean tableRegionsOnline(Configuration conf, PTable table) {
-        try (ClusterConnection hcon =
-                (ClusterConnection) ConnectionFactory.createConnection(conf)) {
-            List<HRegionLocation> locations = hcon.locateRegions(
-              org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
-
-            for (HRegionLocation loc : locations) {
-                try {
-                    ServerName sn = loc.getServerName();
-                    if (sn == null) continue;
-
-                    AdminService.BlockingInterface admin = hcon.getAdmin(sn);
-                    HBaseRpcController controller = hcon.getRpcControllerFactory().newController();
-                    org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.getRegionInfo(controller,
-                        admin, loc.getRegion().getRegionName());
-                } catch (RemoteException e) {
-                    LOGGER.debug("Cannot get region " + loc.getRegion().getEncodedName() + " info due to error:" + e);
-                    return false;
-                }
-            }
-        } catch (IOException ex) {
-            LOGGER.warn("tableRegionsOnline failed due to:", ex);
-            return false;
-        }
-        return true;
-    }
 
     public static boolean propertyNotAllowedToBeOutOfSync(String colFamProp) {
         return SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.contains(colFamProp);
@@ -1076,17 +1029,6 @@ public class MetaDataUtil {
         boolean isMultiTenant = parentTable.isMultiTenant();
         boolean isSalted = parentTable.getBucketNum()!=null;
         return (isMultiTenant && isSalted) ? 2 : (isMultiTenant || isSalted) ? 1 : 0;
-    }
-
-    public static String getJdbcUrl(RegionCoprocessorEnvironment env) {
-        String zkQuorum = env.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
-        String zkClientPort = env.getConfiguration().get(HConstants.ZOOKEEPER_CLIENT_PORT,
-            Integer.toString(HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT));
-        String zkParentNode = env.getConfiguration().get(HConstants.ZOOKEEPER_ZNODE_PARENT,
-            HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
-        return PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum
-            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkClientPort
-            + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkParentNode;
     }
 
     public static boolean isHColumnProperty(String propName) {

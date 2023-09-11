@@ -39,8 +39,8 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -610,7 +610,7 @@ public class DeleteCompiler {
             // TODO: better abstraction
             final StatementContext context = dataPlan.getContext();
             Scan scan = context.getScan();
-            scan.setAttribute(BaseScannerRegionObserver.DELETE_AGG, QueryConstants.TRUE);
+            scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_AGG, QueryConstants.TRUE);
 
             // Build an ungrouped aggregate query: select COUNT(*) from <table> where <where>
             // The coprocessor will delete each row returned from the scan
@@ -822,7 +822,7 @@ public class DeleteCompiler {
                     byte[] uuidValue = ServerCacheClient.generateId();
                     context.getScan().setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
                     context.getScan().setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ptr.get());
-                    context.getScan().setAttribute(BaseScannerRegionObserver.TX_STATE, txState);
+                    context.getScan().setAttribute(BaseScannerRegionObserverConstants.TX_STATE, txState);
                     ScanUtil.setClientVersion(context.getScan(), MetaDataProtocol.PHOENIX_VERSION);
                     String sourceOfDelete = statement.getConnection().getSourceOfOperation();
                     if (sourceOfDelete != null) {

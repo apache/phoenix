@@ -48,7 +48,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
-import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
+import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.visitor.AvgRowWidthVisitor;
@@ -81,6 +81,7 @@ import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.CostUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.SQLCloseables;
@@ -90,7 +91,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-import org.apache.phoenix.util.ServerUtil;
 
 public class HashJoinPlan extends DelegateQueryPlan {
     private static final Logger LOGGER = LoggerFactory.getLogger(HashJoinPlan.class);
@@ -270,7 +270,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
             peeking.peek();
         } catch (Exception e) {
             try {
-                throw ServerUtil.parseServerException(e);
+                throw ClientUtil.parseServerException(e);
             } catch (HashJoinCacheNotFoundException e2) {
                 Long cacheId = e2.getCacheId();
                 if (delegate.getContext().getRetryingPersistentCache(cacheId)) {

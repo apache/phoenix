@@ -47,10 +47,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.WhereCompiler;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -76,7 +74,6 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.trace.TracingIterator;
@@ -383,9 +380,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         IndexMaintainer.serialize(dataTable, ptr, indexes, context.getConnection());
-        scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
+        scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_BUILD_PROTO, ByteUtil.copyKeyBytesIfNecessary(ptr));
         if (dataTable.isTransactional()) {
-            scan.setAttribute(BaseScannerRegionObserver.TX_STATE, context.getConnection().getMutationState().encodeTransaction());
+            scan.setAttribute(BaseScannerRegionObserverConstants.TX_STATE, context.getConnection().getMutationState().encodeTransaction());
         }
     }
 
@@ -427,7 +424,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             for (byte[] viewConstant : viewConstants) {
                 Bytes.writeByteArray(output, viewConstant);
             }
-            scan.setAttribute(BaseScannerRegionObserver.VIEW_CONSTANTS, stream.toByteArray());
+            scan.setAttribute(BaseScannerRegionObserverConstants.VIEW_CONSTANTS, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -446,7 +443,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             boolean storeColsInSingleCell = dataTable.getImmutableStorageScheme() == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
             if (storeColsInSingleCell) {
                 // if storeColsInSingleCell is true all columns of a given column family are stored in a single cell
-                scan.setAttribute(BaseScannerRegionObserver.COLUMNS_STORED_IN_SINGLE_CELL, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+                scan.setAttribute(BaseScannerRegionObserverConstants.COLUMNS_STORED_IN_SINGLE_CELL, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
             }
             WritableUtils.writeVInt(output, dataColumns.size());
             for (PColumn column : dataColumns) {
@@ -455,7 +452,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 Bytes.writeByteArray(output, cf);
                 Bytes.writeByteArray(output, cq);
             }
-            scan.setAttribute(BaseScannerRegionObserver.DATA_TABLE_COLUMNS_TO_JOIN, stream.toByteArray());
+            scan.setAttribute(BaseScannerRegionObserverConstants.DATA_TABLE_COLUMNS_TO_JOIN, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -472,7 +469,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         try {
             DataOutputStream output = new DataOutputStream(stream);
             schema.write(output);
-            scan.setAttribute(BaseScannerRegionObserver.LOCAL_INDEX_JOIN_SCHEMA, stream.toByteArray());
+            scan.setAttribute(BaseScannerRegionObserverConstants.LOCAL_INDEX_JOIN_SCHEMA, stream.toByteArray());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
