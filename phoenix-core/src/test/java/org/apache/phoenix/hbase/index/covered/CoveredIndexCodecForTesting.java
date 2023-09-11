@@ -23,7 +23,7 @@ import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.phoenix.hbase.index.builder.BaseIndexCodec;
+import org.apache.phoenix.hbase.index.BaseIndexCodec;
 
 /**
  * An {@link IndexCodec} for testing that allow you to specify the index updates/deletes, regardless of the current
