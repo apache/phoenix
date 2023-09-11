@@ -691,13 +691,11 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             String parent2, String viewSchema, String viewName)
             throws SQLException {
 
-        /*
-        After PHOENIX-6141, view creation happens in three phases to avoid orphan rows in
-        SYSTEM.CHILD_LINK. We can instrument test CQSI to fail the third phase which will
-        lead to UNVERIFIED orphan rows needed for some tests in this class.
-         */
-        ConnectionQueryServicesTestImpl.setFailPhaseThreeChildLinkWriteForTesting(true);
-
+        final String querySysChildLink =
+                "SELECT * FROM SYSTEM.CHILD_LINK WHERE TABLE_SCHEM='%s' AND "
+                        + "TABLE_NAME='%s' AND COLUMN_FAMILY='%s' AND "
+                        + LINK_TYPE + " = " +
+                        PTable.LinkType.CHILD_TABLE.getSerializedValue();
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
             stmt.execute(String.format(CREATE_BASE_TABLE_DDL, parentSchema,
@@ -713,6 +711,13 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             } catch (TableAlreadyExistsException ignored) {
                 // expected
             }
+
+            // Confirm that the orphan parent->child link exists after the
+            // second view creation
+            ResultSet rs = stmt.executeQuery(String.format(querySysChildLink,
+                    parentSchema,  parent2, SchemaUtil.getTableName(
+                            viewSchema, viewName)));
+            assertTrue(rs.next());
         }
     }
 
