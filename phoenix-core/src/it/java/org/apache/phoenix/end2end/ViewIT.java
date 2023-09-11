@@ -902,10 +902,10 @@ public class ViewIT extends SplitSystemCatalogIT {
     @Test
     //creating view with same name on top of a table with a non existent column
     public void testCreateViewWithUndefinedSameColumnName() throws Exception {
+        String fullViewName = generateUniqueName();
+
         try (Connection conn = DriverManager.getConnection(getUrl());
              Statement stmt = conn.createStatement()) {
-
-            String fullViewName = generateUniqueName();
             String ddl = "CREATE VIEW " + fullViewName +
                     " AS SELECT * FROM " + fullViewName +
                     " WHERE " + fullViewName + " = 1";
@@ -915,6 +915,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertEquals("Undefined column",
                     SQLExceptionCode.COLUMN_NOT_FOUND
                     .getErrorCode(), columnException.getErrorCode());
+            assertEquals(fullViewName, columnException.getColumnName());
         }
     }
 
