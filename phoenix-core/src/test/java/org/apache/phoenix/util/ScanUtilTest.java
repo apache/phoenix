@@ -26,7 +26,7 @@ import org.apache.hadoop.hbase.ExtendedCellBuilderFactory;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -536,7 +536,7 @@ public class ScanUtilTest {
 
                 long timestamp44 = 44L;
                 Scan testScan = new Scan();
-                testScan.setAttribute(BaseScannerRegionObserver.PHOENIX_TTL, Bytes.toBytes(1L));
+                testScan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL, Bytes.toBytes(1L));
                 // Test isTTLExpired
                 Assert.assertTrue(ScanUtil.isTTLExpired(cell42, testScan, timestamp44));
                 Assert.assertFalse(ScanUtil.isTTLExpired(cell43, testScan, timestamp44));

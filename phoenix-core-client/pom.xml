@@ -1,0 +1,434 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- trigger end2end tests-->
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.apache.phoenix</groupId>
+    <artifactId>phoenix</artifactId>
+    <version>5.2.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>phoenix-core-client</artifactId>
+  <name>Phoenix Core Client</name>
+  <description>Core Phoenix Client codebase</description>
+
+  <build>
+    <plugins>
+      <!-- Add the ant-generated sources to the source path -->
+     <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-site-plugin</artifactId>
+     </plugin>
+     <!-- If this is configured in the top-level dependencyManagement,
+     it will run on the compat module even if the plugin is not enabled.
+     Sounds like another maven bug -->
+     <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-enforcer-plugin</artifactId>
+          <configuration>
+            <rules>
+              <evaluateBeanshell>
+                <condition>
+                  import java.util.regex.Pattern;
+                  import java.lang.Integer;
+
+                  versionPattern = Pattern.compile("(\\d+)\\.(\\d+)\\.(\\d+)[^.]*$");
+                  versionMatcher = versionPattern.matcher("${hbase.version}");
+                  versionMatcher.find();
+
+                  hbaseMajor = Integer.parseInt(versionMatcher.group(1));
+                  hbaseMinor = Integer.parseInt(versionMatcher.group(2));
+                  hbasePatch = Integer.parseInt(versionMatcher.group(3));
+
+                  hbaseMajor == 2 &amp;&amp; (
+                    ("${hbase.compat.version}".equals("2.4.0")
+                      &amp;&amp; hbaseMinor == 4
+                      &amp;&amp; hbasePatch == 0)
+                    || ("${hbase.compat.version}".equals("2.4.1")
+                      &amp;&amp; hbaseMinor == 4
+                      &amp;&amp; hbasePatch &gt;=1)
+                    || ("${hbase.compat.version}".equals("2.5.0")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=0)
+                    || ("${hbase.compat.version}".equals("2.5.4")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=4)
+                  )
+                </condition>
+              </evaluateBeanshell>
+            </rules>
+          </configuration>
+          <executions>
+         <execution>
+           <id>check-hbase-compatibility</id>
+           <phase>validate</phase>
+           <goals>
+             <goal>enforce</goal>
+           </goals>
+         </execution>
+       </executions>
+     </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>add-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${antlr-output.dir}</source>
+                <source>${antlr-input.dir}</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <!-- Compile the antlr sources -->
+      <plugin>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr3-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>antlr</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <outputDirectory>${antlr-output.dir}/org/apache/phoenix/parse</outputDirectory>
+        </configuration>
+      </plugin>
+      <!-- Setup eclipse -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-eclipse-plugin</artifactId>
+        <configuration>
+          <buildcommands>
+            <buildcommand>org.jamon.project.templateBuilder</buildcommand>
+            <buildcommand>org.eclipse.jdt.core.javabuilder</buildcommand>
+          </buildcommands>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <!-- generates the file that will be used by the sandbox script in the dev env -->
+            <id>create-phoenix-generated-classpath</id>
+            <goals>
+              <goal>build-classpath</goal>
+            </goals>
+            <configuration>
+              <outputFile>${project.build.directory}/cached_classpath.txt</outputFile>
+            </configuration>
+          </execution>
+          <!-- copies libraries for use by sqlline when it is started from source dir -->
+          <execution>
+            <id>copy-for-sqlline</id>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-api</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-core</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-slf4j-impl</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>org.apache.logging.log4j</groupId>
+                  <artifactId>log4j-1.2-api</artifactId>
+                </artifactItem>
+                <artifactItem>
+                  <groupId>sqlline</groupId>
+                  <artifactId>sqlline</artifactId>
+                  <classifier>jar-with-dependencies</classifier>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.basedir}/../lib</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
+            <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.xolstice.maven.plugins</groupId>
+        <artifactId>protobuf-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>compile-protoc</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <protocArtifact>${protobuf.group}:protoc:${protoc.version}:exe:${protoc.arch}</protocArtifact>
+              <protoSourceRoot>${basedir}/src/main/protobuf/</protoSourceRoot>
+              <clearOutputDirectory>false</clearOutputDirectory>
+              <checkStaleness>true</checkStaleness>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <!-- shaded thirdparty dependencies -->
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
+    </dependency>
+
+    <!-- HBase compat dependency -->
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <!-- Hadoop dependencies -->
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-auth</artifactId>
+    </dependency>
+
+    <!-- HBase dependencies -->
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-metrics-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop2-compat</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol-shaded</artifactId>
+    </dependency>
+
+    <!-- HBase Adjacent Dependencies -->
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-framework</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.curator</groupId>
+      <artifactId>curator-recipes</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.zookeeper</groupId>
+      <artifactId>zookeeper-jute</artifactId>
+    </dependency>
+
+    <!-- Transaction dependencies -->
+    <!-- Omid dependencies -->
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-timestamp-storage</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-hbase-commit-table</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-transaction-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-commit-table</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.omid</groupId>
+      <artifactId>omid-codahale-metrics</artifactId>
+    </dependency>
+
+    <!-- Other dependencies -->
+    <dependency>
+      <groupId>org.antlr</groupId>
+      <artifactId>antlr-runtime</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>joda-time</groupId>
+      <artifactId>joda-time</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.stephenc.findbugs</groupId>
+      <artifactId>findbugs-annotations</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.stephenc.jcip</groupId>
+      <artifactId>jcip-annotations</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.code.findbugs</groupId>
+      <artifactId>jsr305</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.iq80.snappy</groupId>
+      <artifactId>snappy</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.htrace</groupId>
+      <artifactId>htrace-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-commons-cli</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-configuration2</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.clearspring.analytics</groupId>
+      <artifactId>stream</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.ibm.icu</groupId>
+      <artifactId>icu4j-localespi</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.lmax</groupId>
+      <artifactId>disruptor</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.jruby.joni</groupId>
+      <artifactId>joni</artifactId>
+    </dependency>
+    <dependency>
+      <groupId> org.jruby.jcodings</groupId>
+      <artifactId>jcodings</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.hdrhistogram</groupId>
+      <artifactId>HdrHistogram</artifactId>
+    </dependency>
+  </dependencies>
+</project>

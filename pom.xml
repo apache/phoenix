@@ -44,6 +44,8 @@
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
+    <module>phoenix-core-client</module>
+    <module>phoenix-core-server</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-tracing-webapp</module>
@@ -674,6 +676,16 @@
   <dependencyManagement>
     <dependencies>
       <!-- Intra-project dependencies -->
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-core-client</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-core-server</artifactId>
+        <version>${project.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>

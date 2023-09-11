@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -31,7 +32,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.IndexRepairRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -137,7 +137,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     public static synchronized void doSetup() throws Exception {
         // below settings are needed to enforce major compaction
         Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
-        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
+        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         // to force multiple verification tasks to be spawned so that we can exercise the page splitting logic
         props.put(GlobalIndexRegionScanner.INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY, Long.toString(2));

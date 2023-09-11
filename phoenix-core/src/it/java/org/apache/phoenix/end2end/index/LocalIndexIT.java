@@ -35,7 +35,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Calendar;
-import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
@@ -61,7 +60,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -1041,7 +1040,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             rs = stmt.executeQuery(query);
             QueryPlan plan = stmt.getQueryPlan();
             assertEquals(indexTableName, plan.getContext().getCurrentTable().getTable().getName().getString());
-            assertEquals(BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
+            assertEquals(BaseScannerRegionObserverConstants.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertEquals(5, rs.getInt(2));

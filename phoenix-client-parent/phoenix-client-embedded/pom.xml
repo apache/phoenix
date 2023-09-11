@@ -68,7 +68,7 @@
     <!-- Depend on all other internal projects -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <artifactId>phoenix-core-server</artifactId>
       <exclusions>
         <exclusion>
           <groupId>org.slf4j</groupId>

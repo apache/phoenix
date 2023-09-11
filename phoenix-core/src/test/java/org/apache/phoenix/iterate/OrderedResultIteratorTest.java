@@ -25,7 +25,7 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.phoenix.coprocessor.ScanRegionObserver;
+import org.apache.phoenix.execute.ScanPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -58,7 +58,7 @@ public class OrderedResultIteratorTest {
         Scan scan = new Scan();
         Expression exp = LiteralExpression.newConstant(Boolean.TRUE);
         OrderByExpression ex = OrderByExpression.createByCheckIfOrderByReverse(exp, false, false, false);
-        ScanRegionObserver.serializeIntoScan(scan, 0, Arrays.asList(ex), 100);
+        ScanPlan.serializeScanRegionObserverIntoScan(scan, 0, Arrays.asList(ex), 100);
         // Check 5.1.0 & Check > 5.1.0
         ScanUtil.setClientVersion(scan, VersionUtil.encodeVersion("5.1.0"));
         NonAggregateRegionScannerFactory.deserializeFromScan(scan, s, false, 100);

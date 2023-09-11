@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -172,7 +173,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
-        serverProps.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+        serverProps.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Long.toString(MAX_LOOKBACK_AGE));
         serverProps.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
             Long.toString(Long.MAX_VALUE));

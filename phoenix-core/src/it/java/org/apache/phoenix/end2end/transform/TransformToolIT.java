@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.coprocessor.tasks.TransformMonitorTask;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtilHelper;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
@@ -33,7 +34,6 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.transform.TransformTool;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
@@ -119,9 +119,9 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
                 QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.INDEX_REBUILD_PAGE_SIZE_IN_ROWS, Long.toString(8));
         serverProps.put(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
-        serverProps.put(PhoenixConfigurationUtil.TRANSFORM_MONITOR_ENABLED, Boolean.FALSE.toString());
+        serverProps.put(PhoenixConfigurationUtilHelper.TRANSFORM_MONITOR_ENABLED, Boolean.FALSE.toString());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
-        clientProps.put(PhoenixConfigurationUtil.TRANSFORM_MONITOR_ENABLED, Boolean.FALSE.toString());
+        clientProps.put(PhoenixConfigurationUtilHelper.TRANSFORM_MONITOR_ENABLED, Boolean.FALSE.toString());
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
                 new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
