@@ -1207,6 +1207,82 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testLikeExpressionWithDescOrder() throws SQLException {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE " + tableName + " (id varchar, name varchar, type decimal, "
+                        + "status integer CONSTRAINT pk PRIMARY KEY(id desc, type))");
+        String query = "SELECT * FROM " + tableName + " where type = 1 and id like 'xy%'";
+        StatementContext context = compileStatement(query);
+        Scan scan = context.getScan();
+
+        assertTrue(scan.getFilter() instanceof SkipScanFilter);
+        SkipScanFilter filter = (SkipScanFilter) scan.getFilter();
+
+        byte[] lowerRange = filter.getSlots().get(0).get(0).getLowerRange();
+        byte[] upperRange = filter.getSlots().get(0).get(0).getUpperRange();
+        boolean lowerInclusive = filter.getSlots().get(0).get(0).isLowerInclusive();
+        boolean upperInclusive = filter.getSlots().get(0).get(0).isUpperInclusive();
+
+        byte[] startRow = PVarchar.INSTANCE.toBytes("xy");
+        byte[] invStartRow = new byte[startRow.length];
+        SortOrder.invert(startRow, 0, invStartRow, 0, startRow.length);
+
+        byte[] stopRow = PVarchar.INSTANCE.toBytes("xz");
+        byte[] invStopRow = new byte[startRow.length];
+        SortOrder.invert(stopRow, 0, invStopRow, 0, stopRow.length);
+
+        assertArrayEquals(invStopRow, lowerRange);
+        assertArrayEquals(invStartRow, upperRange);
+        assertFalse(lowerInclusive);
+        assertTrue(upperInclusive);
+
+        byte[] expectedStartRow = ByteUtil.concat(invStartRow, new byte[]{0},
+                PDecimal.INSTANCE.toBytes(new BigDecimal(1)));
+        assertArrayEquals(expectedStartRow, scan.getStartRow());
+
+        byte[] expectedStopRow = ByteUtil.concat(invStartRow,
+                new byte[]{(byte) (0xFF)}, PDecimal.INSTANCE.toBytes(new BigDecimal(1)),
+                new byte[]{1});
+        assertArrayEquals(expectedStopRow, scan.getStopRow());
+
+        query = "SELECT * FROM " + tableName + " where type = 1 and id like 'x%'";
+        context = compileStatement(query);
+        scan = context.getScan();
+
+        assertTrue(scan.getFilter() instanceof SkipScanFilter);
+        filter = (SkipScanFilter) scan.getFilter();
+
+        lowerRange = filter.getSlots().get(0).get(0).getLowerRange();
+        upperRange = filter.getSlots().get(0).get(0).getUpperRange();
+        lowerInclusive = filter.getSlots().get(0).get(0).isLowerInclusive();
+        upperInclusive = filter.getSlots().get(0).get(0).isUpperInclusive();
+
+        startRow = PVarchar.INSTANCE.toBytes("x");
+        invStartRow = new byte[startRow.length];
+        SortOrder.invert(startRow, 0, invStartRow, 0, startRow.length);
+
+        stopRow = PVarchar.INSTANCE.toBytes("y");
+        invStopRow = new byte[startRow.length];
+        SortOrder.invert(stopRow, 0, invStopRow, 0, stopRow.length);
+
+        assertArrayEquals(invStopRow, lowerRange);
+        assertArrayEquals(invStartRow, upperRange);
+        assertFalse(lowerInclusive);
+        assertTrue(upperInclusive);
+
+        expectedStartRow = ByteUtil.concat(invStartRow, new byte[]{0},
+                PDecimal.INSTANCE.toBytes(new BigDecimal(1)));
+        assertArrayEquals(expectedStartRow, scan.getStartRow());
+
+        expectedStopRow = ByteUtil.concat(invStartRow,
+                new byte[]{(byte) (0xFF)}, PDecimal.INSTANCE.toBytes(new BigDecimal(1)),
+                new byte[]{1});
+        assertArrayEquals(expectedStopRow, scan.getStopRow());
+    }
+
+    @Test
     public void testLikeNoWildcardExpression() throws SQLException {
         String tenantId = "000000000000001";
         String keyPrefix = "002";
