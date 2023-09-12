@@ -104,8 +104,8 @@ public class PagingFilter extends FilterBase implements Writable {
         // scanned even one row. The order in which it is called is not very predictable.
         // So we need to ensure that we have seen at least one row before we page.
         // The currentCell != null check ensures that.
-        if (state == State.STARTED && currentCell != null &&
-                currentTime - startTime >= pageSizeMs) {
+        if (state == State.STARTED && currentCell != null
+                && currentTime - startTime >= pageSizeMs) {
             state = State.TIME_TO_STOP;
         }
         if (delegate != null) {

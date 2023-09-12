@@ -17,13 +17,13 @@
  */
 package org.apache.phoenix.iterate;
 
-import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
-import org.apache.phoenix.schema.tuple.Tuple;
-
 import java.sql.SQLException;
 import java.util.List;
 
 import static org.apache.phoenix.util.ScanUtil.isDummy;
+
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
  * Iterates through tuples up to a limit
