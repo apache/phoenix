@@ -123,6 +123,9 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
 
     protected void scanDataRows(Collection<byte[]> dataRowKeys, long startTime) throws IOException {
         Scan dataScan = prepareDataTableScan(dataRowKeys);
+        if (dataScan == null) {
+            return;
+        }
         try (ResultScanner resultScanner = dataHTable.getScanner(dataScan)) {
             for (Result result = resultScanner.next(); (result != null);
                  result = resultScanner.next()) {

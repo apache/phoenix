@@ -27,6 +27,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -119,11 +120,16 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
             fail("Expected query to timeout with a 1 ms timeout");
         } catch (SQLException e) {
             //OPERATION_TIMED_OUT Exception expected
-            if (e.getErrorCode() == IO_EXCEPTION.getErrorCode() && e.getCause() instanceof SQLException) {
-                assertEquals(OPERATION_TIMED_OUT.getErrorCode(), ((SQLException) e.getCause()).getErrorCode());
-            } else {
-                assertEquals(OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
+            Throwable t = e;
+            // SQLTimeoutException can be wrapped inside outer exceptions like PhoenixIOException
+            while (t != null && !(t instanceof SQLTimeoutException)) {
+                t = t.getCause();
             }
+            if (t == null) {
+                fail("Expected query to fail with SQLTimeoutException");
+            }
+            assertEquals(OPERATION_TIMED_OUT.getErrorCode(),
+                    ((SQLTimeoutException)t).getErrorCode());
         } finally {
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
         }
