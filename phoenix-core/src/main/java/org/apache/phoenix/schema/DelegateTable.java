@@ -397,6 +397,11 @@ public class DelegateTable implements PTable {
     @Override
     public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
 
+    @Override
+    public String getCDCIncludeScopes() {
+        return delegate.getCDCIncludeScopes();
+    }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

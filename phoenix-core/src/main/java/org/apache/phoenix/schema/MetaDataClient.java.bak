@@ -1726,28 +1726,22 @@ public class MetaDataClient {
         PTable dataTable = tableRef.getTable();
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
-        List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
         // TODO: toString() on function will have an extra space at the beginning.
         ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ? statement.getTimeIdxColumn() : FACTORY.columnName(statement.getTimeIdxFunc().toString());
         // TODO: Would need to add the JSON column as well.
         columnDefs.add(FACTORY.columnDef(timeIdxCol, PTimestamp.INSTANCE.getSqlTypeName(), false, null, false,
-                PTimestamp.INSTANCE.getMaxLength(null), PTimestamp.INSTANCE.getScale(null), false,
+                PTimestamp.INSTANCE.getMaxLength(null), PTimestamp.INSTANCE.getScale(null), true,
                 SortOrder.getDefault(), "", null, false));
-        pkColumnDefs.add(FACTORY.columnDefInPkConstraint(timeIdxCol, SortOrder.getDefault(), false));
+        // TODO: Adding these gives: ERROR 510 (42889): The table already has a primary key. columnName=K
         for (PColumn pcol: pkColumns) {
-            // TODO: Cross check with the ColumnName creation logic in createIndex (line ~1578).
             columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
-                    pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
-                    pcol.getScale(), false, pcol.getSortOrder(), "", null, false));
-            pkColumnDefs.add(FACTORY.columnDefInPkConstraint(FACTORY.columnName(pcol.getName().getString()), pcol.getSortOrder(), pcol.isRowTimestamp()));
+                    pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getDataType().getMaxLength(null),
+                    pcol.getDataType().getScale(null), false, pcol.getSortOrder(), "", null, false));
         }
-        columnDefs.add(FACTORY.columnDef(FACTORY.columnName("CDC JSON"), "VARCHAR", false, null, true, null,
-                null, false, SortOrder.getDefault(), "", null, false));
         CreateTableStatement tableStatement = FACTORY.createTable(
                 FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),
-                statement.getProps(), columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
-                Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
-                statement.getBindCount(), null);
+                statement.getProps(), columnDefs, null, Collections.emptyList(), PTableType.CDC,
+                statement.isIfNotExists(), null, null, statement.getBindCount(), null);
         MutationState tableMutationState = createTable(tableStatement, null, dataTable, null, null, null, null, null);
         indexMutationState.join(tableMutationState);
         return indexMutationState;

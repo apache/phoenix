@@ -211,6 +211,7 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
+    private String cdcIncludeScopes;
 
     public static class Builder {
         private PTableKey key;
@@ -276,6 +277,7 @@ public class PTableImpl implements PTable {
         private String schemaVersion;
         private String externalSchemaId;
         private String streamingTopicName;
+        private String cdcIncludeScopes;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -696,6 +698,13 @@ public class PTableImpl implements PTable {
             return this;
          }
 
+        public Builder setCDCIncludeScopes(String cdcIncludeScopes) {
+            if (cdcIncludeScopes != null) {
+                this.cdcIncludeScopes = cdcIncludeScopes;
+            }
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -986,6 +995,7 @@ public class PTableImpl implements PTable {
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
+        this.cdcIncludeScopes = builder.cdcIncludeScopes;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1999,6 +2009,11 @@ public class PTableImpl implements PTable {
             streamingTopicName =
                 (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
         }
+        String cdcIncludeScopes = null;
+        if (table.hasCDCIncludeScopes()) {
+            cdcIncludeScopes =
+                    (String) PVarchar.INSTANCE.toObject(table.getCDCIncludeScopes().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2056,6 +2071,7 @@ public class PTableImpl implements PTable {
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
+                    .setCDCIncludeScopes(cdcIncludeScopes)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2335,6 +2351,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getStreamingTopicName() {
         return streamingTopicName;
+    }
+
+    @Override
+    public String getCDCIncludeScopes() {
+        return cdcIncludeScopes;
     }
 
     private static final class KVColumnFamilyQualifier {

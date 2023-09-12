@@ -963,6 +963,11 @@ public interface PTable extends PMetaDataEntity {
     String getStreamingTopicName();
 
     /**
+     * @return Optional string that represents the default include scopes to be used for CDC queries.
+     */
+    String getCDCIncludeScopes();
+
+    /**
      * Class to help track encoded column qualifier counters per column family.
      */
     public class EncodedCQCounter {

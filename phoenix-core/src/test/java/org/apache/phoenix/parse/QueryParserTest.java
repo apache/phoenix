@@ -513,6 +513,10 @@ public class QueryParserTest {
 
     @Test
     public void testCreateCDCSimple() throws Exception {
+        //parseQuery("create table  T ( id varchar PRIMARY KEY," + " v1 integer,"
+        //        + " v2 integer) TTL=100");
+        //parseQuery("create index eventlog_latgctime on EventLog(latGCTiee)");
+        //parseQuery("create uncovered index pop_uncov2 on us_population2(PHOENIX_ROW_TIMESTAMP())");
         CreateCDCStatement stmt = null;
         parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
