@@ -17,26 +17,17 @@
  */
 package org.apache.phoenix.expression.function;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.JsonPath;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.parse.JsonValueParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.JsonValueParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.bson.BsonBinaryReader;
-import org.bson.BsonDocument;
-import org.bson.BsonDocumentReader;
-import org.bson.BsonValue;
-import org.bson.RawBsonDocument;
-import org.bson.codecs.BsonDocumentCodec;
-import org.bson.codecs.DecoderContext;
-import org.bson.codecs.RawBsonDocumentCodec;
-import org.bson.io.ByteBufferBsonInput;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.json.JsonDataFormat;
+import org.apache.phoenix.util.json.JsonDataFormatFactory;
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -55,6 +46,9 @@ import java.util.List;
 public class JsonModifyFunction extends ScalarFunction {
 
     public static final String NAME = "JSON_MODIFY";
+    private final JsonDataFormat
+            jsonDataFormat =
+            JsonDataFormatFactory.getJsonDataFormat(JsonDataFormatFactory.DataFormat.BSON);
 
     // This is called from ExpressionType newInstance
     public JsonModifyFunction() {
@@ -81,7 +75,7 @@ public class JsonModifyFunction extends ScalarFunction {
         }
 
         // Column name or JSON string
-        RawBsonDocument top = (RawBsonDocument) PJson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
+        Object top = PJson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
 
         if (!getJSONPathExpr().evaluate(tuple, ptr)) {
             return false;
@@ -103,17 +97,7 @@ public class JsonModifyFunction extends ScalarFunction {
 
         String newVal = (String)PVarchar.INSTANCE.toObject(ptr,
             getNewValueExpr().getSortOrder());
-
-        Configuration conf = Configuration
-            .builder()
-            .jsonProvider(new BsonJsonProvider())
-            .build();
-        BsonValue newValue = JsonPath.using(conf).parse(newVal).json();
-        BsonDocument root = fromRaw(top);
-        JsonPath.using(conf).parse(root).set(jsonPathExprStr, newValue);
-        RawBsonDocument updated =
-            new RawBsonDocumentCodec().decode(new BsonDocumentReader(root), DecoderContext.builder().build());
-        ByteBuffer buffer = updated.getByteBuffer().asNIO();
+        ByteBuffer buffer = jsonDataFormat.updateValue(top, jsonPathExprStr, newVal);
         ptr.set(buffer.array(), buffer.arrayOffset(), buffer.limit());
         return true;
     }
@@ -128,16 +112,6 @@ public class JsonModifyFunction extends ScalarFunction {
 
     private Expression getJSONPathExpr() {
         return getChildren().get(1);
-    }
-
-    private BsonDocument fromRaw(RawBsonDocument rawDocument) {
-        // Transform to an in memory BsonDocument instance
-        BsonBinaryReader bsonReader = new BsonBinaryReader(new ByteBufferBsonInput(rawDocument.getByteBuffer()));
-        try {
-            return new BsonDocumentCodec().decode(bsonReader, DecoderContext.builder().build());
-        } finally {
-            bsonReader.close();
-        }
     }
 
     @Override

@@ -17,26 +17,20 @@
  */
 package org.apache.phoenix.expression.function;
 
-import com.jayway.jsonpath.Configuration;
-import com.jayway.jsonpath.JsonPath;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.parse.JsonValueParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
+import org.apache.phoenix.parse.JsonValueParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PJson;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.bson.BsonValue;
-import org.bson.RawBsonDocument;
+import org.apache.phoenix.util.json.JsonDataFormat;
+import org.apache.phoenix.util.json.JsonDataFormatFactory;
 
+import java.sql.Types;
 import java.util.List;
 
 /**
@@ -52,7 +46,9 @@ import java.util.List;
 public class JsonValueFunction extends ScalarFunction {
 
     public static final String NAME = "JSON_VALUE";
-    private PDataType dataType = PVarchar.INSTANCE;
+    private final JsonDataFormat
+            jsonDataFormat =
+            JsonDataFormatFactory.getJsonDataFormat(JsonDataFormatFactory.DataFormat.BSON);
 
     // This is called from ExpressionType newInstance
     public JsonValueFunction() {
@@ -79,9 +75,7 @@ public class JsonValueFunction extends ScalarFunction {
         }
 
         // Column name or JSON string
-        RawBsonDocument
-                top =
-                (RawBsonDocument) PJson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
+        Object top = PJson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
 
         if (!getJSONPathExpr().evaluate(tuple, ptr)) {
             return false;
@@ -98,45 +92,24 @@ public class JsonValueFunction extends ScalarFunction {
             return true;
         }
 
-        Configuration conf = Configuration.builder().jsonProvider(new BsonJsonProvider()).build();
-        BsonValue value = JsonPath.using(conf).parse(top).read(jsonPathExprStr, BsonValue.class);
+        Object value = jsonDataFormat.getValue(top, jsonPathExprStr);
+        int valueType = jsonDataFormat.getValueType(top, jsonPathExprStr);
         if (value != null) {
-            switch (value.getBsonType()) {
-            case INT32:
-                this.dataType = PInteger.INSTANCE;
-                ptr.set(PInteger.INSTANCE.toBytes(value.asInt32().getValue()));
-                break;
-            case INT64:
-                this.dataType = PLong.INSTANCE;
-                ptr.set(PLong.INSTANCE.toBytes(value.asInt64().getValue()));
-                break;
-            case STRING:
-            case SYMBOL:
-                this.dataType = PVarchar.INSTANCE;
-                ptr.set(PVarchar.INSTANCE.toBytes(value.asString().getValue()));
-                break;
-            case DECIMAL128:
-                this.dataType = PDouble.INSTANCE;
-                ptr.set(PDouble.INSTANCE.toBytes(value.asDecimal128().doubleValue()));
-                break;
-            case DOUBLE:
-                this.dataType = PDouble.INSTANCE;
-                ptr.set(PDouble.INSTANCE.toBytes(value.asDouble().getValue()));
-                break;
-            case BOOLEAN:
-                ptr.set(PVarchar.INSTANCE.toBytes(String.valueOf(value.asBoolean().getValue())));
-                break;
-            case BINARY:
-                this.dataType = PBinary.INSTANCE;
-                ptr.set(PBinary.INSTANCE.toBytes(value.asBinary().getData()));
-                break;
-            case DATE_TIME:
-                this.dataType = PDate.INSTANCE;
-                ptr.set(PDate.INSTANCE.toBytes(value.asDateTime().getValue()));
+            switch (valueType) {
+            case Types.INTEGER:
+            case Types.BOOLEAN:
+            case Types.DOUBLE:
+            case Types.VARCHAR:
+            case Types.BIGINT:
+            case Types.BINARY:
+            case Types.DATE:
+                ptr.set(PVarchar.INSTANCE.toBytes(String.valueOf(value)));
                 break;
             default:
                 return false;
             }
+        } else {
+            return false;
         }
 
         return true;
@@ -152,6 +125,6 @@ public class JsonValueFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return this.dataType;
+        return PVarchar.INSTANCE;
     }
 }

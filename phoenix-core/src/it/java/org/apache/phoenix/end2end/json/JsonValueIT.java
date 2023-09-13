@@ -55,7 +55,8 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             "        \"booltypef\": false,\n" +
             "        \"doubletype\": 2.5, \n" +
             "        \"longtype\": 1490020778457845, \n" +
-            "        \"intArray\": [1, 2, 3] \n" +
+            "        \"intArray\": [1, 2, 3], \n" +
+            "        \"nullcheck\": null \n"+
             "    }\n" +
             "}";
 
@@ -556,18 +557,24 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
                     "JSON_VALUE(JSONCOL, '$.datatypes.longtype')," +
                     "JSON_VALUE(JSONCOL, '$.datatypes.intArray[0]')," +
                     "JSON_VALUE(JSONCOL, '$.datatypes.intArray')," +
-                    "JSON_VALUE(JSONCOL, '$')  FROM "
+                    "JSON_VALUE(JSONCOL, '$')," +
+                    "JSON_VALUE(JSONCOL, '$.datatypes.nullcheck')," +
+                    "JSON_VALUE(JSONCOL, '$.datatypes.noKey')," +
+                    "JSON_VALUE(JSONCOL, '$.datatypes.noKey.subkey')  FROM "
                     + tableName + " WHERE JSON_VALUE(JSONCOL, '$.datatypes.stringtype')='someString'");
             assertTrue(rs.next());
             assertEquals("someString", rs.getString(1));
-            assertEquals(1, rs.getInt(2));
-            assertEquals(true, rs.getBoolean(3));
-            assertEquals(false, rs.getBoolean(4));
-            assertEquals(2.5, rs.getDouble(5), 0.01);
-            assertEquals(1490020778457845l, rs.getLong(6));
-            assertEquals(1, rs.getInt(7));
-            assertEquals(null, rs.getArray(8));
+            assertEquals("1", rs.getString(2));
+            assertEquals("true", rs.getString(3));
+            assertEquals("false", rs.getString(4));
+            assertEquals("2.5", rs.getString(5));
+            assertEquals("1490020778457845", rs.getString(6));
+            assertEquals("1", rs.getString(7));
+            assertEquals(null, rs.getString(8));
             assertEquals(null, rs.getString(9));
+            assertEquals(null, rs.getString(10));
+            assertEquals(null, rs.getString(11));
+            assertEquals(null, rs.getString(12));
         }
     }
 }

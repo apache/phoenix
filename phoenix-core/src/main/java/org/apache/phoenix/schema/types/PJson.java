@@ -18,13 +18,12 @@
 
 package org.apache.phoenix.schema.types;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.json.JsonDataFormat;
+import org.apache.phoenix.util.json.JsonDataFormatFactory;
 
 import java.sql.Types;
-
-import org.bson.RawBsonDocument;
 
 /**
  * <p>
@@ -36,12 +35,14 @@ import org.bson.RawBsonDocument;
  * Such data can also be stored as text, but the JSON data types have the advantage of enforcing
  * that each stored value is valid according to the JSON rules.
  */
-public class PJson extends PVarbinary{
+public class PJson extends PVarbinary {
 
     public static final PJson INSTANCE = new PJson();
+    private JsonDataFormat jsonDataFormat;
 
     private PJson() {
-        super("JSON", Types.VARBINARY, byte[].class, null, 48);
+        super("JSON", PDataType.JSON_TYPE, byte[].class, null, 48);
+        jsonDataFormat = JsonDataFormatFactory.getJsonDataFormat(JsonDataFormatFactory.DataFormat.BSON);
     }
 
     @Override
@@ -66,21 +67,21 @@ public class PJson extends PVarbinary{
     }
 
     @Override
-    public byte[] toBytes(Object object)  {
+    public byte[] toBytes(Object object) {
         if (object == null) {
             return ByteUtil.EMPTY_BYTE_ARRAY;
         }
-        return Bytes.toBytes(((RawBsonDocument)object).getByteBuffer().asNIO());
+        return jsonDataFormat.toBytes(object);
     }
 
     @Override
     public Object toObject(byte[] bytes, int offset, int length,
-                           @SuppressWarnings("rawtypes") PDataType actualType, SortOrder sortOrder,
-                           Integer maxLength, Integer scale) {
+            @SuppressWarnings("rawtypes") PDataType actualType, SortOrder sortOrder,
+            Integer maxLength, Integer scale) {
         if (length == 0) {
             return null;
         }
-        return new RawBsonDocument(bytes, offset, length);
+        return jsonDataFormat.toObject(bytes, offset, length);
     }
 
     @Override
@@ -89,7 +90,7 @@ public class PJson extends PVarbinary{
             return null;
         }
         if (equalsAny(actualType, PVarchar.INSTANCE)) {
-            return RawBsonDocument.parse((String)object);
+            return toObject((String) object);
         }
         return object;
     }
@@ -99,7 +100,7 @@ public class PJson extends PVarbinary{
         if (value == null || value.length() == 0) {
             return null;
         }
-        return RawBsonDocument.parse(value);
+        return jsonDataFormat.toObject(value);
     }
 
     @Override
@@ -110,8 +111,7 @@ public class PJson extends PVarbinary{
 
     @Override
     public int estimateByteSize(Object o) {
-        RawBsonDocument rawBSON = (RawBsonDocument)o;
-        return rawBSON.size();
+        return jsonDataFormat.estimateByteSize(o);
     }
 
     @Override
@@ -121,7 +121,7 @@ public class PJson extends PVarbinary{
 
     @Override
     public boolean isBytesComparableWith(@SuppressWarnings("rawtypes") PDataType otherType) {
-        return otherType == PVarbinary.INSTANCE ;
+        return otherType == PVarbinary.INSTANCE;
     }
 
     @Override

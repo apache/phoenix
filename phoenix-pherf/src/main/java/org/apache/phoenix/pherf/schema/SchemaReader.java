@@ -64,7 +64,7 @@ public class SchemaReader {
         try {
             connection = pUtil.getConnection(null);
             for (Path file : resourceList) {
-                LOGGER.info("\nApplying schema to file: " + file + " " + resourceToString(file));
+                LOGGER.info("\nApplying schema to file: " + file);
                 pUtil.executeStatement(resourceToString(file), connection);
             }
         } finally {
