@@ -93,9 +93,9 @@ public class RowProjector {
             ColumnProjector colProjector = columnProjectors.get(position);
             allCaseSensitive &= colProjector.isCaseSensitive();
             someCaseSensitive |= colProjector.isCaseSensitive();
-            reverseIndex.put(colProjector.getName(), position);
+            reverseIndex.put(colProjector.getLabel(), position);
             if (!colProjector.getTableName().isEmpty()) {
-                reverseIndex.put(SchemaUtil.getColumnName(colProjector.getTableName(), colProjector.getName()), position);
+                reverseIndex.put(SchemaUtil.getColumnName(colProjector.getTableName(), colProjector.getLabel()), position);
             }
         }
         this.allCaseSensitive = allCaseSensitive;
