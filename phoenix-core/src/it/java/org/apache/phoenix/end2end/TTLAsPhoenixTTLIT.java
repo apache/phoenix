@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -78,6 +79,54 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         //phoenix.table.ttl.enabled is true
         Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
         ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+
+    }
+
+    @Test
+    public void testCreateAndAlterTableDDLWithForeverAndNoneTTLValues() throws Exception {
+        String tableName = generateUniqueName();
+        String ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) TTL=FOREVER";
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.createStatement().execute(ddl);
+        assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                HConstants.LATEST_TIMESTAMP, tableName);
+
+        ddl = "ALTER TABLE  " + tableName
+                + " SET TTL=NONE";
+        conn.createStatement().execute(ddl);
+        assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED, tableName);
+        //Setting TTL should not be stored as CF Descriptor properties when
+        //phoenix.table.ttl.enabled is true
+        Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
+        ColumnFamilyDescriptor[] columnFamilies =
+                admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
+        assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
+
+        tableName = generateUniqueName();
+        ddl =
+                "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"
+                        + " col1 integer NOT NULL," + " b.col2 bigint," + " col3 bigint, "
+                        + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1)"
+                        + " ) TTL=NONE";
+        conn.createStatement().execute(ddl);
+        assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED, tableName);
+
+        ddl = "ALTER TABLE  " + tableName
+                + " SET TTL=FOREVER";
+        conn.createStatement().execute(ddl);
+        assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                HConstants.LATEST_TIMESTAMP, tableName);
+        //Setting TTL should not be stored as CF Descriptor properties when
+        //phoenix.table.ttl.enabled is true
+        columnFamilies =
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_TTL, columnFamilies[0].getTimeToLive());
 

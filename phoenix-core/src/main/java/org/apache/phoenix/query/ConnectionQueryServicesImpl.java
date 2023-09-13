@@ -299,7 +299,6 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -2890,6 +2889,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
+                                //Handle FOREVER and NONE case
+                                propValue = convertForeverAndNoneTTLValue(propValue);
                                 //If Phoenix level TTL is enabled we are using TTL as phoenix
                                 //Table level property.
                                 if (!isPhoenixTTLEnabled()) {
@@ -3208,6 +3209,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return (newTTL != null) ?
                 newTTL :
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
+    }
+
+    public static Object convertForeverAndNoneTTLValue(Object propValue) {
+        //Handle FOREVER and NONE value for TTL at HBase level TTL.
+        if (propValue instanceof String) {
+            String strValue = (String) propValue;
+            if ("FOREVER".equalsIgnoreCase(strValue) || "NONE".equalsIgnoreCase(strValue)) {
+                propValue = HConstants.FOREVER;
+            }
+        }
+        return propValue;
     }
 
     /**

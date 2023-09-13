@@ -154,6 +154,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -1063,10 +1064,13 @@ public class MetaDataClient {
                 //for client side.
                 if (prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
-                    if (isPhoenixTTLEnabled()) {
-                        //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
-                        continue;
+                    if (!isPhoenixTTLEnabled()) {
+                        //Handling FOREVER and NONE case for TTL when phoenix.table.ttl.enable is false.
+                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond());
+                        commonFamilyProps.put(prop.getFirst(), value);
                     }
+                    //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
+                    continue;
                 }
 
                 // HTableDescriptor property or Phoenix Table Property

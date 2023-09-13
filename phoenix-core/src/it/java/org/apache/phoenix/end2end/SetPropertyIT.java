@@ -29,6 +29,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -39,6 +40,7 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -804,6 +806,47 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
                 //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
                 assertEquals(30, conn.unwrap(PhoenixConnection.class).getTable(
+                        new PTableKey(null, dataTableFullName)).getPhoenixTTL());
+            }
+        } finally {
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testSetTTLForTableWithForeverAndNoneValue() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            String ddl = "create table " + dataTableFullName + " ("
+                    + " id char(1) NOT NULL,"
+                    + " col1 integer NOT NULL,"
+                    + " col2 bigint NOT NULL,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)"
+                    + " ) " + generateDDLOptions("TTL=NONE, SALT_BUCKETS = 4, DEFAULT_COLUMN_FAMILY='XYZ'");
+            conn.createStatement().execute(ddl);
+            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                assertEquals(1, columnFamilies.length);
+                assertEquals("XYZ", columnFamilies[0].getNameAsString());
+                assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
+                //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+                assertEquals(PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED, conn.unwrap(PhoenixConnection.class).getTable(
+                        new PTableKey(null, dataTableFullName)).getPhoenixTTL());
+            }
+            ddl = "ALTER TABLE " + dataTableFullName + " SET TTL=FOREVER";
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
+                TableDescriptor tableDesc = admin.getDescriptor(TableName.valueOf(dataTableFullName));
+                ColumnFamilyDescriptor[] columnFamilies = tableDesc.getColumnFamilies();
+                assertEquals(1, columnFamilies.length);
+                assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
+                assertEquals("XYZ", columnFamilies[0].getNameAsString());
+                //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
+                assertEquals(HConstants.LATEST_TIMESTAMP, conn.unwrap(PhoenixConnection.class).getTable(
                         new PTableKey(null, dataTableFullName)).getPhoenixTTL());
             }
         } finally {
