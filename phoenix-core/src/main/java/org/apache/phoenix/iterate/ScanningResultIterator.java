@@ -101,13 +101,13 @@ public class ScanningResultIterator implements ResultIterator {
     }
 
     private void changeMetric(CombinableMetric metric, Long value) {
-        if(value != null) {
+        if (value != null) {
             metric.change(value);
         }
     }
 
     private void changeMetric(GlobalClientMetrics metric, Long value) {
-        if(value != null) {
+        if (value != null) {
             metric.update(value);
         }
     }

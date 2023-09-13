@@ -138,7 +138,9 @@ public class ScanMetricsHolder {
         return countOfBytesScanned;
     }
 
-    public CombinableMetric getCountOfRowsPaged() { return countOfRowsPaged; }
+    public CombinableMetric getCountOfRowsPaged() {
+        return countOfRowsPaged;
+    }
 
     public void setScanMetricMap(Map<String, Long> scanMetricMap) {
         this.scanMetricMap = scanMetricMap;

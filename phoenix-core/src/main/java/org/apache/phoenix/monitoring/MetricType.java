@@ -234,7 +234,7 @@ public enum MetricType {
 
     public static String getMetricColumnsDetails() {
         StringBuilder buffer=new StringBuilder();
-        for(MetricType metric:MetricType.values()){
+        for (MetricType metric:MetricType.values()) {
             if (metric.logLevel() != LogLevel.OFF) {
                 buffer.append(metric.columnName());
                 buffer.append(" ");
