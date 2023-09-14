@@ -456,4 +456,1573 @@ public class LikeExpressionIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    @Test
+    public void testLikeWithIndexDesc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name varchar, type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type, name desc)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy012', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthIndexDesc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type, name desc)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithIndexAsc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name varchar, type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type, name)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthIndexAsc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type, name)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithDesc() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName + " (id varchar, name varchar, type decimal, "
+                    + "status integer CONSTRAINT pk PRIMARY KEY(id desc, type))");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyz', 'xyz' , 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyabc', 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xx', 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xz', 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xxyz', 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy123', 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy', 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y', 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y012x', 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('w', 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('wxy01', 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xxyz", rs.getString(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xx", rs.getString(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthDesc() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName + " (id char(5) not null, name varchar," +
+                    " type decimal, status integer CONSTRAINT pk PRIMARY KEY(id desc, type))");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyz', 'xyz' , 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyabc', 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xx', 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xz', 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xxyz', 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy123', 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy', 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y', 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y012x', 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('w', 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('wxy01', 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xxyz", rs.getString(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xx", rs.getString(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithAsc() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName + " (id varchar, name varchar, type decimal, "
+                    + "status integer CONSTRAINT pk PRIMARY KEY(id, type))");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyz', 'xyz' , 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyabc', 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xx', 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xz', 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xxyz', 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy123', 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy', 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y', 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y012x', 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('w', 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('wxy01', 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals("xx", rs.getString(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xxyz", rs.getString(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthAsc() throws Exception {
+        String tableName = generateUniqueName();
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName + " (id char(5) not null, name varchar," +
+                    " type decimal, status integer CONSTRAINT pk PRIMARY KEY(id, type))");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyz', 'xyz' , 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xyabc', 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xx', 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xz', 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xxyz', 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy123', 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('xy', 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y', 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('y012x', 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('w', 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES('wxy01', 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xy%'");
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'x%'");
+
+            assertTrue(rs.next());
+            assertEquals("xx", rs.getString(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xxyz", rs.getString(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy", rs.getString(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xy123", rs.getString(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyabc", rs.getString(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xyz", rs.getString(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'z012%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'v0%'");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and id like 'xz%'");
+
+            assertTrue(rs.next());
+            assertEquals("xz", rs.getString(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithOrderByDesc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name varchar, type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthOrderByDesc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer )");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%' order by name desc");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%' order by name desc");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithOrderByAsc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name varchar, type integer, status integer)");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testLikeWithFixedWidthOrderByAsc() throws Exception {
+        String tableName = generateUniqueName();
+        String indexName = tableName + "_IDX";
+
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE " + tableName +
+                    " (id integer primary key, name char(5), type integer, status integer)");
+
+            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName +
+                    "(status, type)");
+
+            conn.commit();
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(1, 'xyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(2, 'xyabc', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(3, 'xx', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(4, 'xz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(5, 'xxyz', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(6, 'xy123', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(7, 'xy', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'y', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'y012x', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(8, 'w', 1, 1)");
+            stmt.executeUpdate("UPSERT INTO " + tableName + " VALUES(9, 'wxy01', 1, 1)");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xy%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'x%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+            assertEquals("xx", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
+            assertEquals("xxyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(7, rs.getInt(1));
+            assertEquals("xy", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
+            assertEquals("xy123", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals("xyabc", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("xyz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'z012%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'v0%' order by name");
+            assertFalse(rs.next());
+
+            rs = stmt.executeQuery("SELECT * FROM " + tableName +
+                    " where type = 1 and status = 1 and name like 'xz%' order by name");
+
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+            assertEquals("xz", rs.getString(2));
+            assertEquals(1, rs.getInt(3));
+            assertEquals(1, rs.getInt(4));
+
+            assertFalse(rs.next());
+        }
+    }
+
 }

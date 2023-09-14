@@ -141,8 +141,9 @@ public class ParallelIterators extends BaseResultIterators {
 
                     if (LOGGER.isDebugEnabled()) {
                         LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " +
-                            (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
-                            "ms, Scan: " + scan, ScanUtil.getCustomAnnotations(scan)));
+                                        (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
+                                        "ms, Table: " + physicalTableName + ", Scan: " + scan,
+                                ScanUtil.getCustomAnnotations(scan)));
                     }
 
                     allIterators.add(iterator);
