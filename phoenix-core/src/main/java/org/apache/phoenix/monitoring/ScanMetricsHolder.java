@@ -28,6 +28,7 @@ import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_SCANNED;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_SCANNED_REGIONS;
+import static org.apache.phoenix.monitoring.MetricType.PAGED_ROWS_COUNTER;
 
 import java.io.IOException;
 import java.util.Map;
@@ -49,6 +50,8 @@ public class ScanMetricsHolder {
     private final CombinableMetric countOfRemoteRPCRetries;
     private final CombinableMetric countOfRowsScanned;
     private final CombinableMetric countOfRowsFiltered;
+    private final CombinableMetric countOfRowsPaged;
+
     private  Map<String, Long> scanMetricMap;
     private Object scan;
 
@@ -78,6 +81,7 @@ public class ScanMetricsHolder {
         countOfRemoteRPCRetries = readMetrics.allotMetric(COUNT_REMOTE_RPC_RETRIES, tableName);
         countOfRowsScanned = readMetrics.allotMetric(COUNT_ROWS_SCANNED, tableName);
         countOfRowsFiltered = readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName);
+        countOfRowsPaged = readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName);
     }
 
     public CombinableMetric getCountOfRemoteRPCcalls() {
@@ -126,6 +130,10 @@ public class ScanMetricsHolder {
 
     public Map<String, Long> getScanMetricMap() {
         return scanMetricMap;
+    }
+
+    public CombinableMetric getCountOfRowsPaged() {
+        return countOfRowsPaged;
     }
 
     public void setScanMetricMap(Map<String, Long> scanMetricMap) {
