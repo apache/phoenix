@@ -30,6 +30,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_PARALLEL_SCANS;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIME;
@@ -126,7 +127,7 @@ public enum GlobalClientMetrics {
     GLOBAL_HCONNECTIONS_COUNTER(HCONNECTIONS_COUNTER),
     GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(PHOENIX_CONNECTIONS_THROTTLED_COUNTER),
     GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER(PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER),
-
+    GLOBAL_PAGED_ROWS_COUNTER(PAGED_ROWS_COUNTER),
     GLOBAL_HBASE_COUNT_RPC_CALLS(COUNT_RPC_CALLS),
     GLOBAL_HBASE_COUNT_REMOTE_RPC_CALLS(COUNT_REMOTE_RPC_CALLS),
     GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS(COUNT_MILLS_BETWEEN_NEXTS),
@@ -159,7 +160,6 @@ public enum GlobalClientMetrics {
 
     GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER(CLIENT_METADATA_CACHE_MISS_COUNTER),
     GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER(CLIENT_METADATA_CACHE_HIT_COUNTER);
-
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalClientMetrics.class);
     private static final boolean isGlobalMetricsEnabled = QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();

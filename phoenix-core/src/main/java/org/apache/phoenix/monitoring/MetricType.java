@@ -149,6 +149,8 @@ public enum MetricType {
                                                 ", not including throttled connections", LogLevel.OFF, PLong.INSTANCE),
     CLIENT_METADATA_CACHE_MISS_COUNTER("cmcm", "Number of cache misses for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
     CLIENT_METADATA_CACHE_HIT_COUNTER("cmch", "Number of cache hits for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
+    PAGED_ROWS_COUNTER("prc", "Number of dummy rows returned to client due to paging.", LogLevel.DEBUG, PLong.INSTANCE),
+
     // hbase metrics
     COUNT_RPC_CALLS("rp", "Number of RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
     COUNT_REMOTE_RPC_CALLS("rr", "Number of remote RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
@@ -232,7 +234,7 @@ public enum MetricType {
 
     public static String getMetricColumnsDetails() {
         StringBuilder buffer=new StringBuilder();
-        for(MetricType metric:MetricType.values()){
+        for (MetricType metric:MetricType.values()) {
             if (metric.logLevel() != LogLevel.OFF) {
                 buffer.append(metric.columnName());
                 buffer.append(" ");

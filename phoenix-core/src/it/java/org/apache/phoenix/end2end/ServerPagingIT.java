@@ -17,18 +17,14 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.types.PDate;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
+import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
+import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -39,22 +35,48 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.DateUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
         props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(0));
+        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
+
+    private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isPaged) throws SQLException {
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
+            assertEquals(String.format("Got %s", entry.getKey()), tableName, entry.getKey());
+            Map<MetricType, Long> metricValues = entry.getValue();
+            Long pagedRowsCntr = metricValues.get(MetricType.PAGED_ROWS_COUNTER);
+            assertNotNull(pagedRowsCntr);
+            if (isPaged) {
+                assertTrue(String.format("Got %d", pagedRowsCntr.longValue()), pagedRowsCntr > 0);
+            } else {
+                assertTrue(String.format("Got %d", pagedRowsCntr.longValue()), pagedRowsCntr == 0);
+            }
+        }
+        assertTrue(GLOBAL_PAGED_ROWS_COUNTER.getMetric().getValue() > 0);
+    }
+
     @Test
     public void testOrderByNonAggregation() throws Exception {
         final String tablename = generateUniqueName();
@@ -168,6 +190,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 assertEquals(D2.getTime(), rs.getDate(1).getTime());
                 assertFalse(rs.next());
+                assertServerPagingMetric(tablename, rs, true);
             }
         }
     }
@@ -200,6 +223,8 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                 assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i], rs.getString(1));
                 i++;
             }
+            // no paging when serial offset
+            assertServerPagingMetric(tablename, rs, false);
 
             // Testing query with offset + filter
             int filterCond = 10;
@@ -214,6 +239,8 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                         STRINGS[offset + filterCond + i], rs.getString(1));
                 i++;
             }
+            // no paging when serial offset
+            assertServerPagingMetric(tablename, rs, false);
 
             limit = 35;
             rs = conn.createStatement().executeQuery("SELECT t_id from " + tablename + " union all SELECT t_id from "
@@ -228,6 +255,8 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 assertEquals(STRINGS[i - 1], rs.getString(1));
             }
+            // no paging when serial offset
+            assertServerPagingMetric(tablename, rs, false);
             limit = 1;
             offset = 1;
             rs = conn.createStatement()
@@ -235,6 +264,9 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(25, rs.getInt(1));
             assertFalse(rs.next());
+            // because of descending order the offset is implemented on client
+            // so this generates a parallel scan and paging happens
+            assertServerPagingMetric(tablename, rs, true);
         }
     }
 
@@ -262,6 +294,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                 Assert.assertEquals(1, rs.getInt(1));
             }
             Assert.assertFalse(rs.next());
+            assertServerPagingMetric(indexName, rs, true);
         }
     }
 
@@ -285,6 +318,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
             assertEquals("bcd", rs.getString(1));
             assertEquals("bcde", rs.getString(2));
             assertFalse(rs.next());
+            assertServerPagingMetric(indexTableName, rs, true);
 
             // Add another row and run a group by query where the uncovered index should be used
             conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2, val3) values ('c', 'ab','cde', 'cdef')");
