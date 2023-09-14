@@ -154,6 +154,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -1058,11 +1059,17 @@ public class MetaDataClient {
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
                 }
-                //If Phoenix Level TTL is enabled use TTL as Phoenix Table Property as skip
-                //TTL at HTableDescriptor level.
-                if (isPhoenixTTLEnabled() && prop.getFirst().equalsIgnoreCase(TTL)
-                        && tableType != PTableType.SYSTEM) {
+                //Keeping TTL value as Phoenix Table property irrespective of PhoenixTTLEnabled or
+                //not to store the value in SYSCAT. To keep PTableImpl.getPhoenixTTL() consistent
+                //for client side.
+                if (prop.getFirst().equalsIgnoreCase(TTL) && tableType != PTableType.SYSTEM) {
                     tableProps.put(prop.getFirst(), prop.getSecond());
+                    if (!isPhoenixTTLEnabled()) {
+                        //Handling FOREVER and NONE case for TTL when phoenix.table.ttl.enable is false.
+                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond());
+                        commonFamilyProps.put(prop.getFirst(), value);
+                    }
+                    //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
                     continue;
                 }
 
@@ -5299,7 +5306,7 @@ public class MetaDataClient {
                         metaProperties.setColumnEncodedBytesProp(QualifierEncodingScheme.fromSerializedValue((byte)value));
                     } else if (propName.equalsIgnoreCase(USE_STATS_FOR_PARALLELIZATION)) {
                         metaProperties.setUseStatsForParallelizationProp((Boolean)value);
-                    } else if (propName.equalsIgnoreCase(TTL) && isPhoenixTTLEnabled()) {
+                    } else if (propName.equalsIgnoreCase(TTL)) {
                         metaProperties.setPhoenixTTL((Long)value);
                     } else if (propName.equalsIgnoreCase(CHANGE_DETECTION_ENABLED)) {
                         metaProperties.setChangeDetectionEnabled((Boolean) value);
