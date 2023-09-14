@@ -297,12 +297,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int queryTimeoutMillis;
     // Caching per Statement
     protected final Calendar localCalendar = Calendar.getInstance();
-    private boolean ddlTimestampValidationEnabled;
+    private boolean validateLastDdlTimestamp;
 
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
-        this.ddlTimestampValidationEnabled = this.connection.getQueryServices().getProps()
+        this.validateLastDdlTimestamp = this.connection.getQueryServices().getProps()
                                 .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
                                 QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
@@ -331,18 +331,24 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, false, this.ddlTimestampValidationEnabled);
+        return executeQuery(stmt, true, queryLogger, false);
     }
 
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, noCommit, this.ddlTimestampValidationEnabled);
+        return executeQuery(stmt, true, queryLogger, noCommit);
     }
 
+    private String getInfoString(TableRef tableRef) {
+        return String.format("Tenant: %s, Schema: %s, Table: %s",
+                this.connection.getTenantId(),
+                tableRef.getTable().getSchemaName(),
+                tableRef.getTable().getTableName());
+    }
     /**
      * Build a request for the validateLastDDLTimestamp RPC.
      * @param tableRef
-     * @return
+     * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest getValidateDDLTimestampRequest(TableRef tableRef) {
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
@@ -350,8 +356,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
                 = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
-        byte[] tenantIDBytes = this.connection.getTenantId() == null ? HConstants.EMPTY_BYTE_ARRAY : this.connection.getTenantId().getBytes();
-        byte[] schemaBytes = tableRef.getTable().getSchemaName() == null ? HConstants.EMPTY_BYTE_ARRAY : tableRef.getTable().getSchemaName().getBytes();
+        byte[] tenantIDBytes = this.connection.getTenantId() == null
+                                    ? HConstants.EMPTY_BYTE_ARRAY
+                                    : this.connection.getTenantId().getBytes();
+        byte[] schemaBytes = tableRef.getTable().getSchemaName() == null
+                                    ? HConstants.EMPTY_BYTE_ARRAY
+                                    : tableRef.getTable().getSchemaName().getBytes();
 
         innerBuilder.setTenantId(ByteStringer.wrap(tenantIDBytes));
         innerBuilder.setSchemaName(ByteStringer.wrap(schemaBytes));
@@ -368,46 +378,43 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * @param tableRef
      * @throws SQLException
      */
-    private void validateDDLTimestamp(TableRef tableRef, boolean doRetry) throws SQLException {
+    private void validateLastDDLTimestamp(TableRef tableRef, boolean doRetry) throws SQLException {
 
+        String infoString = getInfoString(tableRef);
         try (Admin admin = this.connection.getQueryServices().getAdmin()) {
             // get all live region servers
             List<ServerName> regionServers = new ArrayList<>(admin.getRegionServers(true));
             // pick one at random
-            ServerName regionServer = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
+            ServerName regionServer
+                    = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
 
-            LOGGER.debug("Sending DDL timestamp validation request for table {} at regionserver {}",
-                    tableRef.getTable().getTableName().getString(), regionServer.toString());
+            LOGGER.debug("Sending DDL timestamp validation request for {} to regionserver {}",
+                    infoString, regionServer.toString());
 
             // RPC
             CoprocessorRpcChannel channel = admin.coprocessorService(regionServer);
-            PhoenixRegionServerEndpoint.BlockingInterface service = PhoenixRegionServerEndpoint.newBlockingStub(channel);
+            PhoenixRegionServerEndpoint.BlockingInterface service
+                    = PhoenixRegionServerEndpoint.newBlockingStub(channel);
             service.validateLastDDLTimestamp(null, getValidateDDLTimestampRequest(tableRef));
         }
-        // handle server side exceptions
-        catch (ServiceException | SQLException | IOException e) {
-            if (e instanceof ServiceException) {
-                SQLException ex = ServerUtil.parseRemoteException(e.getCause());
-                // throw if stale cache exception
-                if (ex != null && (ex instanceof StaleMetadataCacheException)) {
-                    throw ex;
-                }
+        catch (Exception e) {
+            SQLException parsedException = ServerUtil.parseServerException(e);
+            if (parsedException instanceof StaleMetadataCacheException) {
+                throw parsedException;
             }
-            //retry once for any other errors
-            LOGGER.error("Error in validating DDL timestamp for table {}: {}",
-                    tableRef.getTable().getName().getString(), e.getCause());
+            //retry once for any exceptions other than StaleMetadataCacheException
+            LOGGER.error("Error in validating DDL timestamp for {}: {}", infoString, parsedException);
             if (doRetry) {
-                validateDDLTimestamp(tableRef, false);
+                validateLastDDLTimestamp(tableRef, false);
                 return;
             }
-            throw new SQLException("Error in validating DDL timestamp for table " +
-                    tableRef.getTable().getName().getString(), e.getCause());
+            throw parsedException;
         }
         // do nothing if the validation succeeded.
     }
 
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit, final boolean validateDDLTimestamp) throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
 
         try {
@@ -455,8 +462,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
 
                                 //if enabled, verify metadata for the table/view/index involved in the query plan
-                                if (validateDDLTimestamp) {
-                                    validateDDLTimestamp(plan.getTableRef(), true);
+                                if (shouldValidateLastDdlTimestamp()) {
+                                    validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
 
                                 // this will create its own trace internally, so we don't wrap this
@@ -504,7 +511,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     e.getSchemaName(), e.getTableName(), true)
                                             .wasUpdated()) {
                                         //TODO we can log retry count and error for debugging in LOG table
-                                        return executeQuery(stmt, false, queryLogger, noCommit, validateDDLTimestamp);
+                                        return executeQuery(stmt, false, queryLogger, noCommit);
                                     }
                                 }
                                 throw e;
@@ -514,8 +521,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 if (e instanceof StaleMetadataCacheException) {
                                     String planSchemaName = getLastQueryPlan().getTableRef().getTable().getSchemaName().toString();
                                     String planTableName = getLastQueryPlan().getTableRef().getTable().getTableName().toString();
+                                    // update cache
                                     new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
-                                    return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
+                                    // skip last ddl timestamp validation in the retry
+                                    setValidateLastDdlTimestamp(false);
+                                    return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit);
                                 }
                                 throw e;
                             }
@@ -2575,6 +2585,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private void setLastQueryPlan(QueryPlan lastQueryPlan) {
         this.lastQueryPlan = lastQueryPlan;
+    }
+
+    public boolean shouldValidateLastDdlTimestamp() {
+        return validateLastDdlTimestamp;
+    }
+
+    public void setValidateLastDdlTimestamp(boolean validateLastDdlTimestamp) {
+        this.validateLastDdlTimestamp = validateLastDdlTimestamp;
     }
     
     private void throwIfUnallowedUserDefinedFunctions(Map<String, UDFParseNode> udfParseNodes) throws SQLException {
