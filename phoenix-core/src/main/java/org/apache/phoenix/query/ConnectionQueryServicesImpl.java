@@ -2104,8 +2104,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 break;
             }
         }
-        if ((tableType == PTableType.VIEW && physicalTableName != null) ||
-                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))) {
+        if ((tableType != PTableType.CDC) && (
+                (tableType == PTableType.VIEW && physicalTableName != null) ||
+                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))
+        )) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
             ensureTableCreated(physicalTableNameBytes, null, tableType, tableProps, families, splits, true,

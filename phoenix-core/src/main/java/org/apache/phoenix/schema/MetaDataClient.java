@@ -1741,7 +1741,7 @@ public class MetaDataClient {
                     pcol.getScale(), false, pcol.getSortOrder(), "", null, false));
             pkColumnDefs.add(FACTORY.columnDefInPkConstraint(FACTORY.columnName(pcol.getName().getString()), pcol.getSortOrder(), pcol.isRowTimestamp()));
         }
-        columnDefs.add(FACTORY.columnDef(FACTORY.columnName("CDC JSON"), "VARCHAR", false, null, true, null,
+        columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME), PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,
                 null, false, SortOrder.getDefault(), "", null, false));
         CreateTableStatement tableStatement = FACTORY.createTable(
                 FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),

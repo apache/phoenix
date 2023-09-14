@@ -32,14 +32,10 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
     public void testCreate() throws SQLException {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        //conn.createStatement().execute("CREATE TABLE IF NOT EXISTS us_population ( state CHAR(2) NOT NULL, city VARCHAR NOT NULL, population BIGINT CONSTRAINT my_pk PRIMARY KEY (state, city))");
-        //conn.createStatement().execute("create cdc pop_changes on us_population(PHOENIX_ROW_TIMESTAMP())");
-
         String tableName = generateUniqueName();
         conn.createStatement().execute(
                 "create table  " + tableName + " ( k integer PRIMARY KEY," + " v1 integer,"
                         + " v2 integer)");
-
         String cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName
                 + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) INDEX_TYPE=global");
