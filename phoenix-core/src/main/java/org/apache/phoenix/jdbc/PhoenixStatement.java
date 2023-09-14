@@ -66,8 +66,6 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
-
-import com.google.protobuf.ServiceException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -396,14 +394,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             PhoenixRegionServerEndpoint.BlockingInterface service
                     = PhoenixRegionServerEndpoint.newBlockingStub(channel);
             service.validateLastDDLTimestamp(null, getValidateDDLTimestampRequest(tableRef));
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             SQLException parsedException = ServerUtil.parseServerException(e);
             if (parsedException instanceof StaleMetadataCacheException) {
                 throw parsedException;
             }
             //retry once for any exceptions other than StaleMetadataCacheException
-            LOGGER.error("Error in validating DDL timestamp for {}: {}", infoString, parsedException);
+            LOGGER.error("Error in validating DDL timestamp for {}: {}",
+                            infoString, parsedException);
             if (doRetry) {
                 validateLastDDLTimestamp(tableRef, false);
                 return;
@@ -461,7 +459,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                 .optimize(PhoenixStatement.this, plan);
                                 setLastQueryPlan(plan);
 
-                                //if enabled, verify metadata for the table/view/index involved in the query plan
+                                //if this.validateLastDdlTimestamp is set
+                                //verify metadata for the table/view/index in the query plan
                                 if (shouldValidateLastDdlTimestamp()) {
                                     validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
@@ -515,9 +514,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     }
                                 }
                                 throw e;
-                            }
-                            catch (SQLException e) {
-                                // force update cache in case of StaleMetadataCacheException and retry
+                            } catch (SQLException e) {
+                                // force update cache if StaleMetadataCacheException and retry
                                 if (e instanceof StaleMetadataCacheException) {
                                     String planSchemaName = getLastQueryPlan().getTableRef().getTable().getSchemaName().toString();
                                     String planTableName = getLastQueryPlan().getTableRef().getTable().getTableName().toString();
