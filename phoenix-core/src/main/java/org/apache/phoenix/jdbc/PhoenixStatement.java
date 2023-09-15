@@ -380,8 +380,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
         String infoString = getInfoString(tableRef);
         try (Admin admin = this.connection.getQueryServices().getAdmin()) {
+            // if this is a retry, update the list of live region servers in CQSI
+            if (!doRetry) {
+                this.connection.getQueryServices().refreshLiveRegionServers();
+            }
             // get all live region servers
-            List<ServerName> regionServers = new ArrayList<>(admin.getRegionServers(true));
+            List<ServerName> regionServers = this.connection.getQueryServices().getLiveRegionServers();
             // pick one at random
             ServerName regionServer
                     = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
@@ -460,7 +464,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                                 //verify metadata for the table/view/index in the query plan
                                 if (validateLastDdlTimestamp) {
-                                    validateLastDDLTimestamp(plan.getTableRef(), true);
+                                    try {
+                                        validateLastDDLTimestamp(plan.getTableRef(), true);
+                                    } catch (StaleMetadataCacheException e) {
+                                        String planSchemaName = plan.getTableRef().getTable().getSchemaName().toString();
+                                        String planTableName = plan.getTableRef().getTable().getTableName().toString();
+                                        // force update client metadata cache
+                                        LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
+                                        new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
+                                        // skip last ddl timestamp validation in the retry
+                                        return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
+                                    }
                                 }
 
                                 // this will create its own trace internally, so we don't wrap this
@@ -512,14 +526,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     }
                                 }
                                 throw e;
-                            } catch (StaleMetadataCacheException e) {
-                                String planSchemaName = getLastQueryPlan().getTableRef().getTable().getSchemaName().toString();
-                                String planTableName = getLastQueryPlan().getTableRef().getTable().getTableName().toString();
-                                // force update client metadata cache
-                                LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
-                                new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
-                                // skip last ddl timestamp validation in the retry
-                                return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
                             }
                             catch (RuntimeException e) {
 
