@@ -700,21 +700,21 @@ public class PTableImpl implements PTable {
                 this.externalSchemaId = externalSchemaId;
             }
             return this;
-         }
+        }
 
-         public Builder setStreamingTopicName(String streamingTopicName) {
+        public Builder setStreamingTopicName(String streamingTopicName) {
             if (streamingTopicName != null) {
                 this.streamingTopicName = streamingTopicName;
             }
             return this;
-         }
+        }
 
-         public Builder setRowKeyPrefix(byte[] rowKeyPrefix) {
+        public Builder setRowKeyPrefix(byte[] rowKeyPrefix) {
             if (rowKeyPrefix != null) {
                 this.rowKeyPrefix = rowKeyPrefix;
             }
             return this;
-         }
+        }
 
         /**
          * Populate derivable attributes of the PTable

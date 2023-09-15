@@ -3886,13 +3886,14 @@ public class MetaDataClient {
 
     private static void mutateIntegerProperty(Connection connection, String tenantId,
             String schemaName, String tableName, String propertyName, Integer propertyValue)
-            throws SQLException{
-        String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " +
-                TENANT_ID + "," +
-                TABLE_SCHEM + "," +
-                TABLE_NAME + "," +
-                propertyName +
-                ") VALUES (?, ?, ?, ?)";
+            throws SQLException {
+        String updatePropertySql = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\""
+                + SYSTEM_CATALOG_TABLE + "\"( "
+                + TENANT_ID + ","
+                + TABLE_SCHEM + ","
+                + TABLE_NAME + ","
+                + propertyName
+                + ") VALUES (?, ?, ?, ?)";
         try (PreparedStatement tableBoolUpsert = connection.prepareStatement(updatePropertySql)) {
             tableBoolUpsert.setString(1, tenantId);
             tableBoolUpsert.setString(2, schemaName);
@@ -5709,9 +5710,13 @@ public class MetaDataClient {
             this.nonTxToTx = nonTxToTx;
         }
 
-        public Integer getTTL() { return ttl; }
+        public Integer getTTL() {
+            return ttl;
+        }
 
-        public void setTTL(Integer ttl) { this.ttl = ttl; }
+        public void setTTL(Integer ttl) {
+            this.ttl = ttl;
+        }
 
         public Boolean isChangeDetectionEnabled() {
             return isChangeDetectionEnabled;

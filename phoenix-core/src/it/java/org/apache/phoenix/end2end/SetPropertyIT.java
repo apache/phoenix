@@ -846,7 +846,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals(HConstants.FOREVER, columnFamilies[0].getTimeToLive());
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
                 //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
-                assertEquals(HConstants.LATEST_TIMESTAMP, conn.unwrap(PhoenixConnection.class).getTable(
+                assertEquals(HConstants.FOREVER, conn.unwrap(PhoenixConnection.class).getTable(
                         new PTableKey(null, dataTableFullName)).getTTL());
             }
         } finally {

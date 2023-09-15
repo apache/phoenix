@@ -4139,13 +4139,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
              * TODO: Provide a path to copy existing data from PHOENIX_TTL to TTL column and then
              * to DROP PHOENIX_TTL Column. See PHOENIX-7023
              */
-            metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 1,
+            metaConnection = addColumnsIfNotExists(metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 1,
                     PhoenixDatabaseMetaData.TTL + " " + PInteger.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
-                    PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " " +
-                            PVarbinary.INSTANCE.getSqlTypeName());
+                    PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " "
+                            + PVarbinary.INSTANCE.getSqlTypeName());
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

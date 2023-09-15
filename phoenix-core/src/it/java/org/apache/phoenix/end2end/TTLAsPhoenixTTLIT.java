@@ -98,7 +98,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
         assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-                HConstants.LATEST_TIMESTAMP, tableName);
+                HConstants.FOREVER, tableName);
 
         ddl = "ALTER TABLE  " + tableName
                 + " SET TTL=NONE";
@@ -126,7 +126,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                 + " SET TTL=FOREVER";
         conn.createStatement().execute(ddl);
         assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-                HConstants.LATEST_TIMESTAMP, tableName);
+                HConstants.FOREVER, tableName);
         //Setting TTL should not be stored as CF Descriptor properties when
         //phoenix.table.ttl.enabled is true
         columnFamilies =

@@ -1374,11 +1374,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
              useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
 
         Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
-        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_OLD_TTL_NOT_DEFINED :
-                PLong.INSTANCE.getCodec().decodeLong(phoenixTTLKv.getValueArray(),
+        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_OLD_TTL_NOT_DEFINED : PLong.INSTANCE
+                .getCodec().decodeLong(phoenixTTLKv.getValueArray(),
                         phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
-        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL :
-            oldTable != null ? oldTable.getPhoenixTTL() : PHOENIX_OLD_TTL_NOT_DEFINED);
+        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL : oldTable != null
+                ? oldTable.getPhoenixTTL() : PHOENIX_OLD_TTL_NOT_DEFINED);
 
         Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
         long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
@@ -1434,19 +1434,19 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             oldTable != null ? oldTable.getStreamingTopicName() : null);
 
         Cell ttlKv = tableKeyValues[TTL_INDEX];
-        int ttl = ttlKv == null ? TTL_NOT_DEFINED :
-                PInteger.INSTANCE.getCodec().decodeInt(ttlKv.getValueArray(),
+        int ttl = ttlKv == null ? TTL_NOT_DEFINED : PInteger.INSTANCE
+                .getCodec().decodeInt(ttlKv.getValueArray(),
                         ttlKv.getValueOffset(), SortOrder.getDefault());
-        builder.setTTL(ttlKv != null ? ttl :
-                oldTable != null ? oldTable.getTTL() : TTL_NOT_DEFINED);
+        builder.setTTL(ttlKv != null ? ttl : oldTable != null
+                ? oldTable.getTTL() : TTL_NOT_DEFINED);
 
         Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
-        byte[] rowKeyPrefix = rowKeyPrefixKv != null ?
-                (byte[]) PVarbinary.INSTANCE.toObject(rowKeyPrefixKv.getValueArray(),
+        byte[] rowKeyPrefix = rowKeyPrefixKv != null
+                ? (byte[]) PVarbinary.INSTANCE.toObject(rowKeyPrefixKv.getValueArray(),
                         rowKeyPrefixKv.getValueOffset(), rowKeyPrefixKv.getValueLength())
                 : null;
-        builder.setRowKeyPrefix(rowKeyPrefix != null ? rowKeyPrefix :
-                oldTable != null ? oldTable.getRowKeyPrefix() : null);
+        builder.setRowKeyPrefix(rowKeyPrefix != null ? rowKeyPrefix
+                : oldTable != null ? oldTable.getRowKeyPrefix() : null);
 
 
         // Check the cell tag to see whether the view has modified this property

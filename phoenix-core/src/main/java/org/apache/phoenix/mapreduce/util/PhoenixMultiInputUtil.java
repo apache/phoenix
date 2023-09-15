@@ -39,12 +39,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 
 public class PhoenixMultiInputUtil {
     public static final String SELECT_ALL_VIEW_METADATA_FROM_SYSCAT_QUERY =
-            "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, TTL FROM " +
-                    SYSTEM_CATALOG_NAME + " WHERE " +
-                    TABLE_TYPE + " = '" + PTableType.VIEW.getSerializedValue() + "' AND " +
-                    TTL + " IS NOT NULL AND " +
-                    TTL + " > " + TTL_NOT_DEFINED + " AND " +
-                    VIEW_TYPE + " <> " + PTable.ViewType.MAPPED.getSerializedValue();
+            "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, TTL FROM "
+                    + SYSTEM_CATALOG_NAME + " WHERE "
+                    + TABLE_TYPE + " = '" + PTableType.VIEW.getSerializedValue() + "' AND "
+                    + TTL + " IS NOT NULL AND "
+                    + TTL + " > " + TTL_NOT_DEFINED + " AND "
+                    + VIEW_TYPE + " <> " + PTable.ViewType.MAPPED.getSerializedValue();
 
     public static Connection buildTenantConnection(String url, String tenantId)
             throws SQLException {

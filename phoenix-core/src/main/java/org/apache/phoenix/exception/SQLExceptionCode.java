@@ -351,7 +351,8 @@ public enum SQLExceptionCode {
             + "is higher than " + QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD+ ". You can edit the"
             + " limit or create ASYNC index."),
     CANNOT_SET_OR_ALTER_TTL(10953, "44A35", "Cannot set or alter "
-            + PhoenixDatabaseMetaData.TTL + " property on an view when parent/child view has TTL set,"),
+            + PhoenixDatabaseMetaData.TTL + " property on an view when parent/child "
+            + "view has TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
     PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY(10955, "44A37", TTL
