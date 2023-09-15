@@ -995,7 +995,7 @@ public class ScanUtil {
                 ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
     }
 
-    public static int getPhoenixTTL(Scan scan) {
+    public static int getTTL(Scan scan) {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserver.TTL);
         if (phoenixTTL == null) {
             return DEFAULT_PHOENIX_TTL;
@@ -1038,7 +1038,7 @@ public class ScanUtil {
 
     public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
         long ts = cell.getTimestamp();
-        int ttl = ScanUtil.getPhoenixTTL(scan);
+        int ttl = ScanUtil.getTTL(scan);
         return ts + ttl < nowTS;
     }
 

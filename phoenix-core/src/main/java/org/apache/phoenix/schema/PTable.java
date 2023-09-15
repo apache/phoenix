@@ -937,6 +937,7 @@ public interface PTable extends PMetaDataEntity {
     /**
      * @return If the view has overridden the TTL set at the parent entity level.
      */
+    @Deprecated
     boolean hasViewModifiedPhoenixTTL();
 
     /**

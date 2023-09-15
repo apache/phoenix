@@ -98,7 +98,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
                         + "numDeleteExpiredRequestCount=%d",
                 s.getRegionInfo().getTable().getNameAsString(),
                 scan.toJSON(Integer.MAX_VALUE),
-                ScanUtil.getPhoenixTTL(scan),
+                ScanUtil.getTTL(scan),
                 metricSource.getMaskExpiredRequestCount(),
                 metricSource.getDeleteExpiredRequestCount()
         ));
@@ -284,7 +284,7 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
             boolean isRowExpired = !checkRowNotExpired(cellList);
             if (isRowExpired) {
-                long ttl = ScanUtil.getPhoenixTTL(this.scan);
+                long ttl = ScanUtil.getTTL(this.scan);
                 long ts = ScanUtil.getMaxTimestamp(cellList);
                 LOG.trace(String.format(
                         "PHOENIX-TTL: Deleting row = [%s] belonging to table = %s, "

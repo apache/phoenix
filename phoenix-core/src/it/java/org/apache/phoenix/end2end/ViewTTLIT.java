@@ -1883,7 +1883,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
             Assert.assertEquals("PhoenixTTL does not match",
-                    phoenixTTL*1000, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
+                    phoenixTTL*1000, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
             Assert.assertTrue("Masking attribute should be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Delete Expired attribute should not set",
@@ -1920,7 +1920,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
             Assert.assertEquals("PhoenixTTL does not match",
-                    phoenixTTL*1000, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
+                    phoenixTTL*1000, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Masking attribute should not be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
             Assert.assertTrue("Delete Expired attribute should be set",

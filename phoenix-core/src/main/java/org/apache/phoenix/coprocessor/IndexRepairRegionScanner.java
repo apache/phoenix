@@ -36,7 +36,6 @@ import java.util.TreeSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -88,7 +87,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
         byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
         dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
         if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
-            indexTableTTL = ScanUtil.getPhoenixTTL(scan);
+            indexTableTTL = ScanUtil.getTTL(scan);
         } else {
             indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
         }

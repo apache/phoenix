@@ -49,7 +49,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FO
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_OLD_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED_DEPRECATED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 
 import java.io.IOException;
@@ -617,6 +617,7 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        @Deprecated
         public Builder setPhoenixTTL(long phoenixTTL) {
             this.phoenixTTL = phoenixTTL;
             return this;
@@ -628,11 +629,13 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        @Deprecated
         public Builder setPhoenixTTLHighWaterMark(long phoenixTTLHighWaterMark) {
             this.phoenixTTLHighWaterMark = phoenixTTLHighWaterMark;
             return this;
         }
 
+        @Deprecated
         public Builder setViewModifiedPhoenixTTL(boolean modified) {
             this.viewModifiedPropSet.set(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS,
                     modified);
@@ -1979,7 +1982,7 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
-        long phoenixTTL = PHOENIX_OLD_TTL_NOT_DEFINED;
+        long phoenixTTL = PHOENIX_TTL_NOT_DEFINED_DEPRECATED;
         if (table.hasPhoenixTTL()) {
             phoenixTTL = table.getPhoenixTTL();
         }
@@ -2355,6 +2358,7 @@ public class PTableImpl implements PTable {
         return viewModifiedPropSet.get(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS);
     }
 
+    @Deprecated
     @Override public boolean hasViewModifiedPhoenixTTL() {
         return viewModifiedPropSet.get(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS);
     }
