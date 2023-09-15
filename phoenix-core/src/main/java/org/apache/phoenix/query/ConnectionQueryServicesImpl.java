@@ -49,7 +49,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
@@ -75,8 +74,6 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAIL
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
-import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
@@ -98,7 +95,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -278,8 +274,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
-import org.apache.phoenix.schema.task.SystemTaskParams;
-import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -297,7 +291,6 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.ConfigUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -311,6 +304,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -399,7 +393,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
     private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
     private boolean localIndexUpgradeRequired;
-
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -2162,14 +2155,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
 
         // Avoid the client-server RPC if this is not a view creation
-        // For view creation, write UNVERIFIED child_link rows
         if (!childLinkMutations.isEmpty()) {
-            sendChildLinkMutations(childLinkMutations, false, false, physicalTableNameBytes, schemaBytes);
+            // Send mutations for parent-child links to SYSTEM.CHILD_LINK
+            // We invoke this using rowKey available in the first element
+            // of childLinkMutations.
+            final byte[] rowKey = childLinkMutations.get(0).getRow();
+            final RpcController controller = getController(PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME);
+            final MetaDataMutationResult result =
+                childLinkMetaDataCoprocessorExec(rowKey,
+                    new ChildLinkMetaDataServiceCallBack(controller, childLinkMutations));
+
+            switch (result.getMutationCode()) {
+                case UNABLE_TO_CREATE_CHILD_LINK:
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK)
+                            .setSchemaName(Bytes.toString(schemaBytes))
+                            .setTableName(Bytes.toString(physicalTableNameBytes)).build().buildException();
+                default:
+                    break;
+            }
         }
 
         // Send the remaining metadata mutations to SYSTEM.CATALOG
         byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaBytes, tableBytes);
-        MetaDataMutationResult result = metaDataCoprocessorExec(SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
+        return metaDataCoprocessorExec(SchemaUtil.getPhysicalHBaseTableName(schemaBytes, tableBytes,
                 SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, this.props)).toString(),
                 tableKey,
                 new Batch.Call<MetaDataService, MetaDataResponse>() {
@@ -2196,89 +2204,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 return rpcCallback.get();
             }
         });
-
-        //For view creation, if SYSCAT rpc succeeds, mark child_link rows as VERIFIED
-        if (!childLinkMutations.isEmpty()) {
-            try {
-                if (result.getMutationCode() == MutationCode.TABLE_NOT_FOUND) {
-                    sendChildLinkMutations(childLinkMutations, true, false, physicalTableNameBytes, schemaBytes);
-                } else {
-                    sendChildLinkMutations(childLinkMutations, true, true, physicalTableNameBytes, schemaBytes);
-                }
-            }
-            catch (SQLException e) {
-                //unverified rows will be repaired during read
-                LOGGER.debug("Exception in phase-3 of view creation: " + e.getMessage());
-                addChildLinkScanTask();
-            }
-        }
-        return result;
-    }
-
-    /*
-    Helper method to send mutations to SYSTEM.CHILD_LINK using its endpoint coprocessor
-     */
-    public void sendChildLinkMutations(List<Mutation> mutations, boolean isVerified, boolean isDelete,
-                                        byte[] physicalTableNameBytes, byte[] schemaBytes)
-            throws SQLException {
-
-        // get empty column information
-        PTable childLinkLogicalTable = getTable(null, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME, HConstants.LATEST_TIMESTAMP);
-        byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(childLinkLogicalTable);
-        byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(childLinkLogicalTable).getFirst();
-
-        // add empty column value to mutations or create delete mutations for phase-3
-        List<Mutation> childLinkMutations = new ArrayList<>();
-        for (Mutation m : mutations) {
-            if (isDelete) {
-                Delete delete = new Delete(m.getRow());
-                childLinkMutations.add(delete);
-            }
-            else {
-                Put put = isVerified ? new Put(m.getRow()) : (Put)m;
-                byte[] emptyColumnValue = isVerified ? VERIFIED_BYTES : UNVERIFIED_BYTES;
-                put.addColumn(emptyCF, emptyCQ, emptyColumnValue);
-                childLinkMutations.add(put);
-            }
-        }
-
-        // Send mutations for parent-child links to SYSTEM.CHILD_LINK
-        // We invoke this using rowKey available in the first element
-        // of childLinkMutations.
-        final byte[] rowKey = childLinkMutations.get(0).getRow();
-        final RpcController controller = getController(PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME);
-        final MetaDataMutationResult result =
-                childLinkMetaDataCoprocessorExec(rowKey,
-                        new ChildLinkMetaDataServiceCallBack(controller, childLinkMutations));
-
-        switch (result.getMutationCode()) {
-            case UNABLE_TO_CREATE_CHILD_LINK:
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_CREATE_CHILD_LINK)
-                        .setSchemaName(Bytes.toString(schemaBytes))
-                        .setTableName(Bytes.toString(physicalTableNameBytes)).build().buildException();
-            default:
-                break;
-        }
-    }
-
-    /*
-    Add a task to SYSTEM.TASK table which does a simple select * query on SYSTEM.CHILD_LINK table.
-    This should trigger the read repair step and verify any unverified rows.
-     */
-    private void addChildLinkScanTask() {
-
-        try {
-            PhoenixConnection conn = QueryUtil.getConnection(config).unwrap(PhoenixConnection.class);
-            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
-                    .setConn(conn)
-                    .setTaskType(PTable.TaskType.CHILD_LINK_SCAN)
-                    .setTaskStatus(PTable.TaskStatus.CREATED.toString())
-                    .setStartTs(new Timestamp(EnvironmentEdgeManager.currentTimeMillis()))
-                    .setTableName(SYSTEM_CHILD_LINK_TABLE)
-                    .build());
-        } catch (Throwable t) {
-            LOGGER.error("Adding a task to scan SYSTEM.CHILD_LINK failed!", t);
-        }
     }
 
     @Override
@@ -2889,6 +2814,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
+                                //Handle FOREVER and NONE case
+                                propValue = convertForeverAndNoneTTLValue(propValue);
                                 //If Phoenix level TTL is enabled we are using TTL as phoenix
                                 //Table level property.
                                 if (!isPhoenixTTLEnabled()) {
@@ -3207,6 +3134,17 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return (newTTL != null) ?
                 newTTL :
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
+    }
+
+    public static Object convertForeverAndNoneTTLValue(Object propValue) {
+        //Handle FOREVER and NONE value for TTL at HBase level TTL.
+        if (propValue instanceof String) {
+            String strValue = (String) propValue;
+            if ("FOREVER".equalsIgnoreCase(strValue) || "NONE".equalsIgnoreCase(strValue)) {
+                propValue = HConstants.FOREVER;
+            }
+        }
+        return propValue;
     }
 
     /**
@@ -3570,6 +3508,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 success = true;
                                 return null;
                             }
+                            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
+                                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -3784,10 +3725,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     private void createOtherSystemTables(PhoenixConnection metaConnection) throws SQLException, IOException {
         try {
-
-            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
             metaConnection.createStatement().execute(getSystemSequenceTableDDL(nSequenceSaltBuckets));
             // When creating the table above, DDL statements are
             // used. However, the CFD level properties are not set
@@ -4440,13 +4377,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public PhoenixConnection upgradeSystemSequence(
             PhoenixConnection metaConnection,
             Map<String, String> systemTableToSnapshotMap) throws SQLException, IOException {
-        int nSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         try (Statement statement = metaConnection.createStatement()) {
-            String createSequenceTable = getSystemSequenceTableDDL(nSaltBuckets);
+            String createSequenceTable = getSystemSequenceTableDDL(nSequenceSaltBuckets);
             statement.executeUpdate(createSequenceTable);
-            nSequenceSaltBuckets = nSaltBuckets;
         } catch (NewerTableAlreadyExistsException e) {
             // Ignore, as this will happen if the SYSTEM.SEQUENCE already exists at this fixed
             // timestamp.
@@ -4479,7 +4412,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // If the table timestamp is before 4.2.1 then run the upgrade script
             if (currentServerSideTableTimeStamp <
                     MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_2_1) {
-                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSaltBuckets, e.getTable())) {
+                if (UpgradeUtil.upgradeSequenceTable(metaConnection, nSequenceSaltBuckets,
+                        e.getTable())) {
                     metaConnection.removeTable(null,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_SCHEMA,
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_TABLE,
@@ -4491,7 +4425,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     clearTableRegionCache(TableName.valueOf(
                             PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES));
                 }
-                nSequenceSaltBuckets = nSaltBuckets;
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
             }

@@ -41,6 +41,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.*;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -145,6 +146,11 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         createMutationsWithUpserts();
         initializeRebuildScannerAttributes();
         initializeGlobalMockitoSetup();
+    }
+
+    @After
+    public void reset() {
+        EnvironmentEdgeManager.reset();
     }
 
     public void createDBObject() throws SQLException {

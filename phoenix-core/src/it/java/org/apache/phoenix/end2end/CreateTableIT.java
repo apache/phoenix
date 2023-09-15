@@ -357,6 +357,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 admin.getDescriptor(TableName.valueOf(tableName)).getColumnFamilies();
         assertEquals(1, columnFamilies.length);
         assertEquals(86400, columnFamilies[0].getTimeToLive());
+        //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+        assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
+                new PTableKey(null, tableName)).getTTL());
     }
 
     @Test
@@ -413,6 +416,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals("B", columnFamilies[0].getNameAsString());
         assertEquals(86400, columnFamilies[1].getTimeToLive());
         assertEquals("C", columnFamilies[1].getNameAsString());
+        //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+        assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
+                new PTableKey(null, tableName)).getTTL());
     }
 
     /**
@@ -439,6 +445,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(86400, columnFamilies[0].getTimeToLive());
         assertEquals("B", columnFamilies[1].getNameAsString());
         assertEquals(86400, columnFamilies[1].getTimeToLive());
+        //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+        assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
+                new PTableKey(null, tableName)).getTTL());
     }
 
     /**
@@ -517,6 +526,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(1, columnFamilies.length);
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
+        //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+        assertEquals(10000, conn.unwrap(PhoenixConnection.class).getTable(
+                new PTableKey(null, tableName)).getTTL());
     }
 
     /**
@@ -539,6 +551,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(1, columnFamilies.length);
         assertEquals("a", columnFamilies[0].getNameAsString());
         assertEquals(10000, columnFamilies[0].getTimeToLive());
+        //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
+        assertEquals(10000, conn.unwrap(PhoenixConnection.class).getTable(
+                new PTableKey(null, tableName)).getTTL());
     }
 
     @Test
@@ -1168,7 +1183,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
         String fullIndexeName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
         // Check system tables priorities.
-        try (Admin admin = driver.getConnectionQueryServices(null, null).getAdmin();
+        try (Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
                 Connection c = DriverManager.getConnection(getUrl())) {
             ResultSet rs = c.getMetaData().getTables("", 
                     "\""+ PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + "\"", 
