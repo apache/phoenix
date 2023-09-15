@@ -22,15 +22,18 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
+import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -106,7 +109,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table with UCF=never and upsert data using client-1
-            createTable(conn1, tableName, Long.MAX_VALUE);
+            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
             upsert(conn1, tableName);
 
             // select query from client-2 works to populate client side metadata cache
@@ -159,11 +162,11 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, Long.MAX_VALUE);
+            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
             upsert(conn1, tableName);
 
             // instrument CQSI to throw a SQLException once when getAdmin is called
-            Mockito.doThrow(new SQLException()).doCallRealMethod().when(spyCqs2).getAdmin();
+            Mockito.doThrow(new SQLException("FAIL")).doCallRealMethod().when(spyCqs2).getAdmin();
 
             // query using client-2 should succeed
             query(conn2, tableName);
@@ -186,12 +189,12 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, Long.MAX_VALUE);
+            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
             upsert(conn1, tableName);
 
             // instrument CQSI admin to throw an IOException once when getRegionServers() is called
             Admin spyAdmin = Mockito.spy(spyCqs2.getAdmin());
-            Mockito.doThrow(new IOException()).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
+            Mockito.doThrow(new IOException("FAIL")).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
             Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
 
             // query using client-2 should succeed
@@ -216,12 +219,12 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, Long.MAX_VALUE);
+            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
             upsert(conn1, tableName);
 
             // Instrument ServerMetadataCache to throw a SQLException once
             ServerMetadataCache spyCache = Mockito.spy(ServerMetadataCache.getInstance(config));
-            Mockito.doThrow(new SQLException()).doCallRealMethod().when(spyCache)
+            Mockito.doThrow(new SQLException("FAIL")).doCallRealMethod().when(spyCache)
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
             ServerMetadataCache.setInstance(spyCache);
 
@@ -247,7 +250,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, Long.MAX_VALUE);
+            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
             upsert(conn1, tableName);
 
             // query using client-2 to populate cache
@@ -266,7 +269,7 @@ public class ServerMetadataCachingIT extends BaseTest {
 
             // instrument CQSI admin to throw an IOException once when getRegionServers() is called
             Admin spyAdmin = Mockito.spy(spyCqs2.getAdmin());
-            Mockito.doThrow(new IOException()).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
+            Mockito.doThrow(new IOException("FAIL")).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
             Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
 
             // query using client-2 should succeed, one additional getTable RPC
@@ -276,6 +279,39 @@ public class ServerMetadataCachingIT extends BaseTest {
                     .getTable((PName) isNull(),
                             any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
                             anyLong(), anyLong());
+        }
+    }
+
+    /**
+     * Test Select Query fails in case CQSI Admin API throws IOException twice.
+     */
+    @Test
+    public void testSelectQueryFails() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // create table and upsert using client-1
+            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            upsert(conn1, tableName);
+
+            // instrument CQSI admin to throw an IOException once when getRegionServers() is called
+            Admin spyAdmin = Mockito.spy(spyCqs2.getAdmin());
+            Mockito.doThrow(new IOException("FAIL")).doThrow(new IOException("FAIL")).when(spyAdmin).getRegionServers(eq(true));
+            Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
+
+            // query using client-2 should fail
+            query(conn2, tableName);
+            Assert.fail("Query should have thrown Exception");
+        }
+        catch (Exception e) {
+            Assert.assertTrue("PhoenixIOException was not thrown when CQSI.getAdmin encountered errors.", e instanceof PhoenixIOException);
         }
     }
 }
