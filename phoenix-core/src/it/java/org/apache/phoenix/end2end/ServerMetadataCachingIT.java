@@ -27,8 +27,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -52,7 +51,6 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
 
 @Category({NeedsOwnMiniClusterTest.class })
 public class ServerMetadataCachingIT extends BaseTest {
@@ -104,7 +102,7 @@ public class ServerMetadataCachingIT extends BaseTest {
         String tableName = generateUniqueName();
         ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
         ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
-        int expectedNumGetTableRPCs;
+        int expectedNumCacheUpdates;
 
         try (Connection conn1 = spyCqs1.connect(url1, props);
              Connection conn2 = spyCqs2.connect(url2, props)) {
@@ -114,13 +112,11 @@ public class ServerMetadataCachingIT extends BaseTest {
             upsert(conn1, tableName);
 
             // select query from client-2 works to populate client side metadata cache
-            // there should be 1 getTable RPC
+            // there should be 1 update to the client cache
             query(conn2, tableName);
-            expectedNumGetTableRPCs = 1;
-            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
-                    .getTable((PName) isNull(),
-                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                            anyLong(), anyLong());
+            expectedNumCacheUpdates = 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
 
             // add column using client-1 to update last ddl timestamp
             alterTableAddColumn(conn1, tableName, "newCol1");
@@ -129,21 +125,17 @@ public class ServerMetadataCachingIT extends BaseTest {
             ServerMetadataCache.resetCache();
 
             // select query from client-2 with old ddl timestamp works
-            // there should be one more getTable RPC
+            // there should be one more update to the client cache
             query(conn2, tableName);
-            expectedNumGetTableRPCs += 1;
-            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
-                    .getTable((PName) isNull(),
-                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                            anyLong(), anyLong());
+            expectedNumCacheUpdates += 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
 
             // select query from client-2 with latest ddl timestamp works
-            // there should be no more getTable RPCs
+            // there should be no more updates to client cache
             query(conn2, tableName);
-            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
-                    .getTable((PName) isNull(),
-                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                            anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
         }
     }
 
@@ -245,7 +237,7 @@ public class ServerMetadataCachingIT extends BaseTest {
         String tableName = generateUniqueName();
         ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
         ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
-        int expectedNumGetTableRPCs;
+        int expectedNumCacheUpdates;
 
         try (Connection conn1 = spyCqs1.connect(url1, props);
              Connection conn2 = spyCqs2.connect(url2, props)) {
@@ -256,11 +248,9 @@ public class ServerMetadataCachingIT extends BaseTest {
 
             // query using client-2 to populate cache
             query(conn2, tableName);
-            expectedNumGetTableRPCs = 1;
-            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
-                    .getTable((PName) isNull(),
-                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                            anyLong(), anyLong());
+            expectedNumCacheUpdates = 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
 
             // add column using client-1 to update last ddl timestamp
             alterTableAddColumn(conn1, tableName, "newCol1");
@@ -273,13 +263,11 @@ public class ServerMetadataCachingIT extends BaseTest {
             Mockito.doThrow(new IOException("FAIL")).doCallRealMethod().when(spyAdmin).getRegionServers(eq(true));
             Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
 
-            // query using client-2 should succeed, one additional getTable RPC
+            // query using client-2 should succeed, one additional cache update
             query(conn2, tableName);
-            expectedNumGetTableRPCs += 1;
-            Mockito.verify(spyCqs2, Mockito.times(expectedNumGetTableRPCs))
-                    .getTable((PName) isNull(),
-                            any(), eq(PVarchar.INSTANCE.toBytes(tableName)),
-                            anyLong(), anyLong());
+            expectedNumCacheUpdates += 1;
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
         }
     }
 
