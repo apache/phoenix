@@ -20,6 +20,7 @@ package org.apache.phoenix.query;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -99,6 +100,7 @@ import org.apache.phoenix.util.SequenceUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ServerUtil;
 
 /**
  *
@@ -469,6 +471,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public int getLowestClusterHBaseVersion() {
         return Integer.MAX_VALUE; // Allow everything for connectionless
+    }
+
+    @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        throw new UnsupportedOperationException();
     }
 
     @Override

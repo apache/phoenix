@@ -139,6 +139,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -400,6 +401,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
     private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
     private boolean localIndexUpgradeRequired;
+
+    // writes guarded by "liveRegionServersLock"
+    private volatile List<ServerName> liveRegionServers;
+    private final Object liveRegionServersLock = new Object();
 
 
     private static interface FeatureSupported {
@@ -3547,6 +3552,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             LOGGER.info("An instance of ConnectionQueryServices was created.");
                             openConnection();
                             hConnectionEstablished = true;
+                            refreshLiveRegionServers();
                             String skipSystemExistenceCheck =
                                 props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
                             if (skipSystemExistenceCheck != null &&
@@ -5255,6 +5261,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } finally {
             Closeables.closeQuietly(admin);
         }
+    }
+
+    @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        synchronized (liveRegionServersLock) {
+            try (Admin admin = getAdmin()) {
+                this.liveRegionServers = new ArrayList<>(admin.getRegionServers(true));
+            }
+            catch (IOException e) {
+                throw ServerUtil.parseServerException(e);
+            }
+        }
+        LOGGER.info("Refreshed list of live region servers.");
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        return this.liveRegionServers;
     }
 
     @Override

@@ -25,6 +25,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -137,6 +138,8 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public int getLowestClusterHBaseVersion();
     public Admin getAdmin() throws SQLException;
+    void refreshLiveRegionServers() throws SQLException;
+    List<ServerName> getLiveRegionServers();
 
     void clearTableRegionCache(TableName name) throws SQLException;
 
