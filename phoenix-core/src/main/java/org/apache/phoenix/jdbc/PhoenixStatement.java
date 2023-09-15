@@ -327,14 +327,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return connection.getQueryServices().getOptimizer().optimize(this, plan);
     }
     
-    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean validateLastDdlTimestamp)
+    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, false, validateLastDdlTimestamp);
+        return executeQuery(stmt, true, queryLogger, false, this.validateLastDdlTimestamp);
     }
 
-    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit, boolean validateLastDdlTimestamp)
+    protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, noCommit, validateLastDdlTimestamp);
+        return executeQuery(stmt, true, queryLogger, noCommit, this.validateLastDdlTimestamp);
     }
 
     private String getInfoString(TableRef tableRef) {
@@ -516,6 +516,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 String planSchemaName = getLastQueryPlan().getTableRef().getTable().getSchemaName().toString();
                                 String planTableName = getLastQueryPlan().getTableRef().getTable().getTableName().toString();
                                 // force update client metadata cache
+                                LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
                                 new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
                                 // skip last ddl timestamp validation in the retry
                                 return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
@@ -2266,7 +2267,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         if (stmt.getOperation().isMutation()) {
             throw new ExecuteQueryNotApplicableException(sql);
         }
-        return executeQuery(stmt, createQueryLogger(stmt, sql), this.validateLastDdlTimestamp);
+        return executeQuery(stmt, createQueryLogger(stmt, sql));
     }
 
     @Override
@@ -2303,7 +2304,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             return false;
         }
         
-        executeQuery(stmt, createQueryLogger(stmt, sql), this.validateLastDdlTimestamp);
+        executeQuery(stmt, createQueryLogger(stmt, sql));
         return true;
     }
 
@@ -2552,10 +2553,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private void setLastResultSet(PhoenixResultSet lastResultSet) {
         this.lastResultSet = lastResultSet;
-    }
-
-    public boolean isValidateLastDdlTimestampEnabled() {
-        return validateLastDdlTimestamp;
     }
 
     private int getLastUpdateCount() {

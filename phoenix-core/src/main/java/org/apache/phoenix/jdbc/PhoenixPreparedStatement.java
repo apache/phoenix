@@ -181,7 +181,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
             executeMutation(statement, createAuditQueryLogger(statement,query));
             return false;
         }
-        executeQuery(statement, createQueryLogger(statement,query), isValidateLastDdlTimestampEnabled());
+        executeQuery(statement, createQueryLogger(statement,query));
         return true;
     }
 
@@ -192,7 +192,7 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
             throw new ExecuteQueryNotApplicableException(statement.getOperation());
         }
 
-        return executeQuery(statement,createQueryLogger(statement,query), isValidateLastDdlTimestampEnabled());
+        return executeQuery(statement,createQueryLogger(statement,query));
     }
 
     @Override

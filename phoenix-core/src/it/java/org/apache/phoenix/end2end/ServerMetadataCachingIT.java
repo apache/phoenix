@@ -58,6 +58,7 @@ import static org.mockito.Matchers.isNull;
 public class ServerMetadataCachingIT extends BaseTest {
 
     private final Random RANDOM = new Random(42);
+    private final long NEVER = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -109,7 +110,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table with UCF=never and upsert data using client-1
-            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
             // select query from client-2 works to populate client side metadata cache
@@ -162,7 +163,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
             // instrument CQSI to throw a SQLException once when getAdmin is called
@@ -189,7 +190,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
             // instrument CQSI admin to throw an IOException once when getRegionServers() is called
@@ -219,7 +220,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
             // Instrument ServerMetadataCache to throw a SQLException once
@@ -250,7 +251,7 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
             // query using client-2 to populate cache
@@ -283,7 +284,7 @@ public class ServerMetadataCachingIT extends BaseTest {
     }
 
     /**
-     * Test Select Query fails in case CQSI Admin API throws IOException twice.
+     * Test Select Query fails in case Admin API throws IOException twice.
      */
     @Test
     public void testSelectQueryFails() throws Exception {
@@ -298,10 +299,10 @@ public class ServerMetadataCachingIT extends BaseTest {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"));
+            createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
-            // instrument CQSI admin to throw an IOException once when getRegionServers() is called
+            // instrument CQSI admin to throw an IOException twice when getRegionServers() is called
             Admin spyAdmin = Mockito.spy(spyCqs2.getAdmin());
             Mockito.doThrow(new IOException("FAIL")).doThrow(new IOException("FAIL")).when(spyAdmin).getRegionServers(eq(true));
             Mockito.doReturn(spyAdmin).when(spyCqs2).getAdmin();
