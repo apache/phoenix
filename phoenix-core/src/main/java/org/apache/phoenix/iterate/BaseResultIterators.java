@@ -1398,6 +1398,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                             // Resubmit just this portion of work again
                             Scan oldScan = scanPair.getFirst();
                             byte[] startKey = oldScan.getAttribute(SCAN_ACTUAL_START_ROW);
+                            if (e2 instanceof StaleRegionBoundaryCacheException) {
+                                LOGGER.warn("Found stale region boundary with the following stack trace ", e2);
+                            }
                             if (e2 instanceof HashJoinCacheNotFoundException) {
                                 LOGGER.debug(
                                         "Retrying when Hash Join cache is not found on the server ,by sending the cache again");
