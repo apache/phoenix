@@ -805,6 +805,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException {
     }
+
+    @Override
+    public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException {}
+
     @Override
     public PMetaData getMetaDataCache() {
         return metaData;

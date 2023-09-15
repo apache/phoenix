@@ -153,6 +153,7 @@ tokens
     SHOW = 'show';
     UNCOVERED = 'uncovered';
     REGIONS = 'regions';
+    TRUNCATE = 'truncate';
 }
 
 
@@ -421,6 +422,7 @@ oneStatement returns [BindableStatement ret]
     |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
+    |   s=truncate_table_node
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
@@ -472,6 +474,12 @@ create_table_node returns [CreateTableStatement ret]
         (SPLIT ON s=value_expression_list)?
         (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null,  cqc); }
+    ;
+
+// Parse a truncate table statement.
+truncate_table_node returns [TruncateTableStatement ret]
+    :   TRUNCATE TABLE t=from_table_name
+        {ret = factory.truncateTable(t, PTableType.TABLE);}
     ;
    
 // Parse a create schema statement.

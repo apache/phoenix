@@ -176,6 +176,7 @@ import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
@@ -1060,6 +1061,30 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
     }
 
+    private static class ExecutableTruncateTableStatement extends TruncateTableStatement implements CompilableStatement {
+        ExecutableTruncateTableStatement(TableName tableName, PTableType tableType) {
+            super(tableName, tableType);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new BaseMutationPlan(context, this.getOperation()) {
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("TRUNCATE TABLE"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.truncateTable(ExecutableTruncateTableStatement.this);
+                }
+            };
+        }
+    }
+
     private static class ExecutableCreateSchemaStatement extends CreateSchemaStatement implements CompilableStatement {
         ExecutableCreateSchemaStatement(String schemaName, boolean ifNotExists) {
             super(schemaName, ifNotExists);
@@ -1829,6 +1854,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
                 List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
             return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, null);
+        }
+
+        @Override
+        public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType) {
+            return new ExecutableTruncateTableStatement(tableName, tableType);
         }
 
         @Override

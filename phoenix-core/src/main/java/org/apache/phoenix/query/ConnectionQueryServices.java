@@ -211,6 +211,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,
             String columnName, String familyName) throws SQLException;
 
+    public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException;
     /**
      * Close all phoenix connections created using this CQS.
      *
