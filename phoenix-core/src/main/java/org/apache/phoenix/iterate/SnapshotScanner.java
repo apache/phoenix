@@ -37,11 +37,14 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.hfile.BlockCacheFactory;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
+import org.apache.hadoop.hbase.mob.MobFileCache;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -79,7 +82,10 @@ public class SnapshotScanner extends AbstractClientScanner {
 
     scan.setIsolationLevel(IsolationLevel.READ_UNCOMMITTED);
     values = new ArrayList<>();
-    this.region = HRegion.openHRegion(conf, fs, rootDir, hri, htd, null, null, null);
+
+    // region init should follow the same pattern as hbase ClientSideRegionScanner.
+    initRegionForSnapshotScanner(conf, fs, rootDir, htd, hri);
+
     this.scan = scan;
 
     RegionCoprocessorEnvironment snapshotEnv = getSnapshotContextEnvironment(conf);
@@ -105,6 +111,41 @@ public class SnapshotScanner extends AbstractClientScanner {
 
     statisticsCollector.init();
     region.startRegionOperation();
+  }
+
+  /**
+   * Initialize region for snapshot scanner utility. This is client side region initialization and
+   * hence it should follow the same region init pattern as the one used by hbase
+   * ClientSideRegionScanner.
+   *
+   * @param conf The configuration.
+   * @param fs The filesystem instance.
+   * @param rootDir Restored region root dir.
+   * @param htd The table descriptor instance used to retrieve the region root dir.
+   * @param hri The region info.
+   * @throws IOException If region init throws IOException.
+   */
+  private void initRegionForSnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
+                                            TableDescriptor htd,
+                                            RegionInfo hri) throws IOException {
+    region = HRegion.newHRegion(CommonFSUtils.getTableDir(rootDir, htd.getTableName()), null, fs,
+            conf, hri, htd, null);
+    region.setRestoredRegion(true);
+    // non RS process does not have a block cache, and this a client side scanner,
+    // create one for MapReduce jobs to cache the INDEX block by setting to use
+    // IndexOnlyLruBlockCache and set a value to HBASE_CLIENT_SCANNER_BLOCK_CACHE_SIZE_KEY
+    conf.set(BlockCacheFactory.BLOCKCACHE_POLICY_KEY, "IndexOnlyLRU");
+    conf.setIfUnset(HConstants.HFILE_ONHEAP_BLOCK_CACHE_FIXED_SIZE_KEY,
+            String.valueOf(HConstants.HBASE_CLIENT_SCANNER_ONHEAP_BLOCK_CACHE_FIXED_SIZE_DEFAULT));
+    // don't allow L2 bucket cache for non RS process to avoid unexpected disk usage.
+    conf.unset(HConstants.BUCKET_CACHE_IOENGINE_KEY);
+    region.setBlockCache(BlockCacheFactory.createBlockCache(conf));
+    // we won't initialize the MobFileCache when not running in RS process. so provided an
+    // initialized cache. Consider the case: an CF was set from an mob to non-mob. if we only
+    // initialize cache for MOB region, NPE from HMobStore will still happen. So Initialize the
+    // cache for every region although it may hasn't any mob CF, BTW the cache is very light-weight.
+    region.setMobFileCache(new MobFileCache(conf));
+    region.initialize();
   }
 
 
