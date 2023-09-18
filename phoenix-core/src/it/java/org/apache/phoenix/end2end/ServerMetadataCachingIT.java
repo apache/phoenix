@@ -28,6 +28,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -90,7 +91,7 @@ public class ServerMetadataCachingIT extends BaseTest {
     /**
      * Client-1 creates a table, upserts data and alters the table.
      * Client-2 queries the table before and after the alter.
-     * Check queries work successfully in both cases and verify number of getTable RPCs.
+     * Check queries work successfully in both cases and verify number of addTable invocations.
      */
     @Test
     public void testSelectQueryWithOldDDLTimestamp() throws SQLException {

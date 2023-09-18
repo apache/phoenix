@@ -463,7 +463,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
 
                                 //verify metadata for the table/view/index in the query plan
-                                if (validateLastDdlTimestamp) {
+                                if (plan.getTableRef() != null && validateLastDdlTimestamp) {
                                     try {
                                         validateLastDDLTimestamp(plan.getTableRef(), true);
                                     } catch (StaleMetadataCacheException e) {
