@@ -524,7 +524,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     tenantViewWithOverrideOptions, null, false);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL.getErrorCode(),
+            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_TTL.getErrorCode(),
                     e.getErrorCode());
         }
     }
@@ -567,7 +567,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 fail();
             }
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL.getErrorCode(),
+            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_TTL.getErrorCode(),
                     e.getErrorCode());
         }
     }
@@ -609,7 +609,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 fail();
             }
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL.getErrorCode(),
+            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_TTL.getErrorCode(),
                     e.getErrorCode());
         }
     }
@@ -1878,7 +1878,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
             Assert.assertEquals("PhoenixTTL does not match",
-                    phoenixTTL*1000, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
+                    phoenixTTL*1000, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
             Assert.assertTrue("Masking attribute should be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Delete Expired attribute should not set",
@@ -1908,14 +1908,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL, Bytes.toBytes(Long.valueOf(table.getPhoenixTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, Bytes.toBytes(Long.valueOf(table.getTTL())));
 
             PhoenixResultSet
                     rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
             Assert.assertEquals("PhoenixTTL does not match",
-                    phoenixTTL*1000, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
+                    phoenixTTL*1000, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Masking attribute should not be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
             Assert.assertTrue("Delete Expired attribute should be set",
@@ -2533,7 +2533,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL, Bytes.toBytes(Long.valueOf(table.getPhoenixTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, Bytes.toBytes(Long.valueOf(table.getTTL())));
 
             PhoenixResultSet
                     rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
@@ -2576,7 +2576,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL, Bytes.toBytes(Long.valueOf(table.getPhoenixTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, Bytes.toBytes(Long.valueOf(table.getTTL())));
             PhoenixResultSet
                     rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
             while (rs.next());

@@ -60,10 +60,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_B
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED_DEPRECATED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
@@ -76,6 +78,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
@@ -381,6 +384,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private static final Cell MAX_LOOKBACK_AGE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
 
+    private static final Cell TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, TTL_BYTES);
+    private static final Cell ROW_KEY_PREFIX_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, ROW_KEY_PREFIX_BYTES);
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
             TABLE_TYPE_KV,
@@ -422,7 +429,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             STREAMING_TOPIC_NAME_KV,
             INDEX_WHERE_KV,
             MAX_LOOKBACK_AGE_KV,
-            CDC_INCLUDE_KV
+            CDC_INCLUDE_KV,
+            TTL_KV,
+            ROW_KEY_PREFIX_KV
     );
 
     static {
@@ -475,6 +484,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
 
     private static final int MAX_LOOKBACK_AGE_INDEX = TABLE_KV_COLUMNS.indexOf(MAX_LOOKBACK_AGE_KV);
+    private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
+    private static final int ROW_KEY_PREFIX_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_PREFIX_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1393,11 +1404,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
              useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
 
         Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
-        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED :
-                PLong.INSTANCE.getCodec().decodeLong(phoenixTTLKv.getValueArray(),
+        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED_DEPRECATED : PLong.INSTANCE
+                .getCodec().decodeLong(phoenixTTLKv.getValueArray(),
                         phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
-        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL :
-            oldTable != null ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED);
+        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL : oldTable != null
+                ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED_DEPRECATED);
 
         Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
         long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
@@ -1478,6 +1489,21 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
             maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
         }
+        Cell ttlKv = tableKeyValues[TTL_INDEX];
+        int ttl = ttlKv == null ? TTL_NOT_DEFINED : PInteger.INSTANCE
+                .getCodec().decodeInt(ttlKv.getValueArray(),
+                        ttlKv.getValueOffset(), SortOrder.getDefault());
+        builder.setTTL(ttlKv != null ? ttl : oldTable != null
+                ? oldTable.getTTL() : TTL_NOT_DEFINED);
+
+        Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
+        byte[] rowKeyPrefix = rowKeyPrefixKv != null
+                ? (byte[]) PVarbinary.INSTANCE.toObject(rowKeyPrefixKv.getValueArray(),
+                        rowKeyPrefixKv.getValueOffset(), rowKeyPrefixKv.getValueLength())
+                : null;
+        builder.setRowKeyPrefix(rowKeyPrefix != null ? rowKeyPrefix
+                : oldTable != null ? oldTable.getRowKeyPrefix() : null);
+
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
@@ -3654,7 +3680,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     Cell cell = cells.get(0);
                     long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
+                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != TTL_NOT_DEFINED;
                     //TODO:- Re-enable when we have ViewTTL
                     return false;
                 }
@@ -3663,7 +3689,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         if (hasNewPhoenixTTLAttribute) {
             // Disallow if the parent has PHOENIX_TTL set.
-            if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
+            if (parentTable != null &&  parentTable.getTTL() != TTL_NOT_DEFINED) {
                 isSchemaMutationAllowed = false;
             }
 
