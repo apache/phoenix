@@ -392,10 +392,15 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final byte[] USE_STATS_FOR_PARALLELIZATION_BYTES = Bytes.toBytes(USE_STATS_FOR_PARALLELIZATION);
 
     // The TTL property will hold the duration after which rows will be marked as expired and
-    // is stored in column PHOENIX_TTL in SYSCAT. TODO:- Rename PHOENIX_TTL to TTL in SYSCAT!?
+    // is stored in column TTL in SYSCAT
     public static final String TTL = "TTL";
-    public static final long PHOENIX_TTL_NOT_DEFINED = 0L;
-    public static final long DEFAULT_PHOENIX_TTL = HConstants.FOREVER;
+    public static final byte[] TTL_BYTES = Bytes.toBytes(TTL);
+    public static final int TTL_NOT_DEFINED = 0;
+    @Deprecated
+    public static final long PHOENIX_TTL_NOT_DEFINED_DEPRECATED = 0L;
+    //Should we change name of Default value as well!?
+    public static final int DEFAULT_PHOENIX_TTL = HConstants.FOREVER;
+
     public static final String PHOENIX_TTL = "PHOENIX_TTL";
     public static final byte[] PHOENIX_TTL_BYTES = Bytes.toBytes(PHOENIX_TTL);
     // The phoenix ttl high watermark if set indicates the timestamp used for determining the expired rows.
@@ -419,6 +424,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String STREAMING_TOPIC_NAME = "STREAMING_TOPIC_NAME";
     public static final byte[] STREAMING_TOPIC_NAME_BYTES = Bytes.toBytes(STREAMING_TOPIC_NAME);
+
+    public static final String ROW_KEY_PREFIX = "ROW_KEY_PREFIX";
+    public static final byte[] ROW_KEY_PREFIX_BYTES = Bytes.toBytes(ROW_KEY_PREFIX);
 
     public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
     public static final String SYSTEM_CHILD_LINK_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);

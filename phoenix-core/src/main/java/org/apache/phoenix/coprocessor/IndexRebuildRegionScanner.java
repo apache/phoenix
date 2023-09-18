@@ -34,7 +34,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -90,7 +89,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
 
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
         if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
-            indexTableTTL = ScanUtil.getPhoenixTTL(scan);
+            indexTableTTL = ScanUtil.getTTL(scan);
         } else {
             indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
         }

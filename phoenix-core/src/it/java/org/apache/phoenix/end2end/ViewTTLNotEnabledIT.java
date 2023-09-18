@@ -95,7 +95,7 @@ public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
             Assert.assertFalse("Should not have any rows", rs.next());
             Assert.assertEquals("Should have at least one element", 1, queryPlan.getScans().size());
             Assert.assertEquals("PhoenixTTL should not be set",
-                    0, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
+                    0, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Masking attribute should not be set",
                     ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
             Assert.assertFalse("Delete Expired attribute should not set",

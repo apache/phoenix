@@ -86,7 +86,7 @@ public class CompactionScanner implements InternalScanner {
             long maxLookbackInMillis,
             byte[] emptyCF,
             byte[] emptyCQ,
-            long phoenixTTL,
+            int phoenixTTL,
             boolean isSystemTable) {
         this.storeScanner = storeScanner;
         this.region = env.getRegion();

@@ -27,12 +27,10 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -97,7 +95,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
         super(innerScanner, region, scan, env, ungroupedAggregateRegionObserver);
         indexHTable = hTableFactory.getTable(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
         if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
-            indexTableTTL = ScanUtil.getPhoenixTTL(scan);
+            indexTableTTL = ScanUtil.getTTL(scan);
         } else {
             indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
         }

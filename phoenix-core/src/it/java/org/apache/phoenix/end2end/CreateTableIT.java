@@ -359,7 +359,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(86400, columnFamilies[0].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
         assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getPhoenixTTL());
+                new PTableKey(null, tableName)).getTTL());
     }
 
     @Test
@@ -418,7 +418,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals("C", columnFamilies[1].getNameAsString());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
         assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getPhoenixTTL());
+                new PTableKey(null, tableName)).getTTL());
     }
 
     /**
@@ -447,7 +447,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(86400, columnFamilies[1].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
         assertEquals(86400, conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getPhoenixTTL());
+                new PTableKey(null, tableName)).getTTL());
     }
 
     /**
@@ -528,7 +528,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(10000, columnFamilies[0].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
         assertEquals(10000, conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getPhoenixTTL());
+                new PTableKey(null, tableName)).getTTL());
     }
 
     /**
@@ -553,7 +553,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         assertEquals(10000, columnFamilies[0].getTimeToLive());
         //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
         assertEquals(10000, conn.unwrap(PhoenixConnection.class).getTable(
-                new PTableKey(null, tableName)).getPhoenixTTL());
+                new PTableKey(null, tableName)).getTTL());
     }
 
     @Test

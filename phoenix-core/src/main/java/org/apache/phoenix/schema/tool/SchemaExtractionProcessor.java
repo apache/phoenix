@@ -54,7 +54,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
@@ -404,7 +404,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
                 if (!key.equalsIgnoreCase(TTL)) {
                     definedProps.put(key, value);
                 } else {
-                    if (isPhoenixTTLEnabled && Long.parseLong(value) != PHOENIX_TTL_NOT_DEFINED) {
+                    if (isPhoenixTTLEnabled && Integer.parseInt(value) != TTL_NOT_DEFINED) {
                         definedProps.put(key, value);
                     }
                 }

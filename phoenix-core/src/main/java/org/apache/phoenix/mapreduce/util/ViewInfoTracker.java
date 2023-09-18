@@ -70,7 +70,7 @@ public class ViewInfoTracker implements ViewInfoWritable {
         return this.isIndexRelation;
     }
 
-    public long getPhoenixTtl() {
+    public long getTTL() {
         return phoenixTtl;
     }
 

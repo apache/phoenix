@@ -75,7 +75,7 @@ public class TTLRegionScanner extends BaseRegionScanner {
                 IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM);
         if (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
                 || !Bytes.toBoolean(isSystemTable))) {
-            ttl = ScanUtil.getPhoenixTTL(this.scan);
+            ttl = ScanUtil.getTTL(this.scan);
         } else {
             ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         }

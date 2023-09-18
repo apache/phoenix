@@ -69,14 +69,14 @@ public class PhoenixMultiViewReaderTest {
         viewInfoWritable = (ViewInfoTracker)phoenixMultiViewReader.getCurrentValue();
         assertEquals(tenantId, viewInfoWritable.getTenantId());
         assertEquals(viewName, viewInfoWritable.getViewName());
-        assertEquals(ttl, viewInfoWritable.getPhoenixTtl());
+        assertEquals(ttl, viewInfoWritable.getTTL());
         assertEquals(false, viewInfoWritable.isIndexRelation());
 
         assertTrue(phoenixMultiViewReader.nextKeyValue());
         viewInfoWritable = (ViewInfoTracker)phoenixMultiViewReader.getCurrentValue();
         assertEquals(tenantId, viewInfoWritable.getTenantId());
         assertEquals(viewName, viewInfoWritable.getViewName());
-        assertEquals(ttl, viewInfoWritable.getPhoenixTtl());
+        assertEquals(ttl, viewInfoWritable.getTTL());
         assertEquals(true, viewInfoWritable.isIndexRelation());
 
         assertFalse(phoenixMultiViewReader.nextKeyValue());

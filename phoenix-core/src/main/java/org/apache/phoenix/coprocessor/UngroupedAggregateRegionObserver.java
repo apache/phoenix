@@ -19,7 +19,7 @@ package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -646,8 +646,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                                     table.getEncodingScheme().
                                                             encode(QueryConstants.
                                                                     ENCODED_EMPTY_COLUMN_NAME),
-                                            table.getPhoenixTTL() == PHOENIX_TTL_NOT_DEFINED
-                                                    ? DEFAULT_PHOENIX_TTL : table.getPhoenixTTL(),
+                                            table.getTTL() == TTL_NOT_DEFINED
+                                                    ? DEFAULT_PHOENIX_TTL : table.getTTL(),
                                             table.getType() == PTableType.SYSTEM
                                             );
                         }
