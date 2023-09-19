@@ -32,7 +32,7 @@ import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
-import org.apache.hadoop.hbase.regionserver.HStore;
+import org.apache.hadoop.hbase.regionserver.StoreUtils;
 import org.apache.hadoop.hbase.util.ChecksumType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,8 +52,8 @@ public class CompatUtil {
 
         return new HFileContextBuilder()
             .withCompression(compression)
-            .withChecksumType(HStore.getChecksumType(conf))
-            .withBytesPerCheckSum(HStore.getBytesPerChecksum(conf))
+            .withChecksumType(StoreUtils.getChecksumType(conf))
+            .withBytesPerCheckSum(StoreUtils.getBytesPerChecksum(conf))
             .withBlockSize(blockSize)
             .withDataBlockEncoding(encoding)
             .build();
@@ -61,20 +61,19 @@ public class CompatUtil {
 
     public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
             throws IOException {
-        return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
+        return MetaTableAccessor.getMergeRegions(conn, regionInfo);
     }
 
     public static ChecksumType getChecksumType(Configuration conf) {
-        return HStore.getChecksumType(conf);
+        return StoreUtils.getChecksumType(conf);
     }
 
     public static int getBytesPerChecksum(Configuration conf) {
-        return HStore.getBytesPerChecksum(conf);
+        return StoreUtils.getBytesPerChecksum(conf);
     }
 
     public static Connection createShortCircuitConnection(final Configuration configuration,
             final RegionCoprocessorEnvironment env) throws IOException {
-        //Short Circuit connections are broken before 2.4.12
-        return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
+        return env.createConnection(configuration);
     }
 }
