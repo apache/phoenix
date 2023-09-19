@@ -1418,10 +1418,11 @@ public class MetaDataClient {
      *    listed as an index column.
      * @param statement
      * @param splits
+     * @param indexPKExpressionType If non-{@code null}, all PK expressions should be of this specific type.
      * @return MutationState from population of index table from data table
      * @throws SQLException
      */
-    public MutationState createIndex(CreateIndexStatement statement, byte[][] splits) throws SQLException {
+    public MutationState createIndex(CreateIndexStatement statement, byte[][] splits, PDataType indexPKExpresionsType) throws SQLException {
         IndexKeyConstraint ik = statement.getIndexConstraint();
         TableName indexTableName = statement.getIndexTableName();
 
@@ -1535,6 +1536,9 @@ public class MetaDataClient {
                 }
                 if (expression.isStateless()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
+                }
+                if (indexPKExpresionsType != null && expression.getDataType() != indexPKExpresionsType) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION).build().buildException();
                 }
                 unusedPkColumns.remove(expression);
 
@@ -1718,7 +1722,10 @@ public class MetaDataClient {
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable()), indexKeyConstraint, null, null, indexProps, false,
                         indexType, false, 0, new HashMap<>());
-        MutationState indexMutationState = createIndex(indexStatement, null);
+        // TODO: Currently index can be dropped, leaving the CDC dangling.
+        // TODO: If the index creation fails because it already exists, it is most likely because the CDC table already exists. Should we catch that exception and translate it to a CDC specific exception?
+        // TODO: Should we also allow PTimestamp here?
+        MutationState indexMutationState = createIndex(indexStatement, null, PDate.INSTANCE);
 
         // TODO: Do we need to borrow the schema name of the table?
         ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);

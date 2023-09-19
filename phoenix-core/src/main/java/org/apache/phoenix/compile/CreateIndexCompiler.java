@@ -82,7 +82,7 @@ public class CreateIndexCompiler {
         return new BaseMutationPlan(context, operation) {
             @Override
             public MutationState execute() throws SQLException {
-                return client.createIndex(create, splits);
+                return client.createIndex(create, splits, null);
             }
 
             @Override

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -26,6 +27,9 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
 @Category(ParallelStatsDisabledTest.class)
 public class CDCMiscIT extends ParallelStatsDisabledIT {
     @Test
@@ -34,11 +38,64 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
-                "create table  " + tableName + " ( k integer PRIMARY KEY," + " v1 integer,"
-                        + " v2 integer)");
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE)");
         String cdcName = generateUniqueName();
-        conn.createStatement().execute("CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) INDEX_TYPE=global");
+
+        try {
+            conn.createStatement().execute("CREATE CDC " + cdcName
+                    + " ON NON_EXISTENT_TABLE (PHOENIX_ROW_TIMESTAMP()) INDEX_TYPE=global");
+            fail("Expected to fail due to non-existent table");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+        }
+
+        try {
+            conn.createStatement().execute("CREATE CDC " + cdcName
+                    + " ON " + tableName +"(UNKNOWN_FUNCTION()) INDEX_TYPE=global");
+            fail("Expected to fail due to invalid function");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(), e.getErrorCode());
+        }
+
+        try {
+            conn.createStatement().execute("CREATE CDC " + cdcName
+                    + " ON " + tableName +"(NOW()) INDEX_TYPE=global");
+            fail("Expected to fail due to non-deterministic function");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+        }
+
+        try {
+            conn.createStatement().execute("CREATE CDC " + cdcName
+                    + " ON " + tableName +"(ROUND(v1)) INDEX_TYPE=global");
+            fail("Expected to fail due to non-timestamp expression in the index PK");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(), e.getErrorCode());
+        }
+
+        try {
+            conn.createStatement().execute("CREATE CDC " + cdcName
+                    + " ON " + tableName +"(v1) INDEX_TYPE=global");
+            fail("Expected to fail due to non-timestamp column in the index PK");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(), e.getErrorCode());
+        }
+
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) INDEX_TYPE=global";
+        conn.createStatement().execute(cdc_sql);
+
+        try {
+            conn.createStatement().execute(cdc_sql);
+            fail("Expected to fail due to duplicate index");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
+        }
+
+        conn.createStatement().execute("CREATE CDC " + generateUniqueName() + " ON " + tableName +
+                "(v2) INDEX_TYPE=global");
+
         conn.close();
     }
 }
