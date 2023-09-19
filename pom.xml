@@ -129,7 +129,7 @@
     <zookeeper.version>3.5.7</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
-    <jetty.version>9.4.51.v20230217</jetty.version>
+    <jetty.version>9.4.52.v20230823</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
