@@ -903,7 +903,7 @@ public class MetaDataClient {
                 String parentSchemaName = SchemaUtil.getSchemaNameFromFullName(parentName);
                 tableName = SchemaUtil.getTableNameFromFullName(parentName);
                 MetaDataMutationResult parentResult = updateCache(connection.getTenantId(), parentSchemaName, tableName,
-                        false, resolvedTimestamp);
+                        true, resolvedTimestamp);
                 PTable parentTable = parentResult.getTable();
                 if (parentResult.getMutationCode() == MutationCode.TABLE_NOT_FOUND || parentTable == null) {
                     // Try once more with different tenant id (connection can be global but view could be tenant

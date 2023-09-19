@@ -202,11 +202,14 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -343,12 +346,24 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 tableRef.getTable().getSchemaName(),
                 tableRef.getTable().getTableName());
     }
+
+    private void setLastDDLTimestampRequestParameters(
+            RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder,
+            byte[] tenantId, PTable pTable) {
+        byte[] schemaBytes = pTable.getSchemaName() == null
+                                ?   HConstants.EMPTY_BYTE_ARRAY
+                                : pTable.getSchemaName().getBytes();
+        innerBuilder.setTenantId(ByteStringer.wrap(tenantId));
+        innerBuilder.setSchemaName(ByteStringer.wrap(schemaBytes));
+        innerBuilder.setTableName(ByteStringer.wrap(pTable.getTableName().getBytes()));
+        innerBuilder.setLastDDLTimestamp(pTable.getLastDDLTimestamp());
+    }
     /**
      * Build a request for the validateLastDDLTimestamp RPC.
      * @param tableRef
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
-    private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest getValidateDDLTimestampRequest(TableRef tableRef) {
+    private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest getValidateDDLTimestampRequest(TableRef tableRef) throws TableNotFoundException {
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
@@ -357,16 +372,23 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         byte[] tenantIDBytes = this.connection.getTenantId() == null
                                     ? HConstants.EMPTY_BYTE_ARRAY
                                     : this.connection.getTenantId().getBytes();
-        byte[] schemaBytes = tableRef.getTable().getSchemaName() == null
-                                    ? HConstants.EMPTY_BYTE_ARRAY
-                                    : tableRef.getTable().getSchemaName().getBytes();
-
-        innerBuilder.setTenantId(ByteStringer.wrap(tenantIDBytes));
-        innerBuilder.setSchemaName(ByteStringer.wrap(schemaBytes));
-        innerBuilder.setTableName(ByteStringer.wrap(tableRef.getTable().getTableName().getBytes()));
-        innerBuilder.setLastDDLTimestamp(tableRef.getTable().getLastDDLTimestamp());
+        setLastDDLTimestampRequestParameters(innerBuilder, tenantIDBytes, tableRef.getTable());
         requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-        return  requestBuilder.build();
+
+        /*
+        when querying a view, we need to validate last ddl timestamps for all its ancestors.
+         */
+        if (tableRef.getTable().getType().equals(PTableType.VIEW)) {
+            PTable pTable = tableRef.getTable();
+            while (pTable.getParentName() != null) {
+                PTable parentTable = this.connection.getTable(new PTableKey(this.connection.getTenantId(), pTable.getParentName().getString()));
+                innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+                setLastDDLTimestampRequestParameters(innerBuilder, tenantIDBytes, parentTable);
+                requestBuilder.addLastDDLTimestampRequests(innerBuilder);
+                pTable = parentTable;
+            }
+        }
+        return requestBuilder.build();
     }
 
     /**

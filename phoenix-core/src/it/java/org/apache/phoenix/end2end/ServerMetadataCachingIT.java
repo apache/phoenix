@@ -28,7 +28,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -72,6 +71,10 @@ public class ServerMetadataCachingIT extends BaseTest {
                 + (updateCacheFrequency == 0 ? "" : "UPDATE_CACHE_FREQUENCY="+updateCacheFrequency));
     }
 
+    private void createView(Connection conn, String parentName, String viewName) throws SQLException {
+        conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + parentName);
+    }
+
     private void upsert(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("UPSERT INTO " + tableName +
                 " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
@@ -85,6 +88,11 @@ public class ServerMetadataCachingIT extends BaseTest {
 
     private void alterTableAddColumn(Connection conn, String tableName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER TABLE " + tableName + " ADD IF NOT EXISTS "
+                + columnName + " INTEGER");
+    }
+
+    private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {
+        conn.createStatement().execute("ALTER VIEW " + viewName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
     }
 
@@ -273,6 +281,54 @@ public class ServerMetadataCachingIT extends BaseTest {
         finally {
             // reset cache instance so that it does not interfere with any other test
             ServerMetadataCache.setInstance(cache);
+        }
+    }
+
+    /**
+     * Client-1 creates a table, 2 level of views on it and alters the first level view.
+     * Client-2 queries the second level view, verify that there were 3 cache updates in client-2,
+     * one each for the two views and base table. 
+     */
+    @Test
+    public void testSelectQueryOnView() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+        int expectedNumCacheUpdates;
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // create table using client-1
+            createTable(conn1, tableName, NEVER);
+            upsert(conn1, tableName);
+
+            // create 2 level of views using client-1
+            String view1 = generateUniqueName();
+            String view2 = generateUniqueName();
+            createView(conn1, tableName, view1);
+            createView(conn1, view1, view2);
+
+            // query second level view using client-2
+            query(conn2, view2);
+            expectedNumCacheUpdates = 3; // table, view1, view2
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
+
+            // alter first level view using client-1 to update its last ddl timestamp
+            alterViewAddColumn(conn1, view1, "foo");
+
+            // invalidate region server cache
+            ServerMetadataCache.resetCache();
+
+            // query second level view
+            query(conn2, view2);
+            expectedNumCacheUpdates += 3; // table, view1
+            Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
+                    .addTable(any(PTable.class), anyLong());
         }
     }
 }
