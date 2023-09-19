@@ -40,6 +40,7 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
@@ -79,11 +80,12 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.4.0 2.4 2.5</hbase.profile.list>
+    <hbase.profile.list>2.4.0 2.4 2.5.0 2.5</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.16</hbase-2.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.3-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
+    <hbase-2.5.runtime.version>2.5.5-hadoop3</hbase-2.5.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -688,6 +690,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.5.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.5</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -699,6 +706,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -734,6 +746,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.5.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -1640,7 +1657,7 @@
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
-      <id>phoenix-hbase-compat-2.5.0</id>
+      <id>phoenix-hbase-compat-2.5.4</id>
       <activation>
         <property>
           <name>hbase.profile</name>
@@ -1649,10 +1666,25 @@
       </activation>
       <properties>
         <hbase.profile>2.5</hbase.profile>
-        <hbase.compat.version>2.5.0</hbase.compat.version>
+        <hbase.compat.version>2.5.4</hbase.compat.version>
         <hadoop.version>3.2.3</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-2.5.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.5.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.5.0</hbase.profile>
+        <hbase.compat.version>2.5.0</hbase.compat.version>
+        <hadoop.version>3.2.3</hadoop.version>
+        <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
