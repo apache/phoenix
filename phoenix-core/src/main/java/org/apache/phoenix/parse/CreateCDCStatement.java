@@ -36,7 +36,9 @@ public class CreateCDCStatement extends MutableStatement {
     private final int bindCount;
 
     public CreateCDCStatement(NamedNode cdcObjName, TableName dataTable, ColumnName timeIdxColumn,
-                              FunctionParseNode timeIdxFunc, Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
+                              FunctionParseNode timeIdxFunc,
+                              Set<PTable.CDCChangeScope> includeScopes, ListMultimap<String,
+                              Pair<String, Object>> props, boolean ifNotExists, int bindCount) {
         this.cdcObjName = cdcObjName;
         this.dataTable = dataTable;
         this.timeIdxColumn = timeIdxColumn;
