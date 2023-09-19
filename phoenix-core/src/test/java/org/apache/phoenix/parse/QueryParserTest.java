@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -26,12 +27,15 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
@@ -39,12 +43,12 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 
 public class QueryParserTest {
-    private void parseQuery(String sql) throws IOException, SQLException {
+    private <T extends BindableStatement> T parseQuery(String sql, Class<T> type) throws IOException, SQLException {
         SQLParser parser = new SQLParser(new StringReader(sql));
         BindableStatement stmt = null;
         stmt = parser.parseStatement();
         if (stmt.getOperation() != Operation.QUERY) {
-            return;
+            return type != null ? type.cast(stmt) : null;
         }
         String newSQL = stmt.toString();
         SQLParser newParser = new SQLParser(new StringReader(newSQL));
@@ -55,6 +59,11 @@ public class QueryParserTest {
             fail("Unable to parse new:\n" + newSQL);
         }
         assertEquals("Expected equality:\n" + sql + "\n" + newSQL, stmt, newStmt);
+        return type != null ? type.cast(stmt) : null;
+    }
+
+    private <T extends BindableStatement> T parseQuery(String sql) throws IOException, SQLException {
+        return parseQuery(sql, null);
     }
 
     private void parseQueryThatShouldFail(String sql) throws Exception {
@@ -486,6 +495,59 @@ public class QueryParserTest {
             assertEquals(2, stmt.getColumnDefs().size());
             assertNotNull(stmt.getPrimaryKeyConstraint());
         }
+    }
+
+    private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists, String tsCol) throws Exception {
+        CreateCDCStatement stmt = parseQuery(sql, CreateCDCStatement.class);
+        assertEquals("FOO", stmt.getCdcObjName().getName());
+        assertEquals("BAR", stmt.getDataTable().getTableName());
+        if (tsCol != null) {
+            assertEquals(tsCol, stmt.getTimeIdxColumn().getColumnName());
+        }
+        else {
+            assertNull(stmt.getTimeIdxColumn());
+        }
+        assertEquals(ifNotExists, stmt.isIfNotExists());
+        return stmt;
+    }
+
+    @Test
+    public void testCreateCDCSimple() throws Exception {
+        CreateCDCStatement stmt = null;
+        parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
+        parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
+        parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
+        stmt = parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, null);
+        assertEquals("PHOENIX_ROW_TIMESTAMP", stmt.getTimeIdxFunc().getName());
+        assertEquals(" PHOENIX_ROW_TIMESTAMP()", stmt.getTimeIdxFunc().toString());
+        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre)", false, "TS");
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)), stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre, pre, post)", false, "TS");
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def", true, "TS");
+        assertEquals(Arrays.asList(new Pair("ABC", "def")), stmt.getProps().get(""));
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def, prop=val", true, "TS");
+        assertEquals(Arrays.asList(new Pair("ABC", "def"), new Pair("PROP", "val")), stmt.getProps().get(""));
+    }
+
+    private void parseInvalidCreateCDC(String sql, int expRrrorCode) throws IOException {
+        try {
+            parseQuery(sql);
+            fail();
+        }
+        catch (SQLException e) {
+            assertEquals(expRrrorCode, e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testInvalidCreateCDC() throws Exception {
+        parseInvalidCreateCDC("create cdc foo on bar", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar ts", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar(ts)", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc s.foo on bar(ts)", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
+        parseInvalidCreateCDC("create cdc foo bar(ts1, ts2)", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
     }
 
     @Test

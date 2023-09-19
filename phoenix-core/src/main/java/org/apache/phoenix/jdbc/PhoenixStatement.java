@@ -131,6 +131,7 @@ import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
@@ -142,6 +143,7 @@ import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.ExplainType;
+import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -194,6 +196,7 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
@@ -521,7 +524,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 	    GLOBAL_MUTATION_SQL_COUNTER.increment();
         try {
             return CallRunner
-                    .run(
+                   .run(
                         new CallRunner.CallableThrowable<Integer, SQLException>() {
                         @Override
                             public Integer call() throws SQLException {
@@ -1053,6 +1056,24 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             CreateTableCompiler compiler = new CreateTableCompiler(stmt, this.getOperation());
             return compiler.compile(this);
+        }
+    }
+
+    private static class ExecutableCreateCDCStatement extends CreateCDCStatement
+            implements CompilableStatement {
+        public ExecutableCreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
+                                            ColumnName timeIdxColumn, FunctionParseNode tfunc,
+                                            Set<PTable.CDCChangeScope> includeScopes,
+                                            ListMultimap<String, Pair<String, Object>> props,
+                                            boolean ifNotExists, int bindCount) {
+            super(cdcObjName, dataTable, timeIdxColumn, tfunc, includeScopes, props, ifNotExists,
+                    bindCount);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt,
+                                        Sequence.ValueOp seqAction) throws SQLException {
+            return null;
         }
     }
 
@@ -1825,6 +1846,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
                 List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
             return new ExecutableCreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, null);
+        }
+
+        @Override
+        public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
+                                            ColumnName timeIdxColumn, FunctionParseNode timeIdxFunc,
+                                            Set<PTable.CDCChangeScope> includeScopes,
+                                            ListMultimap<String, Pair<String, Object>> props,
+                                            boolean ifNotExists, int bindCount) {
+            return new ExecutableCreateCDCStatement(cdcObj, dataTable, timeIdxColumn, timeIdxFunc,
+                    includeScopes, props, ifNotExists, bindCount);
         }
 
         @Override
