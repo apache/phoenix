@@ -64,6 +64,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nonnull;
 
@@ -107,6 +108,7 @@ import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -211,7 +213,7 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
-    private String cdcIncludeScopes;
+    private Set<CDCChangeScope> cdcIncludeScopes;
 
     public static class Builder {
         private PTableKey key;
@@ -277,7 +279,7 @@ public class PTableImpl implements PTable {
         private String schemaVersion;
         private String externalSchemaId;
         private String streamingTopicName;
-        private String cdcIncludeScopes;
+        private Set<CDCChangeScope> cdcIncludeScopes;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -698,7 +700,7 @@ public class PTableImpl implements PTable {
             return this;
          }
 
-        public Builder setCDCIncludeScopes(String cdcIncludeScopes) {
+        public Builder setCDCIncludeScopes(Set<CDCChangeScope> cdcIncludeScopes) {
             if (cdcIncludeScopes != null) {
                 this.cdcIncludeScopes = cdcIncludeScopes;
             }
@@ -2009,9 +2011,9 @@ public class PTableImpl implements PTable {
             streamingTopicName =
                 (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
         }
-        String cdcIncludeScopes = null;
+        String cdcIncludeScopesStr = null;
         if (table.hasCDCIncludeScopes()) {
-            cdcIncludeScopes =
+            cdcIncludeScopesStr =
                     (String) PVarchar.INSTANCE.toObject(table.getCDCIncludeScopes().toByteArray());
         }
         try {
@@ -2071,7 +2073,8 @@ public class PTableImpl implements PTable {
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
-                    .setCDCIncludeScopes(cdcIncludeScopes)
+                    .setCDCIncludeScopes(
+                            CDCUtil.makeChangeScopeEnumsFromString(cdcIncludeScopesStr))
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2354,7 +2357,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public String getCDCIncludeScopes() {
+    public Set<CDCChangeScope> getCDCIncludeScopes() {
         return cdcIncludeScopes;
     }
 

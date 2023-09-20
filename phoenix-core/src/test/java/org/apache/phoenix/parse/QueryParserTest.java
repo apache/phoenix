@@ -531,6 +531,15 @@ public class QueryParserTest {
         assertEquals(Arrays.asList(new Pair("ABC", "def"), new Pair("PROP", "val")), stmt.getProps().get(""));
     }
 
+    @Test
+    public void testCreateCDCWithErrors() throws Exception {
+        parseQueryThatShouldFail("create cdc foo");
+        parseQueryThatShouldFail("create cdc foo on bar");
+        parseQueryThatShouldFail("create cdc foo on bar(ts integer)");
+        parseQueryThatShouldFail("create cdc foo on bar(ts1, ts2)");
+        parseQueryThatShouldFail("create cdc foo on bar(ts) include (abc)");
+    }
+
     private void parseInvalidCreateCDC(String sql, int expRrrorCode) throws IOException {
         try {
             parseQuery(sql);

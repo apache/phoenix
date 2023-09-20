@@ -154,7 +154,6 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -192,6 +191,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
@@ -1021,7 +1021,9 @@ public class MetaDataClient {
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
-        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
+        table = createTableInternal(statement, splits, parent, viewStatement, viewType,
+                viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null,
+                null, null, tableProps, commonFamilyProps);
 
         if (table == null || table.getType() == PTableType.VIEW /*|| table.isTransactional()*/) {
             return new MutationState(0, 0, connection);
@@ -1418,7 +1420,7 @@ public class MetaDataClient {
      *    listed as an index column.
      * @param statement
      * @param splits
-     * @param indexPKExpressionType If non-{@code null}, all PK expressions should be of this specific type.
+     * @param indexPKExpresionsType If non-{@code null}, all PK expressions should be of this specific type.
      * @return MutationState from population of index table from data table
      * @throws SQLException
      */
@@ -1671,7 +1673,9 @@ public class MetaDataClient {
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
             CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount(), null);
-            table = createTableInternal(tableStatement, splits, dataTable, null, null, getViewIndexDataType() ,null, null, allocateIndexId, statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
+            table = createTableInternal(tableStatement, splits, dataTable, null, null,
+                    getViewIndexDataType() ,null, null, allocateIndexId,
+                    statement.getIndexType(), asyncCreatedDate, null, tableProps, commonFamilyProps);
         }
         finally {
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
@@ -1755,8 +1759,9 @@ public class MetaDataClient {
                 statement.getProps(), columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
-        MutationState tableMutationState = createTable(tableStatement, null, dataTable, null, null, null, null, null);
-        indexMutationState.join(tableMutationState);
+        createTableInternal(tableStatement, null, dataTable, null, null, null,
+                null, null, false, null,
+                null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
         return indexMutationState;
     }
 
@@ -1995,11 +2000,12 @@ public class MetaDataClient {
     }
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
-            final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-            final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
-            IndexType indexType, Date asyncCreatedDate,
-            Map<String,Object> tableProps,
-            Map<String,Object> commonFamilyProps) throws SQLException {
+                                       final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
+                                       final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
+                                       IndexType indexType, Date asyncCreatedDate,
+                                       Set<PTable.CDCChangeScope> cdcIncludeScopes,
+                                       Map<String, Object> tableProps,
+                                       Map<String, Object> commonFamilyProps) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         TableName tableNameNode = null;
@@ -2098,7 +2104,8 @@ public class MetaDataClient {
 
             String schemaVersion = (String) TableProperty.SCHEMA_VERSION.getValue(tableProps);
             String streamingTopicName = (String) TableProperty.STREAMING_TOPIC_NAME.getValue(tableProps);
-            String cdcIncludeScopes = ""; // TODO: Construct a comma-separated string from property.
+            String cdcIncludeScopesStr = cdcIncludeScopes == null ? null :
+                    CDCUtil.makeChangeScopeStringFromEnums(cdcIncludeScopes);
 
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
@@ -3135,10 +3142,10 @@ public class MetaDataClient {
                 tableUpsert.setString(35, streamingTopicName);
             }
 
-            if (cdcIncludeScopes == null) {
+            if (cdcIncludeScopesStr == null) {
                 tableUpsert.setNull(36, Types.VARCHAR);
             } else {
-                tableUpsert.setString(36, cdcIncludeScopes);
+                tableUpsert.setString(36, cdcIncludeScopesStr);
             }
 
             tableUpsert.execute();

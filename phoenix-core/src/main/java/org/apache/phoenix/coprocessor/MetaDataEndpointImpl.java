@@ -247,6 +247,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -1433,7 +1434,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 (String) PVarchar.INSTANCE.toObject(includeSpecKv.getValueArray(),
                         includeSpecKv.getValueOffset(), includeSpecKv.getValueLength())
                 : null;
-        builder.setCDCIncludeScopes(includeSpec != null ? includeSpec :
+        builder.setCDCIncludeScopes(includeSpec != null ?
+                CDCUtil.makeChangeScopeEnumsFromString(includeSpec) :
                 oldTable != null ? oldTable.getCDCIncludeScopes() : null);
 
         // Check the cell tag to see whether the view has modified this property

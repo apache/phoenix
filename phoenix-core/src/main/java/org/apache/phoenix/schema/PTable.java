@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -965,7 +966,7 @@ public interface PTable extends PMetaDataEntity {
     /**
      * @return Optional string that represents the default include scopes to be used for CDC queries.
      */
-    String getCDCIncludeScopes();
+    Set<CDCChangeScope> getCDCIncludeScopes();
 
     /**
      * Class to help track encoded column qualifier counters per column family.

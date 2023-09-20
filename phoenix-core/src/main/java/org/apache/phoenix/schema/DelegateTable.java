@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -398,7 +399,7 @@ public class DelegateTable implements PTable {
     public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
 
     @Override
-    public String getCDCIncludeScopes() {
+    public Set<CDCChangeScope> getCDCIncludeScopes() {
         return delegate.getCDCIncludeScopes();
     }
 
