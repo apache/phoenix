@@ -105,7 +105,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
      * @return true if {@link PDataType} supports equality operators (=,!=,<,>,<=,>=) otherwise
      *         false.
      */
-    public boolean isEqualitySupported() {
+    public boolean isComparisonSupported() {
         return true;
     }
 

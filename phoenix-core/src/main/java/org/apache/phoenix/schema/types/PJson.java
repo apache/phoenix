@@ -51,7 +51,7 @@ public class PJson extends PVarbinary {
     }
 
     @Override
-    public boolean isEqualitySupported() {
+    public boolean isComparisonSupported() {
         return false;
     }
 

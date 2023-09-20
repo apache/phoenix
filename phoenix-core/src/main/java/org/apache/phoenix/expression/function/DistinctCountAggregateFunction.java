@@ -28,7 +28,7 @@ import org.apache.phoenix.expression.aggregator.DistinctValueWithCountServerAggr
 import org.apache.phoenix.parse.DistinctCountParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.EqualityNotSupportedException;
+import org.apache.phoenix.schema.ComparisonNotSupportedException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -102,8 +102,8 @@ public class DistinctCountAggregateFunction extends DelegateConstantToCountAggre
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         for (Expression child : getChildren()) {
-            if (!child.getDataType().isEqualitySupported()) {
-                throw new EqualityNotSupportedException(child.getDataType());
+            if (!child.getDataType().isComparisonSupported()) {
+                throw new ComparisonNotSupportedException(child.getDataType());
             }
         }
         // TODO: optimize query plan of this to run scan serially for a limit of one row

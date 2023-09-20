@@ -165,6 +165,7 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
                     // JIRA - https://issues.apache.org/jira/browse/PHOENIX-1329
                     continue;
                 }
+                // Condition to check if a type can be used as a primary key.
                 if (!pType.canBePrimaryKey()) {
                     continue;
                 }

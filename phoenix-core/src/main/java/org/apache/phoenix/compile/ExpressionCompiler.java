@@ -116,7 +116,6 @@ import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -204,13 +203,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         Expression rhsExpr = children.get(1);
 
         PDataType dataTypeOfLHSExpr = lhsExpr.getDataType();
-        if (dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isEqualitySupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
+        if (dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
                     .setMessage(" for type " + dataTypeOfLHSExpr).build().buildException();
         }
         PDataType dataTypeOfRHSExpr = rhsExpr.getDataType();
-        if (dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isEqualitySupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
+        if (dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
                     .setMessage(" for type " + dataTypeOfRHSExpr).build().buildException();
         }
 
@@ -494,12 +493,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhs = children.get(0);
         Expression rhs = children.get(1);
-        if (!lhs.getDataType().isEqualitySupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
+        if (!lhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
                     .setMessage(" for type " + lhs.getDataType()).build().buildException();
         }
-        if (!rhs.getDataType().isEqualitySupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
+        if (!rhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
                     .setMessage(" for type " + rhs.getDataType()).build().buildException();
         }
         if ( rhs.getDataType() != null && lhs.getDataType() != null &&
@@ -658,8 +657,8 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         PDataType firstChildType = firstChild.getDataType();
         ParseNode firstChildNode = node.getChildren().get(0);
 
-        if (firstChildType != null && !firstChildType.isEqualitySupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
+        if (firstChildType != null && !firstChildType.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
                     .setMessage(" for type " + firstChildType).build().buildException();
         }
 

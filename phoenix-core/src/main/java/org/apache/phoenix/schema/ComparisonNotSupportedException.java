@@ -21,9 +21,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.types.PDataType;
 
-public class EqualityNotSupportedException extends RuntimeException {
-    public EqualityNotSupportedException(PDataType<?> pDataType) {
-        super(new SQLExceptionInfo.Builder(SQLExceptionCode.NON_EQUALITY_COMPARISON)
+public class ComparisonNotSupportedException extends RuntimeException {
+    public ComparisonNotSupportedException(PDataType<?> pDataType) {
+        super(new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
                 .setMessage(" for type " + pDataType.toString()).build().buildException());
     }
 }
