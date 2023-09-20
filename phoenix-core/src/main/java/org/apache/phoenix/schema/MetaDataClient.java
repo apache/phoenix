@@ -1721,11 +1721,15 @@ public class MetaDataClient {
                         SortOrder.getDefault()
         )}));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
+        // TODO: What to do if LOCAL?
+        if (indexType == IndexType.GLOBAL) {
+            indexType = IndexType.UNCOVERED_GLOBAL;
+        }
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
         // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
-                        statement.getDataTable()), indexKeyConstraint, null, null, indexProps, false,
-                        indexType, false, 0, new HashMap<>());
+                        statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
+                        indexProps, false, indexType, false, 0, new HashMap<>());
         // TODO: Currently index can be dropped, leaving the CDC dangling.
         // TODO: If the index creation fails because it already exists, it is most likely because the CDC table already exists. Should we catch that exception and translate it to a CDC specific exception?
         // TODO: Should we also allow PTimestamp here?

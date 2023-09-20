@@ -517,6 +517,9 @@ public class QueryParserTest {
         parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
+        parseCreateCDCSimple("create cdc foo on bar(t) index_type=global", true, "T");
+        // TODO: local is a keyword and so can't be used as a property value.
+        //parseCreateCDCSimple("create cdc foo on bar(t) index_type=local", true, "T");
         stmt = parseCreateCDCSimple("create cdc foo on bar(TS_FUNC()) TTL=100, INDEX_TYPE=global", false, null);
         assertEquals("TS_FUNC", stmt.getTimeIdxFunc().getName());
         assertEquals(" TS_FUNC()", stmt.getTimeIdxFunc().toString());

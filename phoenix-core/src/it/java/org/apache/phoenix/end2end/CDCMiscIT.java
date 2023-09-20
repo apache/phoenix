@@ -19,19 +19,37 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 @Category(ParallelStatsDisabledTest.class)
 public class CDCMiscIT extends ParallelStatsDisabledIT {
+    private void assertCDCState(Connection conn, String cdcName, String expInclude,
+                                int idxType) throws SQLException {
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT cdc_include FROM " +
+                "system.catalog WHERE table_name = '" + cdcName +
+                "' AND column_name IS NULL and column_family IS NULL")) {
+            assertEquals(true, rs.next());
+            assertEquals(expInclude, rs.getString(1));
+        }
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT index_type FROM " +
+                "system.catalog WHERE table_name = '" + SchemaUtil.getCDCIndexName(cdcName) +
+                "' AND column_name IS NULL and column_family IS NULL")) {
+                assertEquals(true, rs.next());
+            assertEquals(idxType, rs.getInt(1));
+        }
+    }
     @Test
     public void testCreate() throws SQLException {
         Properties props = new Properties();
@@ -44,7 +62,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON NON_EXISTENT_TABLE (PHOENIX_ROW_TIMESTAMP()) INDEX_TYPE=global");
+                    + " ON NON_EXISTENT_TABLE (PHOENIX_ROW_TIMESTAMP())");
             fail("Expected to fail due to non-existent table");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
@@ -52,7 +70,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(UNKNOWN_FUNCTION()) INDEX_TYPE=global");
+                    + " ON " + tableName +"(UNKNOWN_FUNCTION())");
             fail("Expected to fail due to invalid function");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(), e.getErrorCode());
@@ -60,7 +78,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(NOW()) INDEX_TYPE=global");
+                    + " ON " + tableName +"(NOW())");
             fail("Expected to fail due to non-deterministic function");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
@@ -68,7 +86,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(ROUND(v1)) INDEX_TYPE=global");
+                    + " ON " + tableName +"(ROUND(v1))");
             fail("Expected to fail due to non-timestamp expression in the index PK");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(), e.getErrorCode());
@@ -76,15 +94,16 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(v1) INDEX_TYPE=global");
+                    + " ON " + tableName +"(v1)");
             fail("Expected to fail due to non-timestamp column in the index PK");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(), e.getErrorCode());
         }
 
         String cdc_sql = "CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) INDEX_TYPE=global";
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
         conn.createStatement().execute(cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
 
         try {
             conn.createStatement().execute(cdc_sql);
@@ -93,8 +112,15 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
         }
 
-        conn.createStatement().execute("CREATE CDC " + generateUniqueName() + " ON " + tableName +
-                "(v2) INDEX_TYPE=global");
+        cdcName = generateUniqueName();
+        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
+                "(v2) INCLUDE (post, pre, post) INDEX_TYPE=global");
+        assertCDCState(conn, cdcName, "PRE, POST", 3);
+
+        //cdcName = generateUniqueName();
+        //conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
+        //        "(v2) INCLUDE (pre, post) INDEX_TYPE=local");
+        //assertCDCState(conn, cdcName, "POST, PRE", 2);
 
         conn.close();
     }

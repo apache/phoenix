@@ -47,7 +47,8 @@ public class CDCUtil {
     public static String makeChangeScopeStringFromEnums(Set<PTable.CDCChangeScope> includeScopes) {
         String cdcChangeScopes = "";
         if (includeScopes != null) {
-            Iterable<String> tmpStream = () -> includeScopes.stream().map(s -> s.name()).iterator();
+            Iterable<String> tmpStream = () -> includeScopes.stream().sorted()
+                    .map(s -> s.name()).iterator();
             cdcChangeScopes = StringUtils.join(", ", tmpStream);
         }
         return cdcChangeScopes;
