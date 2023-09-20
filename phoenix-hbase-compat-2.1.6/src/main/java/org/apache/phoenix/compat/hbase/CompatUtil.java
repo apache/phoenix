@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
@@ -36,6 +37,7 @@ import org.apache.hadoop.hbase.util.ChecksumType;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 
 import java.io.IOException;
+import java.util.List;
 
 public class CompatUtil {
 
@@ -90,5 +92,10 @@ public class CompatUtil {
             final RegionCoprocessorEnvironment env) throws IOException {
         //Short Circuit connections are broken before 2.4.12
         return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
+    }
+
+    public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
+            throws IOException {
+        return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
     }
 }
