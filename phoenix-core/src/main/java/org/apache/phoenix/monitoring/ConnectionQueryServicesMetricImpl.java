@@ -19,21 +19,21 @@ package org.apache.phoenix.monitoring;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class PhoenixTableMetricImpl implements PhoenixTableMetric {
+public class ConnectionQueryServicesMetricImpl implements ConnectionQueryServicesMetric {
 
     private AtomicLong numberOfSamples = new AtomicLong(0);
     private Metric metric;
 
     /**
-     * Default implementation used when TableLevel Metrics are enabled
+     * Default implementation used when Phoenix Connection Query Service Metrics are enabled
      */
-    public PhoenixTableMetricImpl(MetricType type) {
+    public ConnectionQueryServicesMetricImpl(MetricType type) {
         this.metric = new AtomicMetric(type);
     }
 
     /**
-     * Reset the internal state. Typically called after metric information has been collected and a new phase of
-     * collection is being requested for the next interval.
+     * Reset the internal state. Typically called after metric information has been
+     * collected and a new phase of collection is being requested for the next interval.
      */
     @Override public void reset() {
         metric.reset();
