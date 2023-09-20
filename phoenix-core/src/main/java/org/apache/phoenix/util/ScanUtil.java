@@ -494,7 +494,7 @@ public class ScanUtil {
                 // But if last field of rowKey is variable length and also DESC, the trailing 0xFF
                 // is not removed when stored in HBASE, so for such case, we should not set
                 // lastInclusiveUpperSingleKey back to false.
-                if(sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
+                if (sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
                     lastInclusiveUpperSingleKey &= (fieldIndex + slotSpan[i]) < schema.getMaxFields()-1;
                 }
             }
@@ -696,10 +696,10 @@ public class ScanUtil {
     public static void setupLocalIndexScan(Scan scan) {
         byte[] prefix = scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length]: scan.getStartRow();
         int prefixLength = scan.getStartRow().length == 0? scan.getStopRow().length: scan.getStartRow().length;
-        if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
+        if (scan.getAttribute(SCAN_START_ROW_SUFFIX) != null) {
             scan.withStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
         }
-        if(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)!=null) {
+        if (scan.getAttribute(SCAN_STOP_ROW_SUFFIX) != null) {
             scan.withStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
         }
     }
@@ -721,7 +721,7 @@ public class ScanUtil {
      * @param newScan
      */
     public static void setLocalIndexAttributes(Scan newScan, int keyOffset, byte[] regionStartKey, byte[] regionEndKey, byte[] startRowSuffix, byte[] stopRowSuffix) {
-        if(ScanUtil.isLocalIndex(newScan)) {
+        if (ScanUtil.isLocalIndex(newScan)) {
              newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
              newScan.withStartRow(regionStartKey);
              newScan.withStopRow(regionEndKey);
@@ -797,7 +797,7 @@ public class ScanUtil {
     public static int getRowKeyPosition(int[] slotSpan, int slotPosition) {
         int offset = 0;
 
-        for(int i = 0; i < slotPosition; i++) {
+        for (int i = 0; i < slotPosition; i++) {
             offset += slotSpan[i];
         }
 
@@ -1363,7 +1363,7 @@ public class ScanUtil {
 
     public static boolean isDummy(Tuple tuple) {
         if (tuple instanceof ResultTuple) {
-            isDummy(((ResultTuple) tuple).getResult());
+            return isDummy(((ResultTuple) tuple).getResult());
         }
         return false;
     }

@@ -24,8 +24,11 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.util.ScanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *  PagingRegionScanner works with PagingFilter to make sure that the time between two rows
@@ -43,6 +46,9 @@ public class PagingRegionScanner extends BaseRegionScanner {
     private Region region;
     private Scan scan;
     private PagingFilter pagingFilter;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(PagingRegionScanner.class);
+
 	public PagingRegionScanner(Region region, RegionScanner scanner, Scan scan) {
 	    super(scanner);
 	    this.region = region;
@@ -55,6 +61,9 @@ public class PagingRegionScanner extends BaseRegionScanner {
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
         try {
+            if (pagingFilter != null) {
+                pagingFilter.init();
+            }
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
             if (pagingFilter == null) {
                 return hasMore;
@@ -66,19 +75,20 @@ public class PagingRegionScanner extends BaseRegionScanner {
                     // Close the current region scanner, start a new one and return a dummy result
                     delegate.close();
                     byte[] rowKey = pagingFilter.getRowKeyAtStop();
-                    scan.withStartRow(rowKey, true);
+                    boolean isInclusive = pagingFilter.isNextRowInclusive();
+                    scan.withStartRow(rowKey, isInclusive);
                     delegate = region.getScanner(scan);
                     if (results.isEmpty()) {
+                        LOGGER.info("Page filter stopped, generating dummy key {} inclusive={}",
+                                Bytes.toStringBinary(rowKey), isInclusive);
                         ScanUtil.getDummyResult(rowKey, results);
                     }
-                    pagingFilter.init();
                     return true;
                 }
                 return false;
             } else {
                 // We got a row from the HBase scanner within the configured time (i.e., the page size). We need to
                 // start a new page on the next next() call.
-                pagingFilter.resetStartTime();
                 return true;
             }
         } catch (Exception e) {

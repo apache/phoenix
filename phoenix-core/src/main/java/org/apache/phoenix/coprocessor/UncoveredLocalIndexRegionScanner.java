@@ -67,6 +67,9 @@ public class UncoveredLocalIndexRegionScanner extends UncoveredIndexRegionScanne
 
     protected void scanDataRows(Collection<byte[]> dataRowKeys, long startTime) throws IOException {
         Scan dataScan = prepareDataTableScan(dataRowKeys);
+        if (dataScan == null) {
+            return;
+        }
         try (RegionScanner regionScanner = region.getScanner(dataScan)) {
             boolean hasMore;
             do {
