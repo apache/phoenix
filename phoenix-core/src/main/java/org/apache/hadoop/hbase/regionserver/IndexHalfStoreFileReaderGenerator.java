@@ -125,8 +125,8 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 }
                 if (result == null || result.isEmpty()) {
                     List<RegionInfo> mergeRegions =
-                            MetaTableAccessor.getMergeRegions(ctx.getEnvironment().getConnection(),
-                                region.getRegionInfo().getRegionName());
+                            CompatUtil.getMergeRegions(ctx.getEnvironment().getConnection(),
+                                region.getRegionInfo());
                     if (mergeRegions == null || mergeRegions.isEmpty()) {
                         return reader;
                     }

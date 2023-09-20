@@ -26,12 +26,12 @@
     <version>5.1.4-SNAPSHOT</version>
   </parent>
 
-  <artifactId>phoenix-hbase-compat-2.5.0</artifactId>
-  <name>Phoenix Hbase 2.5.0 compatibility</name>
-  <description>Compatibility module for HBase 2.5.0 - 2.5.3</description>
+  <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
+  <name>Phoenix Hbase 2.5.4 compatibility</name>
+  <description>Compatibility module for HBase 2.5.4+</description>
 
   <properties>
-    <hbase25.compat.version>2.5.0</hbase25.compat.version>
+    <hbase25.compat.version>2.5.4</hbase25.compat.version>
   </properties>
 
   <dependencies>

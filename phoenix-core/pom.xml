@@ -75,6 +75,9 @@
                     || ("${hbase.compat.version}".equals("2.5.0")
                       &amp;&amp; hbaseMinor == 5
                       &amp;&amp; hbasePatch &gt;=0)
+                    || ("${hbase.compat.version}".equals("2.5.4")
+                      &amp;&amp; hbaseMinor == 5
+                      &amp;&amp; hbasePatch &gt;=4)
                   )
                 </condition>
               </evaluateBeanshell>

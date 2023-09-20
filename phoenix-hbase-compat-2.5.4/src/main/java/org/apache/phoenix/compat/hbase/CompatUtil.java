@@ -43,7 +43,6 @@ import org.apache.hadoop.hbase.regionserver.StoreUtils;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
 import org.apache.hadoop.hbase.util.ChecksumType;
-import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,9 +52,6 @@ public class CompatUtil {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(
         CompatUtil.class);
-
-    private static boolean hasFixedShortCircuitConnection =
-            VersionInfo.compareVersion(VersionInfo.getVersion(), "2.4.12") >= 0;
 
     private CompatUtil() {
         //Not to be instantiated
@@ -155,15 +151,11 @@ public class CompatUtil {
 
     public static Connection createShortCircuitConnection(final Configuration configuration,
             final RegionCoprocessorEnvironment env) throws IOException {
-        if (hasFixedShortCircuitConnection) {
-            return env.createConnection(configuration);
-        } else {
-            return org.apache.hadoop.hbase.client.ConnectionFactory.createConnection(configuration);
-        }
+        return env.createConnection(configuration);
     }
 
     public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
             throws IOException {
-        return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
+        return MetaTableAccessor.getMergeRegions(conn, regionInfo);
     }
 }
