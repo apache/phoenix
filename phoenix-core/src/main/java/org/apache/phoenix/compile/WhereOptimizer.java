@@ -1691,8 +1691,10 @@ public class WhereOptimizer {
             KeySlots childSlots = childParts.get(0);
             KeySlot childSlot = childSlots.getSlots().get(0);
             final String startsWith = node.getLiteralPrefix();
-            SortOrder sortOrder = node.getChildren().get(0).getSortOrder();
-            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, sortOrder);
+            // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
+            PColumn column = childSlot.getKeyPart().getColumn();
+            PDataType type = column.getDataType();
+            byte[] key = PVarchar.INSTANCE.toBytes(startsWith, SortOrder.ASC);
             // If the expression is an equality expression against a fixed length column
             // and the key length doesn't match the column length, the expression can
             // never be true.
@@ -1702,9 +1704,6 @@ public class WhereOptimizer {
             if (childNodeFixedLength != null && key.length > childNodeFixedLength) {
                 return EMPTY_KEY_SLOTS;
             }
-            // TODO: is there a case where we'd need to go through the childPart to calculate the key range?
-            PColumn column = childSlot.getKeyPart().getColumn();
-            PDataType type = column.getDataType();
             byte[] lowerRange = key;
             byte[] upperRange = ByteUtil.nextKey(key);
             Integer columnFixedLength = column.getMaxLength();
@@ -1715,17 +1714,9 @@ public class WhereOptimizer {
                     lowerRange = type.pad(lowerRange, columnFixedLength, SortOrder.ASC);
                     upperRange = type.pad(upperRange, columnFixedLength, SortOrder.ASC);
                 }
-            } else if (column.getSortOrder() == SortOrder.DESC && table.rowKeyOrderOptimizable()) {
-                // Append a zero byte if descending since a \xFF byte will be appended to the lowerRange
-                // causing rows to be skipped that should be included. For example, with rows 'ab', 'a',
-                // a lowerRange of 'a\xFF' would skip 'ab', while 'a\x00\xFF' would not.
-                lowerRange = Arrays.copyOf(lowerRange, lowerRange.length+1);
-                lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
             }
-            KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false, SortOrder.ASC);
-            if (column.getSortOrder() == SortOrder.DESC) {
-                range = range.invert();
-            }
+            KeyRange range = type.getKeyRange(lowerRange, true, upperRange, false,
+                    SortOrder.ASC);
             // Only extract LIKE expression if pattern ends with a wildcard and everything else was extracted
             return newKeyParts(childSlot, node.endsWithOnlyWildcard() ? node : null, range);
         }

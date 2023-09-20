@@ -36,11 +36,17 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 public interface ColumnProjector {
     /**
-     * Get the column name as it was referenced in the query
+     * Get the column name
      * @return the database column name
      */
     String getName();
-    
+
+    /**
+     * Get the expression string
+     * @return the label as it was referenced in the query
+     */
+    String getLabel();
+
     /**
      * Get the expression
      * @return the expression for the column projector

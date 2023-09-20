@@ -172,17 +172,27 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
         List<KeyRange> keys = new ArrayList<>(dataRowKeys.size());
         for (byte[] dataRowKey : dataRowKeys) {
-            keys.add(PVarbinary.INSTANCE.getKeyRange(dataRowKey, SortOrder.ASC));
+            // If the data table scan was interrupted because of paging we retry the scan
+            // but on retry we should only fetch data table rows which we haven't already
+            // fetched.
+            if (!dataRows.containsKey(new ImmutableBytesPtr(dataRowKey))) {
+                keys.add(PVarbinary.INSTANCE.getKeyRange(dataRowKey, SortOrder.ASC));
+            }
         }
-        ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
-        Scan dataScan = new Scan(dataTableScan);
-        dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
-        scanRanges.initializeScan(dataScan);
-        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        dataScan.setFilter(new SkipScanFilter(skipScanFilter, false));
-        dataScan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS,
-                Bytes.toBytes(Long.valueOf(pageSizeMs)));
-        return dataScan;
+        if (!keys.isEmpty()) {
+            ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
+            Scan dataScan = new Scan(dataTableScan);
+            dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
+            scanRanges.initializeScan(dataScan);
+            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+            dataScan.setFilter(new SkipScanFilter(skipScanFilter, false));
+            dataScan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS,
+                    Bytes.toBytes(Long.valueOf(pageSizeMs)));
+            return dataScan;
+        } else {
+            LOGGER.info("All data rows have already been fetched");
+            return null;
+        }
     }
 
     protected boolean scanIndexTableRows(List<Cell> result,

@@ -157,6 +157,7 @@ tokens
     SHOW = 'show';
     UNCOVERED = 'uncovered';
     REGIONS = 'regions';
+    NOVERIFY = 'noverify';
 }
 
 
@@ -293,7 +294,7 @@ package org.apache.phoenix.parse;
     public void resetBindCount() {
         anonBindNum = 0;
     }
-    
+
     public String nextBind() {
         return Integer.toString(++anonBindNum);
     }
@@ -476,10 +477,11 @@ explain_node returns [BindableStatement ret]
 create_table_node returns [CreateTableStatement ret]
     :   CREATE (im=IMMUTABLE)? TABLE (IF NOT ex=EXISTS)? t=from_table_name 
         (LPAREN c=column_defs (pk=pk_constraint)? RPAREN)
+        (noverify=NOVERIFY)?
         (p=fam_properties)?
         (SPLIT ON s=value_expression_list)?
         (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
-        {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null,  cqc); }
+        {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null, cqc, noverify!=null); }
     ;
    
 // Parse a create schema statement.

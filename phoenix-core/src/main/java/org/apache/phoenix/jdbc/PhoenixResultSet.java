@@ -1633,7 +1633,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
                     startingPos++, currentDynCol.getName().getString());
 
             ColumnProjector dynColProj = new ExpressionProjector(
-                    currentDynCol.getName().getString(), tableName, exp, false);
+                    currentDynCol.getName().getString(), currentDynCol.getName().getString(), tableName, exp, false);
             allColumnProjectors.add(dynColProj);
         }
 

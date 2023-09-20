@@ -19,6 +19,8 @@ package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
@@ -26,6 +28,8 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.parse.CreateTableStatement;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -35,13 +39,30 @@ public class CreateTableCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testCreateTableWithDuplicateColumns() throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
-        String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, DUPE INTEGER, DUPE INTEGER)";
-        try {
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+            String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, DUPE INTEGER, DUPE INTEGER)";
             conn.createStatement().execute(ddl);
             fail();
         } catch (ColumnAlreadyExistsException e) {
             assertEquals("DUPE", e.getColumnName());
         }
+    }
+
+    @Test
+    public void testCreateTableWithNoVerify() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+            String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, A INTEGER, B INTEGER) NOVERIFY";
+            boolean result = conn.createStatement().execute(ddl);
+            assertFalse(result);
+        }
+    }
+
+    @Test
+    public void testCreateTableWithNoVerifyValidateStmt() throws SQLException {
+        String ddl = "CREATE TABLE A (K VARCHAR PRIMARY KEY DESC) NOVERIFY";
+        CreateTableStatement stmt = (CreateTableStatement)new SQLParser((ddl)).parseStatement();
+
+        assertTrue(stmt.isNoVerify());
     }
 }
