@@ -333,12 +333,34 @@ public class ParseNodeFactory {
         return new IndexKeyConstraint(parseNodeAndSortOrder);
     }
 
-    public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows, Map<String, Integer> cqCounters) {
-        return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters);
+    public CreateTableStatement createTable(
+            TableName tableName, ListMultimap<String,Pair<String,Object>> props,
+            List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
+            List<ParseNode> splits, PTableType tableType, boolean ifNotExists,
+            TableName baseTableName, ParseNode tableTypeIdNode, int bindCount,
+            Boolean immutableRows, Map<String, Integer> cqCounters, boolean noVerify) {
+        return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType,
+                ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters,
+                noVerify);
     }
 
-    public CreateTableStatement createTable(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType, boolean ifNotExists, TableName baseTableName, ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
-        return new CreateTableStatement(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists, baseTableName, tableTypeIdNode, bindCount, immutableRows, null);
+    public CreateTableStatement createTable(
+            TableName tableName, ListMultimap<String,Pair<String,Object>> props,
+            List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits,
+            PTableType tableType, boolean ifNotExists, TableName baseTableName,
+            ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows,
+            Map<String, Integer> cqCounters) {
+        return createTable(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists,
+                baseTableName, tableTypeIdNode, bindCount, immutableRows, cqCounters, false);
+    }
+
+    public CreateTableStatement createTable(
+            TableName tableName, ListMultimap<String,Pair<String,Object>> props,
+            List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint, List<ParseNode> splits,
+            PTableType tableType, boolean ifNotExists, TableName baseTableName,
+            ParseNode tableTypeIdNode, int bindCount, Boolean immutableRows) {
+        return createTable(tableName, props, columns, pkConstraint, splits, tableType, ifNotExists,
+                baseTableName, tableTypeIdNode, bindCount, immutableRows, null, false);
     }
 
     public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
@@ -460,15 +482,15 @@ public class ParseNodeFactory {
     }
     
     public NamedTableNode namedTable(String alias, TableName name, List<ColumnDef> dyn_columns, LiteralParseNode tableSampleNode) {
-    	Double tableSamplingRate;
-    	if(tableSampleNode==null||tableSampleNode.getValue()==null){
-    		tableSamplingRate=ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
-    	}else if(tableSampleNode.getValue() instanceof Integer){
-    		tableSamplingRate=(double)((int)tableSampleNode.getValue());
-    	}else{
-    		tableSamplingRate=((BigDecimal) tableSampleNode.getValue()).doubleValue();
-    	}
-    	return new NamedTableNode(alias, name, dyn_columns, tableSamplingRate);
+        Double tableSamplingRate;
+        if (tableSampleNode == null || tableSampleNode.getValue() == null) {
+            tableSamplingRate = ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
+        } else if (tableSampleNode.getValue() instanceof Integer) {
+            tableSamplingRate = (double)((int)tableSampleNode.getValue());
+        } else {
+            tableSamplingRate=((BigDecimal) tableSampleNode.getValue()).doubleValue();
+        }
+        return new NamedTableNode(alias, name, dyn_columns, tableSamplingRate);
     }
 
     public BindTableNode bindTable(String alias, TableName name) {
@@ -534,7 +556,7 @@ public class ParseNodeFactory {
         args.addAll(valueNodes);
 
         BuiltInFunctionInfo info = getInfo(name, args);
-        if(info==null) {
+        if (info == null) {
             return new UDFParseNode(name,args,info);
         }
         Constructor<? extends FunctionParseNode> ctor = info.getNodeCtor();

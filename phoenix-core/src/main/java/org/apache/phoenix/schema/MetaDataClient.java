@@ -1025,7 +1025,8 @@ public class MetaDataClient {
                 viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null,
                 null, null, tableProps, commonFamilyProps);
 
-        if (table == null || table.getType() == PTableType.VIEW /*|| table.isTransactional()*/) {
+        if (table == null || table.getType() == PTableType.VIEW
+                || statement.isNoVerify() /*|| table.isTransactional()*/) {
             return new MutationState(0, 0, connection);
         }
         // Hack to get around the case when an SCN is specified on the connection.

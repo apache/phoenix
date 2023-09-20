@@ -43,6 +43,7 @@ public class CreateTableStatement extends MutableStatement {
     // TODO change this to boolean at the next major release and remove TableProperty.IMMUTABLE_ROWS and QueryServiceOptions.IMMUTABLE_ROWS_ATTRIB
     private final Boolean immutableRows;
     private final Map<String, Integer> familyCQCounters;
+    private final boolean noVerify;
     
     public CreateTableStatement(CreateTableStatement createTable, List<ColumnDef> columns) {
         this.tableName = createTable.tableName;
@@ -57,6 +58,7 @@ public class CreateTableStatement extends MutableStatement {
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
         this.familyCQCounters = createTable.familyCQCounters;
+        this.noVerify = createTable.noVerify;
     }
 
     public CreateTableStatement(CreateTableStatement createTable, PrimaryKeyConstraint pkConstraint,
@@ -73,6 +75,7 @@ public class CreateTableStatement extends MutableStatement {
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
         this.familyCQCounters = createTable.familyCQCounters;
+        this.noVerify = createTable.noVerify;
     }
 
     public CreateTableStatement(CreateTableStatement createTable, ListMultimap<String,Pair<String,Object>>  props, List<ColumnDef> columns) {
@@ -88,12 +91,13 @@ public class CreateTableStatement extends MutableStatement {
         this.whereClause = createTable.whereClause;
         this.immutableRows = createTable.immutableRows;
         this.familyCQCounters = createTable.familyCQCounters;
+        this.noVerify = createTable.noVerify;
     }
 
     protected CreateTableStatement(TableName tableName, ListMultimap<String,Pair<String,Object>> props, List<ColumnDef> columns, PrimaryKeyConstraint pkConstraint,
                                    List<ParseNode> splitNodes, PTableType tableType, boolean ifNotExists,
                                    TableName baseTableName, ParseNode whereClause, int bindCount, Boolean immutableRows,
-                                   Map<String, Integer> familyCounters) {
+                                   Map<String, Integer> familyCounters, boolean noVerify) {
         this.tableName = tableName;
         this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of() : props;
         this.tableType = PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(tableName.getSchemaName()) ? PTableType.SYSTEM : tableType;
@@ -106,6 +110,7 @@ public class CreateTableStatement extends MutableStatement {
         this.whereClause = whereClause;
         this.immutableRows = immutableRows;
         this.familyCQCounters = familyCounters;
+        this.noVerify = noVerify;
     }
 
     public ParseNode getWhereClause() {
@@ -155,5 +160,9 @@ public class CreateTableStatement extends MutableStatement {
 
     public Map<String, Integer> getFamilyCQCounters() {
         return familyCQCounters;
+    }
+
+    public boolean isNoVerify() {
+        return noVerify;
     }
 }
