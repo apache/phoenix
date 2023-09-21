@@ -18,16 +18,21 @@
 
 package org.apache.phoenix.util;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.hadoop.util.StringUtils;
 
 import org.apache.phoenix.schema.PTable;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
 public class CDCUtil {
+    /**
+     * Make a set of CDC change scope enums from the given string containing comma separated scope
+     * names.
+     *
+     * @param includeScopes Comma-separated scope names.
+     * @return the set of enums, which can be empty if the string is empty or has no valid names.
+     */
     public static Set<PTable.CDCChangeScope> makeChangeScopeEnumsFromString(String includeScopes) {
         Set<PTable.CDCChangeScope> cdcChangeScopes = new HashSet<>();
         if (includeScopes != null) {
@@ -44,6 +49,12 @@ public class CDCUtil {
         return cdcChangeScopes;
     }
 
+    /**
+     * Make a string of comma-separated scope names from the specified set of enums.
+     *
+     * @param includeScopes Set of scope enums
+     * @return the comma-separated string of scopes, which can be an empty string in case the set is empty.
+     */
     public static String makeChangeScopeStringFromEnums(Set<PTable.CDCChangeScope> includeScopes) {
         String cdcChangeScopes = "";
         if (includeScopes != null) {
