@@ -1181,9 +1181,10 @@ public class MetaDataClient {
                 + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
             try (PreparedStatement selectStatsStmt = connection.prepareStatement(query)) {
                 selectStatsStmt.setString(1, physicalName.getString());
-                ResultSet rs = selectStatsStmt.executeQuery(query);
-                if (rs.next()) {
-                    msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                try (ResultSet rs = selectStatsStmt.executeQuery(query)) {
+                    if (rs.next()) {
+                        msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                    }
                 }
             }
         }
@@ -1745,7 +1746,6 @@ public class MetaDataClient {
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
         // TODO: toString() on function will have an extra space at the beginning.
         ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ? statement.getTimeIdxColumn() : FACTORY.columnName(statement.getTimeIdxFunc().toString());
-        // TODO: Would need to add the JSON column as well.
         columnDefs.add(FACTORY.columnDef(timeIdxCol, PTimestamp.INSTANCE.getSqlTypeName(), false, null, false,
                 PTimestamp.INSTANCE.getMaxLength(null), PTimestamp.INSTANCE.getScale(null), false,
                 SortOrder.getDefault(), "", null, false));
@@ -2150,37 +2150,40 @@ public class MetaDataClient {
                 storeNulls = parent.getStoreNulls();
                 parentTableName = parent.getTableName().getString();
                 // Pass through data table sequence number so we can check it hasn't changed
-                PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                incrementStatement.setString(1, tenantIdStr);
-                incrementStatement.setString(2, schemaName);
-                incrementStatement.setString(3, parentTableName);
-                incrementStatement.setLong(4, parent.getSequenceNumber());
-                incrementStatement.execute();
-                // Get list of mutations and add to table meta data that will be passed to server
-                // to guarantee order. This row will always end up last
-                tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
-                connection.rollback();
+                try (PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM)) {
+                    incrementStatement.setString(1, tenantIdStr);
+                    incrementStatement.setString(2, schemaName);
+                    incrementStatement.setString(3, parentTableName);
+                    incrementStatement.setLong(4, parent.getSequenceNumber());
+                    incrementStatement.execute();
+                    // Get list of mutations and add to table meta data that will be passed to server
+                    // to guarantee order. This row will always end up last
+                    tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                    connection.rollback();
+                }
 
                 // Add row linking from data table row to index table row
-                PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                linkStatement.setString(1, tenantIdStr);
-                linkStatement.setString(2, schemaName);
-                linkStatement.setString(3, parentTableName);
-                linkStatement.setString(4, tableName);
-                linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
-                linkStatement.setLong(6, parent.getSequenceNumber());
-                linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
-                linkStatement.execute();
+                try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK)) {
+                    linkStatement.setString(1, tenantIdStr);
+                    linkStatement.setString(2, schemaName);
+                    linkStatement.setString(3, parentTableName);
+                    linkStatement.setString(4, tableName);
+                    linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
+                    linkStatement.setLong(6, parent.getSequenceNumber());
+                    linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
+                    linkStatement.execute();
+                }
 
                 // Add row linking index table to parent table for indexes on views
                 if (parent.getType() == PTableType.VIEW) {
-	                linkStatement = connection.prepareStatement(CREATE_VIEW_INDEX_PARENT_LINK);
-	                linkStatement.setString(1, tenantIdStr);
-	                linkStatement.setString(2, schemaName);
-	                linkStatement.setString(3, tableName);
-	                linkStatement.setString(4, parent.getName().getString());
-	                linkStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
-	                linkStatement.execute();
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_INDEX_PARENT_LINK)) {
+                        linkStatement.setString(1, tenantIdStr);
+                        linkStatement.setString(2, schemaName);
+                        linkStatement.setString(3, tableName);
+                        linkStatement.setString(4, parent.getName().getString());
+                        linkStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
+                        linkStatement.execute();
+                    }
                 }
             }
 
@@ -2450,24 +2453,26 @@ public class MetaDataClient {
                     pkColumns = newLinkedHashSet(parent.getPKColumns());
 
                     // Add row linking view to its parent 
-                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK);
-                    linkStatement.setString(1, tenantIdStr);
-                    linkStatement.setString(2, schemaName);
-                    linkStatement.setString(3, tableName);
-                    linkStatement.setString(4, parent.getName().getString());
-                    linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
-                    linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
-                    linkStatement.execute();
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK)) {
+                        linkStatement.setString(1, tenantIdStr);
+                        linkStatement.setString(2, schemaName);
+                        linkStatement.setString(3, tableName);
+                        linkStatement.setString(4, parent.getName().getString());
+                        linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
+                        linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                        linkStatement.execute();
+                    }
                     // Add row linking parent to view
-                    // TODO From 4.16 write the child links to SYSTEM.CHILD_LINK directly 
-                    linkStatement = connection.prepareStatement(CREATE_CHILD_LINK);
-                    linkStatement.setString(1, parent.getTenantId() == null ? null : parent.getTenantId().getString());
-                    linkStatement.setString(2, parent.getSchemaName() == null ? null : parent.getSchemaName().getString());
-                    linkStatement.setString(3, parent.getTableName().getString());
-                    linkStatement.setString(4, tenantIdStr);
-                    linkStatement.setString(5, SchemaUtil.getTableName(schemaName, tableName));
-                    linkStatement.setByte(6, LinkType.CHILD_TABLE.getSerializedValue());
-                    linkStatement.execute();
+                    // TODO From 4.16 write the child links to SYSTEM.CHILD_LINK directly
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_CHILD_LINK)) {
+                        linkStatement.setString(1, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                        linkStatement.setString(2, parent.getSchemaName() == null ? null : parent.getSchemaName().getString());
+                        linkStatement.setString(3, parent.getTableName().getString());
+                        linkStatement.setString(4, tenantIdStr);
+                        linkStatement.setString(5, SchemaUtil.getTableName(schemaName, tableName));
+                        linkStatement.setByte(6, LinkType.CHILD_TABLE.getSerializedValue());
+                        linkStatement.execute();
+                    }
                 }
             } else {
                 columns = new LinkedHashMap<PColumn,PColumn>(colDefs.size());
@@ -2484,29 +2489,30 @@ public class MetaDataClient {
                     && !physicalNames.get(0).getString().equals(SchemaUtil.getPhysicalHBaseTableName(
                         schemaName, tableName, isNamespaceMapped).getString()))) {
                     // Add row linking from data table row to physical table row
-                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                    for (PName physicalName : physicalNames) {
-                        linkStatement.setString(1, tenantIdStr);
-                        linkStatement.setString(2, schemaName);
-                        linkStatement.setString(3, tableName);
-                        linkStatement.setString(4, physicalName.getString());
-                        linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
-                        if (tableType == PTableType.VIEW) {
-                            if (parent.getType() == PTableType.TABLE) {
-                                linkStatement.setString(4, SchemaUtil.getTableName(parent.getSchemaName().getString(),parent.getTableName().getString()));
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK)) {
+                        for (PName physicalName : physicalNames) {
+                            linkStatement.setString(1, tenantIdStr);
+                            linkStatement.setString(2, schemaName);
+                            linkStatement.setString(3, tableName);
+                            linkStatement.setString(4, physicalName.getString());
+                            linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
+                            if (tableType == PTableType.VIEW) {
+                                if (parent.getType() == PTableType.TABLE) {
+                                    linkStatement.setString(4, SchemaUtil.getTableName(parent.getSchemaName().getString(), parent.getTableName().getString()));
+                                    linkStatement.setLong(6, parent.getSequenceNumber());
+                                } else { //This is a grandchild view, find the physical base table
+                                    PTable logicalTable = connection.getTable(new PTableKey(null, SchemaUtil.replaceNamespaceSeparator(physicalName)));
+                                    linkStatement.setString(4, SchemaUtil.getTableName(logicalTable.getSchemaName().getString(), logicalTable.getTableName().getString()));
+                                    linkStatement.setLong(6, logicalTable.getSequenceNumber());
+                                }
+                                // Set link to logical name
+                                linkStatement.setString(7, null);
+                            } else {
                                 linkStatement.setLong(6, parent.getSequenceNumber());
-                            } else { //This is a grandchild view, find the physical base table
-                                PTable logicalTable = connection.getTable(new PTableKey(null, SchemaUtil.replaceNamespaceSeparator(physicalName)));
-                                linkStatement.setString(4, SchemaUtil.getTableName(logicalTable.getSchemaName().getString(),logicalTable.getTableName().getString()));
-                                linkStatement.setLong(6, logicalTable.getSequenceNumber());
+                                linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
                             }
-                            // Set link to logical name
-                            linkStatement.setString(7, null);
-                        } else {
-                            linkStatement.setLong(6, parent.getSequenceNumber());
-                            linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
+                            linkStatement.execute();
                         }
-                        linkStatement.execute();
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
                     connection.rollback();
@@ -2920,12 +2926,13 @@ public class MetaDataClient {
                     }
                 }
                 if (tableType == VIEW && !changedCqCounters.isEmpty()) {
-                    PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                    incrementStatement.setString(1, null);
-                    incrementStatement.setString(2, viewPhysicalTable.getSchemaName().getString());
-                    incrementStatement.setString(3, viewPhysicalTable.getTableName().getString());
-                    incrementStatement.setLong(4, viewPhysicalTable.getSequenceNumber() + 1);
-                    incrementStatement.execute();
+                    try (PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM)) {
+                        incrementStatement.setString(1, null);
+                        incrementStatement.setString(2, viewPhysicalTable.getSchemaName().getString());
+                        incrementStatement.setString(3, viewPhysicalTable.getTableName().getString());
+                        incrementStatement.setLong(4, viewPhysicalTable.getSequenceNumber() + 1);
+                        incrementStatement.execute();
+                    }
                 }
                 if (connection.getMutationState().toMutations(timestamp).hasNext()) {
                     tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
@@ -3156,20 +3163,22 @@ public class MetaDataClient {
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
-                PreparedStatement setAsync = connection.prepareStatement(SET_ASYNC_CREATED_DATE);
-                setAsync.setString(1, tenantIdStr);
-                setAsync.setString(2, schemaName);
-                setAsync.setString(3, tableName);
-                setAsync.setDate(4, asyncCreatedDate);
-                setAsync.execute();
+                try (PreparedStatement setAsync = connection.prepareStatement(SET_ASYNC_CREATED_DATE)) {
+                    setAsync.setString(1, tenantIdStr);
+                    setAsync.setString(2, schemaName);
+                    setAsync.setString(3, tableName);
+                    setAsync.setDate(4, asyncCreatedDate);
+                    setAsync.execute();
+                }
             } else {
                 Date syncCreatedDate = new Date(EnvironmentEdgeManager.currentTimeMillis());
-                PreparedStatement setSync = connection.prepareStatement(SET_INDEX_SYNC_CREATED_DATE);
-                setSync.setString(1, tenantIdStr);
-                setSync.setString(2, schemaName);
-                setSync.setString(3, tableName);
-                setSync.setDate(4, syncCreatedDate);
-                setSync.execute();
+                try (PreparedStatement setSync = connection.prepareStatement(SET_INDEX_SYNC_CREATED_DATE)) {
+                    setSync.setString(1, tenantIdStr);
+                    setSync.setString(2, schemaName);
+                    setSync.setString(3, tableName);
+                    setSync.setDate(4, syncCreatedDate);
+                    setSync.execute();
+                }
             }
             tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
             connection.rollback();
@@ -3782,8 +3791,8 @@ public class MetaDataClient {
         // Ordinal position is 1-based and we don't count SALT column in ordinal position
         int totalColumnCount = table.getColumns().size() + (table.getBucketNum() == null ? 0 : -1);
         final long seqNum = table.getSequenceNumber() + 1;
-        PreparedStatement tableUpsert = connection.prepareStatement(MUTATE_TABLE);
         String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
+        PreparedStatement tableUpsert = connection.prepareStatement(MUTATE_TABLE);
         try {
             tableUpsert.setString(1, tenantId);
             tableUpsert.setString(2, schemaName);
@@ -4272,9 +4281,8 @@ public class MetaDataClient {
                 // Add column metadata afterwards, maintaining the order so columns have more predictable ordinal position
                 tableMetaData.addAll(columnMetaData);
                 if (!changedCqCounters.isEmpty()) {
-                    PreparedStatement linkStatement;
-                        linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER);
-                        for (Entry<String, Integer> entry : changedCqCounters.entrySet()) {    
+                    try (PreparedStatement linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER)) {
+                        for (Entry<String, Integer> entry : changedCqCounters.entrySet()) {
                             linkStatement.setString(1, tenantIdToUse);
                             linkStatement.setString(2, tableForCQCounters.getSchemaName().getString());
                             linkStatement.setString(3, tableForCQCounters.getTableName().getString());
@@ -4282,16 +4290,18 @@ public class MetaDataClient {
                             linkStatement.setInt(5, entry.getValue());
                             linkStatement.execute();
                         }
+                    }
 
                     // When a view adds its own columns, then we need to increase the sequence number of the base table
                     // too since we want clients to get the latest PTable of the base table.
                     if (tableType == VIEW) {
-                        PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                        incrementStatement.setString(1, null);
-                        incrementStatement.setString(2, tableForCQCounters.getSchemaName().getString());
-                        incrementStatement.setString(3, tableForCQCounters.getTableName().getString());
-                        incrementStatement.setLong(4, tableForCQCounters.getSequenceNumber() + 1);
-                        incrementStatement.execute();
+                        try (PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM)) {
+                            incrementStatement.setString(1, null);
+                            incrementStatement.setString(2, tableForCQCounters.getSchemaName().getString());
+                            incrementStatement.setString(3, tableForCQCounters.getTableName().getString());
+                            incrementStatement.setLong(4, tableForCQCounters.getSequenceNumber() + 1);
+                            incrementStatement.execute();
+                        }
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();
