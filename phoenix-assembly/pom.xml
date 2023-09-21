@@ -226,6 +226,11 @@
           <artifactId>phoenix-hbase-compat-2.5.0</artifactId>
           <version>${project.version}</version>
         </dependency>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
+          <version>${project.version}</version>
+        </dependency>
       </dependencies>
     </profile>
   </profiles>

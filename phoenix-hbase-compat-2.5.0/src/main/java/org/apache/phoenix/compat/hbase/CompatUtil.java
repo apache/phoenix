@@ -18,12 +18,14 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
@@ -57,8 +59,9 @@ public class CompatUtil {
             .build();
     }
 
-    public static Scan getScanForTableName(Connection conn, TableName tableName) {
-        return MetaTableAccessor.getScanForTableName(conn.getConfiguration(), tableName);
+    public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
+            throws IOException {
+        return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
     }
 
     public static ChecksumType getChecksumType(Configuration conf) {
