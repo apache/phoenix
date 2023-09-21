@@ -194,7 +194,28 @@ public class ConnectionQueryServicesImplTest {
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(notCorruptedStartKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, true);
+
+        // comparing the current regionInfo startKey is greater than the previous endKey leading to a hole
+        // [0x3000,0x3001) vs 0x2999
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
+        when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
+        when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedDecreasingKey, true);
+
+        // comparing the current regionInfo startKey is less than the previous endKey leading to an overlap
+        // [0x2999,0x3001) vs 0x3000
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
+        when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
+        when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+
+        // comparing the current regionInfo startKey is equal to the previous endKey
+        // [0x3000,0x3001) vs 0x3000
+        GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
+        when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
+        when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, false);
 
         // test EMPTY_START_ROW
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
