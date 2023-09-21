@@ -284,11 +284,11 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             assertNull(table.useStatsForParallelization());
             assertNull(viewTable1.useStatsForParallelization());
             assertTrue(viewTable2.useStatsForParallelization());
-
             // Alter a property value for the base table. So the view for which this property was
             // not explicitly set or modified earlier should get the base table's new property value
             conn.createStatement().execute("ALTER TABLE " + tableName
                     + " SET UPDATE_CACHE_FREQUENCY=3, USE_STATS_FOR_PARALLELIZATION=false");
+            Thread.sleep(2);
             // query the views to force the table cache to be updated
             viewConn.createStatement().execute("SELECT * FROM " + viewOfTable1);
             viewConn.createStatement().execute("SELECT * FROM " + viewOfTable2);
