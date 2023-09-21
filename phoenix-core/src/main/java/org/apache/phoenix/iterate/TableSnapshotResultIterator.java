@@ -43,6 +43,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,6 +133,7 @@ public class TableSnapshotResultIterator implements ResultIterator {
       }
     }
     this.regions.sort(RegionInfo.COMPARATOR);
+    ScanUtil.setScanAttributeForPaging(scan, this.context.getConnection());
     LOGGER.info("Initialization complete with " + regions.size() + " valid regions");
   }
 

@@ -1225,20 +1225,25 @@ public class ScanUtil {
         if (emptyCF != null && emptyCQ != null) {
             addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
+
+        setScanAttributeForPaging(scan, phoenixConnection);
+    }
+
+    public static void setScanAttributeForPaging(Scan scan, PhoenixConnection phoenixConnection) {
         if (phoenixConnection.getQueryServices().getProps().getBoolean(
                 QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
                 QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
             long pageSizeMs = phoenixConnection.getQueryServices().getProps()
                     .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
             if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+                // Use the half of the HBase RPC timeout value as the server page size to make sure that the HBase
                 // region server will be able to send a heartbeat message to the client before the client times out
                 pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
             }
+
             scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
-
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {
