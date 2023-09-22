@@ -177,6 +177,9 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         try (Connection conn1 = getConnection();
              Connection conn2 = getConnection()){
             createBaseTable(conn1, schemaName, tableName, false, null, null, true);
+            if (isNamespaceMapped) {
+                conn1.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + viewSchemaName);
+            }
             conn1.createStatement().execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
             conn1.createStatement().execute("CREATE INDEX " + indexName + " ON " + fullViewName + " (v1)");
             conn2.createStatement().executeQuery("SELECT * FROM " + fullTableName).next();
@@ -202,6 +205,10 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
              Connection conn1 = getTenantConnection("10")) {
 
             createBaseTable(conn, SCHEMA1, tableName, true, null, null, true);
+            if (isNamespaceMapped) {
+                conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + SCHEMA2);
+            }
+
             PreparedStatement stmt = conn.prepareStatement(
                 "UPSERT INTO " + fullTableName
                     + " VALUES(?,?,?,?,?)");
@@ -481,11 +488,13 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         conn.createStatement().execute(viewDdl);
         conn.createStatement().execute(indexDdl);
 
-        String childViewName = String.format("S_%s.\"%s\"", generateUniqueName(), keyPrefix);
+        String childViewNameSchema = String.format("S_%s", generateUniqueName());
+        String childViewName = String.format("%s.\"%s\"", childViewNameSchema, keyPrefix);
         String viewChildDDl = String.format("CREATE VIEW IF NOT EXISTS %s AS SELECT * FROM %s", childViewName, fullViewName);
         Connection conn2 = null;
         if (isNamespaceMapped) {
             conn2 = getTenantConnection(TENANT1);
+            conn2.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + childViewNameSchema);
         } else {
             conn2 = conn;
         }
@@ -579,6 +588,8 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
                  Connection tsConn3 = DriverManager.getConnection(getUrl(), tsProps)) {
                 if (isNamespaceMapped) {
                     conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + baseSchemaName);
+                    conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + viewSchemaName);
+                    conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + tsViewSchemaName);
                 }
                 conn.createStatement().execute(
                     "CREATE TABLE " + baseFullName + "(\n" + "    ORGANIZATION_ID CHAR(15) NOT NULL,\n"
@@ -696,6 +707,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             c.setAutoCommit(true);
             if (isNamespaceMapped) {
                 c.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + SCHEMA1);
+                c.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + SCHEMA2);
             }
             s.execute("CREATE TABLE " + tableName + " (COL1 VARCHAR PRIMARY KEY, CF.COL2 VARCHAR)");
             s.executeUpdate("UPSERT INTO " + tableName + " VALUES ('AAA', 'BBB')");

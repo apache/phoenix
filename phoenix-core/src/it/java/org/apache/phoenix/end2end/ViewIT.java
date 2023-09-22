@@ -44,7 +44,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+
+import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.NamespaceDescriptor;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -57,9 +64,9 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.SchemaNotFoundException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -273,7 +280,46 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertEquals(4, count);
         }
     }
-    
+
+    @Test
+    public void testCreateMappedViewWithHbaseNamespace() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+                Boolean.TRUE.toString());
+        Connection conn1 = DriverManager.getConnection(getUrl(), props);
+        conn1.setAutoCommit(true);
+
+        HBaseTestingUtility testUtil = getUtility();
+        Admin admin = testUtil.getAdmin();
+
+        String nameSpace = generateUniqueName();
+        admin.createNamespace(NamespaceDescriptor.create(nameSpace).build());
+
+        String tableNameStr = generateUniqueName();
+        TableName tableName = TableName.valueOf(nameSpace, tableNameStr);
+        String familyNameStr = "colFam1";
+        TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(tableName);
+        builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(
+                familyNameStr));
+        admin.createTable(builder.build());
+
+
+        String viewName = SchemaUtil.getTableName(nameSpace, tableNameStr);
+        try {
+            conn1.createStatement().execute("CREATE VIEW " + viewName +
+                    " (pk VARCHAR PRIMARY KEY, \"colFam1\".\"lastname\" VARCHAR )");
+        } catch (SchemaNotFoundException e) {
+            assertEquals(nameSpace, e.getSchemaName());
+            assertEquals("ERROR 722 (43M05): Schema does not exist schemaName="
+                            + nameSpace,
+                    e.getMessage());
+        }
+
+        conn1.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + nameSpace);
+        conn1.createStatement().execute("CREATE VIEW " + viewName +
+                " (pk VARCHAR PRIMARY KEY, \"colFam1\".\"lastname\" VARCHAR )");
+    }
+
     @Test
     public void testViewWithCurrentDate() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl());
