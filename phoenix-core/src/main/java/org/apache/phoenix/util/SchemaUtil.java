@@ -1131,7 +1131,8 @@ public class SchemaUtil {
     }
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
-        return PTableType.TABLE.equals(tableType) && isNamespaceMappingEnabled(tableType, props);
+        return (PTableType.TABLE.equals(tableType) || PTableType.VIEW.equals(tableType))
+                && isNamespaceMappingEnabled(tableType, props);
     }
     
     public static boolean isNamespaceMappingEnabled(PTableType type, Configuration conf) {

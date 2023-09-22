@@ -163,16 +163,21 @@ public class FromCompiler {
     	
         TableName baseTable = statement.getBaseTableName();
         String schemaName;
-        if (baseTable == null) {
-            if (SchemaUtil.isSchemaCheckRequired(statement.getTableType(), connection.getQueryServices().getProps())) {
-                schemaName = statement.getTableName().getSchemaName();
-                if (schemaName != null) {
-                    new SchemaResolver(connection, statement.getTableName().getSchemaName(), true);
-                } else if (connection.getSchema() != null) {
-                    // To ensure schema set through properties or connection string exists before creating table
-                    new SchemaResolver(connection, connection.getSchema(), true);
-                }
+        if (SchemaUtil.isSchemaCheckRequired(statement.getTableType(),
+                connection.getQueryServices().getProps())) {
+            schemaName = statement.getTableName().getSchemaName();
+            if (schemaName != null) {
+                new SchemaResolver(connection,
+                        statement.getTableName().getSchemaName(),
+                        true);
+            } else if (connection.getSchema() != null) {
+                // To ensure schema set through properties or connection string exists before creating table
+                new SchemaResolver(connection,
+                        connection.getSchema(),
+                        true);
             }
+        }
+        if (baseTable == null) {
             return EMPTY_TABLE_RESOLVER;
         }
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
