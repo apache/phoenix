@@ -368,19 +368,6 @@ public class DelegateTable implements PTable {
         return delegate.getTTL();
     }
 
-    @Deprecated
-    @Override public long getPhoenixTTL() { return delegate.getPhoenixTTL(); }
-
-    @Deprecated
-    @Override public long getPhoenixTTLHighWaterMark() {
-        return delegate.getPhoenixTTLHighWaterMark();
-    }
-
-    @Deprecated
-    @Override public boolean hasViewModifiedPhoenixTTL() {
-        return delegate.hasViewModifiedPhoenixTTL();
-    }
-
     @Override
     public Long getLastDDLTimestamp() {
         return delegate.getLastDDLTimestamp();

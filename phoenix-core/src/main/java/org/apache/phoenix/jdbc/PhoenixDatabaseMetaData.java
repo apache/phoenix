@@ -396,16 +396,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TTL = "TTL";
     public static final byte[] TTL_BYTES = Bytes.toBytes(TTL);
     public static final int TTL_NOT_DEFINED = 0;
-    @Deprecated
-    public static final long PHOENIX_TTL_NOT_DEFINED_DEPRECATED = 0L;
-    //Should we change name of Default value as well!?
-    public static final int DEFAULT_PHOENIX_TTL = HConstants.FOREVER;
-
+    public static final int DEFAULT_TTL = HConstants.FOREVER;
     public static final String PHOENIX_TTL = "PHOENIX_TTL";
     public static final byte[] PHOENIX_TTL_BYTES = Bytes.toBytes(PHOENIX_TTL);
-    // The phoenix ttl high watermark if set indicates the timestamp used for determining the expired rows.
-    // otherwise the now() - ttl-duration is the timestamp used.
-    public static final long MIN_PHOENIX_TTL_HWM = 0L;
     public static final String PHOENIX_TTL_HWM = "PHOENIX_TTL_HWM";
     public static final byte[] PHOENIX_TTL_HWM_BYTES = Bytes.toBytes(PHOENIX_TTL_HWM);
 

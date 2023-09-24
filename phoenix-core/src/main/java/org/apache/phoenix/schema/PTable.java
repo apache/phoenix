@@ -923,24 +923,6 @@ public interface PTable extends PMetaDataEntity {
     int getTTL();
 
     /**
-     * @return The PHOENIX_TTL duration associated with the entity.
-     */
-    @Deprecated
-    long getPhoenixTTL();
-
-    /**
-     * @return The PHOENIX_TTL high water mark timestamp associated with the entity.
-     */
-    @Deprecated
-    long getPhoenixTTLHighWaterMark();
-
-    /**
-     * @return If the view has overridden the TTL set at the parent entity level.
-     */
-    @Deprecated
-    boolean hasViewModifiedPhoenixTTL();
-
-    /**
      * @return the last timestamp at which this entity had its data shape created or modified (e
      * .g, create entity, adding or dropping a column. Not affected by changing table properties
      */

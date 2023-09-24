@@ -108,11 +108,11 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final String ORG_ID_FMT = "00D0x000%s";
     static final String ID_FMT = "00A0y000%07d";
     static final String ZID_FMT = "00B0y000%07d";
-    private static final String PHOENIX_TTL_HEADER_SQL = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG "
+    private static final String TTL_HEADER_SQL = "SELECT TTL FROM SYSTEM.CATALOG "
             + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
 
-    private static final String ALTER_PHOENIX_TTL_SQL
-            = "ALTER VIEW \"%s\".\"%s\" set PHOENIX_TTL=%s";
+    private static final String ALTER_TTL_SQL
+            = "ALTER VIEW \"%s\".\"%s\" set TTL=%s";
 
     private static final String ALTER_SQL_WITH_NO_TTL
             = "ALTER VIEW \"%s\".\"%s\" ADD IF NOT EXISTS %s CHAR(10)";
@@ -134,7 +134,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
     @BeforeClass
     public static final void doSetup() throws Exception {
-        // Turn on the PHOENIX_TTL feature
+        // Turn on the TTL feature
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
             put(QueryServices.PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, String.valueOf(true));
         }};
@@ -170,7 +170,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 new SubstringComparator(schemaName));
         QualifierFilter phoenixTTLQualifierFilter = new QualifierFilter(
                 CompareOperator.EQUAL,
-                new BinaryComparator(PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES));
+                new BinaryComparator(PhoenixDatabaseMetaData.TTL_BYTES));
         filterList.addFilter(schemaNameFilter);
         filterList.addFilter(phoenixTTLQualifierFilter);
         try (Table tbl = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES)
@@ -184,7 +184,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             int numMatchingRows = 0;
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 numMatchingRows += result.containsColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                        PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES) ? 1 : 0;
+                        PhoenixDatabaseMetaData.TTL_BYTES) ? 1 : 0;
             }
             assertEquals(String.format("Expected rows do not match for table = %s at timestamp %d",
                     Bytes.toString(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES),
@@ -202,7 +202,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     "TENANT_ID IS NULL" :
                     String.format("TENANT_ID = '%s'", tenantId);
             String sql = String
-                    .format(PHOENIX_TTL_HEADER_SQL, tenantClause, schemaName, tableName, tableType);
+                    .format(TTL_HEADER_SQL, tenantClause, schemaName, tableName, tableType);
             stmt.execute(sql);
             ResultSet rs = stmt.getResultSet();
             long actualTTLValueReturned = rs.next() ? rs.getLong(1) : 0;
@@ -230,7 +230,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
         // Phoenix TTL is set to 300s => 300000 ms
-        globalViewOptions.setTableProps("PHOENIX_TTL=300");
+        globalViewOptions.setTableProps("TTL=300");
 
         SchemaBuilder.GlobalViewIndexOptions globalViewIndexOptions
                 = SchemaBuilder.GlobalViewIndexOptions.withDefaults();
@@ -271,7 +271,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
         // Phoenix TTL is set to 300s => 300000 ms
-        tenantViewWithOverrideOptions.setTableProps("PHOENIX_TTL=300");
+        tenantViewWithOverrideOptions.setTableProps("TTL=300");
         if (tenantViewOptions != null) {
             tenantViewWithOverrideOptions = tenantViewOptions;
         }
@@ -329,7 +329,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         schemaBuilder.withTableDefaults().withGlobalViewDefaults().build();
 
         // Expected 2 rows - one for Table and GlobalView each.
-        // Since the PHOENIX_TTL property values are not being set,
+        // Since the TTL property values are not being set,
         // we expect the view header columns to show up in raw scans only.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, true, 2);
@@ -347,13 +347,13 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true,TTL=100");
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps("PHOENIX_TTL=1000");
+        tenantViewOptions.setTableProps("TTL=1000");
         try {
             schemaBuilder.withTableOptions(tableOptions).withTenantViewOptions(tenantViewOptions)
                     .buildNewView();
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_TTL_FOR_TABLE_WITH_TTL
+            assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_PHOENIX_LEVEL_TTL_FOR_TABLE_WITH_TTL
                     .getErrorCode(), e.getErrorCode());
         }
     }
@@ -362,13 +362,13 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     public void testPhoenixTTLWithViewIndexFails() throws Exception {
 
         TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
-        tenantViewIndexOptions.setIndexProps("PHOENIX_TTL=1000");
+        tenantViewIndexOptions.setIndexProps("TTL=1000");
         try {
             final SchemaBuilder schemaBuilder = createLevel1TenantView(null,
                     tenantViewIndexOptions);
             fail();
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY.getErrorCode(),
+            assertEquals(SQLExceptionCode.PHOENIX_LEVEL_TTL_SUPPORTED_FOR_VIEWS_ONLY.getErrorCode(),
                     e.getErrorCode());
         }
     }
@@ -379,7 +379,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
         // Phoenix TTL is set to 120s => 120000 ms
-        tenantViewOptions.setTableProps("PHOENIX_TTL=120");
+        tenantViewOptions.setTableProps("TTL=120");
 
         final SchemaBuilder schemaBuilder = createLevel1TenantView(tenantViewOptions, null);
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
@@ -391,7 +391,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are being set,
+        // Since the TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 2);
@@ -420,7 +420,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are being set,
+        // Since the TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 4);
@@ -428,7 +428,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 PTableType.VIEW.getSerializedValue(), 300000);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, indexOnGlobalViewName,
                 PTableType.INDEX.getSerializedValue(), 300000);
-        // Since the PHOENIX_TTL property values are not being overridden,
+        // Since the TTL property values are not being overridden,
         // we expect the TTL value to be same as the global view.
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, tenantViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
@@ -441,8 +441,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        // Client can also specify PHOENIX_TTL=NONE
-        tenantViewOptions.setTableProps("PHOENIX_TTL=0");
+        // Client can also specify TTL=NONE
+        tenantViewOptions.setTableProps("TTL=0");
         final SchemaBuilder schemaBuilder = createLevel1TenantView(tenantViewOptions, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
@@ -454,7 +454,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 3 deleted rows - one for Table, one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are not being set or being set to zero,
+        // Since the TTL property values are not being set or being set to zero,
         // we expect the view header columns to show up in raw scans only.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, true, 3);
@@ -470,8 +470,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        // Client can also specify PHOENIX_TTL=0
-        tenantViewOptions.setTableProps("PHOENIX_TTL=NONE");
+        // Client can also specify TTL=0
+        tenantViewOptions.setTableProps("TTL=NONE");
         final SchemaBuilder schemaBuilder = createLevel1TenantView(tenantViewOptions, null);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
@@ -483,7 +483,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 3 deleted rows - one for Table, one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are not being set or being set to zero,
+        // Since the TTL property values are not being set or being set to zero,
         // we expect the view header columns to show up in raw scans only.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, true, 3);
@@ -497,13 +497,13 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 120s => 120000 ms
                 String sql = String
-                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, tenantViewName, "120");
+                        .format(ALTER_TTL_SQL, schemaName, tenantViewName, "120");
                 stmt.execute(sql);
             }
         }
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are being set,
+        // Since the TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 2);
@@ -519,7 +519,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         try {
             TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
             // Phoenix TTL is set to 120s => 120000 ms
-            tenantViewWithOverrideOptions.setTableProps("PHOENIX_TTL=120");
+            tenantViewWithOverrideOptions.setTableProps("TTL=120");
             final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(
                     tenantViewWithOverrideOptions, null);
             fail();
@@ -548,7 +548,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are being set,
+        // Since the TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 4);
@@ -556,7 +556,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 PTableType.VIEW.getSerializedValue(), 300000);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, indexOnGlobalViewName,
                 PTableType.INDEX.getSerializedValue(), 300000);
-        // Since the PHOENIX_TTL property values are not being overridden,
+        // Since the TTL property values are not being overridden,
         // we expect the TTL value to be same as the global view.
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, tenantViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
@@ -568,7 +568,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 120s => 120000 ms
                 String sql = String
-                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, tenantViewName, "120");
+                        .format(ALTER_TTL_SQL, schemaName, tenantViewName, "120");
                 stmt.execute(sql);
                 fail();
             }
@@ -597,7 +597,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are being set,
+        // Since the TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 2);
@@ -610,7 +610,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 120s => 120000 ms
                 String sql = String
-                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, globalViewName, "120");
+                        .format(ALTER_TTL_SQL, schemaName, globalViewName, "120");
                 stmt.execute(sql);
                 fail();
             }
@@ -639,7 +639,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
         // Expected 2 rows - one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values are being set,
+        // Since the TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 2);
@@ -689,13 +689,13 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             try (Statement stmt = connection.createStatement()) {
                 // Phoenix TTL is set to 'NONE'
                 String sql = String
-                        .format(ALTER_PHOENIX_TTL_SQL, schemaName, globalViewName, "'NONE'");
+                        .format(ALTER_TTL_SQL, schemaName, globalViewName, "'NONE'");
                 stmt.execute(sql);
             }
         }
 
         // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
-        // Since the PHOENIX_TTL property values for global view are being reset,
+        // Since the TTL property values for global view are being reset,
         // we expect the view header columns value to be set to zero.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
                 schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 4);
@@ -703,7 +703,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 PTableType.VIEW.getSerializedValue(), 0);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, indexOnGlobalViewName,
                 PTableType.INDEX.getSerializedValue(), 0);
-        // Since the PHOENIX_TTL property values for the tenant view are not being reset,
+        // Since the TTL property values for the tenant view are not being reset,
         // we expect the TTL value to be same as before.
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, tenantViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
@@ -721,7 +721,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         // Define the test schema.
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
@@ -780,7 +780,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions
                 globalViewIndexOptions =
@@ -882,7 +882,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
@@ -1019,7 +1019,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
@@ -1160,7 +1160,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
@@ -1257,7 +1257,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
@@ -1363,7 +1363,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tenantViewOptions
                 .setTenantViewColumnTypes(asList("CHAR(15)", "VARCHAR", "VARCHAR", "VARCHAR"));
 
-        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         OtherOptions testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
         testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
@@ -1450,7 +1450,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.setTableProps(tableProps);
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions globalViewIndexOptions = GlobalViewIndexOptions.withDefaults();
 
@@ -1642,7 +1642,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tenantViewWithOverrideOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
         tenantViewWithOverrideOptions
                 .setTenantViewColumnTypes(asList("CHAR(15)", "VARCHAR", "VARCHAR", "VARCHAR"));
-        tenantViewWithOverrideOptions.setTableProps(String.format("PHOENIX_TTL=%d", tenantPhoenixTTL));
+        tenantViewWithOverrideOptions.setTableProps(String.format("TTL=%d", tenantPhoenixTTL));
 
         OtherOptions testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
         testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
@@ -1748,7 +1748,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         SchemaBuilder.GlobalViewOptions globalViewOptions =
                 SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", globalPhoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", globalPhoenixTTL));
 
         SchemaBuilder.GlobalViewIndexOptions globalViewIndexOptions =
                 SchemaBuilder.GlobalViewIndexOptions.withDefaults();
@@ -1850,7 +1850,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.getTableColumnTypes().clear();
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         // Define the test schema.
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
@@ -1938,7 +1938,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.setTableProps(tableProps);
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         // Define the test schema.
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
@@ -2030,7 +2030,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tableOptions.setTableProps(tableProps);
 
         GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        globalViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         GlobalViewIndexOptions globalViewIndexOptions = GlobalViewIndexOptions.withDefaults();
 
@@ -2201,7 +2201,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         TenantViewOptions tenantViewOptions = new TenantViewOptions();
         tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
         tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
-        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
 
         TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
 

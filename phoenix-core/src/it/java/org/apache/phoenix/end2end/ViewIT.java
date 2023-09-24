@@ -1078,6 +1078,22 @@ public class ViewIT extends SplitSystemCatalogIT {
             assertFalse(rs.next());
         }
     }
+    @Test
+    public void testCreateViewOnTopOfView() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            String fullViewName =  generateUniqueName();
+            String ddl = "CREATE VIEW " +  fullViewName + " AS SELECT * FROM " + fullViewName + " WHERE " +
+                    fullViewName + " = 1";
+            stmt.execute(ddl);
+            fail("Should have thrown an exception");
+        } catch (TableNotFoundException tableException) {
+            assertEquals("Can not create a new view with the same parent view/table name",
+                    SQLExceptionCode.TABLE_UNDEFINED
+                            .getErrorCode(), tableException.getErrorCode());
+        }
+    }
+
 
     public static Pair<String, Scan> testUpdatableViewIndex(
             String fullTableName, Integer saltBuckets,
