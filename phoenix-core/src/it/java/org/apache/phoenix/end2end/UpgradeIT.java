@@ -54,7 +54,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -65,7 +64,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -344,7 +342,6 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
             String tableName = "T_" + generateUniqueName();
             String tableName1 = "T_" + generateUniqueName();
             String tableName2 = "T_" + generateUniqueName();
-            Random rand = new Random();
             long randomValue = 181938859789797187L;
             long randomIntValue = 156743;
             PreparedStatement prepareStatement = conn.prepareStatement(dml);
