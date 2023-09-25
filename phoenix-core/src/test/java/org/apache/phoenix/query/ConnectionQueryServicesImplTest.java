@@ -168,6 +168,7 @@ public class ConnectionQueryServicesImplTest {
                 org.mockito.Mockito.CALLS_REAL_METHODS);
         byte[] corruptedStartAndEndKey = "0x3000".getBytes();
         byte[] corruptedDecreasingKey = "0x2999".getBytes();
+        byte[] corruptedNewEndKey = "0x3001".getBytes();
         byte[] notCorruptedStartKey = "0x2999".getBytes();
         byte[] notCorruptedEndKey = "0x3000".getBytes();
         byte[] notCorruptedNewKey = "0x3001".getBytes();
@@ -190,24 +191,24 @@ public class ConnectionQueryServicesImplTest {
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
 
         // comparing the current regionInfo endKey is greater than the previous endKey
-        // [0x3000,0x3000) vs 0x3001
+        // [0x2999,0x3001) vs 0x3000
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
-        when(mockHRegionInfo.getStartKey()).thenReturn(notCorruptedStartKey);
-        when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, true);
+        when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
+        when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
 
         // comparing the current regionInfo startKey is greater than the previous endKey leading to a hole
         // [0x3000,0x3001) vs 0x2999
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
-        when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
+        when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedDecreasingKey, true);
 
         // comparing the current regionInfo startKey is less than the previous endKey leading to an overlap
         // [0x2999,0x3001) vs 0x3000
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
-        when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
+        when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
         testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
 
         // comparing the current regionInfo startKey is equal to the previous endKey
@@ -215,7 +216,7 @@ public class ConnectionQueryServicesImplTest {
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, false);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false);
 
         // test EMPTY_START_ROW
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
