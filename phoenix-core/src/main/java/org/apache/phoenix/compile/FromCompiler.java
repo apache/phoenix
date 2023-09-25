@@ -171,7 +171,8 @@ public class FromCompiler {
                         statement.getTableName().getSchemaName(),
                         true);
             } else if (connection.getSchema() != null) {
-                // To ensure schema set through properties or connection string exists before creating table
+                // To ensure schema set through properties or connection
+                // string exists before creating table
                 new SchemaResolver(connection,
                         connection.getSchema(),
                         true);
@@ -250,7 +251,7 @@ public class FromCompiler {
      */
     public static TableRef refreshDerivedTableNode(
             ColumnResolver columnResolver, DerivedTableNode derivedTableNode) throws SQLException {
-        if(!(columnResolver instanceof MultiTableColumnResolver)) {
+        if (!(columnResolver instanceof MultiTableColumnResolver)) {
             throw new UnsupportedOperationException();
         }
         return ((MultiTableColumnResolver)columnResolver).refreshDerivedTableNode(derivedTableNode);
@@ -600,13 +601,13 @@ public class FromCompiler {
             List<PFunction> functionsFound = new ArrayList<PFunction>(functionNames.size());
             if (updateCacheImmediately || connection.getAutoCommit()) {
                 getFunctionFromCache(functionNames, functionsFound, true);
-                if(functionNames.isEmpty()) {
+                if (functionNames.isEmpty()) {
                     return functionsFound;
                 }
                 MetaDataMutationResult result = client.updateCache(functionNames);
                 timeStamp = result.getMutationTime();
                 functionsFound = result.getFunctions();
-                if(functionNames.size() != functionsFound.size()){
+                if (functionNames.size() != functionsFound.size()){
                     throw new FunctionNotFoundException("Some of the functions in " +
                             functionNames.toString()+" are not found");
                 }
@@ -617,11 +618,11 @@ public class FromCompiler {
                 if (!functionNames.isEmpty()) {
                     result = client.updateCache(functionNames);
                 }
-                if(result!=null) {
+                if (result!=null) {
                     if (!result.getFunctions().isEmpty()) {
                         functionsFound.addAll(result.getFunctions());
                     }
-                    if(result.wasUpdated()) {
+                    if (result.wasUpdated()) {
                         timeStamp = result.getMutationTime();
                     }
                 }
@@ -645,7 +646,7 @@ public class FromCompiler {
                                           List<PFunction> functionsFound,
                                           boolean getOnlyTemporyFunctions) {
             Iterator<String> iterator = functionNames.iterator();
-            while(iterator.hasNext()) {
+            while (iterator.hasNext()) {
                 PFunction function = null;
                 String functionName = iterator.next();
                 try {
@@ -1017,7 +1018,7 @@ public class FromCompiler {
         public TableRef refreshDerivedTableNode(DerivedTableNode derivedTableNode) throws SQLException {
               String tableAlias = derivedTableNode.getAlias();
               List<TableRef> removedTableRefs = this.tableMap.removeAll(tableAlias);
-              if(removedTableRefs == null || removedTableRefs.isEmpty()) {
+              if (removedTableRefs == null || removedTableRefs.isEmpty()) {
                   return null;
               }
               tables.removeAll(removedTableRefs);

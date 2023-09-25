@@ -939,6 +939,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                     + schemaName1);
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "
                     + viewSchemaName);
+            conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS "
+                    + SCHEMA3);
         }
         String ddl = "CREATE TABLE " + fullTableName1
                 + " (k INTEGER NOT NULL PRIMARY KEY, v1 DATE)";
