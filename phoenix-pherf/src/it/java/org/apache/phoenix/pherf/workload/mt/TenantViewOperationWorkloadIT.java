@@ -36,6 +36,7 @@ import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils.TestConfigAndEx
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -69,6 +70,11 @@ public class TenantViewOperationWorkloadIT extends ParallelStatsDisabledIT {
                         .getRegions(PhoenixDatabaseMetaData.SYSTEM_TASK_HBASE_TABLE_NAME)
                         .get(0).getCoprocessorHost()
                         .findCoprocessorEnvironment(TaskRegionObserver.class.getName());
+    }
+
+    @BeforeClass
+    public static synchronized void setUrl() {
+        PhoenixUtil.setZookeeper(MultiTenantTestUtils.getZookeeperFromUrl(url));
     }
 
     @Parameterized.Parameters( name = "generator_type={0}" )
