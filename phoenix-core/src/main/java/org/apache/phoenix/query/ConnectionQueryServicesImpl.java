@@ -4152,7 +4152,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
                     PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " " +
                             PVarbinary.INSTANCE.getSqlTypeName());
-            //Copy Data From PHOENIX_TTL column to TTL and column will be removed after copying.
+            //Copy Data From PHOENIX_TTL column to TTL as PHOENIX_TTL column will be removed in
+            //later release.
             copyDataFromPhoenixTTLtoTTL(metaConnection);
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }

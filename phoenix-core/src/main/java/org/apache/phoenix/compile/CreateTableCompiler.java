@@ -139,7 +139,6 @@ public class CreateTableCompiler {
             if (whereNode == null) {
                 viewStatementToBe = parentToBe.getViewStatement();
             } else {
-
                 whereNode = StatementNormalizer.normalize(whereNode, resolver);
                 if (whereNode.isStateless()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.VIEW_WHERE_IS_CONSTANT)

@@ -106,16 +106,19 @@ message PTable {
   optional int32 viewIndexIdType = 39 [default = 5];
   optional bool viewModifiedUpdateCacheFrequency = 40;
   optional bool viewModifiedUseStatsForParallelization = 41;
-  optional int64 lastDDLTimestamp = 42;
-  optional bool changeDetectionEnabled = 43;
-  optional bytes physicalTableNameBytes = 44;
-  optional bytes baseTableLogicalNameBytes = 45;
-  optional bytes schemaVersion = 46;
-  optional bytes externalSchemaId=47;
-  optional PTable transformingNewTable=48;
-  optional bytes streamingTopicName=49;
-  optional int32 ttl = 50;
-  optional bytes rowKeyPrefix = 51;
+  optional int64 phoenixTTL = 42;
+  optional int64 phoenixTTLHighWaterMark = 43;
+  optional bool viewModifiedPhoenixTTL = 44;
+  optional int64 lastDDLTimestamp = 45;
+  optional bool changeDetectionEnabled = 46;
+  optional bytes physicalTableNameBytes = 47;
+  optional bytes baseTableLogicalNameBytes = 48;
+  optional bytes schemaVersion = 49;
+  optional bytes externalSchemaId=50;
+  optional PTable transformingNewTable=51;
+  optional bytes streamingTopicName=52;
+  optional int32 ttl = 53;
+  optional bytes rowKeyPrefix = 54;
 }
 
 message EncodedCQCounter {
