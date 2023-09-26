@@ -457,9 +457,6 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals("Basic", rs.getString(1));
             assertEquals("Bristol", rs.getString(2));
             assertEquals("Water polo", rs.getString(3));
-            // returned format is different
-            //assertEquals("[\"Sport\",\"Water polo\"]", rs.getString(4));
-            //assertEquals("{\"address\":{\"county\":\"Avon\",\"town\":\"Bristol\",\"country\":\"England\"},\"type\":1,\"tags\":[\"Sport\",\"Water polo\"]}", rs.getString(5));
             assertFalse(rs.next());
 
             // Now check for empty match
@@ -486,13 +483,13 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
 
             String upsert ="UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
             conn.createStatement().execute(upsert);
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT pk, col, JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from " + tableName);
 
             String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_VALUE(jsoncol, '$.info.tags'), JSON_VALUE(jsoncol, '$.info') " +
+                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_VALUE(jsoncol, '$.info.tags'), JSON_VALUE(jsoncol, '$.info'), " +
+                "JSON_VALUE(jsoncol, '$.info.tags[2]') " +
                 " FROM " + tableName +
                 " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
             String query = String.format(queryTemplate, "AndersenFamily");
@@ -501,9 +498,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals("Basic", rs.getString(1));
             assertEquals("Manchester", rs.getString(2));
             assertEquals("alto1", rs.getString(3));
-            //assertEquals("[\"Sport\",\"Water polo\",\"Books\"]", rs.getString(4));
-            //assertEquals("{\"type\":1,\"address\":{\"town\":\"Manchester\",\"county\":\"Avon\",\"country\":\"England\"},\"tags\":[\"Sport\",\"Water polo\",\"Books\"]}", rs.getString(5));
-            //assertFalse(rs.next());
+            assertEquals("UpsertSelectVal", rs.getString(6));
 
             // Now check for empty match
             query = String.format(queryTemplate, "Windsors");
