@@ -39,6 +39,7 @@ import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
@@ -77,7 +78,7 @@ public class SchemaReaderIT extends BaseTest {
 
     private void assertApplySchemaTest() {
         try {
-            util.setZookeeper("localhost");
+            PhoenixUtil.setZookeeper(MultiTenantTestUtils.getZookeeperFromUrl(url));
             SchemaReader reader = new SchemaReader(util, ".*datamodel/.*test_schema.*sql");
 
             List<Path> resources = new ArrayList<>(reader.getResourceList());
