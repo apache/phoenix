@@ -2015,7 +2015,7 @@ public class PTableImpl implements PTable {
 
         byte[] rowKeyPrefix = null;
         if (table.hasRowKeyPrefix()) {
-            rowKeyPrefix = PVarbinary.INSTANCE.toBytes(table.getRowKeyPrefix());
+            rowKeyPrefix = table.getRowKeyPrefix().toByteArray();
         }
 
         String indexWhere = null;

@@ -1416,8 +1416,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
         byte[] rowKeyPrefix = rowKeyPrefixKv != null
-                ? (byte[]) PVarbinary.INSTANCE.toObject(rowKeyPrefixKv.getValueArray(),
-                        rowKeyPrefixKv.getValueOffset(), rowKeyPrefixKv.getValueLength())
+                ? CellUtil.cloneValue(rowKeyPrefixKv)
                 : null;
         builder.setRowKeyPrefix(rowKeyPrefix != null ? rowKeyPrefix
                 : oldTable != null ? oldTable.getRowKeyPrefix() : null);

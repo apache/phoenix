@@ -959,7 +959,7 @@ public class MetaDataClient {
         argUpsert.execute();
     }
 
-    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
+    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[] rowKeyPrefix, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
@@ -1024,7 +1024,7 @@ public class MetaDataClient {
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
-        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
+        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, rowKeyPrefix, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
 
         if (table == null || table.getType() == PTableType.VIEW
                 || statement.isNoVerify() /*|| table.isTransactional()*/) {
@@ -1699,8 +1699,10 @@ public class MetaDataClient {
                     statement.getProps(), columnDefs, pk, statement.getSplitNodes(),
                     PTableType.INDEX, statement.ifNotExists(), null,
                     statement.getWhere(), statement.getBindCount(), null);
-            table = createTableInternal(tableStatement, splits, dataTable, null, null,
-                    getViewIndexDataType() ,null, null, allocateIndexId,
+            table = createTableInternal(tableStatement, splits, dataTable,
+                    null, null,
+                    getViewIndexDataType() ,null, null,
+                    null, allocateIndexId,
                     statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
         }
         finally {
@@ -2073,8 +2075,8 @@ public class MetaDataClient {
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-            final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
-            IndexType indexType, Date asyncCreatedDate,
+            final byte[] rowKeyPrefix, final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced,
+            boolean allocateIndexId, IndexType indexType, Date asyncCreatedDate,
             Map<String,Object> tableProps,
             Map<String,Object> commonFamilyProps) throws SQLException {
         final PTableType tableType = statement.getTableType();
@@ -2127,7 +2129,6 @@ public class MetaDataClient {
 
             Integer phoenixTTL = TTL_NOT_DEFINED;
             Integer phoenixTTLProp = (Integer) TableProperty.TTL.getValue(tableProps);
-            byte[] rowKeyPrefix = null;
 
             // Validate TTL prop value if set
             if (phoenixTTLProp != null) {
@@ -2481,11 +2482,9 @@ public class MetaDataClient {
                         // set to the parent value if the property is not set on the view
                         updateCacheFrequency = parent.getUpdateCacheFrequency();
                     }
-
                     if (viewType == ViewType.UPDATABLE) {
                         phoenixTTL = getTTLFromParent(parent);
                     }
-
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
                     // TODO PHOENIX-4766 Add an options to stop sending parent metadata when creating views
@@ -2941,6 +2940,7 @@ public class MetaDataClient {
                         .setIndexes(Collections.<PTable>emptyList())
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
+                        .setRowKeyPrefix(rowKeyPrefix)
                         .setTTL(TTL_NOT_DEFINED)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
@@ -3198,8 +3198,7 @@ public class MetaDataClient {
             if (rowKeyPrefix == null) {
                 tableUpsert.setNull(35, Types.VARBINARY);
             } else {
-                //Need to update are we have Prefix Builder in place.
-                tableUpsert.setNull(35, Types.VARBINARY);
+                tableUpsert.setBytes(35, rowKeyPrefix);
             }
             if (tableType == INDEX && statement.getWhereClause() != null) {
                 tableUpsert.setString(36, statement.getWhereClause().toString());
