@@ -1723,7 +1723,6 @@ public class MetaDataClient {
                         SortOrder.getDefault()
         )}));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
-        // TODO: What to do if LOCAL?
         if (indexType == IndexType.GLOBAL) {
             indexType = IndexType.UNCOVERED_GLOBAL;
         }

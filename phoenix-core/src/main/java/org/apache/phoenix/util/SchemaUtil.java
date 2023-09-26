@@ -115,6 +115,8 @@ public class SchemaUtil {
     private static final int VAR_KV_LENGTH_ESTIMATE = 50;
     public static final String ESCAPE_CHARACTER = "\"";
     public static final DataBlockEncoding DEFAULT_DATA_BLOCK_ENCODING = DataBlockEncoding.FAST_DIFF;
+    public static final String CDC_INDEX_PREFIX = "__CDC__";
+
     public static final PDatum VAR_BINARY_DATUM = new PDatum() {
     
         @Override
@@ -1381,7 +1383,12 @@ public class SchemaUtil {
     }
 
     public static String getCDCIndexName(String cdcName) {
-        return "__CDC__" + cdcName;
+        return CDC_INDEX_PREFIX + cdcName;
+    }
+
+    public static String getCDCNameFromIndexName(String indexName) {
+        assert(indexName.startsWith(CDC_INDEX_PREFIX));
+        return indexName.substring(CDC_INDEX_PREFIX.length());
     }
 
     private static boolean isQuotesNeeded(String name) {
