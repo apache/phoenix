@@ -134,7 +134,7 @@
     <omid.version>1.0.2</omid.version>
     <stream.version>2.9.5</stream.version>
     <icu4j.version>72.1</icu4j.version>
-    <guice.version>4.0</guice.version>
+    <guice.version>5.1.0</guice.version>
     <zookeeper.version>3.4.14</zookeeper.version>
     <curator.version>4.0.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
@@ -1105,10 +1105,6 @@
             <artifactId>fastutil</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
           </exclusion>
@@ -1145,10 +1141,6 @@
           <exclusion>
             <groupId>org.apache.omid</groupId>
             <artifactId>omid-hbase-common-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-io</groupId>
@@ -1205,10 +1197,6 @@
             <artifactId>testng</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1234,10 +1222,6 @@
           <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-io</groupId>
@@ -1283,10 +1267,6 @@
             <artifactId>testng</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1314,10 +1294,6 @@
             <artifactId>omid-hbase-common-hbase1.x</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1339,10 +1315,6 @@
           <exclusion>
             <groupId>org.apache.omid</groupId>
             <artifactId>omid-hbase-shims-hbase1.x</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-io</groupId>
