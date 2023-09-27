@@ -83,6 +83,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LE
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
+import static org.apache.phoenix.util.UpgradeUtil.copyTTLValuesFromPhoenixTTLColumnToTTLColumn;
 import static org.apache.phoenix.util.UpgradeUtil.getSysTableSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.moveOrCopyChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
@@ -3611,6 +3612,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return addColumn(oldMetaConnection, tableName, timestamp, columns, true);
     }
 
+    private void copyDataFromPhoenixTTLtoTTL(PhoenixConnection oldMetaConnection) throws IOException {
+        // Increase the timeouts so that the scan queries during Copy Data do not timeout
+        // on large SYSCAT Tables
+        Map<String, String> options = new HashMap<>();
+        options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        copyTTLValuesFromPhoenixTTLColumnToTTLColumn(oldMetaConnection, options);
+    }
+
     // Available for testing
     protected long getSystemTableVersion() {
         return MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
@@ -4383,6 +4393,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
                     PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " "
                             + PVarbinary.INSTANCE.getSqlTypeName());
+            //Copy Data From PHOENIX_TTL column to TTL as PHOENIX_TTL column will be removed in
+            //later release.
+            copyDataFromPhoenixTTLtoTTL(metaConnection);
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

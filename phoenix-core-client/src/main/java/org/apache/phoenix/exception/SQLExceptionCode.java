@@ -351,11 +351,11 @@ public enum SQLExceptionCode {
     CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX(10950, "44A31", "Cannot set or alter "
             + PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " on an index"),
     @Deprecated
-    PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY(10951, "44A32", PhoenixDatabaseMetaData.PHOENIX_TTL
+    PHOENIX_LEVEL_TTL_SUPPORTED_FOR_VIEWS_ONLY(10951, "44A32", PhoenixDatabaseMetaData.TTL
             + " property can only be set for views"),
     @Deprecated
-    CANNOT_SET_OR_ALTER_PHOENIX_TTL_FOR_TABLE_WITH_TTL(10952, "44A33", "Cannot set or alter "
-            + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an table with TTL,"),
+    CANNOT_SET_OR_ALTER_PHOENIX_LEVEL_TTL_FOR_TABLE_WITH_TTL(10952, "44A33", "Cannot set or alter "
+            + TTL + " property on an table with TTL,"),
     ABOVE_INDEX_NON_ASYNC_THRESHOLD(1097, "44A34", "The estimated read size for index creation "
             + "is higher than " + QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD+ ". You can edit the"
             + " limit or create ASYNC index."),
@@ -370,7 +370,7 @@ public enum SQLExceptionCode {
             + " only if none of the parents have indexes in the parent hierarchy"),
     MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY(10957, "44A39", "Max lookback age can only be set for tables"),
     UNKNOWN_INCLUDE_CHANGE_SCOPE(10958, "44A40", "Unknown change scope for CDC INCLUDE"),
-    PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY(10959, "44A41", TTL
+    TTL_SUPPORTED_FOR_TABLES_ONLY(10959, "44A41", TTL
             + "property can only be set for tables"),
 
     /** Sequence related */

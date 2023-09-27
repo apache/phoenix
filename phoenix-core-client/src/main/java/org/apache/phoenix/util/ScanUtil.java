@@ -24,7 +24,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
@@ -109,6 +109,7 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1083,9 +1084,9 @@ public class ScanUtil {
     public static int getTTL(Scan scan) {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
-            return DEFAULT_PHOENIX_TTL;
+            return DEFAULT_TTL;
         }
-        return Bytes.toInt(phoenixTTL);
+        return Bytes.readAsInt(phoenixTTL, 0, phoenixTTL.length);
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {

@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Properties;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX;
-import static org.apache.phoenix.exception.SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY;
+import static org.apache.phoenix.exception.SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_ONLY;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -269,7 +269,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                 fail();
             } catch (SQLException sqe) {
                 assertEquals("Should fail with TTL supported for tables only",
-                        PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), sqe.getErrorCode());
+                        TTL_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), sqe.getErrorCode());
             }
 
             try {
@@ -277,7 +277,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                 fail();
             } catch (SQLException sqe) {
                 assertEquals("Should fail with TTL supported for tables only",
-                        PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), sqe.getErrorCode());
+                        TTL_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), sqe.getErrorCode());
             }
 
 

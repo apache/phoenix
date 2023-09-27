@@ -74,16 +74,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED_DEPRECATED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
@@ -362,8 +358,6 @@ public class MetaDataClient {
                     ENCODING_SCHEME + "," +
                     USE_STATS_FOR_PARALLELIZATION +"," +
                     VIEW_INDEX_ID_DATA_TYPE +"," +
-                    PHOENIX_TTL +"," +
-                    PHOENIX_TTL_HWM + "," +
                     CHANGE_DETECTION_ENABLED + "," +
                     PHYSICAL_TABLE_NAME + "," +
                     SCHEMA_VERSION + "," +
@@ -374,7 +368,7 @@ public class MetaDataClient {
                     TTL + "," +
                     ROW_KEY_PREFIX +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -2302,11 +2296,10 @@ public class MetaDataClient {
                             : QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 
             Integer phoenixTTL = TTL_NOT_DEFINED;
-            Long phoenixTTLHighWaterMark = MIN_PHOENIX_TTL_HWM;
             Integer phoenixTTLProp = (Integer) TableProperty.TTL.getValue(tableProps);
             byte[] rowKeyPrefix = null;
 
-            // Validate PHOENIX_TTL prop value if set
+            // Validate TTL prop value if set
             if (phoenixTTLProp != null) {
                 if (phoenixTTLProp < 0) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
@@ -2318,7 +2311,7 @@ public class MetaDataClient {
 
                 if (tableType != TABLE) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.
-                            PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
+                            TTL_SUPPORTED_FOR_TABLES_ONLY)
                             .setSchemaName(schemaName)
                             .setTableName(tableName)
                             .build()
@@ -3151,8 +3144,6 @@ public class MetaDataClient {
                         .setIndexes(Collections.<PTable>emptyList())
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
-                        .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED_DEPRECATED)
-                        .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
                         .setLastDDLTimestamp(0L)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
@@ -3380,64 +3371,60 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setNull(29, Types.NULL);
             }
-            //Setting Null for PHOENIX_TTL and PHOENIX_TTL_HWM as they will be removed later and
-            //are not in use
-            tableUpsert.setNull(30, Types.BIGINT);
-            tableUpsert.setNull(31, Types.BIGINT);
 
             if (isChangeDetectionEnabledProp == null) {
-                tableUpsert.setNull(32, Types.BOOLEAN);
+                tableUpsert.setNull(30, Types.BOOLEAN);
             } else {
-                tableUpsert.setBoolean(32, isChangeDetectionEnabledProp);
+                tableUpsert.setBoolean(30, isChangeDetectionEnabledProp);
             }
 
             if (physicalTableName == null){
-                tableUpsert.setNull(33, Types.VARCHAR);
+                tableUpsert.setNull(31, Types.VARCHAR);
             } else {
-                tableUpsert.setString(33, physicalTableName);
+                tableUpsert.setString(31, physicalTableName);
             }
 
             if (schemaVersion == null) {
-                tableUpsert.setNull(34, Types.VARCHAR);
+                tableUpsert.setNull(32, Types.VARCHAR);
             } else {
-                tableUpsert.setString(34, schemaVersion);
+                tableUpsert.setString(32, schemaVersion);
             }
 
             if (streamingTopicName == null) {
-                tableUpsert.setNull(35, Types.VARCHAR);
+                tableUpsert.setNull(33, Types.VARCHAR);
             } else {
-                tableUpsert.setString(35, streamingTopicName);
+                tableUpsert.setString(33, streamingTopicName);
             }
 
             if (tableType == INDEX && statement.getWhereClause() != null) {
-                tableUpsert.setString(36, statement.getWhereClause().toString());
+                tableUpsert.setString(34, statement.getWhereClause().toString());
             } else {
-                tableUpsert.setNull(36, Types.VARCHAR);
+                tableUpsert.setNull(34, Types.VARCHAR);
             }
             if (maxLookbackAge == null) {
-                tableUpsert.setNull(37, Types.BIGINT);
+                tableUpsert.setNull(35, Types.BIGINT);
             }
             else {
-                tableUpsert.setLong(37, maxLookbackAge);
+                tableUpsert.setLong(35, maxLookbackAge);
             }
 
             if (cdcIncludeScopesStr == null) {
-                tableUpsert.setNull(38, Types.VARCHAR);
+                tableUpsert.setNull(36, Types.VARCHAR);
             } else {
-                tableUpsert.setString(38, cdcIncludeScopesStr);
+                tableUpsert.setString(36, cdcIncludeScopesStr);
             }
 
-            if (phoenixTTL == null || phoenixTTL == TTL_NOT_DEFINED) {
-                tableUpsert.setNull(39, Types.INTEGER);
+            if (phoenixTTL == null) {
+                tableUpsert.setNull(37, Types.INTEGER);
             } else {
-                tableUpsert.setInt(39, phoenixTTL);
+                tableUpsert.setInt(37, phoenixTTL);
             }
 
             if (rowKeyPrefix == null) {
-                tableUpsert.setNull(40, Types.VARBINARY);
+                tableUpsert.setNull(38, Types.VARBINARY);
             } else {
                 //Need to update are we have Prefix Builder in place.
-                tableUpsert.setNull(40, Types.VARBINARY);
+                tableUpsert.setNull(38, Types.VARBINARY);
             }
 
             tableUpsert.execute();
@@ -3570,8 +3557,6 @@ public class MetaDataClient {
                         .setParentTableName((parent == null) ? null : parent.getTableName())
                         .setPhysicalNames(ImmutableList.copyOf(physicalNames))
                         .setColumns(columns.values())
-                        .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED_DEPRECATED)
-                        .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
                         .setViewModifiedUpdateCacheFrequency(tableType == PTableType.VIEW &&
                                 parent != null &&
                                 parent.getUpdateCacheFrequency() != updateCacheFrequency)
@@ -3579,9 +3564,6 @@ public class MetaDataClient {
                                 parent != null &&
                                 parent.useStatsForParallelization()
                                         != useStatsForParallelizationProp)
-                        .setViewModifiedPhoenixTTL(tableType == PTableType.VIEW &&
-                                parent != null && phoenixTTL != null &&
-                                parent.getTTL() != phoenixTTL)
                         .setLastDDLTimestamp(result.getTable() != null ?
                                 result.getTable().getLastDDLTimestamp() : null)
                         .setIsChangeDetectionEnabled(isChangeDetectionEnabledProp)
@@ -5887,7 +5869,7 @@ public class MetaDataClient {
             }
             if (table.getType() != PTableType.TABLE) {
                 throw new SQLExceptionInfo.Builder(
-                        SQLExceptionCode.PHOENIX_TTL_SUPPORTED_FOR_TABLES_ONLY)
+                        SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_ONLY)
                         .build()
                         .buildException();
             }
