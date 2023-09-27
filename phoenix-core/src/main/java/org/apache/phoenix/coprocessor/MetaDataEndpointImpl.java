@@ -50,15 +50,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED_DEPRECATED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
@@ -355,8 +351,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final Cell STORAGE_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORAGE_SCHEME_BYTES);
     private static final Cell ENCODING_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ENCODING_SCHEME_BYTES);
     private static final Cell USE_STATS_FOR_PARALLELIZATION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_STATS_FOR_PARALLELIZATION_BYTES);
-    private static final Cell PHOENIX_TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PHOENIX_TTL_BYTES);
-    private static final Cell PHOENIX_TTL_HWM_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PHOENIX_TTL_HWM_BYTES);
     private static final Cell LAST_DDL_TIMESTAMP_KV =
         createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, LAST_DDL_TIMESTAMP_BYTES);
     private static final Cell CHANGE_DETECTION_ENABLED_KV =
@@ -404,8 +398,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             STORAGE_SCHEME_KV,
             ENCODING_SCHEME_KV,
             USE_STATS_FOR_PARALLELIZATION_KV,
-            PHOENIX_TTL_KV,
-            PHOENIX_TTL_HWM_KV,
             LAST_DDL_TIMESTAMP_KV,
             CHANGE_DETECTION_ENABLED_KV,
             SCHEMA_VERSION_KV,
@@ -449,8 +441,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int QUALIFIER_ENCODING_SCHEME_INDEX = TABLE_KV_COLUMNS.indexOf(ENCODING_SCHEME_KV);
     private static final int USE_STATS_FOR_PARALLELIZATION_INDEX = TABLE_KV_COLUMNS.indexOf(USE_STATS_FOR_PARALLELIZATION_KV);
     private static final int PHYSICAL_TABLE_NAME_INDEX = TABLE_KV_COLUMNS.indexOf(PHYSICAL_TABLE_NAME_KV);
-    private static final int PHOENIX_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(PHOENIX_TTL_KV);
-    private static final int PHOENIX_TTL_HWM_INDEX = TABLE_KV_COLUMNS.indexOf(PHOENIX_TTL_HWM_KV);
     private static final int LAST_DDL_TIMESTAMP_INDEX =
         TABLE_KV_COLUMNS.indexOf(LAST_DDL_TIMESTAMP_KV);
     private static final int CHANGE_DETECTION_ENABLED_INDEX =
@@ -1372,29 +1362,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(), useStatsForParallelizationKv.getValueOffset(), useStatsForParallelizationKv.getValueLength()));
          builder.setUseStatsForParallelization(useStatsForParallelization != null ?
              useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
-
-        Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
-        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED_DEPRECATED : PLong.INSTANCE
-                .getCodec().decodeLong(phoenixTTLKv.getValueArray(),
-                        phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
-        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL : oldTable != null
-                ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED_DEPRECATED);
-
-        Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
-        long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
-                PLong.INSTANCE.getCodec().decodeLong(phoenixTTLHWMKv.getValueArray(),
-                        phoenixTTLHWMKv.getValueOffset(), SortOrder.getDefault());
-        builder.setPhoenixTTLHighWaterMark(phoenixTTLHWMKv != null ? phoenixTTLHWM :
-            oldTable != null ? oldTable.getPhoenixTTLHighWaterMark() : MIN_PHOENIX_TTL_HWM);
-
-        // Check the cell tag to see whether the view has modified this property
-        final byte[] tagPhoenixTTL = (phoenixTTLKv == null) ?
-                HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(phoenixTTLKv);
-        boolean viewModifiedPhoenixTTL = (PTableType.VIEW.equals(tableType)) &&
-                Bytes.contains(tagPhoenixTTL, VIEW_MODIFIED_PROPERTY_BYTES);
-        builder.setViewModifiedPhoenixTTL(oldTable != null ?
-            oldTable.hasViewModifiedPhoenixTTL() || viewModifiedPhoenixTTL : viewModifiedPhoenixTTL);
-
         Cell lastDDLTimestampKv = tableKeyValues[LAST_DDL_TIMESTAMP_INDEX];
         Long lastDDLTimestamp = lastDDLTimestampKv == null ?
            null : PLong.INSTANCE.getCodec().decodeLong(lastDDLTimestampKv.getValueArray(),
@@ -3133,10 +3100,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
                 }
             }
-            // Validate PHOENIX_TTL property settings for views only.
+            // Validate TTL property settings for views only.
             if (expectedType == PTableType.VIEW) {
                 isSchemaMutationAllowed = validatePhoenixTTLAttributeSettingForView(
-                        parentTable, childViews, tableMetadata, PHOENIX_TTL_BYTES);
+                        parentTable, childViews, tableMetadata, TTL_BYTES);
             }
         }
         if (!isMutationAllowed) {
@@ -3460,23 +3427,23 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
-    // Checks whether a non-zero PHOENIX_TTL value is being set.
+    // Checks whether a non-zero TTL value is being set.
     private boolean validatePhoenixTTLAttributeSettingForView(
             final PTable parentTable,
             final List<PTable> childViews,
             final List<Mutation> tableMetadata,
-            final byte[] phoenixTtlBytes) {
+            final byte[] ttlBytes) {
         boolean hasNewPhoenixTTLAttribute = false;
         boolean isSchemaMutationAllowed = true;
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
                 Put p = (Put)m;
-                List<Cell> cells = p.get(TABLE_FAMILY_BYTES, phoenixTtlBytes);
+                List<Cell> cells = p.get(TABLE_FAMILY_BYTES, ttlBytes);
                 if (cells != null && cells.size() > 0) {
                     Cell cell = cells.get(0);
-                    long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
+                    long newTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != TTL_NOT_DEFINED;
+                    hasNewPhoenixTTLAttribute =  newTTL != TTL_NOT_DEFINED;
                     //TODO:- Re-enable when we have ViewTTL
                     return false;
                 }
@@ -3489,10 +3456,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 isSchemaMutationAllowed = false;
             }
 
-            // Since we do not allow propagation of PHOENIX_TTL values during ALTER for now.
-            // If a child view exists and this view previously had a PHOENIX_TTL value set
-            // then that implies that the child view too has a valid PHOENIX_TTL (non zero).
-            // In this case we do not allow for ALTER of the view's PHOENIX_TTL value.
+            // Since we do not allow propagation of TTL values during ALTER for now.
+            // If a child view exists and this view previously had a TTL value set
+            // then that implies that the child view too has a valid TTL (non zero).
+            // In this case we do not allow for ALTER of the view's TTL value.
             if (!childViews.isEmpty()) {
                 isSchemaMutationAllowed = false;
             }

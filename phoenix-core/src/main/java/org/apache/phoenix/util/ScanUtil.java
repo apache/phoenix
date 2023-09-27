@@ -24,7 +24,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTU
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_PHOENIX_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -998,7 +998,7 @@ public class ScanUtil {
     public static int getTTL(Scan scan) {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserver.TTL);
         if (phoenixTTL == null) {
-            return DEFAULT_PHOENIX_TTL;
+            return DEFAULT_TTL;
         }
         return Bytes.toInt(phoenixTTL);
     }

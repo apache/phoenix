@@ -334,6 +334,92 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         testParentChildLinksHelper(true);
     }
 
+    @Test
+    public void testCopyTTLValuesFromPhoenixTTLColumnToTTLColumn() throws Exception {
+        try (PhoenixConnection conn = getConnection(false, null).unwrap(PhoenixConnection.class);
+        Connection metaConn = getConnection(false, null, false, false)) {
+            String dml = "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, PHOENIX_TTL) VALUES (?,?,?,?)";
+            String tableName = "T_" + generateUniqueName();
+            String tableName1 = "T_" + generateUniqueName();
+            String tableName2 = "T_" + generateUniqueName();
+            long randomValue = 181938859789797187L;
+            long randomIntValue = 156743;
+            PreparedStatement prepareStatement = conn.prepareStatement(dml);
+            //Set Null PHOENIX_TTL values
+            for (int i = 1; i < 6; i++) {
+                prepareStatement.setString(1, null);
+                prepareStatement.setString(2, "S_" + generateUniqueName());
+                prepareStatement.setString(3, "T_" + generateUniqueName());
+                prepareStatement.setNull(4, Types.BIGINT);
+                prepareStatement.execute();
+            }
+            //Set Random PHOENIX_TLL value less than INT_MAX
+            prepareStatement.setString(1, null);
+            prepareStatement.setString(2, "S_" + generateUniqueName());
+            prepareStatement.setString(3, tableName);
+            prepareStatement.setLong(4, randomValue);
+            prepareStatement.execute();
+            //Set Random PHOENIX_TLL value between INT_MAX and LONG_MAX
+            prepareStatement.setString(1, null);
+            prepareStatement.setString(2, "S_" + generateUniqueName());
+            prepareStatement.setString(3, tableName1);
+            prepareStatement.setLong(4, randomIntValue);
+            prepareStatement.execute();
+            //Set Long Max PHOENIX_TTL value
+            prepareStatement.setString(1, null);
+            prepareStatement.setString(2, "S_" + generateUniqueName());
+            prepareStatement.setString(3, tableName2);
+            prepareStatement.setLong(4, Long.MAX_VALUE);
+            prepareStatement.execute();
+            conn.commit();
+
+            String sql = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName + "'";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            rs.next();
+            assertEquals("Should have return one value for PHOENIX_TTL column",randomValue, rs.getLong(1));
+
+            String sql1 = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName1 + "'";
+            ResultSet rs1 = conn.createStatement().executeQuery(sql1);
+            rs1.next();
+            assertEquals("Should have return one value for PHOENIX_TTL column",randomIntValue, rs1.getLong(1));
+
+            String sql2 = "SELECT PHOENIX_TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName2 + "'";
+            ResultSet rs2 = conn.createStatement().executeQuery(sql2);
+            rs2.next();
+            assertEquals("Should have return one value for PHOENIX_TTL column",Long.MAX_VALUE, rs2.getLong(1));
+
+            PhoenixConnection phxMetaConn = metaConn.unwrap(PhoenixConnection.class);
+            phxMetaConn.setRunningUpgrade(true);
+
+            Map<String, String> options = new HashMap<>();
+            options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            String clientPort = getUtility().getConfiguration().get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
+
+            String localQuorum = String.format("localhost:%s", clientPort);
+            options.put(QueryServices.ZOOKEEPER_QUORUM_ATTRIB, localQuorum);
+            options.put(QueryServices.ZOOKEEPER_PORT_ATTRIB, clientPort);
+            //Copy Values from PHOENIX_TTL to TTL
+            UpgradeUtil.copyTTLValuesFromPhoenixTTLColumnToTTLColumn(phxMetaConn, options);
+
+            String sql3 = "SELECT TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName + "'";
+            ResultSet rs3 = conn.createStatement().executeQuery(sql3);
+            rs3.next();
+            assertEquals("Should have return one value for PHOENIX_TTL column",Integer.MAX_VALUE, rs3.getInt(1));
+
+            String sql4 = "SELECT TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName1 + "'";
+            ResultSet rs4 = conn.createStatement().executeQuery(sql4);
+            rs4.next();
+            assertEquals("Should have return one value for PHOENIX_TTL column",randomIntValue, rs4.getInt(1));
+
+            String sql5 = "SELECT TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName2 + "'";
+            ResultSet rs5 = conn.createStatement().executeQuery(sql5);
+            rs5.next();
+            assertEquals("Should have return one value for PHOENIX_TTL column",Integer.MAX_VALUE, rs5.getInt(1));
+        }
+    }
+
+
     private void testParentChildLinksHelper(boolean copyMode) throws Exception {
         String schema = "S_" + generateUniqueName();
         String table1 = "T_" + generateUniqueName();

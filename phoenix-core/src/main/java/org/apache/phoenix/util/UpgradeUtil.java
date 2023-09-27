@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
@@ -65,6 +67,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURI
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SCAN_PAGE_SIZE;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -1369,6 +1372,102 @@ public class UpgradeUtil {
         }
         LOGGER.info(String.format("Finished moving/copying child link rows from %s to %s ",
                 SYSTEM_CATALOG_NAME, SYSTEM_CHILD_LINK_NAME));
+    }
+
+    public static void copyTTLValuesFromPhoenixTTLColumnToTTLColumn(
+            PhoenixConnection oldMetaConnection, Map<String, String> options) throws IOException {
+        long numOfCopiedTTLRows = 0;
+        ReadOnlyProps readOnlyProps = oldMetaConnection.getQueryServices().getProps();
+        TableName sysCat = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME, readOnlyProps);
+
+        LOGGER.debug(String.format("SYSTEM CATALOG tabled use for copying TTL values: %s", sysCat.toString()));
+        Configuration conf = oldMetaConnection.getQueryServices().getConfiguration();
+        try (org.apache.hadoop.hbase.client.Connection copyTTLConnection =  getHBaseConnection(conf, options);
+             Table sysCatalogTable = copyTTLConnection.getTable(sysCat)) {
+            boolean pageMore = false;
+            byte[] lastRowKey = null;
+
+            do {
+                Scan scan = new Scan();
+                scan.addFamily(DEFAULT_COLUMN_FAMILY_BYTES);
+                // Push down the filter to hbase to avoid transfer
+                SingleColumnValueFilter copyTTLFilter = new SingleColumnValueFilter(
+                        DEFAULT_COLUMN_FAMILY_BYTES,
+                        PHOENIX_TTL_BYTES, CompareOperator.NOT_EQUAL,
+                        (byte[]) null);
+
+                copyTTLFilter.setFilterIfMissing(true);
+                // Limit number of records
+                PageFilter pf = new PageFilter(DEFAULT_SCAN_PAGE_SIZE);
+
+                scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, pf, copyTTLFilter));
+                if (pageMore) {
+                    scan.withStartRow(lastRowKey, false);
+                }
+                // Collect the row keys to process them in batch
+                try (ResultScanner scanner = sysCatalogTable.getScanner(scan)) {
+                    int count = 0;
+                    List<byte[]> rowKeys = new ArrayList<>();
+                    List<Put> puts = new ArrayList<>();
+                    for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
+                        count++;
+                        lastRowKey = rr.getRow();
+                        byte[] tmpKey = new byte[lastRowKey.length];
+                        System.arraycopy(lastRowKey, 0, tmpKey, 0, tmpKey.length);
+                        long rowTS = rr.rawCells()[0].getTimestamp();
+                        rowKeys.add(tmpKey);
+                        Put put = new Put(tmpKey);
+                        put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
+                                EMPTY_COLUMN_VALUE_BYTES);
+                        int result = new BigInteger(rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES,
+                                PHOENIX_TTL_BYTES)).intValue();
+                        //Check if result is negative (means greater than INT_MAX,
+                        //put result as INT_MAX
+                        if (result < 0) {
+                            result = Integer.MAX_VALUE;
+                        }
+                        put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
+                                PInteger.INSTANCE.toBytes(result));
+                        puts.add(put);
+                    }
+
+                    if (puts.size() > 0) {
+                        Object[] putResults = new Object[puts.size()];
+                        try (Table copyTTLTable = copyTTLConnection.getTable(sysCat)) {
+                            // Process a batch of ttl values
+                            copyTTLTable.batch(puts, putResults);
+                            int numCopied = 0;
+                            for (int i = 0; i < putResults.length; i++) {
+                                if (java.util.Objects.nonNull(putResults[i])) {
+                                    numCopied++;
+                                }
+                            }
+                            numOfCopiedTTLRows += numCopied;
+                        } catch (Exception e) {
+                            LOGGER.error(String.format(
+                                    "Failed copying ttl value batch from PHOENIX_TTL column to TTL" +
+                                    " column on %s with Exception :",
+                                    SYSTEM_CATALOG_NAME), e);
+                        }
+                    }
+                    pageMore = count != 0;
+                    LOGGER.info(String.format("copyTTLValues From PHOENIX_TTL to TTL Column is " +
+                            "in progress => numOfCopiedTTLRows: %d",
+                            numOfCopiedTTLRows));
+
+                }
+            } while (pageMore);
+        } catch (IOException ioe) {
+            LOGGER.error(String.format(
+                    "Failed copying ttl value batch from PHOENIX_TTL column to TTL" +
+                    " column in %s with Exception :",
+                    SYSTEM_CATALOG_NAME), ioe);
+            throw ioe;
+        }
+        LOGGER.info(String.format("Finished copying ttl values link rows from PHOENIX_TTL column " +
+                "to TTL column on %s ",
+                SYSTEM_CATALOG_NAME));
+
     }
 
     public static void addViewIndexToParentLinks(PhoenixConnection oldMetaConnection) throws SQLException {
