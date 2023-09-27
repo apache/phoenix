@@ -35,6 +35,7 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @Category(ParallelStatsDisabledTest.class)
@@ -126,6 +127,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             fail("Expected to fail due to duplicate index");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(cdcName));
         }
 
         cdcName = generateUniqueName();

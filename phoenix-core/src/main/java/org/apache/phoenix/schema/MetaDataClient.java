@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
@@ -1728,10 +1729,21 @@ public class MetaDataClient {
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
                         indexProps, false, indexType, false, 0, new HashMap<>());
-        // TODO: Currently index can be dropped, leaving the CDC dangling.
-        // TODO: If the index creation fails because it already exists, it is most likely because the CDC table already exists. Should we catch that exception and translate it to a CDC specific exception?
+        // TODO: Currently index can be dropped, leaving the CDC dangling, DROP INDEX needs to
+        //  protect based on CDCUtil.isACDCIndex().
         // TODO: Should we also allow PTimestamp here?
-        MutationState indexMutationState = createIndex(indexStatement, null, PDate.INSTANCE);
+        MutationState indexMutationState;
+        try {
+            indexMutationState = createIndex(indexStatement, null, PDate.INSTANCE);
+        }
+        catch(SQLException e) {
+            if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
+                throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
+                        statement.getCdcObjName().getName()).build().buildException();
+            }
+            // TODO: What about translating other index creation failures? E.g., bad TS column.
+            throw e;
+        }
 
         // TODO: Do we need to borrow the schema name of the table?
         ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
