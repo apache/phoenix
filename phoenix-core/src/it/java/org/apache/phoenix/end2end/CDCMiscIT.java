@@ -19,8 +19,8 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -48,7 +48,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(expInclude, rs.getString(1));
         }
         try (ResultSet rs = conn.createStatement().executeQuery("SELECT index_type FROM " +
-                "system.catalog WHERE table_name = '" + SchemaUtil.getCDCIndexName(cdcName) +
+                "system.catalog WHERE table_name = '" + CDCUtil.getCDCIndexName(cdcName) +
                 "' AND column_name IS NULL and column_family IS NULL")) {
                 assertEquals(true, rs.next());
             assertEquals(idxType, rs.getInt(1));
@@ -130,15 +130,17 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-                "(v2) INCLUDE (post, pre, post) INDEX_TYPE=global");
+                "(v2) INCLUDE (post, pre, post) INDEX_TYPE=g");
         assertCDCState(conn, cdcName, "PRE, POST", 3);
-        assertPTable(cdcName,
-        new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+        assertPTable(cdcName, new HashSet<>(
+                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
 
-        //cdcName = generateUniqueName();
-        //conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-        //        "(v2) INCLUDE (pre, post) INDEX_TYPE=local");
-        //assertCDCState(conn, cdcName, "POST, PRE", 2);
+        cdcName = generateUniqueName();
+        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
+                "(v2) INCLUDE (pre, post) INDEX_TYPE=l");
+        assertCDCState(conn, cdcName, "PRE, POST", 2);
+        assertPTable(cdcName, new HashSet<>(
+                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
 
         conn.close();
     }

@@ -25,9 +25,9 @@ import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.util.CDCUtil.CDC_INDEX_TYPE_LOCAL;
 
 import java.sql.SQLException;
-import java.util.Locale;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -342,13 +342,9 @@ public enum TableProperty {
     INDEX_TYPE(PhoenixDatabaseMetaData.CDC_INDEX_TYPE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, false, false, false) {
         @Override
         public Object getValue(Object value) {
-            try {
-                return value == null ? PTable.IndexType.GLOBAL : PTable.IndexType.valueOf(value.toString().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_INDEX_TYPE)
-                        .setMessage(value.toString())
-                        .build().buildException());
-            }
+            return value != null && value.toString().toUpperCase().equals(CDC_INDEX_TYPE_LOCAL) ?
+                    PTable.IndexType.LOCAL :
+                    PTable.IndexType.UNCOVERED_GLOBAL;
         }
 
         @Override

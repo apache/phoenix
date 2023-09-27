@@ -26,6 +26,9 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.schema.PTable;
 
 public class CDCUtil {
+    public static final String CDC_INDEX_PREFIX = "__CDC__";
+    public static final String CDC_INDEX_TYPE_LOCAL = "L";
+
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope
      * names.
@@ -63,5 +66,18 @@ public class CDCUtil {
             cdcChangeScopes = StringUtils.join(", ", tmpStream);
         }
         return cdcChangeScopes;
+    }
+
+    public static String getCDCIndexName(String cdcName) {
+        return CDC_INDEX_PREFIX + cdcName;
+    }
+
+    public static String getCDCNameFromIndexName(String indexName) {
+        assert(indexName.startsWith(CDC_INDEX_PREFIX));
+        return indexName.substring(CDC_INDEX_PREFIX.length());
+    }
+
+    public static boolean isACDCIndex(String indexName) {
+        return indexName.startsWith(CDC_INDEX_PREFIX);
     }
 }

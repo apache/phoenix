@@ -1714,7 +1714,7 @@ public class MetaDataClient {
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
 
-        NamedNode indexName = FACTORY.indexName(SchemaUtil.getCDCIndexName(statement.getCdcObjName().getName()));
+        NamedNode indexName = FACTORY.indexName(CDCUtil.getCDCIndexName(statement.getCdcObjName().getName()));
         String timeIdxColName = statement.getTimeIdxColumn() != null ? statement.getTimeIdxColumn().getColumnName() : null;
         IndexKeyConstraint indexKeyConstraint = FACTORY.indexKey(Arrays.asList(new Pair[]{Pair.newPair(
                         timeIdxColName != null ?
@@ -1723,9 +1723,6 @@ public class MetaDataClient {
                         SortOrder.getDefault()
         )}));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
-        if (indexType == IndexType.GLOBAL) {
-            indexType = IndexType.UNCOVERED_GLOBAL;
-        }
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
         // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
