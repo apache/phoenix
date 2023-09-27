@@ -18,7 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -27,7 +28,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -50,6 +54,15 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(idxType, rs.getInt(1));
         }
     }
+
+    private void assertPTable(String cdcName, Set<PTable.CDCChangeScope> expIncludeScopes)
+            throws SQLException {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PTable table = PhoenixRuntime.getTable(conn, cdcName);
+        assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
+    }
+
     @Test
     public void testCreate() throws SQLException {
         Properties props = new Properties();
@@ -81,7 +94,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                     + " ON " + tableName +"(NOW())");
             fail("Expected to fail due to non-deterministic function");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.
+                    getErrorCode(), e.getErrorCode());
         }
 
         try {
@@ -89,7 +103,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                     + " ON " + tableName +"(ROUND(v1))");
             fail("Expected to fail due to non-timestamp expression in the index PK");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(),
+                    e.getErrorCode());
         }
 
         try {
@@ -97,7 +112,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                     + " ON " + tableName +"(v1)");
             fail("Expected to fail due to non-timestamp column in the index PK");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(), e.getErrorCode());
+            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(),
+                    e.getErrorCode());
         }
 
         String cdc_sql = "CREATE CDC " + cdcName
@@ -116,6 +132,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
                 "(v2) INCLUDE (post, pre, post) INDEX_TYPE=global");
         assertCDCState(conn, cdcName, "PRE, POST", 3);
+        assertPTable(cdcName,
+        new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
 
         //cdcName = generateUniqueName();
         //conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
