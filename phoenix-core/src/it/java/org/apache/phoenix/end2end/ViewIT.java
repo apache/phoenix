@@ -284,7 +284,7 @@ public class ViewIT extends SplitSystemCatalogIT {
     }
 
     @Test
-    public void testCreateViewWithHbaseNamespace() throws Exception {
+    public void testCreateMappedViewWithHbaseNamespace() throws Exception {
         Properties props = new Properties();
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
                 Boolean.TRUE.toString());
