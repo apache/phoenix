@@ -414,7 +414,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         if (!resolveViewConstants && IndexUtil.getViewConstantValue(column, ptr)) {
             return LiteralExpression.newConstant(
                     column.getDataType().toObject(ptr, column.getSortOrder()),
-                    column.getDataType(), column.getSortOrder());
+                    column.getDataType());
         }
         if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(column)) { // project only kv columns
             addColumn(column);
