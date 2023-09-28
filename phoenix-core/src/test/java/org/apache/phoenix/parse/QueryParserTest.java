@@ -592,7 +592,71 @@ public class QueryParserTest {
                         "increment by 1\n"));
         parseQuery(sql);
     }
-    
+
+    private DropCDCStatement parseDropCDCSimple(String sql, boolean ifNotExists) throws Exception {
+        DropCDCStatement stmt = parseQuery(sql, DropCDCStatement.class);
+        assertEquals("FOO", stmt.getCdcObjName().getName());
+        assertEquals("BAR", stmt.getTableName().getTableName());
+        assertEquals(ifNotExists, stmt.ifExists());
+        return stmt;
+    }
+    @Test
+    public void testDropCDCSimple() throws Exception {
+        DropCDCStatement stmt = null;
+        parseDropCDCSimple("drop cdc foo on bar", false);
+        parseDropCDCSimple("drop cdc if exists foo on bar", true);
+        parseDropCDCSimple("drop cdc if exists foo on s.bar", true);
+    }
+
+    private void parseInvalidDropCDC(String sql, int expRrrorCode) throws IOException {
+        try {
+            parseQuery(sql);
+            fail();
+        }
+        catch (SQLException e) {
+            assertEquals(expRrrorCode, e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testInvalidDropCDC() throws Exception {
+        parseInvalidDropCDC("drop cdc foo bar", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidDropCDC("drop cdc s.foo on bar", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
+        parseInvalidDropCDC("drop cdc foo on bar(ts)", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+    }
+
+    private AlterCDCStatement parseAlterCDCSimple(String sql, boolean ifNotExists) throws Exception {
+        AlterCDCStatement stmt = parseQuery(sql, AlterCDCStatement.class);
+        assertEquals("FOO", stmt.getTable().getName().getTableName());
+        assertEquals("BAR", stmt.getTableName());
+        assertEquals(ifNotExists, stmt.ifExists());
+        return stmt;
+    }
+    @Test
+    public void testAlterCDCSimple() throws Exception {
+        AlterCDCStatement stmt = null;
+        parseAlterCDCSimple("alter cdc foo on bar SET max_look_back=2", false);
+        parseAlterCDCSimple("alter cdc if exists foo on bar SET max_look_back=2", true);
+        parseAlterCDCSimple("alter cdc if exists foo on s.bar SET max_look_back=2", true);
+    }
+
+    private void parseInvalidAlterCDC(String sql, int expRrrorCode) throws IOException {
+        try {
+            parseQuery(sql);
+            fail();
+        }
+        catch (SQLException e) {
+            assertEquals(expRrrorCode, e.getErrorCode());
+        }
+    }
+
+    @Test
+    public void testInvalidAlterCDC() throws Exception {
+        parseInvalidAlterCDC("alter cdc foo bar SET max_look_back=2", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+        parseInvalidAlterCDC("alter cdc s.foo on bar SET max_look_back=2", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
+        parseInvalidAlterCDC("alter cdc foo on bar(ts) SET max_look_back=2", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
+    }
+
     @Test
     public void testNextValueForSelect() throws Exception {
         String sql = ((

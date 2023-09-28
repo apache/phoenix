@@ -439,8 +439,10 @@ oneStatement returns [BindableStatement ret]
     |   s=declare_cursor_node
     |   s=drop_table_node
     |   s=drop_index_node
+    |   s=drop_cdc_node
     |   s=alter_index_node
     |   s=alter_table_node
+    |   s=alter_cdc_node
     |   s=show_node
     |   s=show_create_table_node
     |   s=trace_node
@@ -687,12 +689,25 @@ drop_index_node returns [DropIndexStatement ret]
       {ret = factory.dropIndex(i, t, ex!=null); }
     ;
 
+// Parse a drop CDC statement
+drop_cdc_node returns [DropCDCStatement ret]
+   : DROP CDC (IF ex=EXISTS)? o=cdc_name ON t=from_table_name
+     {ret = factory.dropCDC(o, t, ex!=null); }
+   ;
+
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
     : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
       ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)?)
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), isRebuildAll!=null, async!=null, p); }
     ;
+
+// Parse a alter CDC statement
+alter_cdc_node returns [AlterCDCStatement ret]
+   : ALTER CDC (IF ex=EXISTS)? o=cdc_name ON t=from_table_name
+     ((SET?) p=fam_properties)?
+     {ret = factory.alterCDC(factory.namedTable(null, TableName.create(t.getSchemaName(), o.getName())), t.getTableName(), ex!=null, p); }
+   ;
 
 // Parse a trace statement.
 trace_node returns [TraceStatement ret]

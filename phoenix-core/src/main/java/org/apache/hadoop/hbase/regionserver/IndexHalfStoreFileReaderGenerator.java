@@ -100,7 +100,9 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                             .unwrap(PhoenixConnection.class)) {
                 // This is the CQSI shared Connection. MUST NOT be closed.
                 Connection hbaseConn = conn.getQueryServices().getAdmin().getConnection();
-                Scan scan = CompatUtil.getScanForTableName(hbaseConn, tableName);
+                Scan scan =
+                        MetaTableAccessor.getScanForTableName(hbaseConn.getConfiguration(),
+                            tableName);
                 SingleColumnValueFilter scvf = null;
                 if (Reference.isTopFileRegion(r.getFileRegion())) {
                     scvf =
@@ -125,8 +127,8 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 }
                 if (result == null || result.isEmpty()) {
                     List<RegionInfo> mergeRegions =
-                            MetaTableAccessor.getMergeRegions(ctx.getEnvironment().getConnection(),
-                                region.getRegionInfo().getRegionName());
+                            CompatUtil.getMergeRegions(ctx.getEnvironment().getConnection(),
+                                region.getRegionInfo());
                     if (mergeRegions == null || mergeRegions.isEmpty()) {
                         return reader;
                     }
