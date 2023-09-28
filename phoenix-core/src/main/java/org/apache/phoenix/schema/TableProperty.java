@@ -367,7 +367,7 @@ public enum TableProperty {
 
         @Override
         public Object getPTableValue(PTable table) {
-            return null;
+            return table.getCDCIncludeScopes();
         }
     };
 

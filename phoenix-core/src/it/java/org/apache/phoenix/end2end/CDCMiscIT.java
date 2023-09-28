@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
@@ -62,6 +63,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PTable table = PhoenixRuntime.getTable(conn, cdcName);
         assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
+        assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(table));
     }
 
     @Test
