@@ -207,9 +207,9 @@ def shell_quote(args):
         return " ".join([pipes.quote(tryDecode(v)) for v in args])
 
 def common_sqlline_args(parser):
-    parser.add_argument('-v', '--verbose', help='Verbosity on sqlline.', default='true')
-    parser.add_argument('-c', '--color', help='Color setting for sqlline.', default='true')
-    parser.add_argument('-fc', '--fastconnect', help='Fetch all schemas on initial connection', default='false')
+    parser.add_argument('-v', '--verbose', help='Verbosity on sqlline.', action="store_true")
+    parser.add_argument('-c', '--color', help='Color setting for sqlline.', action="store_true")
+    parser.add_argument('-fc', '--fastconnect', help='Fetch all schemas on initial connection', action="store_true")
 
 if __name__ == "__main__":
     setPath()
