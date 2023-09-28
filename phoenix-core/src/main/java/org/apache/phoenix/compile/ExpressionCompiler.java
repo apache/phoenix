@@ -116,7 +116,6 @@ import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -202,6 +201,18 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
+
+        PDataType dataTypeOfLHSExpr = lhsExpr.getDataType();
+        if (dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + dataTypeOfLHSExpr).build().buildException();
+        }
+        PDataType dataTypeOfRHSExpr = rhsExpr.getDataType();
+        if (dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + dataTypeOfRHSExpr).build().buildException();
+        }
+
         CompareOperator op = node.getFilterOp();
 
         if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
@@ -482,7 +493,15 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhs = children.get(0);
         Expression rhs = children.get(1);
-        if ( rhs.getDataType() != null && lhs.getDataType() != null && 
+        if (!lhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + lhs.getDataType()).build().buildException();
+        }
+        if (!rhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + rhs.getDataType()).build().buildException();
+        }
+        if ( rhs.getDataType() != null && lhs.getDataType() != null &&
                 !lhs.getDataType().isCoercibleTo(rhs.getDataType())  && 
                 !rhs.getDataType().isCoercibleTo(lhs.getDataType())) {
             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
@@ -637,7 +656,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ImmutableBytesWritable ptr = context.getTempPtr();
         PDataType firstChildType = firstChild.getDataType();
         ParseNode firstChildNode = node.getChildren().get(0);
-        
+
+        if (firstChildType != null && !firstChildType.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + firstChildType).build().buildException();
+        }
+
         if (firstChildNode instanceof BindParseNode) {
             PDatum datum = firstChild;
             if (firstChildType == null) {

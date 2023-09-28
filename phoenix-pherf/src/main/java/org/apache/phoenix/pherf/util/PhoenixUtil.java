@@ -21,11 +21,9 @@ package org.apache.phoenix.pherf.util;
 import com.google.gson.Gson;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
-import org.apache.phoenix.pherf.configuration.DataTypeMapping;
 import org.apache.phoenix.pherf.configuration.Ddl;
 import org.apache.phoenix.pherf.configuration.Query;
 import org.apache.phoenix.pherf.configuration.QuerySet;
@@ -311,7 +309,6 @@ public class PhoenixUtil {
             while (resultSet.next()) {
                 Column column = new Column();
                 column.setName(resultSet.getString("COLUMN_NAME"));
-                column.setType(DataTypeMapping.valueOf(resultSet.getString("TYPE_NAME").replace(" ", "_")));
                 column.setLength(resultSet.getInt("COLUMN_SIZE"));
                 columnList.add(column);
                 LOGGER.debug(String.format("getColumnsMetaData for column name : %s", column.getName()));
@@ -514,6 +511,13 @@ public class PhoenixUtil {
             case VARCHAR:
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.VARCHAR);
+                } else {
+                    statement.setString(count, dataValue.getValue());
+                }
+                break;
+            case JSON:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARBINARY);
                 } else {
                     statement.setString(count, dataValue.getValue());
                 }
