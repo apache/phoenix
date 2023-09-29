@@ -27,12 +27,10 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -76,6 +74,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -338,7 +337,10 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     }
 
     private void setMutationAttributes(Mutation m, byte[] uuidValue) {
-        m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD, indexMetaData);
+        ScanUtil.annotateMutationWithMetadataAttributes(tenantId, schemaName,
+                logicalTableName, tableType, lastDdlTimestamp, m);
+        m.setAttribute(useProto ? PhoenixIndexCodec.INDEX_PROTO_MD : PhoenixIndexCodec.INDEX_MD,
+                indexMetaData);
         m.setAttribute(PhoenixIndexCodec.INDEX_UUID, uuidValue);
         m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
                 BaseScannerRegionObserver.REPLAY_INDEX_REBUILD_WRITES);
