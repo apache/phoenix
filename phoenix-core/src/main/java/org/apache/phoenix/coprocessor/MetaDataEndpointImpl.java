@@ -3437,6 +3437,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
+    /**
+     * Invalidate metadata cache from all region servers for the given tenant and table name.
+     * @param tenantId
+     * @param schemaName
+     * @param tableOrViewName
+     * @throws Throwable
+     */
     private void invalidateServerMetadataCache(byte[] tenantId, byte[]schemaName,
             byte[] tableOrViewName) throws Throwable {
         Configuration conf = env.getConfiguration();
@@ -3457,13 +3464,26 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
                 env.getConfiguration()).unwrap(PhoenixConnection.class);
              Admin admin = connection.getQueryServices().getAdmin()) {
-            // This will incur an extra RPC to the master.
+            // This will incur an extra RPC to the master. This RPC is required since we want to
+            // get current list of regionservers.
             Collection<ServerName> serverNames = admin.getRegionServers(true);
             invalidateServerMetadataCacheWithRetries(admin, serverNames, tenantId, schemaName,
                     tableOrViewName, false);
         }
     }
 
+    /**
+     * Invalidate metadata cache on all regionservers with retries for the given tenantID
+     * and tableName with retries. We retry once before failing the operation.
+     *
+     * @param admin
+     * @param serverNames
+     * @param tenantId
+     * @param schemaName
+     * @param tableOrViewName
+     * @param retryAttempt
+     * @throws Throwable
+     */
     private void invalidateServerMetadataCacheWithRetries(Admin admin,
             Collection<ServerName> serverNames, byte[] tenantId, byte[] schemaName,
             byte[] tableOrViewName, boolean retryAttempt) throws Throwable {
@@ -3513,13 +3533,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             map.put(future, serverName);
         }
 
+        // Here we create one master like future which tracks individual future
+        // for each region server.
         CompletableFuture<Void> allFutures = CompletableFuture.allOf(
                 futures.toArray(new CompletableFuture[0]));
         try {
             allFutures.get(metadataCacheInvalidationTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (Throwable t) {
-            LOGGER.error("Exception while invalidating metadata cache"
-                    + " for tenantID: {}, tableName: {} ", tenantIDStr, fullTableName, t);
             List<ServerName> failedServers = getFailedServers(futures, map);
             LOGGER.error("Invalidating metadata cache for tenantID: {}, tableName: {} failed for "
                     + "region servers: {}", tenantIDStr, fullTableName, failedServers, t);
@@ -3540,6 +3560,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
+    /*
+        Get the list of regionservers that failed the invalidateCache rpc.
+     */
     private List<ServerName> getFailedServers(List<CompletableFuture<Void>> futures,
                                               Map<Future, ServerName> map) {
         List<ServerName> failedServers = new ArrayList<>();
@@ -3548,6 +3571,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // If this task is still running, cancel it and keep in retry list.
                 ServerName sn = map.get(completedFuture);
                 failedServers.add(sn);
+                // Even though we cancel this future but it doesn't interrupt the executing thread.
                 completedFuture.cancel(true);
             } else if (completedFuture.isCompletedExceptionally()
                     || completedFuture.isCancelled()) {
