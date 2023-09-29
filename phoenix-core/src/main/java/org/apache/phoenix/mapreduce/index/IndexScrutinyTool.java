@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import com.google.inject.Inject;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -116,7 +115,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
             "If specified, uses Tenant connection for tenant view index scrutiny (optional)");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_SCRUTINY_[%s]_[%s]";
 
-    @Inject
     Class<? extends IndexScrutinyMapper> mapperClass = null;
 
     public IndexScrutinyTool(Class<? extends IndexScrutinyMapper> indexScrutinyMapperForTestClass) {

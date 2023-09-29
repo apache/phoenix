@@ -78,10 +78,17 @@ public class MultiTenantTestUtils {
         int expectedOpGroups;
     }
 
+    public static String getZookeeperFromUrl(String jdbcUrl) {
+        // Pherf should use the full JDBC URL internally instead of the ZK quorum.
+        // This is just an ugly hack to get the tests running in the meantime
+        jdbcUrl.replaceAll("\\\\:", "=");
+        String[] parts = jdbcUrl.split(":");
+        return String.join(":", parts[2], parts[3], parts[4]).replaceAll("=", "\\\\:");
+    }
+
     public SchemaReader applySchema(PhoenixUtil util, String matcherSchema) throws Exception {
         PherfConstants constants = PherfConstants.create();
 
-        PhoenixUtil.setZookeeper("localhost");
         SchemaReader reader = new SchemaReader(util, matcherSchema);
         reader.applySchema();
         List<Path> resources = new ArrayList<>(reader.getResourceList());
