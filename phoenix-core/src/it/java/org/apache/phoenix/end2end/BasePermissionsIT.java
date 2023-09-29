@@ -179,13 +179,10 @@ public abstract class BasePermissionsIT extends BaseTest {
         configureNamespacesOnServer(config, isNamespaceMapped);
         configureStatsConfigurations(config);
         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
-        config.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
-                FailingPhoenixRegionServerEndpoint.class.getName());
 
         testUtil.startMiniCluster(1);
         superUser1 = User.createUserForTesting(config, SUPER_USER, new String[0]);
         superUser2 = User.createUserForTesting(config, "superUser2", new String[0]);
-
     }
 
     @Before
