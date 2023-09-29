@@ -30,6 +30,7 @@ import org.apache.phoenix.pherf.configuration.XMLConfigParser;
 import org.apache.phoenix.pherf.result.ResultUtil;
 import org.apache.phoenix.pherf.schema.SchemaReader;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -59,11 +60,12 @@ public abstract class ResultBaseTestIT extends ParallelStatsDisabledIT {
         String dir = properties.getProperty("pherf.default.results.dir");
         resultUtil.ensureBaseDirExists(dir);
 
-        PhoenixUtil.setZookeeper("localhost");
         reader = new SchemaReader(util, matcherSchema);
         parser = new XMLConfigParser(matcherScenario);
 
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+
+        PhoenixUtil.setZookeeper(MultiTenantTestUtils.getZookeeperFromUrl(url));
     }
 
     @AfterClass public static synchronized void tearDown() throws Exception {
