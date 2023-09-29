@@ -36,6 +36,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -46,6 +47,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
+import org.apache.phoenix.exception.QueryOutOfScanRangeException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -186,6 +188,31 @@ public class TableResultIterator implements ResultIterator {
                 if (lastTuple != null) {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
+                    if(scan.getStartRow() != null &&
+                            Bytes.compareTo(scan.getStartRow(), HConstants.EMPTY_START_ROW) != 0){
+                        if(scan.includeStartRow()){
+                            if(Bytes.compareTo(scan.getStartRow(), ptr.get()) > 0){
+                               throw new QueryOutOfScanRangeException("Query returned is out of scan range");
+                            }
+                        } else {
+                            if(Bytes.compareTo(scan.getStartRow(), ptr.get()) >= 0){
+                                throw new QueryOutOfScanRangeException("Query returned is out of scan range");
+                            }
+                        }
+                    }
+
+                    if(scan.getStopRow() != null &&
+                            Bytes.compareTo(scan.getStopRow(), HConstants.EMPTY_END_ROW) != 0){
+                        if(scan.includeStopRow()){
+                            if(Bytes.compareTo(scan.getStopRow(), ptr.get()) < 0){
+                                throw new QueryOutOfScanRangeException("Query returned is out of scan range");
+                            }
+                        } else {
+                            if(Bytes.compareTo(scan.getStopRow(), ptr.get()) <= 0){
+                                throw new QueryOutOfScanRangeException("Query returned is out of scan range");
+                            }
+                        }
+                    }
                 }
             } catch (SQLException e) {
                 try {
