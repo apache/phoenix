@@ -533,6 +533,9 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 							IndexMaintainer.serializeAdditional(dataPTable, indexMetaDataPtr, indexesToPartiallyRebuild,
 									conn);
 							byte[] attribValue = ByteUtil.copyKeyBytesIfNecessary(indexMetaDataPtr);
+                            // TODO : use array of index names as Scan attribute for only
+                            // specific index maintainer lookup at the server side.
+                            // ScanUtil.setWALAnnotationAttributes(dataPTable, dataTableScan);
 							dataTableScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, attribValue);
 							ScanUtil.setClientVersion(dataTableScan, MetaDataProtocol.PHOENIX_VERSION);
                             LOGGER.info("Starting to partially build indexes:" + indexesToPartiallyRebuild
