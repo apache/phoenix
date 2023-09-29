@@ -131,6 +131,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
             assertTrue(e.getMessage().endsWith(cdcName));
         }
+        conn.createStatement().execute("CREATE CDC IF NOT EXISTS " + cdcName + " ON " + tableName +
+                "(v2) INCLUDE (pre, post) INDEX_TYPE=g");
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +

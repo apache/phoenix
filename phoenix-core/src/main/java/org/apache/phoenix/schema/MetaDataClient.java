@@ -1731,7 +1731,8 @@ public class MetaDataClient {
         // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
-                        indexProps, false, indexType, false, 0, new HashMap<>());
+                        indexProps, statement.isIfNotExists(), indexType, false, 0,
+                        new HashMap<>());
         // TODO: Currently index can be dropped, leaving the CDC dangling, DROP INDEX needs to
         //  protect based on CDCUtil.isACDCIndex().
         // TODO: Should we also allow PTimestamp here?
