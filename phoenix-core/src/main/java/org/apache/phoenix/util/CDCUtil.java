@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.StringTokenizer;
 
 import org.apache.hadoop.util.StringUtils;
 
@@ -39,10 +40,11 @@ public class CDCUtil {
     public static Set<PTable.CDCChangeScope> makeChangeScopeEnumsFromString(String includeScopes) {
         Set<PTable.CDCChangeScope> cdcChangeScopes = new HashSet<>();
         if (includeScopes != null) {
-            String[] toks = includeScopes.split("\\s*,\\s*");
-            for (String tok: toks) {
+            StringTokenizer st  = new StringTokenizer(includeScopes, ",");
+            while (st.hasMoreTokens()) {
+                String tok = st.nextToken();
                 try {
-                    cdcChangeScopes.add(PTable.CDCChangeScope.valueOf(tok.toUpperCase()));
+                    cdcChangeScopes.add(PTable.CDCChangeScope.valueOf(tok.trim().toUpperCase()));
                 }
                 catch (IllegalArgumentException e) {
                     // Just ignore unrecognized scopes.
@@ -63,7 +65,7 @@ public class CDCUtil {
         if (includeScopes != null) {
             Iterable<String> tmpStream = () -> includeScopes.stream().sorted()
                     .map(s -> s.name()).iterator();
-            cdcChangeScopes = StringUtils.join(", ", tmpStream);
+            cdcChangeScopes = StringUtils.join(",", tmpStream);
         }
         return cdcChangeScopes;
     }
