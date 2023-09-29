@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
@@ -140,6 +141,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.compat.hbase.CompatUtil;
+import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
+import org.apache.phoenix.end2end.FailingPhoenixRegionServerEndpoint;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
@@ -642,9 +645,24 @@ public abstract class BaseTest {
         if (conf.getLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0) == 0) {
             conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0);
         }
+        setPhoenixRegionServerEndpoint(conf);
         return conf;
     }
 
+    /*
+        Set property  hbase.coprocessor.regionserver.classes to include PhoenixRegionServerEndpoint
+        by default. If some other regionserver coprocs are already present then append
+        PhoenixRegionServerEndpoint to the existing coprocs.
+     */
+    private static void setPhoenixRegionServerEndpoint(Configuration conf) {
+        String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
+        if (value == null) {
+            value = PhoenixRegionServerEndpoint.class.getName();
+        } else {
+            value = String.join(",", value, PhoenixRegionServerEndpoint.class.getName());
+        }
+        conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, value);
+    }
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver;
         String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);

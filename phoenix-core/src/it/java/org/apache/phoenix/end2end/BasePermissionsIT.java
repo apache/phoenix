@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -83,6 +84,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -177,6 +179,8 @@ public abstract class BasePermissionsIT extends BaseTest {
         configureNamespacesOnServer(config, isNamespaceMapped);
         configureStatsConfigurations(config);
         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
+        config.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
+                FailingPhoenixRegionServerEndpoint.class.getName());
 
         testUtil.startMiniCluster(1);
         superUser1 = User.createUserForTesting(config, SUPER_USER, new String[0]);
