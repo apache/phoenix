@@ -493,13 +493,13 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhs = children.get(0);
         Expression rhs = children.get(1);
-        if (!lhs.getDataType().isComparisonSupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
-                    .setMessage(" for type " + lhs.getDataType()).build().buildException();
+        if (lhs.getDataType() != null && !lhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED).setMessage(
+                    " for type " + lhs.getDataType()).build().buildException();
         }
-        if (!rhs.getDataType().isComparisonSupported()) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
-                    .setMessage(" for type " + rhs.getDataType()).build().buildException();
+        if (rhs.getDataType() != null && !rhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED).setMessage(
+                    " for type " + rhs.getDataType()).build().buildException();
         }
         if ( rhs.getDataType() != null && lhs.getDataType() != null &&
                 !lhs.getDataType().isCoercibleTo(rhs.getDataType())  && 

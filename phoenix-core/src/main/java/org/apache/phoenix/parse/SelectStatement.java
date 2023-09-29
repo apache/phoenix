@@ -41,7 +41,7 @@ public class SelectStatement implements FilterableStatement {
     public static final SelectStatement SELECT_STAR =
             new SelectStatement(
                     null, null, false,
-                    Arrays.asList(new AliasedNode(null, new LiteralParseNode("PK")),new AliasedNode(null, new LiteralParseNode("COL")), new AliasedNode(null, new LiteralParseNode("JSONCOL")) ),
+                    Arrays.asList(),
                     null, Collections.<ParseNode>emptyList(),
                     null, Collections.<OrderByNode>emptyList(),
                     null, null, 0, false, false, Collections.<SelectStatement>emptyList(), new HashMap<String, UDFParseNode>(1));

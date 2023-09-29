@@ -20,16 +20,19 @@ package org.apache.phoenix.parse;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.expression.function.JsonValueFunction;
+import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 
 import java.sql.SQLException;
 import java.util.List;
 
-public class JsonValueParseNode extends FunctionParseNode {
+/**
+ * ParseNode for JSON_QUERY function.
+ */
+public class JsonQueryParseNode extends FunctionParseNode {
 
-    public JsonValueParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    public JsonQueryParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
         super(name, children, info);
     }
 
@@ -38,8 +41,8 @@ public class JsonValueParseNode extends FunctionParseNode {
             throws SQLException {
         PDataType dataType = children.get(0).getDataType();
         if (!dataType.isCoercibleTo(PJson.INSTANCE)) {
-            throw new SQLException(dataType + " type is unsupported for JSON_VALUE().");
+            throw new SQLException(dataType + " type is unsupported for JSON_QUERY().");
         }
-        return new JsonValueFunction(children);
+        return new JsonQueryFunction(children);
     }
 }

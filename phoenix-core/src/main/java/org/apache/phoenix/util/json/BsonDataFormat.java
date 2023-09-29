@@ -33,6 +33,8 @@ import org.bson.io.ByteBufferBsonInput;
 
 import java.nio.ByteBuffer;
 import java.sql.Types;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class BsonDataFormat implements JsonDataFormat {
     @Override
@@ -65,6 +67,10 @@ public class BsonDataFormat implements JsonDataFormat {
     @Override
     public Object getValue(Object obj, String jsonPathExprStr) {
         BsonValue value = getBsonValue(jsonPathExprStr, (RawBsonDocument) obj);
+        return getValue(value);
+    }
+
+    private Object getValue(BsonValue value) {
         if (value != null) {
             switch (value.getBsonType()) {
             case INT32:
@@ -84,6 +90,10 @@ public class BsonDataFormat implements JsonDataFormat {
                 return value.asBinary().getData();
             case DATE_TIME:
                 return value.asDateTime().getValue();
+            case DOCUMENT:
+                return value.asDocument().toJson();
+            case ARRAY:
+                return readArray(value).toString();
             default:
                 return null;
             }
@@ -108,6 +118,21 @@ public class BsonDataFormat implements JsonDataFormat {
         Configuration conf = getConfiguration();
         BsonValue value = JsonPath.using(conf).parse(top).read(jsonPathExprStr, BsonValue.class);
         return value;
+    }
+
+    private List<Object> readArray(BsonValue value) {
+        return value.asArray().stream().map(e -> {
+            // The reason for handling string in a special way is because:
+            // Given a string array in JSON - ["hello","world"]
+            // A string array when converted to a string returns
+            // as [hello, world] - the quotes stripped
+            // This change allows to retain those quotes.
+            if (e.isString() || e.isSymbol()) {
+                return "\"" + getValue(e) + "\"";
+            } else {
+                return String.valueOf(getValue(e));
+            }
+        }).collect(Collectors.toList());
     }
 
     private Configuration getConfiguration() {

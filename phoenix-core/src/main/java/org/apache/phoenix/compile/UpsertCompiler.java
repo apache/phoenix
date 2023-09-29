@@ -576,8 +576,13 @@ public class UpsertCompiler {
         int idx=0;
         if (valueNodes != null) {
             for (ParseNode valueNode : valueNodes) {
-                PColumn column = table.getColumns().get(idx);
-                ColumnParseNode cpn =
+                List<PColumn> columns = table.getColumns();
+                if (idx == columns.size()) {
+                    break;
+                }
+                PColumn column = columns.get(idx);
+                ColumnParseNode
+                        cpn =
                         new ParseNodeFactory().column(null, column.getName().getString(), null);
                 if (SchemaUtil.isPKColumn(column)) {
                     whereNodes.add(new ParseNodeFactory().equal(cpn, valueNodes.get(idx)));
@@ -712,7 +717,6 @@ public class UpsertCompiler {
         if (valueNodes == null || isFunctionEvalNeeded) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
-            runOnServer = true;
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;
@@ -833,9 +837,6 @@ public class UpsertCompiler {
                         UpsertValuesCompiler expressionBuilder = new UpsertValuesCompiler(context);
                         int nodeIndex = 0;
                         for (ParseNode valueNode : valueNodes) {
-                            if (!valueNode.isStateless()) {
-                                //   throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
-                            }
                             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
                             expressionBuilder.setColumn(column);
                             Expression expression = valueNode.accept(expressionBuilder);
@@ -847,8 +848,9 @@ public class UpsertCompiler {
                             constantExpressions.add(expression);
                             nodeIndex++;
                         }
-                        scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserver.serialize(constantExpressions));
-                                       }
+                        scan.setAttribute(BaseScannerRegionObserver.UPSERT_SELECT_EXPRS,
+                                UngroupedAggregateRegionObserver.serialize(constantExpressions));
+                    }
                     return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context, connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
                 }
             }
