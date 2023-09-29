@@ -70,6 +70,7 @@ public class ServerBuildTransformingTableCompiler extends ServerBuildIndexCompil
             scan.setAttribute(BaseScannerRegionObserver.DO_TRANSFORMING, TRUE_BYTES);
             TransformMaintainer.serialize(dataTable, ptr, newTable, plan.getContext().getConnection());
 
+            ScanUtil.annotateScanWithMetadataAttributes(dataTable, scan);
             scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
             scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
             ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);

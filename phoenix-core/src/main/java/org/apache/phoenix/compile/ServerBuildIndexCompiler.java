@@ -112,6 +112,9 @@ public class ServerBuildIndexCompiler {
                 }
             }
             IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(index), plan.getContext().getConnection());
+            scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
+                    index.getTableName().getBytes());
+            ScanUtil.annotateScanWithMetadataAttributes(dataTable, scan);
             // Set the scan attributes that UngroupedAggregateRegionObserver will switch on.
             // For local indexes, the BaseScannerRegionObserver.LOCAL_INDEX_BUILD_PROTO attribute, and
             // for global indexes PhoenixIndexCodec.INDEX_PROTO_MD attribute is set to the serialized form of index

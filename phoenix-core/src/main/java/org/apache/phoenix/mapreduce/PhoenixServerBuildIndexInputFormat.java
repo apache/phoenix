@@ -125,7 +125,11 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                 PTable pIndexTable = tableRef.getTable();
                 PTable pDataTable = PhoenixRuntime.getTable(phoenixConnection, dataTableFullName);
                 IndexMaintainer.serialize(pDataTable, ptr, Collections.singletonList(pIndexTable), phoenixConnection);
-                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
+                scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
+                        pIndexTable.getTableName().getBytes());
+                ScanUtil.annotateScanWithMetadataAttributes(pDataTable, scan);
+                scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD,
+                        ByteUtil.copyKeyBytesIfNecessary(ptr));
                 scan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
             }

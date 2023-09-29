@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -161,6 +162,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     protected Map<byte[], NavigableSet<byte[]>> familyMap;
     protected IndexTool.IndexVerifyType verifyType = IndexTool.IndexVerifyType.NONE;
     protected boolean verify = false;
+    protected byte[] tenantId;
+    protected byte[] schemaName;
+    protected byte[] logicalTableName;
+    protected byte[] tableType;
+    protected byte[] lastDdlTimestamp;
 
     // This relies on Hadoop Configuration to handle warning about deprecated configs and
     // to set the correct non-deprecated configs when an old one shows up.
@@ -201,6 +207,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         if (indexMetaData == null) {
             indexMetaData = scan.getAttribute(PhoenixIndexCodec.INDEX_MD);
         }
+        tenantId = scan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
+        schemaName = scan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+        logicalTableName = scan.getAttribute(
+                MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
+        tableType = scan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
+        lastDdlTimestamp = scan.getAttribute(
+                MutationState.MutationMetadataType.TIMESTAMP.toString());
         byte[] transforming = scan.getAttribute(BaseScannerRegionObserver.DO_TRANSFORMING);
         List<IndexMaintainer> maintainers = null;
         if (transforming == null) {
