@@ -670,6 +670,90 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       Assert.assertNull(rs.getString(5));
 
       Assert.assertFalse(rs.next());
+
+      rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY "
+              + "VCOL1 DESC, COL2 ASC");
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals("vcol2", rs.getString(3));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("vcol1", rs.getString(3));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("vcol1", rs.getString(3));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("vcol1", rs.getString(3));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("vcol1", rs.getString(3));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals("vcol-2", rs.getString(3));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals("vcol-1", rs.getString(3));
+
+      Assert.assertFalse(rs.next());
+
+      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02
+              + " ORDER BY VCOL2 DESC, VCOL1 DESC");
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("vcol1", rs.getString(2));
+      Assert.assertNull(rs.getString(3));
+      Assert.assertEquals("col5_07", rs.getString(4));
+      Assert.assertNull(rs.getString(5));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("vcol1", rs.getString(2));
+      Assert.assertEquals("vcol2_03", rs.getString(3));
+      Assert.assertEquals("col5_03", rs.getString(4));
+      Assert.assertEquals("col6_03", rs.getString(5));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("vcol1", rs.getString(2));
+      Assert.assertEquals("vcol2_02", rs.getString(3));
+      Assert.assertEquals("col5_02", rs.getString(4));
+      Assert.assertEquals("col6_02", rs.getString(5));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("vcol1", rs.getString(2));
+      Assert.assertEquals("vcol2_01", rs.getString(3));
+      Assert.assertEquals("col5_01", rs.getString(4));
+      Assert.assertEquals("col6_01", rs.getString(5));
+
+      Assert.assertFalse(rs.next());
     }
   }
 
@@ -785,6 +869,90 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       Assert.assertNull(rs.getString(3));
       Assert.assertEquals("col5_07", rs.getString(4));
       Assert.assertNull(rs.getString(5));
+
+      Assert.assertFalse(rs.next());
+
+      rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY "
+              + "VCOL1 DESC, COL2 ASC");
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals(236.49, rs.getDouble(3), 0);
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals(234.75, rs.getDouble(3), 0);
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals(234.75, rs.getDouble(3), 0);
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals(234.75, rs.getDouble(3), 0);
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals(234.75, rs.getDouble(3), 0);
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals(98.8452, rs.getDouble(3), 0);
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("col1", rs.getString(1));
+      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals(17.053, rs.getDouble(3), 0);
+
+      Assert.assertFalse(rs.next());
+
+      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02
+              + " ORDER BY VCOL2 DESC, VCOL1 DESC");
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals(234.75, rs.getDouble(2), 0);
+      Assert.assertNull(rs.getString(3));
+      Assert.assertEquals("col5_07", rs.getString(4));
+      Assert.assertNull(rs.getString(5));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals(234.75, rs.getDouble(2), 0);
+      Assert.assertEquals("vcol2_03", rs.getString(3));
+      Assert.assertEquals("col5_03", rs.getString(4));
+      Assert.assertEquals("col6_03", rs.getString(5));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals(234.75, rs.getDouble(2), 0);
+      Assert.assertEquals("vcol2_02", rs.getString(3));
+      Assert.assertEquals("col5_02", rs.getString(4));
+      Assert.assertEquals("col6_02", rs.getString(5));
+
+      Assert.assertTrue(rs.next());
+
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals(234.75, rs.getDouble(2), 0);
+      Assert.assertEquals("vcol2_01", rs.getString(3));
+      Assert.assertEquals("col5_01", rs.getString(4));
+      Assert.assertEquals("col6_01", rs.getString(5));
 
       Assert.assertFalse(rs.next());
     }
