@@ -673,8 +673,9 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     }
 
     private void annotateAndCommit(UngroupedAggregateRegionObserver.MutationList mutations) throws IOException {
+        annotateDataMutations(mutations, scan);
         if (isDelete || isUpsert) {
-            annotateDataMutations(mutations, scan);
+            annotateDataMutationsWithExternalSchemaId(mutations, scan);
         }
         ungroupedAggregateRegionObserver.commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
             targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
@@ -703,11 +704,16 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         for (Mutation m : mutationsList) {
             annotateMutation(m, tenantId, schemaName, logicalTableName, tableType, ddlTimestamp);
         }
+    }
 
+    private void annotateDataMutationsWithExternalSchemaId(
+            UngroupedAggregateRegionObserver.MutationList mutationsList,
+            Scan scan) {
         byte[] externalSchemaRegistryId = scan.getAttribute(
-            MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
+                MutationState.MutationMetadataType.EXTERNAL_SCHEMA_ID.toString());
         for (Mutation m : mutationsList) {
             annotateMutation(m, externalSchemaRegistryId);
         }
     }
+
 }

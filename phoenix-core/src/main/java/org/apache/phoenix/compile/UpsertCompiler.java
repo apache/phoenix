@@ -1153,7 +1153,7 @@ public class UpsertCompiler {
             ImmutableBytesWritable ptr = context.getTempPtr();
             PTable table = tableRef.getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
-            ScanUtil.setWALAnnotationAttributes(table, scan);
+            ScanUtil.annotateScanWithMetadataAttributes(table, scan);
             byte[] txState = table.isTransactional() ?
                     connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
 
