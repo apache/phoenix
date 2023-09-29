@@ -1711,18 +1711,21 @@ public class MetaDataClient {
     }
 
     public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
-        Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
-        Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
+        Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(
+                statement.getProps().size());
+        Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
+                statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
 
-        NamedNode indexName = FACTORY.indexName(CDCUtil.getCDCIndexName(statement.getCdcObjName().getName()));
-        String timeIdxColName = statement.getTimeIdxColumn() != null ? statement.getTimeIdxColumn().getColumnName() : null;
-        IndexKeyConstraint indexKeyConstraint = FACTORY.indexKey(Arrays.asList(new Pair[]{Pair.newPair(
-                        timeIdxColName != null ?
-                                FACTORY.column(statement.getDataTable(), timeIdxColName, timeIdxColName) :
-                                statement.getTimeIdxFunc(),
-                        SortOrder.getDefault()
-        )}));
+        NamedNode indexName = FACTORY.indexName(CDCUtil.getCDCIndexName(
+                statement.getCdcObjName().getName()));
+        String timeIdxColName = statement.getTimeIdxColumn() != null ?
+                statement.getTimeIdxColumn().getColumnName() : null;
+        IndexKeyConstraint indexKeyConstraint =
+                FACTORY.indexKey(Arrays.asList(new Pair[] { Pair.newPair(
+                        timeIdxColName != null ? FACTORY.column(statement.getDataTable(),
+                                timeIdxColName, timeIdxColName) : statement.getTimeIdxFunc(),
+                        SortOrder.getDefault()) }));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
         // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
@@ -1752,8 +1755,11 @@ public class MetaDataClient {
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
-        // TODO: toString() on function will have an extra space at the beginning.
-        ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ? statement.getTimeIdxColumn() : FACTORY.columnName(statement.getTimeIdxFunc().toString());
+        // TODO: toString() on function will have an extra space at the beginning, but this may
+        //  be OK as I see exactly the same with an index.
+        ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ?
+                statement.getTimeIdxColumn() :
+                FACTORY.columnName(statement.getTimeIdxFunc().toString());
         columnDefs.add(FACTORY.columnDef(timeIdxCol, PTimestamp.INSTANCE.getSqlTypeName(), false, null, false,
                 PTimestamp.INSTANCE.getMaxLength(null), PTimestamp.INSTANCE.getScale(null), false,
                 SortOrder.getDefault(), "", null, false));
@@ -1763,9 +1769,11 @@ public class MetaDataClient {
             columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
                     pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
                     pcol.getScale(), false, pcol.getSortOrder(), "", null, false));
-            pkColumnDefs.add(FACTORY.columnDefInPkConstraint(FACTORY.columnName(pcol.getName().getString()), pcol.getSortOrder(), pcol.isRowTimestamp()));
+            pkColumnDefs.add(FACTORY.columnDefInPkConstraint(FACTORY.columnName(
+                    pcol.getName().getString()), pcol.getSortOrder(), pcol.isRowTimestamp()));
         }
-        columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME), PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,
+        columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME),
+                PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,
                 null, false, SortOrder.getDefault(), "", null, false));
         CreateTableStatement tableStatement = FACTORY.createTable(
                 FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),
