@@ -28,6 +28,7 @@ public class CDCUtilTest {
 
     @Test
     public void testScopeStringConstruction() throws Exception {
+        assertEquals(null, CDCUtil.makeChangeScopeStringFromEnums(null));
         assertEquals("", CDCUtil.makeChangeScopeStringFromEnums(
                 new HashSet<PTable.CDCChangeScope>()));
         assertEquals("CHANGE,PRE,POST,LATEST", CDCUtil.makeChangeScopeStringFromEnums(

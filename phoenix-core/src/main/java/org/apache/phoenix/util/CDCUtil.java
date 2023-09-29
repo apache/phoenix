@@ -61,7 +61,7 @@ public class CDCUtil {
      * @return the comma-separated string of scopes, which can be an empty string in case the set is empty.
      */
     public static String makeChangeScopeStringFromEnums(Set<PTable.CDCChangeScope> includeScopes) {
-        String cdcChangeScopes = "";
+        String cdcChangeScopes = null;
         if (includeScopes != null) {
             Iterable<String> tmpStream = () -> includeScopes.stream().sorted()
                     .map(s -> s.name()).iterator();

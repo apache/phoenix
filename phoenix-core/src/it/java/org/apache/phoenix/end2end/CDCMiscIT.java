@@ -134,17 +134,16 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-                "(v2) INCLUDE (post, pre, post) INDEX_TYPE=g");
-        assertCDCState(conn, cdcName, "PRE, POST", 3);
+                "(v2) INCLUDE (pre, post) INDEX_TYPE=g");
+        assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
                 Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-                "(v2) INCLUDE (pre, post) INDEX_TYPE=l");
-        assertCDCState(conn, cdcName, "PRE, POST", 2);
-        assertPTable(cdcName, new HashSet<>(
-                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+                "(v2) INDEX_TYPE=l");
+        assertCDCState(conn, cdcName, null, 2);
+        assertPTable(cdcName, null);
 
         conn.close();
     }
