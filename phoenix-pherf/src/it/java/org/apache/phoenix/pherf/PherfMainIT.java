@@ -24,6 +24,7 @@ import org.apache.phoenix.pherf.result.Result;
 import org.apache.phoenix.pherf.result.ResultValue;
 import org.apache.phoenix.pherf.result.file.ResultFileDetails;
 import org.apache.phoenix.pherf.result.impl.CSVFileResultHandler;
+import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -56,7 +57,7 @@ public class PherfMainIT extends ResultBaseTestIT {
 
     @Test
     public void testPherfMain() throws Exception {
-        String[] args = { "-q", "-l",
+        String[] args = { "-q", "-l", "-z", MultiTenantTestUtils.getZookeeperFromUrl(url),
                 "-schemaFile", ".*create_prod_test_unsalted.sql",
                 "-scenarioFile", ".*prod_test_unsalted_scenario.xml"};
         Pherf pherf = new Pherf(args);
@@ -71,7 +72,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     @Test
     public void testQueryTimeout() throws Exception {
         // Timeout of 0 ms means every query execution should time out
-        String[] args = {"-q", "-l",
+        String[] args = {"-q", "-l", "-z", MultiTenantTestUtils.getZookeeperFromUrl(url),
                 "-drop", "all",
                 "-schemaFile", ".*timeout_test_schema.sql",
                 "-scenarioFile", ".*scenario_with_query_timeouts.xml" };
@@ -93,7 +94,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     @Test
     public void testLargeQueryTimeout() throws Exception {
         // Timeout of max_long ms means every query execution should finish without timing out
-        String[] args = {"-q", "-l",
+        String[] args = {"-q", "-l", "-z", MultiTenantTestUtils.getZookeeperFromUrl(url),
                 "-drop", "all",
                 "-schemaFile", ".*timeout_test_schema.sql",
                 "-scenarioFile", ".*scenario_with_query_timeouts.xml" };
@@ -115,7 +116,7 @@ public class PherfMainIT extends ResultBaseTestIT {
     @Test
     public void testNoQueryTimeout() throws Exception {
         // Missing timeout attribute means every query execution should finish without timing out
-        String[] args = {"-q", "-l",
+        String[] args = {"-q", "-l", "-z", MultiTenantTestUtils.getZookeeperFromUrl(url),
                 "-drop", "all",
                 "-schemaFile", ".*timeout_test_schema.sql",
                 "-scenarioFile", ".*scenario_with_query_timeouts.xml" };
