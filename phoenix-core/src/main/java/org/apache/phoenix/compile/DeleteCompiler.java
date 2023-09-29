@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -815,7 +814,7 @@ public class DeleteCompiler {
             ImmutableBytesWritable ptr = context.getTempPtr();
             PTable table = dataPlan.getTableRef().getTable();
             table.getIndexMaintainers(ptr, context.getConnection());
-            ScanUtil.setWALAnnotationAttributes(table, context.getScan());
+            ScanUtil.annotateScanWithMetadataAttributes(table, context.getScan());
             byte[] txState = table.isTransactional() ? connection.getMutationState().encodeTransaction() : ByteUtil.EMPTY_BYTE_ARRAY;
             ServerCache cache = null;
             try {
