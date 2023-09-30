@@ -83,6 +83,7 @@ public class SnapshotScanner extends AbstractClientScanner {
     scan.setIsolationLevel(IsolationLevel.READ_UNCOMMITTED);
     values = new ArrayList<>();
 
+    // TODO : Use hbase provided snapshot scanner (make it IA.LimitedPrivate)
     // region init should follow the same pattern as hbase ClientSideRegionScanner.
     initRegionForSnapshotScanner(conf, fs, rootDir, htd, hri);
 
