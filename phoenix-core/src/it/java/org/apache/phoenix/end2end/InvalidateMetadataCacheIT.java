@@ -74,7 +74,7 @@ public class InvalidateMetadataCacheIT extends BaseTest {
             conn.createStatement().execute(ddl);
             conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
                     " ADD CF.col2 integer");
-            fail("Shouldn't reach heere");
+            fail("Shouldn't reach here");
         } catch (Exception e) {
             LOGGER.error("Exception while adding column", e);
             // This is expected
@@ -103,6 +103,29 @@ public class InvalidateMetadataCacheIT extends BaseTest {
         } catch (Exception e) {
             LOGGER.error("Exception while adding column", e);
             // This is expected
+        }
+    }
+
+    /**
+     * Add FailingPhoenixRegionServerEndpoint as regionserver co-processor.
+     * Make one of the regionserver throw Exception in the first attempt and succeed on retry.
+     * Make sure that ALTER TABLE ADD COLUMN statement succeeds on retry.
+     */
+    @Test
+    public void testAddColumnWithOneRSSucceedingOnRetry() {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String dataTableFullName = generateUniqueName();
+        String ddl = getCreateTableStmt(dataTableFullName);
+        HRegionServer regionServerZero = utility.getMiniHBaseCluster().getRegionServer(0);
+        FailingPhoenixRegionServerEndpoint coprocForRS0 =
+                getFailingPhoenixRegionServerEndpoint(regionServerZero);
+        coprocForRS0.failFirstAndThenSucceed();
+        try(Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute("ALTER TABLE " + dataTableFullName +
+                    " ADD CF.col2 integer");
+        } catch (Throwable e) {
+            fail("Shouldn't reach here");
         }
     }
 

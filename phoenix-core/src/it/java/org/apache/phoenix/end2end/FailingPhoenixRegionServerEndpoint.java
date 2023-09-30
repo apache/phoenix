@@ -35,6 +35,8 @@ public class FailingPhoenixRegionServerEndpoint extends PhoenixRegionServerEndpo
 
     private boolean throwException;
     private boolean shouldSleep;
+    private boolean failFirstAndThenSucceed;
+    private int attempt = 0;
 
     @Override
     public void invalidateServerMetadataCache(RpcController controller,
@@ -55,18 +57,35 @@ public class FailingPhoenixRegionServerEndpoint extends PhoenixRegionServerEndpo
             } catch (InterruptedException e) {
                 LOGGER.warn("Exception while sleeping in FailingPhoenixRegionServerEndpoint", e);
             }
-        } else {
+        } else if (failFirstAndThenSucceed) {
+            if (attempt == 0) {
+                IOException ioe = new IOException("On purpose");
+                ProtobufUtil.setControllerException(controller, ioe);
+                attempt++;
+            }
+        }
+        else {
             LOGGER.info("Invalidating server metadata cache");
         }
     }
 
     public void throwException() {
+        reset();
         this.throwException = true;
-        this.shouldSleep = false;
     }
 
     public void sleep() {
+        reset();
         this.shouldSleep = true;
+    }
+
+    public void failFirstAndThenSucceed() {
+        reset();
+        failFirstAndThenSucceed = true;
+    }
+    private void reset() {
+        this.shouldSleep = false;
         this.throwException = false;
+        this.failFirstAndThenSucceed = false;
     }
 }

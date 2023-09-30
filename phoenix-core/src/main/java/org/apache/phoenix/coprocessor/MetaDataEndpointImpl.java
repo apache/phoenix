@@ -3481,17 +3481,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @param tenantId
      * @param schemaName
      * @param tableOrViewName
-     * @param retryAttempt
+     * @param isRetry
      * @throws Throwable
      */
     private void invalidateServerMetadataCacheWithRetries(Admin admin,
             Collection<ServerName> serverNames, byte[] tenantId, byte[] schemaName,
-            byte[] tableOrViewName, boolean retryAttempt) throws Throwable {
+            byte[] tableOrViewName, boolean isRetry) throws Throwable {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
         String tenantIDStr = Bytes.toString(tenantId);
         LOGGER.info("Invalidating metadata cache for tenantID: {}, tableName: {} for"
-                        + " region servers: {}, isRetryAttempt: {}", tenantIDStr, fullTableName,
-                serverNames, retryAttempt);
+                        + " region servers: {}, isRetry: {}", tenantIDStr, fullTableName,
+                serverNames, isRetry);
         RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest request =
                 getRequest(tenantId, schemaName, tableOrViewName);
         // TODO Do I need my own executor or can I re-use QueryServices#Executor
@@ -3543,7 +3543,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<ServerName> failedServers = getFailedServers(futures, map);
             LOGGER.error("Invalidating metadata cache for tenantID: {}, tableName: {} failed for "
                     + "region servers: {}", tenantIDStr, fullTableName, failedServers, t);
-            if (retryAttempt) {
+            if (isRetry) {
                 // If this is a retry attempt then just fail the operation.
                 if (allFutures.isCompletedExceptionally()) {
                     if (t instanceof ExecutionException) {
