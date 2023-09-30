@@ -173,7 +173,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             Set<byte[]> familySet, Set<TableName> indexes) throws IOException {
         if (!accessCheckEnabled) { return; }
         
-        if (tableType != PTableType.VIEW) {
+        if (tableType != PTableType.VIEW && tableType != PTableType.CDC) {
             TableDescriptorBuilder tableDescBuilder = TableDescriptorBuilder.newBuilder(physicalTableName);
             for (byte[] familyName : familySet) {
                 tableDescBuilder.setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(familyName).build());
@@ -184,9 +184,9 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             }
         }
 
-        // Index and view require read access on parent physical table.
+        // Index, view and CDC require read access on parent physical table.
         Set<TableName> physicalTablesChecked = new HashSet<TableName>();
-        if (tableType == PTableType.VIEW || tableType == PTableType.INDEX) {
+        if (tableType == PTableType.VIEW || tableType == PTableType.INDEX || tableType == PTableType.CDC) {
             physicalTablesChecked.add(parentPhysicalTableName);
             if (execPermissionsCheckEnabled) {
                 requireAccess("Create" + tableType, parentPhysicalTableName, Action.READ, Action.EXEC);

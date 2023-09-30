@@ -64,6 +64,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nonnull;
 
@@ -107,6 +108,7 @@ import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -211,6 +213,7 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
+    private Set<CDCChangeScope> cdcIncludeScopes;
 
     public static class Builder {
         private PTableKey key;
@@ -276,6 +279,7 @@ public class PTableImpl implements PTable {
         private String schemaVersion;
         private String externalSchemaId;
         private String streamingTopicName;
+        private Set<CDCChangeScope> cdcIncludeScopes;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -696,6 +700,13 @@ public class PTableImpl implements PTable {
             return this;
          }
 
+        public Builder setCDCIncludeScopes(Set<CDCChangeScope> cdcIncludeScopes) {
+            if (cdcIncludeScopes != null) {
+                this.cdcIncludeScopes = cdcIncludeScopes;
+            }
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -986,6 +997,7 @@ public class PTableImpl implements PTable {
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
+        this.cdcIncludeScopes = builder.cdcIncludeScopes;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1999,6 +2011,11 @@ public class PTableImpl implements PTable {
             streamingTopicName =
                 (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
         }
+        String cdcIncludeScopesStr = null;
+        if (table.hasCDCIncludeScopes()) {
+            cdcIncludeScopesStr =
+                    (String) PVarchar.INSTANCE.toObject(table.getCDCIncludeScopes().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2056,6 +2073,8 @@ public class PTableImpl implements PTable {
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
+                    .setCDCIncludeScopes(
+                            CDCUtil.makeChangeScopeEnumsFromString(cdcIncludeScopesStr))
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2335,6 +2354,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getStreamingTopicName() {
         return streamingTopicName;
+    }
+
+    @Override
+    public Set<CDCChangeScope> getCDCIncludeScopes() {
+        return cdcIncludeScopes;
     }
 
     private static final class KVColumnFamilyQualifier {

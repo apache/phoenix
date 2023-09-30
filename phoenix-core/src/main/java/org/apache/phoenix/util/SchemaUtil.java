@@ -115,6 +115,7 @@ public class SchemaUtil {
     private static final int VAR_KV_LENGTH_ESTIMATE = 50;
     public static final String ESCAPE_CHARACTER = "\"";
     public static final DataBlockEncoding DEFAULT_DATA_BLOCK_ENCODING = DataBlockEncoding.FAST_DIFF;
+
     public static final PDatum VAR_BINARY_DATUM = new PDatum() {
     
         @Override
@@ -239,7 +240,7 @@ public class SchemaUtil {
     }
 
     /**
-     * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
+     * Normalizes the fulltableName . Uses {@linkplain #normalizeIdentifier}
      * @param fullTableName
      * @return
      */

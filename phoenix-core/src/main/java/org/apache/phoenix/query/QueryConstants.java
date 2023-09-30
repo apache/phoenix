@@ -47,6 +47,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BIND_PARAMETERS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BUFFER_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
@@ -303,6 +304,9 @@ public interface QueryConstants {
 
     // custom TagType
     byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
+
+    String CDC_JSON_COL_NAME = "CDC JSON";
+
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
      * {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
@@ -342,6 +346,7 @@ public interface QueryConstants {
             SCHEMA_VERSION + " VARCHAR, \n" +
             EXTERNAL_SCHEMA_ID + " VARCHAR, \n" +
             STREAMING_TOPIC_NAME + " VARCHAR, \n" +
+            CDC_INCLUDE_TABLE + " VARCHAR, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

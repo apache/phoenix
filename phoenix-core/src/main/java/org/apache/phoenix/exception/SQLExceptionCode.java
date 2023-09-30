@@ -168,8 +168,9 @@ public enum SQLExceptionCode {
      AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_INDEX(520, "42897", "Aggregate expression not allowed in an index."),
      NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX(521, "42898", "Non-deterministic expression not allowed in an index."),
      STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX(522, "42899", "Stateless expression not allowed in an index."),
-     
-     /**
+     INCORRECT_DATATYPE_FOR_EXPRESSION(539, "42102", "Expression datatype is incorrect for this index."),
+
+    /**
       *  Transaction exceptions.
       */
      TRANSACTION_CONFLICT_EXCEPTION(523, "42900", "Transaction aborted due to conflict with other mutations."),
@@ -351,6 +352,8 @@ public enum SQLExceptionCode {
             + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
+    UNKNOWN_INDEX_TYPE(1098,"44A37", "Unknown INDEX type: "),
+    UNKNOWN_INCLUDE_CHANGE_SCOPE(1099,"44A38", "Unknown change scope for INCLUDE: "),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

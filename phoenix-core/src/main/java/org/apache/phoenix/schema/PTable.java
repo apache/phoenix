@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -963,6 +964,11 @@ public interface PTable extends PMetaDataEntity {
     String getStreamingTopicName();
 
     /**
+     * @return Optional string that represents the default include scopes to be used for CDC queries.
+     */
+    Set<CDCChangeScope> getCDCIncludeScopes();
+
+    /**
      * Class to help track encoded column qualifier counters per column family.
      */
     public class EncodedCQCounter {
@@ -1050,6 +1056,11 @@ public interface PTable extends PMetaDataEntity {
 
     enum CDCChangeScope {
         /**
+         * Include only the actual change in image.
+         */
+        CHANGE,
+
+        /**
          * Include only the pre image (state prior to the change) of the row.
          */
         PRE,
@@ -1063,11 +1074,6 @@ public interface PTable extends PMetaDataEntity {
          * Include only the latest image of the row.
          */
         LATEST,
-
-        /**
-         * Include all images.
-         */
-        ALL,
+        ;
     }
-
 }

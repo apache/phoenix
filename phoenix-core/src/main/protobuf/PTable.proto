@@ -30,6 +30,7 @@ enum PTableType {
   VIEW = 2;
   INDEX = 3;
   JOIN = 4;
+  CDC = 5;
 }
 
 message PColumn {
@@ -117,6 +118,7 @@ message PTable {
   optional bytes externalSchemaId=50;
   optional PTable transformingNewTable=51;
   optional bytes streamingTopicName=52;
+  optional bytes CDCIncludeScopes=55;
 }
 
 message EncodedCQCounter {

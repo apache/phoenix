@@ -497,7 +497,8 @@ public class QueryParserTest {
         }
     }
 
-    private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists, String tsCol) throws Exception {
+    private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists, String tsCol)
+            throws Exception {
         CreateCDCStatement stmt = parseQuery(sql, CreateCDCStatement.class);
         assertEquals("FOO", stmt.getCdcObjName().getName());
         assertEquals("BAR", stmt.getDataTable().getTableName());
@@ -517,17 +518,37 @@ public class QueryParserTest {
         parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
         parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
-        stmt = parseCreateCDCSimple("create cdc foo on bar(PHOENIX_ROW_TIMESTAMP())", false, null);
-        assertEquals("PHOENIX_ROW_TIMESTAMP", stmt.getTimeIdxFunc().getName());
-        assertEquals(" PHOENIX_ROW_TIMESTAMP()", stmt.getTimeIdxFunc().toString());
+        parseCreateCDCSimple("create cdc foo on bar(t) index_type=g", false, "T");
+        parseCreateCDCSimple("create cdc foo on bar(t) index_type=l", false, "T");
+        stmt = parseCreateCDCSimple("create cdc foo on bar(TS_FUNC()) TTL=100, INDEX_TYPE=g",
+                false, null);
+        assertEquals("TS_FUNC", stmt.getTimeIdxFunc().getName());
+        assertEquals(" TS_FUNC()", stmt.getTimeIdxFunc().toString());
+        assertEquals(Arrays.asList(new Pair("TTL", 100), new Pair("INDEX_TYPE", "g")),
+                stmt.getProps().get(""));
         stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre)", false, "TS");
-        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)), stmt.getIncludeScopes());
-        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre, pre, post)", false, "TS");
-        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), stmt.getIncludeScopes());
-        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def", true, "TS");
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)),
+                stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre, pre, post)",
+                false, "TS");
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE,
+                PTable.CDCChangeScope.POST)), stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def",
+                true, "TS");
         assertEquals(Arrays.asList(new Pair("ABC", "def")), stmt.getProps().get(""));
-        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def, prop=val", true, "TS");
-        assertEquals(Arrays.asList(new Pair("ABC", "def"), new Pair("PROP", "val")), stmt.getProps().get(""));
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def, prop=val",
+                true, "TS");
+        assertEquals(Arrays.asList(new Pair("ABC", "def"), new Pair("PROP", "val")),
+                stmt.getProps().get(""));
+    }
+
+    @Test
+    public void testCreateCDCWithErrors() throws Exception {
+        parseQueryThatShouldFail("create cdc foo");
+        parseQueryThatShouldFail("create cdc foo on bar");
+        parseQueryThatShouldFail("create cdc foo on bar(ts integer)");
+        parseQueryThatShouldFail("create cdc foo on bar(ts1, ts2)");
+        parseQueryThatShouldFail("create cdc foo on bar(ts) include (abc)");
     }
 
     private void parseInvalidCreateCDC(String sql, int expRrrorCode) throws IOException {
@@ -1106,5 +1127,4 @@ public class QueryParserTest {
         parseQueryThatShouldFail("SELECT b, x from x WHERE x = "
                 + "b'0 10 ' --comment \n /* comment */ '00 000' \n \n ''");
     }
-
 }
