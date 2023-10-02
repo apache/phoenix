@@ -448,6 +448,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                         @Override public PhoenixResultSet call() throws SQLException {
                             final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                             boolean success = false;
+                            boolean updateMetrics = true;
                             boolean pointLookup = false;
                             String tableName = null;
                             PhoenixResultSet rs = null;
@@ -488,17 +489,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                                 //verify metadata for the table/view/index in the query plan
                                 if (plan.getTableRef() != null && validateLastDdlTimestamp) {
-                                    try {
-                                        validateLastDDLTimestamp(plan.getTableRef(), true);
-                                    } catch (StaleMetadataCacheException e) {
-                                        String planSchemaName = plan.getTableRef().getTable().getSchemaName().toString();
-                                        String planTableName = plan.getTableRef().getTable().getTableName().toString();
-                                        // force update client metadata cache
-                                        LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
-                                        new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
-                                        // skip last ddl timestamp validation in the retry
-                                        return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
-                                    }
+                                    validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
 
                                 // this will create its own trace internally, so we don't wrap this
@@ -536,6 +527,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
+                                updateMetrics = false;
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
@@ -551,8 +543,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 throw e;
                             }
+                            catch (StaleMetadataCacheException e) {
+                                updateMetrics = false;
+                                String planSchemaName = lastQueryPlan.getTableRef().getTable().getSchemaName().toString();
+                                String planTableName = lastQueryPlan.getTableRef().getTable().getTableName().toString();
+                                // force update client metadata cache
+                                LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
+                                new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
+                                // skip last ddl timestamp validation in the retry
+                                return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
+                            }
                             catch (RuntimeException e) {
-
                                 // FIXME: Expression.evaluate does not throw SQLException
                                 // so this will unwrap throws from that.
                                 if (e.getCause() instanceof SQLException) {
@@ -560,41 +561,43 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 throw e;
                             } finally {
-                                // Regardless of whether the query was successfully handled or not,
-                                // update the time spent so far. If needed, we can separate out the
-                                // success times and failure times.
-                                GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis()
-                                        - startTime);
-                                long
-                                        executeQueryTimeSpent =
-                                        EnvironmentEdgeManager.currentTimeMillis() - startTime;
-                                if (tableName != null) {
+                                if (updateMetrics) {
+                                    // Regardless of whether the query was successfully handled or not,
+                                    // update the time spent so far. If needed, we can separate out the
+                                    // success times and failure times.
+                                    GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis()
+                                            - startTime);
+                                    long
+                                            executeQueryTimeSpent =
+                                            EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                                    if (tableName != null) {
 
-                                    TableMetricsManager
-                                            .updateMetricsMethod(tableName, SELECT_SQL_COUNTER, 1);
-                                    TableMetricsManager
-                                            .updateMetricsMethod(tableName, SELECT_SQL_QUERY_TIME,
-                                                    executeQueryTimeSpent);
-                                    if (success) {
-                                        TableMetricsManager.updateMetricsMethod(tableName,
-                                                SELECT_SUCCESS_SQL_COUNTER, 1);
-                                        TableMetricsManager.updateMetricsMethod(tableName,
-                                                pointLookup ?
-                                                        SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
-                                                        SELECT_SCAN_SUCCESS_SQL_COUNTER, 1);
-                                    } else {
-                                        TableMetricsManager.updateMetricsMethod(tableName,
-                                                SELECT_FAILED_SQL_COUNTER, 1);
-                                        TableMetricsManager.updateMetricsMethod(tableName,
-                                                SELECT_AGGREGATE_FAILURE_SQL_COUNTER, 1);
-                                        TableMetricsManager.updateMetricsMethod(tableName,
-                                                pointLookup ?
-                                                        SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
-                                                        SELECT_SCAN_FAILED_SQL_COUNTER, 1);
+                                        TableMetricsManager
+                                                .updateMetricsMethod(tableName, SELECT_SQL_COUNTER, 1);
+                                        TableMetricsManager
+                                                .updateMetricsMethod(tableName, SELECT_SQL_QUERY_TIME,
+                                                        executeQueryTimeSpent);
+                                        if (success) {
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                    SELECT_SUCCESS_SQL_COUNTER, 1);
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                    pointLookup ?
+                                                            SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
+                                                            SELECT_SCAN_SUCCESS_SQL_COUNTER, 1);
+                                        } else {
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                    SELECT_FAILED_SQL_COUNTER, 1);
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                    SELECT_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                                            TableMetricsManager.updateMetricsMethod(tableName,
+                                                    pointLookup ?
+                                                            SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
+                                                            SELECT_SCAN_FAILED_SQL_COUNTER, 1);
+                                        }
                                     }
-                                }
-                                if (rs != null) {
-                                    rs.setQueryTime(executeQueryTimeSpent);
+                                    if (rs != null) {
+                                        rs.setQueryTime(executeQueryTimeSpent);
+                                    }
                                 }
                             }
                             return rs;
