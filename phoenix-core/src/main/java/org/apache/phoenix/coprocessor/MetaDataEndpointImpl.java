@@ -3694,7 +3694,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         byte[] count;
                         try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
                             List<Cell> countCells = new ArrayList<>();
-                            scanner.next(countCells);
+                            countScanner.next(countCells);
                             count = Result.create(countCells)
                                     .getValue(TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
