@@ -188,27 +188,27 @@ public class TableResultIterator implements ResultIterator {
                 if (lastTuple != null) {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
-                    if(scan.getStartRow() != null &&
-                            Bytes.compareTo(scan.getStartRow(), HConstants.EMPTY_START_ROW) != 0){
-                        if(scan.includeStartRow()){
-                            if(Bytes.compareTo(scan.getStartRow(), ptr.get()) > 0){
-                               throw new QueryOutOfScanRangeException("Query returned is out of scan range");
+                    if (scan.getStartRow() != null
+                            && Bytes.compareTo(scan.getStartRow(), HConstants.EMPTY_START_ROW) != 0) {
+                        if (scan.includeStartRow()) {
+                            if (Bytes.compareTo(scan.getStartRow(), ptr.get()) > 0) {
+                                throw new QueryOutOfScanRangeException("Query returned is out of scan range");
                             }
                         } else {
-                            if(Bytes.compareTo(scan.getStartRow(), ptr.get()) >= 0){
+                            if (Bytes.compareTo(scan.getStartRow(), ptr.get()) >= 0) {
                                 throw new QueryOutOfScanRangeException("Query returned is out of scan range");
                             }
                         }
                     }
 
-                    if(scan.getStopRow() != null &&
-                            Bytes.compareTo(scan.getStopRow(), HConstants.EMPTY_END_ROW) != 0){
-                        if(scan.includeStopRow()){
-                            if(Bytes.compareTo(scan.getStopRow(), ptr.get()) < 0){
+                    if (scan.getStopRow() != null
+                            && Bytes.compareTo(scan.getStopRow(), HConstants.EMPTY_END_ROW) != 0) {
+                        if (scan.includeStopRow()) {
+                            if (Bytes.compareTo(scan.getStopRow(), ptr.get()) < 0) {
                                 throw new QueryOutOfScanRangeException("Query returned is out of scan range");
                             }
                         } else {
-                            if(Bytes.compareTo(scan.getStopRow(), ptr.get()) <= 0){
+                            if (Bytes.compareTo(scan.getStopRow(), ptr.get()) <= 0) {
                                 throw new QueryOutOfScanRangeException("Query returned is out of scan range");
                             }
                         }
@@ -218,15 +218,15 @@ public class TableResultIterator implements ResultIterator {
                 try {
                     throw ServerUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {
-                    if(ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
+                    if (ScanUtil.isNonAggregateScan(scan) && plan.getContext().getAggregationManager().isEmpty()) {
                         // For non aggregate queries if we get stale region boundary exception we can
                         // continue scanning from the next value of lasted fetched result.
                         Scan newScan = ScanUtil.newScan(scan);
                         newScan.withStartRow(newScan.getAttribute(SCAN_ACTUAL_START_ROW));
-                        if(lastTuple != null) {
+                        if (lastTuple != null) {
                             lastTuple.getKey(ptr);
                             byte[] startRowSuffix = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                            if(ScanUtil.isLocalIndex(newScan)) {
+                            if (ScanUtil.isLocalIndex(newScan)) {
                                 // If we just set scan start row suffix then server side we prepare
                                 // actual scan boundaries by prefixing the region start key.
                                 newScan.setAttribute(SCAN_START_ROW_SUFFIX, ByteUtil.nextKey(startRowSuffix));
