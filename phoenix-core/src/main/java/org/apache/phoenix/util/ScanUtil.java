@@ -492,7 +492,7 @@ public class ScanUtil {
                 // But if last field of rowKey is variable length and also DESC, the trailing 0xFF
                 // is not removed when stored in HBASE, so for such case, we should not set
                 // lastInclusiveUpperSingleKey back to false.
-                if(sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
+                if (sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
                     lastInclusiveUpperSingleKey &= (fieldIndex + slotSpan[i]) < schema.getMaxFields()-1;
                 }
             }
@@ -694,10 +694,10 @@ public class ScanUtil {
     public static void setupLocalIndexScan(Scan scan) {
         byte[] prefix = scan.getStartRow().length == 0 ? new byte[scan.getStopRow().length]: scan.getStartRow();
         int prefixLength = scan.getStartRow().length == 0? scan.getStopRow().length: scan.getStartRow().length;
-        if(scan.getAttribute(SCAN_START_ROW_SUFFIX)!=null) {
+        if (scan.getAttribute(SCAN_START_ROW_SUFFIX) != null) {
             scan.withStartRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_START_ROW_SUFFIX), 0, prefix, prefixLength));
         }
-        if(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)!=null) {
+        if (scan.getAttribute(SCAN_STOP_ROW_SUFFIX) != null) {
             scan.withStopRow(ScanRanges.prefixKey(scan.getAttribute(SCAN_STOP_ROW_SUFFIX), 0, prefix, prefixLength));
         }
     }
@@ -719,7 +719,7 @@ public class ScanUtil {
      * @param newScan
      */
     public static void setLocalIndexAttributes(Scan newScan, int keyOffset, byte[] regionStartKey, byte[] regionEndKey, byte[] startRowSuffix, byte[] stopRowSuffix) {
-        if(ScanUtil.isLocalIndex(newScan)) {
+        if (ScanUtil.isLocalIndex(newScan)) {
              newScan.setAttribute(SCAN_ACTUAL_START_ROW, regionStartKey);
              newScan.withStartRow(regionStartKey);
              newScan.withStopRow(regionEndKey);
@@ -795,7 +795,7 @@ public class ScanUtil {
     public static int getRowKeyPosition(int[] slotSpan, int slotPosition) {
         int offset = 0;
 
-        for(int i = 0; i < slotPosition; i++) {
+        for (int i = 0; i < slotPosition; i++) {
             offset += slotSpan[i];
         }
 
@@ -1121,6 +1121,7 @@ public class ScanUtil {
             return null;
         }
     }
+
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
@@ -1149,6 +1150,9 @@ public class ScanUtil {
                 return;
             }
             TransformMaintainer indexMaintainer = indexTable.getTransformMaintainer(oldTable, phoenixConnection);
+            scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
+                    indexTable.getTableName().getBytes());
+            ScanUtil.annotateScanWithMetadataAttributes(oldTable, scan);
             // This is the path where we are reading from the newly transformed table
             if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -1185,6 +1189,9 @@ public class ScanUtil {
                 return;
             }
 
+            scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
+                    indexTable.getTableName().getBytes());
+            ScanUtil.annotateScanWithMetadataAttributes(dataTable, scan);
             if (scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD) == null) {
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(indexTable), phoenixConnection);
@@ -1289,20 +1296,25 @@ public class ScanUtil {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
             addEmptyColumnToScan(scan, emptyCF, emptyCQ);
         }
+
+        setScanAttributeForPaging(scan, phoenixConnection);
+    }
+
+    public static void setScanAttributeForPaging(Scan scan, PhoenixConnection phoenixConnection) {
         if (phoenixConnection.getQueryServices().getProps().getBoolean(
                 QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
                 QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)) {
             long pageSizeMs = phoenixConnection.getQueryServices().getProps()
                     .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
             if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the the server page size to make sure that the HBase
+                // Use the half of the HBase RPC timeout value as the server page size to make sure that the HBase
                 // region server will be able to send a heartbeat message to the client before the client times out
                 pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
             }
+
             scan.setAttribute(BaseScannerRegionObserver.SERVER_PAGE_SIZE_MS, Bytes.toBytes(Long.valueOf(pageSizeMs)));
         }
-
     }
 
     public static void getDummyResult(byte[] rowKey, List<Cell> result) {
@@ -1357,7 +1369,7 @@ public class ScanUtil {
 
     public static boolean isDummy(Tuple tuple) {
         if (tuple instanceof ResultTuple) {
-            isDummy(((ResultTuple) tuple).getResult());
+            return isDummy(((ResultTuple) tuple).getResult());
         }
         return false;
     }
@@ -1407,7 +1419,7 @@ public class ScanUtil {
      * @param table Table metadata for the target table/view of the write
      * @param scan Scan to trigger the server-side coproc
      */
-    public static void setWALAnnotationAttributes(PTable table, Scan scan) {
+    public static void annotateScanWithMetadataAttributes(PTable table, Scan scan) {
         if (table.getTenantId() != null) {
             scan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
                     table.getTenantId().getBytes());
@@ -1430,6 +1442,103 @@ public class ScanUtil {
             }
         }
     }
+
+    /**
+     * Annotate Mutation with required metadata attributes (tenant id, schema name, logical table
+     * name, table type, last ddl timestamp) from the client side.
+     *
+     * @param tenantId tenant id.
+     * @param schemaName schema name.
+     * @param logicalTableName logical table name.
+     * @param tableType table type.
+     * @param timestamp last ddl timestamp.
+     * @param mutation mutation object to attach attributes.
+     */
+    public static void annotateMutationWithMetadataAttributes(byte[] tenantId,
+                                                              byte[] schemaName,
+                                                              byte[] logicalTableName,
+                                                              byte[] tableType,
+                                                              byte[] timestamp,
+                                                              Mutation mutation) {
+        if (tenantId != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+                    tenantId);
+        }
+        mutation.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                schemaName);
+        mutation.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                logicalTableName);
+        mutation.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                tableType);
+        if (timestamp != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    timestamp);
+        }
+    }
+
+    /**
+     * Annotate Scan with required metadata attributes (tenant id, schema name, logical table
+     * name, table type, last ddl timestamp), from old scan object to new scan object.
+     *
+     * @param oldScan old scan object.
+     * @param newScan new scan object.
+     */
+    public static void annotateScanWithMetadataAttributes(Scan oldScan, Scan newScan) {
+        byte[] tenantId =
+                oldScan.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString());
+        byte[] schemaName =
+                oldScan.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+        byte[] logicalTableName = oldScan.getAttribute(
+                MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
+        byte[] tableType =
+                oldScan.getAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString());
+        byte[] timestamp =
+                oldScan.getAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString());
+        if (tenantId != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(), tenantId);
+        }
+        if (schemaName != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                    schemaName);
+        }
+        if (logicalTableName != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                    logicalTableName);
+        }
+        if (tableType != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                    tableType);
+        }
+        if (timestamp != null) {
+            newScan.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    timestamp);
+        }
+    }
+
+    /**
+     * Annotate Mutation with required metadata attributes (tenant id, schema name, logical table
+     * name, table type, last ddl timestamp), derived from the given PTable object.
+     *
+     * @param table table object to derive metadata attributes from.
+     * @param mutation mutation object.
+     */
+    public static void annotateMutationWithMetadataAttributes(PTable table, Mutation mutation) {
+        if (table.getTenantId() != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+                    table.getTenantId().getBytes());
+        }
+        mutation.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+                table.getSchemaName().getBytes());
+        mutation.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+                table.getTableName().getBytes());
+        mutation.setAttribute(MutationState.MutationMetadataType.TABLE_TYPE.toString(),
+                table.getType().getValue().getBytes());
+        if (table.getLastDDLTimestamp() != null) {
+            mutation.setAttribute(MutationState.MutationMetadataType.TIMESTAMP.toString(),
+                    Bytes.toBytes(table.getLastDDLTimestamp()));
+        }
+    }
+
     public static PageFilter removePageFilterFromFilterList(FilterList filterList) {
         Iterator<Filter> filterIterator = filterList.getFilters().iterator();
         while (filterIterator.hasNext()) {

@@ -704,7 +704,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey) throws IOException {
         // in order to check the overlap/inconsistencies bad region info, we have to make sure
         // the current endKey always increasing(compare the previous endKey)
-        if (Bytes.compareTo(regionLocation.getRegion().getEndKey(), currentKey) <= 0
+        // note :- currentKey is the previous regions endKey
+        if ((Bytes.compareTo(regionLocation.getRegion().getStartKey(), currentKey) != 0
+                || Bytes.compareTo(regionLocation.getRegion().getEndKey(), currentKey) <= 0)
                 && !Bytes.equals(currentKey, HConstants.EMPTY_START_ROW)
                 && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW)) {
             GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();

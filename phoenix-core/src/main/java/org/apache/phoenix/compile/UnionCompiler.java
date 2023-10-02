@@ -90,7 +90,7 @@ public class UnionCompiler {
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         for (int i = 0; i < plan.getProjector().getColumnCount(); i++) {
             ColumnProjector colProj = plan.getProjector().getColumnProjector(i);
-            String name = selectNodes == null ? colProj.getName() : selectNodes.get(i).getAlias();
+            String name = selectNodes == null ? colProj.getLabel() : selectNodes.get(i).getAlias();
             PName colName = PNameFactory.newName(name);
             PColumnImpl projectedColumn = new PColumnImpl(PNameFactory.newName(name),
                 UNION_FAMILY_NAME, targetTypes.get(i).getType(), targetTypes.get(i).getMaxLength(),

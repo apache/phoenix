@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
@@ -57,6 +58,20 @@ public class PostIndexDDLCompilerTest extends BaseConnectionlessQueryTest {
             PostIndexDDLCompiler compiler = new PostIndexDDLCompiler(pConn, new TableRef(pDataTable));
             MutationPlan plan = compiler.compile(pConn.getTable(new PTableKey(null, "IDX")));
             assertEquals("T", plan.getQueryPlan().getTableRef().getTable().getTableName().getString());
+        }
+    }
+
+    @Test
+    public void testCreateTableWithNoVerify() throws SQLException {
+        String ddl = "CREATE TABLE A (K VARCHAR PRIMARY KEY DESC) NOVERIFY";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+            MutationPlan plan = stmt.compileMutation(ddl);
+            MutationState state = plan.execute();
+
+            assertEquals("CREATE TABLE\n", plan.getExplainPlan().toString());
+            assertEquals(0, state.getMaxSize());
+            assertEquals(0, state.getMaxSizeBytes());
         }
     }
 

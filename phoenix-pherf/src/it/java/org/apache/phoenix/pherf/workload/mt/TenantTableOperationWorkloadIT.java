@@ -32,6 +32,7 @@ import org.apache.phoenix.pherf.workload.mt.generators.TenantLoadEventGeneratorF
 import org.apache.phoenix.pherf.workload.mt.MultiTenantTestUtils.TestConfigAndExpectations;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -67,6 +68,11 @@ public class TenantTableOperationWorkloadIT extends ParallelStatsDisabledIT {
         testCases.add(new Object[] { "UNIFORM" });
         testCases.add(new Object[] { "SEQUENTIAL" });
         return testCases;
+    }
+
+    @BeforeClass
+    public static synchronized void setUrl() {
+        PhoenixUtil.setZookeeper(MultiTenantTestUtils.getZookeeperFromUrl(url));
     }
 
     @Before

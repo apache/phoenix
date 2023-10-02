@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow;
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.coprocessor.generated.MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
@@ -83,6 +84,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
+import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -99,15 +101,23 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
@@ -123,9 +133,11 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.TagUtil;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -142,10 +154,12 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
+import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.security.User;
+import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -173,6 +187,7 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
+import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -251,6 +266,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PhoenixStopWatch;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -267,6 +283,7 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
+import com.google.protobuf.ServiceException;
 
 /**
  * Endpoint co-processor through which all Phoenix metadata mutations flow.
@@ -309,11 +326,10 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     // Column to track tables that have been upgraded based on PHOENIX-2067
     public static final String ROW_KEY_ORDER_OPTIMIZABLE = "ROW_KEY_ORDER_OPTIMIZABLE";
     public static final byte[] ROW_KEY_ORDER_OPTIMIZABLE_BYTES = Bytes.toBytes(ROW_KEY_ORDER_OPTIMIZABLE);
-
-    private static final byte[] CHILD_TABLE_BYTES = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
-    private static final byte[] PHYSICAL_TABLE_BYTES =
-            new byte[]{PTable.LinkType.PHYSICAL_TABLE.getSerializedValue()};
-
+    public static final String PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS =
+            "phoenix.metadata.cache.invalidation.timeoutMs";
+    // Default to 10 seconds.
+    public static final long PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT = 10 * 1000;
     // KeyValues for Table
     private static final Cell TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
@@ -587,7 +603,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean allowSplittableSystemCatalogRollback;
 
     private MetricsMetadataSource metricsSource;
-
+    private long metadataCacheInvalidationTimeoutMs;
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
     }
@@ -623,7 +639,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
-
+        this.metadataCacheInvalidationTimeoutMs = config.getLong(
+                PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS,
+                PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT);
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -2531,6 +2549,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PTable parentTable = null;
         //if this is a view, we need to get the columns from its parent table / view
         if (newTable != null && newTable.getType().equals(PTableType.VIEW)) {
+            // TODO why creating generic connection and not getConnectionOnServer?
             try (PhoenixConnection conn = (PhoenixConnection)
                 ConnectionUtil.getInputConnection(env.getConfiguration())) {
                 newTable = ViewUtil.addDerivedColumnsAndIndexesFromAncestors(conn, newTable);
@@ -2752,7 +2771,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (parentLockKey != null) {
                     acquireLock(region, parentLockKey, locks);
                 }
-
+                invalidateServerMetadataCache(tenantIdBytes, schemaName, tableOrViewName);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 result = doDropTable(lockKey, tenantIdBytes, schemaName, tableOrViewName,
                         parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata,
@@ -3165,10 +3184,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (mutationResult.isPresent()) {
                     return mutationResult.get();
                 }
-
+                // We take a write row lock for tenantId, schemaName, tableOrViewName
                 acquireLock(region, key, locks);
+                // Invalidate the cache from all the regionservers.
+                invalidateServerMetadataCache(tenantId, schemaName, tableOrViewName);
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
-                List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
+                List<ImmutableBytesPtr> invalidateList = new ArrayList<>();
                 invalidateList.add(cacheKey);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
                 if (failConcurrentMutateAddColumnOneTimeForTesting) {
@@ -3417,6 +3438,167 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     }
 
     /**
+     * Invalidate metadata cache from all region servers for the given tenant and table name.
+     * @param tenantId
+     * @param schemaName
+     * @param tableOrViewName
+     * @throws Throwable
+     */
+    private void invalidateServerMetadataCache(byte[] tenantId, byte[]schemaName,
+            byte[] tableOrViewName) throws Throwable {
+        Configuration conf = env.getConfiguration();
+        String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
+        if (value == null
+                || !value.contains(PhoenixRegionServerEndpoint.class.getName())) {
+            // PhoenixRegionServerEndpoint is not loaded. We don't have to invalidate the cache.
+            LOGGER.info("Skip invalidating server metadata cache for tenantID: {},"
+                            + " schema name: {}, table Name: {} since PhoenixRegionServerEndpoint"
+                            + " is not loaded", Bytes.toString(tenantId),
+                    Bytes.toString(schemaName), Bytes.toString(tableOrViewName));
+            return;
+        }
+        Properties properties = new Properties();
+        // Skip checking of system table existence since the system tables should have created
+        // by now.
+        properties.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
+        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
+                env.getConfiguration()).unwrap(PhoenixConnection.class);
+             Admin admin = connection.getQueryServices().getAdmin()) {
+            // This will incur an extra RPC to the master. This RPC is required since we want to
+            // get current list of regionservers.
+            Collection<ServerName> serverNames = admin.getRegionServers(true);
+            invalidateServerMetadataCacheWithRetries(admin, serverNames, tenantId, schemaName,
+                    tableOrViewName, false);
+        }
+    }
+
+    /**
+     * Invalidate metadata cache on all regionservers with retries for the given tenantID
+     * and tableName with retries. We retry once before failing the operation.
+     *
+     * @param admin
+     * @param serverNames
+     * @param tenantId
+     * @param schemaName
+     * @param tableOrViewName
+     * @param isRetry
+     * @throws Throwable
+     */
+    private void invalidateServerMetadataCacheWithRetries(Admin admin,
+            Collection<ServerName> serverNames, byte[] tenantId, byte[] schemaName,
+            byte[] tableOrViewName, boolean isRetry) throws Throwable {
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
+        String tenantIDStr = Bytes.toString(tenantId);
+        LOGGER.info("Invalidating metadata cache for tenantID: {}, tableName: {} for"
+                        + " region servers: {}, isRetry: {}", tenantIDStr, fullTableName,
+                serverNames, isRetry);
+        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest request =
+                getRequest(tenantId, schemaName, tableOrViewName);
+        // TODO Do I need my own executor or can I re-use QueryServices#Executor
+        //  since it is supposed to be used only for scans according to documentation?
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        Map<Future, ServerName> map = new HashMap<>();
+        for (ServerName serverName : serverNames) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    PhoenixStopWatch innerWatch = new PhoenixStopWatch().start();
+                    // TODO Using the same as ServerCacheClient but need to think if we need some
+                    // special controller for invalidating cache since this is in the path of
+                    // DDL operations. We also need to think of we need separate RPC handler
+                    // threads for this?
+                    ServerRpcController controller = new ServerRpcController();
+                    RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
+                            service = RegionServerEndpointProtos.RegionServerEndpointService
+                            .newBlockingStub(admin.coprocessorService(serverName));
+                    LOGGER.info("Sending invalidate metadata cache for tenantID: {}, tableName: {}"
+                            + " to region server: {}", tenantIDStr, fullTableName, serverName);
+                    // The timeout for this particular request is managed by config parameter:
+                    // hbase.rpc.timeout. Even if the future times out, this runnable can be in
+                    // RUNNING state and will not be interrupted.
+                    service.invalidateServerMetadataCache(controller, request);
+                    LOGGER.info("Invalidating metadata cache for tenantID: {}, tableName: {}"
+                            + " on region server: {} completed successfully and it took {} ms",
+                            tenantIDStr, fullTableName, serverName,
+                            innerWatch.stop().elapsedMillis());
+                    // TODO Create a histogram metric for time taken for invalidating the cache.
+                } catch (ServiceException se) {
+                    LOGGER.error("Invalidating metadata cache for tenantID: {}, tableName: {}"
+                                    + " failed for regionserver {}", tenantIDStr, fullTableName,
+                            serverName, se);
+                    IOException ioe = ServerUtil.parseServiceException(se);
+                    throw new CompletionException(ioe);
+                }
+            });
+            futures.add(future);
+            map.put(future, serverName);
+        }
+
+        // Here we create one master like future which tracks individual future
+        // for each region server.
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.toArray(new CompletableFuture[0]));
+        try {
+            allFutures.get(metadataCacheInvalidationTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (Throwable t) {
+            List<ServerName> failedServers = getFailedServers(futures, map);
+            LOGGER.error("Invalidating metadata cache for tenantID: {}, tableName: {} failed for "
+                    + "region servers: {}", tenantIDStr, fullTableName, failedServers, t);
+            if (isRetry) {
+                // If this is a retry attempt then just fail the operation.
+                if (allFutures.isCompletedExceptionally()) {
+                    if (t instanceof ExecutionException) {
+                        t = t.getCause();
+                    }
+                }
+                throw t;
+            } else {
+                // This is the first attempt, we can retry once.
+                // Indicate that this is a retry attempt.
+                invalidateServerMetadataCacheWithRetries(admin, failedServers,
+                        tenantId, schemaName, tableOrViewName, true);
+            }
+        }
+    }
+
+    /*
+        Get the list of regionservers that failed the invalidateCache rpc.
+     */
+    private List<ServerName> getFailedServers(List<CompletableFuture<Void>> futures,
+                                              Map<Future, ServerName> map) {
+        List<ServerName> failedServers = new ArrayList<>();
+        for (CompletableFuture completedFuture : futures) {
+            if (completedFuture.isDone() == false) {
+                // If this task is still running, cancel it and keep in retry list.
+                ServerName sn = map.get(completedFuture);
+                failedServers.add(sn);
+                // Even though we cancel this future but it doesn't interrupt the executing thread.
+                completedFuture.cancel(true);
+            } else if (completedFuture.isCompletedExceptionally()
+                    || completedFuture.isCancelled()) {
+                // This means task is done but completed with exception
+                // or was canceled. Add it to retry list.
+                ServerName sn = map.get(completedFuture);
+                failedServers.add(sn);
+            }
+        }
+        return failedServers;
+    }
+
+    private RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest getRequest(
+            byte[] tenantID, byte[] schemaName, byte[] tableOrViewName) {
+        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.Builder builder =
+                RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.newBuilder();
+
+        RegionServerEndpointProtos.InvalidateServerMetadataCache.Builder innerBuilder
+                = RegionServerEndpointProtos.InvalidateServerMetadataCache.newBuilder();
+        innerBuilder.setTenantId(ByteStringer.wrap(tenantID));
+        innerBuilder.setSchemaName(ByteStringer.wrap(schemaName));
+        innerBuilder.setTableName(ByteStringer.wrap(tableOrViewName));
+        builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
+        return builder.build();
+    }
+
+    /**
      * Removes the table from the server side cache
      */
     private void clearRemoteTableFromCache(long clientTimeStamp, byte[] schemaName, byte[] tableName) throws SQLException {
@@ -3657,8 +3839,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     public void dropColumn(RpcController controller, final DropColumnRequest request,
                            RpcCallback<MetaDataResponse> done) {
         List<Mutation> tableMetaData = null;
-        final List<byte[]> tableNamesToDelete = Lists.newArrayList();
-        final List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
         try {
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
@@ -3978,6 +4158,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     done.run(builder.build());
                     return;
                 }
+                invalidateServerMetadataCache(tenantId, schemaName, tableName);
                 getCoprocessorHost().preIndexUpdate(Bytes.toString(tenantId),
                         SchemaUtil.getTableName(schemaName, tableName),
                         TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
@@ -4066,7 +4247,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         byte[] count;
                         try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
                             List<Cell> countCells = new ArrayList<>();
-                            scanner.next(countCells);
+                            countScanner.next(countCells);
                             count = Result.create(countCells)
                                     .getValue(TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);

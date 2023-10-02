@@ -2072,8 +2072,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             String query = "SELECT f1.*, v4 FROM t";
             ResultSetMetaData rsMeta = statement.executeQuery(query).getMetaData();
             assertEquals("V1", rsMeta.getColumnName(1));
+            assertEquals("V1", rsMeta.getColumnLabel(1));
             assertEquals("V2", rsMeta.getColumnName(2));
+            assertEquals("V2", rsMeta.getColumnLabel(2));
             assertEquals("V4", rsMeta.getColumnName(3));
+            assertEquals("V4", rsMeta.getColumnLabel(3));
         } finally {
             statement.execute("DROP TABLE IF EXISTS t");
             conn.close();
@@ -2092,7 +2095,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             String query = "SELECT f1.*, v4 FROM s.t";
             ResultSetMetaData rsMeta = statement.executeQuery(query).getMetaData();
             assertEquals("V1", rsMeta.getColumnName(1));
+            assertEquals("V1", rsMeta.getColumnLabel(1));
             assertEquals("V2", rsMeta.getColumnName(2));
+            assertEquals("V2", rsMeta.getColumnLabel(2));
+            assertEquals("V4", rsMeta.getColumnLabel(3));
             assertEquals("V4", rsMeta.getColumnName(3));
         } finally {
             statement.execute("DROP TABLE IF EXISTS s.t");

@@ -23,6 +23,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -30,12 +31,16 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -48,6 +53,9 @@ import java.util.Random;
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
@@ -59,6 +67,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
     private final long NEVER = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCacheTest.class);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -199,6 +208,225 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     null, Bytes.toBytes(tenantViewNameStr));
             verify(spyCQS, times(2)).getTable(
                     any(), any(),  eq(tenantViewNameBytes), anyLong(), anyLong());
+        }
+    }
+  
+    /**
+     * Make sure we are invalidating the cache for table with no tenant connection, no schema name
+     * and valid table name.
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateCacheForBaseTable() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableNameStr =  generateUniqueName();
+        PTable pTable;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = getCreateTableStmt(tableNameStr);
+            // Create a test table.
+            conn.createStatement().execute(ddl);
+            pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
+            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            // Override the connection to use in ServerMetadataCache
+            cache.setConnectionForTesting(conn);
+            byte[] tableName = Bytes.toBytes(tableNameStr);
+            long lastDDLTimestampFromCache = cache.getLastDDLTimestampForTable(
+                    null, null, tableName);
+            assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
+            // Invalidate the cache for this table.
+            cache.invalidate(null, null, tableName);
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableName));
+        }
+    }
+  
+    /**
+     * Make sure we are invalidating the cache for table with no tenant connection,
+     * valid schema name and table name.
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateCacheForBaseTableWithSchemaName() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String schemaName = generateUniqueName();
+        String tableName =  generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        PTable pTable;
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = getCreateTableStmt(fullTableName);
+            // Create a test table.
+            conn.createStatement().execute(ddl);
+            pTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            // Override the connection to use in ServerMetadataCache
+            cache.setConnectionForTesting(conn);
+            byte[] tableNameBytes = Bytes.toBytes(fullTableName);
+            long lastDDLTimestampFromCache = cache.getLastDDLTimestampForTable(
+                    null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
+            assertEquals(pTable.getLastDDLTimestamp().longValue(), lastDDLTimestampFromCache);
+            // Invalidate the cache for this table.
+            cache.invalidate(null, Bytes.toBytes(schemaName), Bytes.toBytes(tableName));
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null,
+                    Bytes.toBytes(schemaName), Bytes.toBytes(tableName)));
+        }
+    }
+  
+  /**
+     * Make sure we are invalidating the cache for view with tenant connection.
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateCacheForTenantView() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableNameStr = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = getCreateTableStmt(tableNameStr);
+            // Create a test table.
+            conn.createStatement().execute(ddl);
+        }
+        String tenantId = "T_" + generateUniqueName();
+        Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        PTable tenantViewTable;
+        // Create view on table.
+        String whereClause = " WHERE COL1 = 1000";
+        String tenantViewNameStr = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), tenantProps)) {
+            conn.createStatement().execute(getCreateViewStmt(tenantViewNameStr,
+                    tableNameStr, whereClause));
+            tenantViewTable = PhoenixRuntime.getTableNoCache(conn, tenantViewNameStr);
+            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            // Override the connection to use in ServerMetadataCache
+            cache.setConnectionForTesting(conn);
+            byte[] tenantIDBytes = Bytes.toBytes(tenantId);
+            byte[] tenantViewNameBytes = Bytes.toBytes(tenantViewNameStr);
+            long lastDDLTimestampFromCache = cache.getLastDDLTimestampForTable(
+                    tenantIDBytes, null, tenantViewNameBytes);
+            assertEquals(tenantViewTable.getLastDDLTimestamp().longValue(),
+                    lastDDLTimestampFromCache);
+            // Invalidate the cache for this table.
+            cache.invalidate(tenantIDBytes, null, tenantViewNameBytes);
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(
+                    tenantIDBytes, null, tenantViewNameBytes));
+        }
+    }
+
+    /**
+     * Make sure we are invalidating the cache for table with no tenant connection, no schema name
+     * and valid table name when we run alter statement.
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateCacheForBaseTableWithAlterStatement() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableNameStr =  generateUniqueName();
+        byte[] tableNameBytes = Bytes.toBytes(tableNameStr);
+        PTable pTable;
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = getCreateTableStmt(tableNameStr);
+            // Create a test table.
+            conn.createStatement().execute(ddl);
+            pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
+            long lastDDLTimestamp = pTable.getLastDDLTimestamp();
+            assertEquals(lastDDLTimestamp,
+                    cache.getLastDDLTimestampForTable(null, null, tableNameBytes));
+            String alterDDLStmt = "ALTER TABLE " + tableNameStr + " SET DISABLE_WAL = true";
+            conn.createStatement().execute(alterDDLStmt);
+            // The above alter statement will invalidate the last ddl timestamp from metadata cache.
+            // Notice that we are using cache#getLastDDLTimestampForTableFromCacheOnly which will
+            // read the last ddl timestamp only from the cache and return null if not present in
+            // the cache.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableNameBytes));
+            // This will load the cache with the latest last ddl timestamp value.
+            long lastDDLTimestampAfterAlterStmt = cache.getLastDDLTimestampForTable(null,
+                    null, tableNameBytes);
+            assertNotNull(lastDDLTimestampAfterAlterStmt);
+            // Make sure that the last ddl timestamp value after ALTER statement
+            // is greater than previous one.
+            assertTrue(lastDDLTimestampAfterAlterStmt > lastDDLTimestamp);
+        }
+    }
+  
+  /**
+     * Make sure we are invalidating the cache for table with no tenant connection, no schema name
+     * and valid table name when we run drop table statement.
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateCacheForBaseTableWithDropTableStatement() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableNameStr =  generateUniqueName();
+        byte[] tableNameBytes = Bytes.toBytes(tableNameStr);
+        PTable pTable;
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = getCreateTableStmt(tableNameStr);
+            // Create a test table.
+            conn.createStatement().execute(ddl);
+            pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
+            long lastDDLTimestamp = pTable.getLastDDLTimestamp();
+            assertEquals(lastDDLTimestamp,
+                    cache.getLastDDLTimestampForTable(null, null, tableNameBytes));
+            assertNotNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null,
+                    tableNameBytes));
+            String alterDDLStmt = "DROP TABLE " + tableNameStr;
+            conn.createStatement().execute(alterDDLStmt);
+            // The above alter statement will invalidate the last ddl timestamp from metadata cache.
+            // Notice that we are using cache#getLastDDLTimestampForTableFromCacheOnly which will
+            // read the last ddl timestamp only from the cache and return null if not present in
+            // the cache.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableNameBytes));
+        }
+    }
+
+    /**
+     * Make sure we are invalidating the cache for table with no tenant connection, no schema name
+     * and valid table name when we run update index statement.
+     * @throws Exception
+     */
+    @Test
+    public void testInvalidateCacheForBaseTableWithUpdateIndexStatement() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableNameStr = "TBL_" + generateUniqueName();
+        String indexNameStr = "IND_" + generateUniqueName();
+        byte[] indexNameBytes = Bytes.toBytes(indexNameStr);
+        PTable indexTable;
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = getCreateTableStmt(tableNameStr);
+            // Create a test table.
+            conn.createStatement().execute(ddl);
+            String indexDDLStmt = "CREATE INDEX " + indexNameStr + " ON " + tableNameStr + "(col1)";
+            conn.createStatement().execute(indexDDLStmt);
+            TestUtil.waitForIndexState(conn, indexNameStr, PIndexState.ACTIVE);
+            indexTable = PhoenixRuntime.getTableNoCache(conn, indexNameStr);
+            long lastDDLTimestamp = indexTable.getLastDDLTimestamp();
+            assertEquals(lastDDLTimestamp,
+                    cache.getLastDDLTimestampForTable(null, null, indexNameBytes));
+            Thread.sleep(1);
+            // Disable an index. This should change the LAST_DDL_TIMESTAMP.
+            String disableIndexDDL = "ALTER INDEX " + indexNameStr + " ON " + tableNameStr
+                    + " DISABLE";
+            conn.createStatement().execute(disableIndexDDL);
+            TestUtil.waitForIndexState(conn, indexNameStr, PIndexState.DISABLE);
+            // The above alter index statement will invalidate the last ddl timestamp from metadata
+            // cache. Notice that we are using cache#getLastDDLTimestampForTableFromCacheOnly which
+            // will read the last ddl timestamp only from the cache and return null if not present
+            // in the cache.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, indexNameBytes));
+            // This will load the cache with the latest last ddl timestamp value.
+            long lastDDLTimestampAfterUpdateIndexStmt = cache.getLastDDLTimestampForTable(null,
+                    null, indexNameBytes);
+            assertNotNull(lastDDLTimestampAfterUpdateIndexStmt);
+            // Make sure that the last ddl timestamp value after ALTER statement
+            // is greater than previous one.
+            assertTrue(lastDDLTimestampAfterUpdateIndexStmt > lastDDLTimestamp);
         }
     }
 
@@ -383,7 +611,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Assert.assertTrue("SQLException was not thrown when last ddl timestamp validation encountered errors twice.", e instanceof SQLException);
         }
     }
-
+  
+    
     /**
      * Client-1 creates a table, 2 level of views on it and alters the first level view.
      * Client-2 queries the second level view, verify that there were 3 cache updates in client-2,
@@ -482,6 +711,12 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     private void alterTableAddColumn(Connection conn, String tableName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER TABLE " + tableName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
+    }
+
+    private String getCreateTableStmt(String tableName) {
+        return   "CREATE TABLE " + tableName +
+                "  (a_string varchar not null, col1 integer" +
+                "  CONSTRAINT pk PRIMARY KEY (a_string)) ";
     }
 
     private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {

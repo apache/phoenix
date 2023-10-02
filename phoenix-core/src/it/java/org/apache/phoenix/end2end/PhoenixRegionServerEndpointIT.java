@@ -43,7 +43,6 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -54,8 +53,6 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(REGIONSERVER_COPROCESSOR_CONF_KEY,
-                PhoenixRegionServerEndpoint.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 

@@ -40,6 +40,7 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
@@ -79,11 +80,16 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.4.0 2.4 2.5</hbase.profile.list>
+    <hbase.profile.list>2.4.0 2.4 2.5.0 2.5</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.16</hbase-2.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.3-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
+    <hbase-2.5.runtime.version>2.5.5-hadoop3</hbase-2.5.runtime.version>
+
+    <compileSource>1.8</compileSource>
+    <maven.compiler.source>${compileSource}</maven.compiler.source>
+    <maven.compiler.target>${compileSource}</maven.compiler.target>
 
     <!-- General Properties -->
     <antlr-input.dir>src/main/antlr3</antlr-input.dir>
@@ -121,11 +127,11 @@
     <omid.version>1.1.0</omid.version>
     <stream.version>2.9.5</stream.version>
     <icu4j.version>72.1</icu4j.version>
-    <guice.version>4.0</guice.version>
+    <guice.version>5.1.0</guice.version>
     <zookeeper.version>3.5.7</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
-    <jetty.version>9.4.51.v20230217</jetty.version>
+    <jetty.version>9.4.52.v20230823</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
@@ -155,6 +161,41 @@
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
     <!-- Empty argument when code coverage is deactivated -->
     <jacocoArgLine></jacocoArgLine>
+
+    <!-- JVM version dependent JVM options for running tests. Keep mostly in sync with HBase-->
+    <surefire.Xmx>2200m</surefire.Xmx>
+
+    <phoenix-surefire.argLine>-enableassertions -Xmx${surefire.Xmx}
+      -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true
+      -Djava.awt.headless=true -Djdk.net.URLClassPath.disableClassPathURLCheck=true
+      -Dorg.apache.hbase.thirdparty.io.netty.leakDetection.level=advanced
+      -Dio.netty.eventLoopThreads=3 -Duser.timezone="America/Los_Angeles"
+      -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/
+      "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}"
+    </phoenix-surefire.argLine>
+    <phoenix-surefire.jdk8.tuning.flags>
+        -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC
+        -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled
+        -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68
+    </phoenix-surefire.jdk8.tuning.flags>
+    <phoenix-surefire.jdk11.flags>-Dorg.apache.hbase.thirdparty.io.netty.tryReflectionSetAccessible=true
+      --add-modules jdk.unsupported
+      --add-opens java.base/java.nio=ALL-UNNAMED
+      --add-opens java.base/sun.nio.ch=ALL-UNNAMED
+      --add-opens java.base/java.lang=ALL-UNNAMED
+      --add-opens java.base/jdk.internal.ref=ALL-UNNAMED
+      --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+      --add-opens java.base/java.util=ALL-UNNAMED
+      --add-opens java.base/java.util.concurrent=ALL-UNNAMED
+      --add-exports java.base/jdk.internal.misc=ALL-UNNAMED
+      --add-exports java.security.jgss/sun.security.krb5=ALL-UNNAMED</phoenix-surefire.jdk11.flags>
+    <phoenix-surefire.jdk11.tuning.flags>
+        ${phoenix-surefire.jdk8.tuning.flags}
+    </phoenix-surefire.jdk11.tuning.flags>
+    <phoenix-surefire.jdk17.flags>--add-opens java.base/jdk.internal.util.random=ALL-UNNAMED</phoenix-surefire.jdk17.flags>
+    <phoenix-surefire.jdk17.tuning.flags></phoenix-surefire.jdk17.tuning.flags>
+    <!-- Surefire argLine defaults for Linux + JDK8 -->
+    <argLine>${phoenix-surefire.argLine} ${phoenix-surefire.jdk8.tuning.flags} @{jacocoArgLine}</argLine>
 
     <!-- Set default encoding so multi-byte tests work correctly on the Mac -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -192,10 +233,6 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <configuration>
-            <source>1.8</source>
-            <target>1.8</target>
-          </configuration>
         </plugin>
         <plugin>
           <groupId>org.antlr</groupId>
@@ -328,7 +365,6 @@
               <id>ParallelStatsEnabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
               <goals>
@@ -340,7 +376,6 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
-                <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -352,7 +387,6 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
-                 <argLine>@{jacocoArgLine} -Duser.timezone="America/Los_Angeles" -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
@@ -574,8 +608,6 @@
         <configuration>
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
-          <argLine>@{jacocoArgLine} -enableassertions -Xmx2250m -Duser.timezone="America/Los_Angeles"
-            -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/</argLine>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
@@ -658,6 +690,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.5.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.5</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -669,6 +706,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -704,6 +746,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.5.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -1082,10 +1129,6 @@
         <version>${omid.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1112,10 +1155,6 @@
             <artifactId>testng</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1129,10 +1168,6 @@
           <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-io</groupId>
@@ -1163,10 +1198,6 @@
             <artifactId>testng</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1194,10 +1225,6 @@
             <artifactId>testng</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
@@ -1212,10 +1239,6 @@
         <artifactId>omid-hbase-commit-table</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>com.google.inject</groupId>
-            <artifactId>guice</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
@@ -1610,7 +1633,7 @@
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
-      <id>phoenix-hbase-compat-2.5.0</id>
+      <id>phoenix-hbase-compat-2.5.4</id>
       <activation>
         <property>
           <name>hbase.profile</name>
@@ -1619,10 +1642,25 @@
       </activation>
       <properties>
         <hbase.profile>2.5</hbase.profile>
-        <hbase.compat.version>2.5.0</hbase.compat.version>
+        <hbase.compat.version>2.5.4</hbase.compat.version>
         <hadoop.version>3.2.3</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-2.5.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.5.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.5.0</hbase.profile>
+        <hbase.compat.version>2.5.0</hbase.compat.version>
+        <hadoop.version>3.2.3</hadoop.version>
+        <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1814,6 +1852,38 @@
       </activation>
       <properties>
         <protoc.arch>osx-x86_64</protoc.arch>
+      </properties>
+    </profile>
+    <profile>
+      <id>build-with-jdk8</id>
+      <activation>
+        <jdk>[1.8,11)</jdk>
+      </activation>
+    </profile>
+    <!-- See PHOENIX-6997 when building with with Java9+ -->
+    <profile>
+      <id>build-with-jdk11</id>
+      <activation>
+        <jdk>[11,17)</jdk>
+      </activation>
+      <properties>
+        <argLine>${phoenix-surefire.jdk11.flags}
+          ${phoenix-surefire.jdk11.tuning.flags}
+          ${phoenix-surefire.argLine}
+          @{jacocoArgLine}</argLine>
+      </properties>
+    </profile>
+    <profile>
+      <id>build-with-jdk17</id>
+      <activation>
+        <jdk>[17,)</jdk>
+      </activation>
+      <properties>
+        <argLine>${phoenix-surefire.jdk11.flags}
+          ${phoenix-surefire.jdk17.flags}
+          ${phoenix-surefire.jdk17.tuning.flags}
+          ${phoenix-surefire.argLine}
+          @{jacocoArgLine}</argLine>
       </properties>
     </profile>
   </profiles>

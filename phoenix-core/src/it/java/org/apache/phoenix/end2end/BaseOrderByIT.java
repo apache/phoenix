@@ -44,15 +44,24 @@ import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Test;
 
 
 public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
+
+    Properties props;
+    @Before
+    public void setup() {
+        props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(0));
+    }
 
     @Test
     public void testMultiOrderByExpr() throws Exception {
@@ -63,7 +72,7 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
                     Lists.newArrayList("ENTITY_ID", "B_STRING"))
             .setFullTableName(tableName)
             .setOrderByClause("B_STRING, ENTITY_ID");
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             ResultSet rs = executeQuery(conn, queryBuilder);
             assertTrue (rs.next());
@@ -98,7 +107,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
                     Lists.newArrayList("ENTITY_ID", "B_STRING"))
             .setFullTableName(tableName)
             .setOrderByClause("B_STRING || ENTITY_ID DESC");
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             ResultSet rs = executeQuery(conn, queryBuilder);
             assertTrue (rs.next());
@@ -126,7 +134,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testOrderByDifferentColumns() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             String tableName = generateUniqueName();
@@ -201,7 +208,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAggregateOrderBy() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "create table " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, VAL1 VARCHAR, VAL2 INTEGER)";
@@ -262,7 +268,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testAggregateOptimizedOutOrderBy() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         String ddl = "create table " + tableName + " (K1 VARCHAR NOT NULL, K2 VARCHAR NOT NULL, VAL1 VARCHAR, VAL2 INTEGER, CONSTRAINT pk PRIMARY KEY(K1,K2))";
@@ -342,7 +347,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testNullsLastWithDesc() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String tableName=generateUniqueName();
             String sql="CREATE TABLE "+tableName+" ( "+
@@ -606,7 +610,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
     }
 
     private void doTestOrderByReverseOptimization(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String tableName=generateUniqueName();
             String sql="CREATE TABLE "+tableName+" ( "+
@@ -712,7 +715,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
     }
 
     private void doTestOrderByReverseOptimizationWithNullsLast(boolean salted,boolean desc1,boolean desc2,boolean desc3) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String tableName=generateUniqueName();
             String sql="CREATE TABLE "+tableName+" ( "+
@@ -958,7 +960,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testOrderByNullable() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String sql = "CREATE TABLE IF NOT EXISTS us_population (state CHAR(2) NOT NULL," +
                     "city VARCHAR NOT NULL, population BIGINT CONSTRAINT my_pk PRIMARY KEY" +
@@ -1000,7 +1001,6 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testPhoenix6999() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = "TBL_" + generateUniqueName();
         String descTableName = "TBL_" + generateUniqueName();
 

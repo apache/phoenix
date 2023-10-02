@@ -22,6 +22,8 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDE
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_PAUSE;
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
 
+import com.google.protobuf.ServiceException;
+
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -431,5 +433,18 @@ public class ServerUtil {
     public static boolean isHBaseNamespaceAvailable(Admin admin, String schemaName) throws IOException{
         String[] hbaseNamespaces = admin.listNamespaces();
         return Arrays.asList(hbaseNamespaces).contains(schemaName);
+    }
+
+    /**
+     * Convert ServiceException into an IOException
+     * @param se ServiceException
+     * @return IOException
+     */
+    public static IOException parseServiceException(ServiceException se) {
+        Throwable cause = se.getCause();
+        if (cause != null && cause instanceof IOException) {
+            return (IOException) cause;
+        }
+        return new IOException(se);
     }
 }
