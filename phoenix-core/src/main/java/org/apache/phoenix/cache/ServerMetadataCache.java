@@ -136,6 +136,33 @@ public class ServerMetadataCache {
         return table.getLastDDLTimestamp();
     }
 
+    /**
+     * Invalidate cache for the given tenantID, schema name and table name.
+     * Guava cache is thread safe so we don't have to synchronize it explicitly.
+     * @param tenantID tenantID
+     * @param schemaName schemaName
+     * @param tableName tableName
+     */
+    public void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName) {
+        String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
+        LOGGER.debug("Invalidating server metadata cache for tenantID: {}, full table: {}",
+                Bytes.toString(tenantID), fullTableNameStr);
+        byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
+        ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
+        lastDDLTimestampMap.invalidate(tableKeyPtr);
+    }
+
+    /**
+     * This should be used only in the tests. DO NOT use this in production code.
+     */
+    @VisibleForTesting
+    public Long getLastDDLTimestampForTableFromCacheOnly(byte[] tenantID, byte[] schemaName,
+                                                         byte[] tableName) {
+        byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
+        ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
+        return lastDDLTimestampMap.getIfPresent(tableKeyPtr);
+    }
+
     // This is used by tests to override specific connection to use.
     private Connection getConnection(Properties properties) throws SQLException {
         return connectionForTesting != null ? connectionForTesting

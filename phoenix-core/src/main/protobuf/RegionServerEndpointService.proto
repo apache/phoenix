@@ -36,7 +36,24 @@ message LastDDLTimestampRequest {
   required int64 lastDDLTimestamp = 4;
 }
 
-service RegionServerCoprocService {
+message InvalidateServerMetadataCache {
+  // Will be HConstants.EMPTY_BYTE_ARRAY if tenantID or schema name is null.
+  required bytes tenantId = 1;
+  required bytes schemaName = 2;
+  required bytes tableName = 3;
+}
+
+message InvalidateServerMetadataCacheResponse {
+}
+
+message InvalidateServerMetadataCacheRequest {
+  repeated InvalidateServerMetadataCache invalidateServerMetadataCacheRequests = 1;
+}
+
+service RegionServerEndpointService {
   rpc validateLastDDLTimestamp(ValidateLastDDLTimestampRequest)
       returns (ValidateLastDDLTimestampResponse);
+
+  rpc invalidateServerMetadataCache(InvalidateServerMetadataCacheRequest)
+      returns (InvalidateServerMetadataCacheResponse);
 }
