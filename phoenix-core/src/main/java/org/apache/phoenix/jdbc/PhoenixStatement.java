@@ -406,10 +406,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
         String infoString = getInfoString(tableRef);
         try (Admin admin = this.connection.getQueryServices().getAdmin()) {
-            // if this is a retry, update the list of live region servers in CQSI
-            if (!doRetry) {
-                this.connection.getQueryServices().refreshLiveRegionServers();
-            }
             // get all live region servers
             List<ServerName> regionServers = this.connection.getQueryServices().getLiveRegionServers();
             // pick one at random
@@ -432,6 +428,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             //retry once for any exceptions other than StaleMetadataCacheException
             LOGGER.error("Error in validating DDL timestamp for {}", infoString, parsedException);
             if (doRetry) {
+                // update the list of live region servers
+                this.connection.getQueryServices().refreshLiveRegionServers();
                 validateLastDDLTimestamp(tableRef, false);
                 return;
             }

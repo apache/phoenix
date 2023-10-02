@@ -256,22 +256,20 @@ public class ServerMetadataCachingIT extends BaseTest {
             createTable(conn1, tableName, NEVER);
             upsert(conn1, tableName);
 
-            // Instrument ServerMetadataCache to throw a SQLException once
+            // Instrument ServerMetadataCache to throw a SQLException twice
             cache = ServerMetadataCache.getInstance(config);
             ServerMetadataCache spyCache = Mockito.spy(cache);
-            Mockito.doThrow(new SQLException("FAIL")).doCallRealMethod().when(spyCache)
+            SQLException e = new SQLException("FAIL");
+            Mockito.doThrow(e).doThrow(e).when(spyCache)
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
             ServerMetadataCache.setInstance(spyCache);
-
-            // instrument CQSI to throw a SQLException once when live region servers are refreshed
-            Mockito.doThrow(new SQLException("FAIL")).when(spyCqs2).refreshLiveRegionServers();
 
             // query using client-2 should fail
             query(conn2, tableName);
             Assert.fail("Query should have thrown Exception");
         }
         catch (Exception e) {
-            Assert.assertTrue("PhoenixIOException was not thrown when CQSI.getAdmin encountered errors.", e instanceof PhoenixIOException);
+            Assert.assertTrue("SQLException was not thrown when last ddl timestamp validation encountered errors twice.", e instanceof SQLException);
         }
     }
 
