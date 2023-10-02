@@ -31,6 +31,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -129,6 +130,7 @@ public class ServerMetadataCachingIT extends BaseTest {
             alterTableAddColumn(conn1, tableName, "newCol1");
 
             // invalidate region server cache
+            // TODO: remove this call after PHOENIX-6968 is committed.
             ServerMetadataCache.resetCache();
 
             // select query from client-2 with old ddl timestamp works
@@ -180,10 +182,6 @@ public class ServerMetadataCachingIT extends BaseTest {
             // verify live region servers were refreshed
             Mockito.verify(spyCqs2, Mockito.times(1)).refreshLiveRegionServers();
         }
-        finally {
-            // reset cache instance so that it does not interfere with any other test
-            ServerMetadataCache.setInstance(cache);
-        }
     }
 
     /**
@@ -217,6 +215,7 @@ public class ServerMetadataCachingIT extends BaseTest {
             alterTableAddColumn(conn1, tableName, "newCol1");
 
             // invalidate region server cache
+            // TODO: remove this call after PHOENIX-6968 is committed.
             ServerMetadataCache.resetCache();
 
             // Instrument ServerMetadataCache to throw a SQLException once
@@ -234,10 +233,6 @@ public class ServerMetadataCachingIT extends BaseTest {
 
             // verify live region servers were refreshed
             Mockito.verify(spyCqs2, Mockito.times(1)).refreshLiveRegionServers();
-        }
-        finally {
-            // reset cache instance so that it does not interfere with any other test
-            ServerMetadataCache.setInstance(cache);
         }
     }
 
@@ -277,10 +272,6 @@ public class ServerMetadataCachingIT extends BaseTest {
         }
         catch (Exception e) {
             Assert.assertTrue("PhoenixIOException was not thrown when CQSI.getAdmin encountered errors.", e instanceof PhoenixIOException);
-        }
-        finally {
-            // reset cache instance so that it does not interfere with any other test
-            ServerMetadataCache.setInstance(cache);
         }
     }
 
@@ -322,13 +313,19 @@ public class ServerMetadataCachingIT extends BaseTest {
             alterViewAddColumn(conn1, view1, "foo");
 
             // invalidate region server cache
+            // TODO: remove this call after PHOENIX-6968 is committed.
             ServerMetadataCache.resetCache();
 
             // query second level view
             query(conn2, view2);
-            expectedNumCacheUpdates += 3; // table, view1
+            expectedNumCacheUpdates += 3; // table, view1, view2
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
         }
+    }
+
+    @After
+    public void resetMetadataCache() {
+        ServerMetadataCache.resetCache();
     }
 }

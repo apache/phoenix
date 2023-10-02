@@ -303,9 +303,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
-        this.validateLastDdlTimestamp = this.connection.getQueryServices().getProps()
-                                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                                QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+        this.validateLastDdlTimestamp = getValidateLastDdlTimestampEnabled();
     }
 
     /**
@@ -315,6 +313,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int getDefaultQueryTimeoutMillis() {
         return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    private boolean getValidateLastDdlTimestampEnabled() {
+        return connection.getQueryServices().getProps()
+                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
 
     protected List<PhoenixResultSet> getResultSets() {
@@ -348,15 +352,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private void setLastDDLTimestampRequestParameters(
-            RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder,
-            byte[] tenantId, PTable pTable) {
+            RegionServerEndpointProtos.LastDDLTimestampRequest.Builder builder, PTable pTable) {
+        byte[] tenantIDBytes = this.connection.getTenantId() == null
+                ? HConstants.EMPTY_BYTE_ARRAY
+                : this.connection.getTenantId().getBytes();
         byte[] schemaBytes = pTable.getSchemaName() == null
                                 ?   HConstants.EMPTY_BYTE_ARRAY
                                 : pTable.getSchemaName().getBytes();
-        innerBuilder.setTenantId(ByteStringer.wrap(tenantId));
-        innerBuilder.setSchemaName(ByteStringer.wrap(schemaBytes));
-        innerBuilder.setTableName(ByteStringer.wrap(pTable.getTableName().getBytes()));
-        innerBuilder.setLastDDLTimestamp(pTable.getLastDDLTimestamp());
+        builder.setTenantId(ByteStringer.wrap(tenantIDBytes));
+        builder.setSchemaName(ByteStringer.wrap(schemaBytes));
+        builder.setTableName(ByteStringer.wrap(pTable.getTableName().getBytes()));
+        builder.setLastDDLTimestamp(pTable.getLastDDLTimestamp());
     }
     /**
      * Build a request for the validateLastDDLTimestamp RPC.
@@ -369,10 +375,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
                 = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
-        byte[] tenantIDBytes = this.connection.getTenantId() == null
-                                    ? HConstants.EMPTY_BYTE_ARRAY
-                                    : this.connection.getTenantId().getBytes();
-        setLastDDLTimestampRequestParameters(innerBuilder, tenantIDBytes, tableRef.getTable());
+
+        setLastDDLTimestampRequestParameters(innerBuilder, tableRef.getTable());
         requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
         /*
@@ -383,7 +387,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             while (pTable.getParentName() != null) {
                 PTable parentTable = this.connection.getTable(new PTableKey(this.connection.getTenantId(), pTable.getParentName().getString()));
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                setLastDDLTimestampRequestParameters(innerBuilder, tenantIDBytes, parentTable);
+                setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                 pTable = parentTable;
             }
@@ -413,7 +417,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                     = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
 
             LOGGER.debug("Sending DDL timestamp validation request for {} to regionserver {}",
-                    infoString, regionServer.toString());
+                    infoString, regionServer);
 
             // RPC
             CoprocessorRpcChannel channel = admin.coprocessorService(regionServer);
