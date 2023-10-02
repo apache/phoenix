@@ -488,6 +488,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
 
                                 //verify metadata for the table/view/index in the query plan
+                                //plan.getTableRef can be null in some cases like EXPLAIN <query>
                                 if (plan.getTableRef() != null && validateLastDdlTimestamp) {
                                     validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
@@ -547,8 +548,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 updateMetrics = false;
                                 String planSchemaName = lastQueryPlan.getTableRef().getTable().getSchemaName().toString();
                                 String planTableName = lastQueryPlan.getTableRef().getTable().getTableName().toString();
-                                // force update client metadata cache
                                 LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
+                                // force update client metadata cache for the table/view/index
+                                // this also updates the cache for all its ancestors
                                 new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
                                 // skip last ddl timestamp validation in the retry
                                 return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
