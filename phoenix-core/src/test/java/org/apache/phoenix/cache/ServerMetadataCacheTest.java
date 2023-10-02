@@ -24,6 +24,7 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -237,10 +238,13 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // TODO: remove this call after PHOENIX-6968 is committed.
             ServerMetadataCache.resetCache();
 
+            // reset the spy CQSI object
+            Mockito.reset(spyCqs2);
+
             // select query from client-2 with old ddl timestamp works
-            // there should be one more update to the client cache
+            // there should be one update to the client cache
             query(conn2, tableName);
-            expectedNumCacheUpdates += 1;
+            expectedNumCacheUpdates = 1;
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
 
@@ -322,6 +326,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // TODO: remove this call after PHOENIX-6968 is committed.
             ServerMetadataCache.resetCache();
 
+            // reset the spy CQSI object
+            Mockito.reset(spyCqs2);
+
             // Instrument ServerMetadataCache to throw a SQLException once
             cache = ServerMetadataCache.getInstance(config);
             ServerMetadataCache spyCache = Mockito.spy(cache);
@@ -329,9 +336,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
             ServerMetadataCache.setInstance(spyCache);
 
-            // query using client-2 should succeed, one additional cache update
+            // query using client-2 should succeed, one cache update
             query(conn2, tableName);
-            expectedNumCacheUpdates += 1;
+            expectedNumCacheUpdates = 1;
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
 
@@ -418,9 +425,25 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // TODO: remove this call after PHOENIX-6968 is committed.
             ServerMetadataCache.resetCache();
 
+            // reset the spy CQSI object
+            Mockito.reset(spyCqs2);
+
             // query second level view
             query(conn2, view2);
-            expectedNumCacheUpdates += 3; // table, view1, view2
+
+            // verify there was a getTable RPC for the view and all its ancestors
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(view1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(view2)),
+                    anyLong(), anyLong());
+
+            // verify that the view and all its ancestors were updated in the client cache
+            expectedNumCacheUpdates = 3; // table, view1, view2
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
         }
