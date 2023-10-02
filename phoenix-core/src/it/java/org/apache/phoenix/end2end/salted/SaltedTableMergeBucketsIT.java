@@ -22,6 +22,7 @@ import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -41,6 +42,7 @@ import java.util.stream.IntStream;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.apache.phoenix.query.QueryServices;
@@ -280,6 +282,8 @@ public class SaltedTableMergeBucketsIT extends ParallelStatsEnabledIT {
     }
 
     public void mergeRegions(String testTableName) throws Exception {
+        // Merge seems to have problems on Hbase 2.1 and 2.2
+        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3") >= 0);
         Admin admin =
                 driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
         List<RegionInfo> regions = admin.getRegions(TableName.valueOf(testTableName));
