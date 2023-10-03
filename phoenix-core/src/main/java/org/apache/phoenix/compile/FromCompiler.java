@@ -165,16 +165,16 @@ public class FromCompiler {
         String schemaName;
         if (SchemaUtil.isSchemaCheckRequired(statement.getTableType(),
                 connection.getQueryServices().getProps())) {
-            schemaName = statement.getTableName().getSchemaName();
+            // To ensure schema set through properties or connection
+            // string exists before creating table
+            schemaName = statement.getTableName().getSchemaName() != null ?
+                    statement.getTableName().getSchemaName() : connection.getSchema();
             if (schemaName != null) {
+                // Only create SchemaResolver object to check
+                // if constructor throws exception.
+                // No exception means schema exists
                 new SchemaResolver(connection,
-                        statement.getTableName().getSchemaName(),
-                        true);
-            } else if (connection.getSchema() != null) {
-                // To ensure schema set through properties or connection
-                // string exists before creating table
-                new SchemaResolver(connection,
-                        connection.getSchema(),
+                        schemaName,
                         true);
             }
         }
