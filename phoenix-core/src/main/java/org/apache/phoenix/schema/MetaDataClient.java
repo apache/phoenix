@@ -886,6 +886,8 @@ public class MetaDataClient {
      * @param resolvedTimestamp timestamp at which child table was resolved
      * @param alwaysAddAncestorColumnsAndIndexes flag that determines whether we should recalculate
      *        all inherited columns and indexes that can be used in the view and
+     * @param alwaysHitServerForAncestors flag that determines whether we should fetch latest
+     *        metadata for ancestors from the server
      * @return true if the PTable contained by result was modified and false otherwise
      * @throws SQLException if the physical table cannot be found
      */
