@@ -223,9 +223,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         PTable pTable;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
-            String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
-            conn.createStatement().execute(ddl);
+            createTable(conn, tableNameStr, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
             ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
             // Override the connection to use in ServerMetadataCache
@@ -254,9 +253,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         PTable pTable;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
-            String ddl = getCreateTableStmt(fullTableName);
             // Create a test table.
-            conn.createStatement().execute(ddl);
+            createTable(conn, fullTableName, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
             // Override the connection to use in ServerMetadataCache
@@ -282,20 +280,18 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String tableNameStr = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
-            String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
-            conn.createStatement().execute(ddl);
+            createTable(conn, tableNameStr, NEVER);
         }
         String tenantId = "T_" + generateUniqueName();
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         PTable tenantViewTable;
         // Create view on table.
-        String whereClause = " WHERE COL1 = 1000";
+        String whereClause = " WHERE V1 = 1000";
         String tenantViewNameStr = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), tenantProps)) {
-            conn.createStatement().execute(getCreateViewStmt(tenantViewNameStr,
-                    tableNameStr, whereClause));
+            createViewWhereClause(conn, tableNameStr, tenantViewNameStr, whereClause);
             tenantViewTable = PhoenixRuntime.getTableNoCache(conn, tenantViewNameStr);
             ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
             // Override the connection to use in ServerMetadataCache
@@ -327,9 +323,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
-            String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
-            conn.createStatement().execute(ddl);
+            createTable(conn, tableNameStr, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
             long lastDDLTimestamp = pTable.getLastDDLTimestamp();
             assertEquals(lastDDLTimestamp,
@@ -365,9 +360,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
-            String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
-            conn.createStatement().execute(ddl);
+            createTable(conn, tableNameStr, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
             long lastDDLTimestamp = pTable.getLastDDLTimestamp();
             assertEquals(lastDDLTimestamp,
@@ -399,10 +393,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
-            String ddl = getCreateTableStmt(tableNameStr);
             // Create a test table.
-            conn.createStatement().execute(ddl);
-            String indexDDLStmt = "CREATE INDEX " + indexNameStr + " ON " + tableNameStr + "(col1)";
+            createTable(conn, tableNameStr, NEVER);
+            String indexDDLStmt = "CREATE INDEX " + indexNameStr + " ON " + tableNameStr + "(v1)";
             conn.createStatement().execute(indexDDLStmt);
             TestUtil.waitForIndexState(conn, indexNameStr, PIndexState.ACTIVE);
             indexTable = PhoenixRuntime.getTableNoCache(conn, indexNameStr);
@@ -711,12 +704,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     private void alterTableAddColumn(Connection conn, String tableName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER TABLE " + tableName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
-    }
-
-    private String getCreateTableStmt(String tableName) {
-        return   "CREATE TABLE " + tableName +
-                "  (a_string varchar not null, col1 integer" +
-                "  CONSTRAINT pk PRIMARY KEY (a_string)) ";
     }
 
     private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {

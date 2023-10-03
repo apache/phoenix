@@ -52,11 +52,6 @@ public class PhoenixRegionServerEndpoint
     }
 
     @Override
-    public Iterable<Service> getServices() {
-        return Collections.singleton(this);
-    }
-
-    @Override
     public void validateLastDDLTimestamp(RpcController controller,
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request,
             RpcCallback<RegionServerEndpointProtos.ValidateLastDDLTimestampResponse> done) {
