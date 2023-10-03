@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
@@ -488,8 +489,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
 
                                 //verify metadata for the table/view/index in the query plan
+                                //only do this for non-system tables
                                 //plan.getTableRef can be null in some cases like EXPLAIN <query>
-                                if (plan.getTableRef() != null && validateLastDdlTimestamp) {
+                                String schemaName = plan.getTableRef().getTable().getSchemaName().toString();
+                                boolean isSystemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
+                                if (validateLastDdlTimestamp && !isSystemTable && plan.getTableRef() != null) {
                                     validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
 
