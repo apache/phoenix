@@ -455,10 +455,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // add column using client-1 to update last ddl timestamp
             alterTableAddColumn(conn1, tableName, "newCol1");
 
-            // invalidate region server cache
-            // TODO: remove this call after PHOENIX-6968 is committed.
-            ServerMetadataCache.resetCache();
-
             // reset the spy CQSI object
             Mockito.reset(spyCqs2);
 
@@ -542,10 +538,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // add column using client-1 to update last ddl timestamp
             alterTableAddColumn(conn1, tableName, "newCol1");
-
-            // invalidate region server cache
-            // TODO: remove this call after PHOENIX-6968 is committed.
-            ServerMetadataCache.resetCache();
 
             // reset the spy CQSI object
             Mockito.reset(spyCqs2);
@@ -643,10 +635,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // alter first level view using client-1 to update its last ddl timestamp
             alterViewAddColumn(conn1, view1, "foo");
 
-            // invalidate region server cache
-            // TODO: remove this call after PHOENIX-6968 is committed.
-            ServerMetadataCache.resetCache();
-
             // reset the spy CQSI object
             Mockito.reset(spyCqs2);
 
@@ -672,12 +660,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
 
-    private void createViewWhereClause(Connection conn, String parentName, String viewName, String whereClause) throws SQLException {
-        conn.createStatement().execute("CREATE VIEW " + viewName +
-                " AS SELECT * FROM "+ parentName + whereClause);
-    }
-
-
     //Helper methods
 
     private void createTable(Connection conn, String tableName, long updateCacheFrequency) throws SQLException {
@@ -689,6 +671,12 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     private void createView(Connection conn, String parentName, String viewName) throws SQLException {
         conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + parentName);
     }
+
+    private void createViewWhereClause(Connection conn, String parentName, String viewName, String whereClause) throws SQLException {
+        conn.createStatement().execute("CREATE VIEW " + viewName +
+                " AS SELECT * FROM "+ parentName + whereClause);
+    }
+
 
     private void upsert(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("UPSERT INTO " + tableName +
