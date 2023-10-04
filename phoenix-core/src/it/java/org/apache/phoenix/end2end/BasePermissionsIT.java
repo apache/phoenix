@@ -45,6 +45,7 @@ import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -569,6 +570,18 @@ public abstract class BasePermissionsIT extends BaseTest {
                 try (Connection conn = getConnection(); Statement stmt = conn.createStatement();) {
                     assertFalse(stmt.execute("UPDATE STATISTICS " + tableName + " SET \""
                             + QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB + "\" = 5"));
+                    int retry = 20;
+                    while (retry-- > 0) {
+                        Thread.sleep(10000);
+                        ResultSet rs = stmt.executeQuery(
+                            "SELECT count(*) FROM SYSTEM.STATS where PHYSICAL_NAME = '"
+                            + SchemaUtil.getPhysicalHBaseTableName(tableName.getBytes(),
+                                isNamespaceMapped) + "'");
+                        rs.next();
+                        if (rs.getInt(1) > 0) {
+                            break;
+                        }
+                    }
                 }
                 return null;
             }
