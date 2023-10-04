@@ -53,8 +53,8 @@ parser = argparse.ArgumentParser(description='Launches the Apache Phoenix Client
 parser.add_argument('zookeepers', nargs='?', help='The ZooKeeper quorum string', default='')
 # Positional argument 'sqlfile' is optional
 parser.add_argument('sqlfile', nargs='?', help='A file of SQL commands to execute', default='')
-parser.add_argument('--debug', help='Start JVM with debug options', action="store_true")
 parser.add_argument('--noconnect', help='Start without making a connection', action="store_true")
+parser.add_argument('--verbose-command', help='Show the Java command on the console before executing it', action="store_true")
 # Common arguments across sqlline.py and sqlline-thin.py
 phoenix_utils.common_sqlline_args(parser)
 # Parse the args
@@ -116,7 +116,6 @@ else:
     disable_jna = ""
 
 java_cmd = java + ' $PHOENIX_OPTS ' + \
-    (args.debug and "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=127.0.0.1:8071" or "") + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
@@ -130,7 +129,7 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     " -n none -p none --color=" + (args.color and "true" or "false") + " --fastConnect=" + (args.fastconnect and "true" or "false") + \
     " --verbose=" + (args.verbose and "true" or "false") + " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
-if args.verbose:
+if args.verbose_command:
     print("Executing java command: " + java_cmd)
 
 os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)
