@@ -64,6 +64,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         PTable table = PhoenixRuntime.getTable(conn, cdcName);
         assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
         assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(table));
+        assertNull(table.getIndexState()); // Index state should be null for CDC.
     }
 
     @Test

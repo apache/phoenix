@@ -3065,7 +3065,9 @@ public class MetaDataClient {
                     defaultCreateState = PIndexState.BUILDING;
                 }
             }
-            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : defaultCreateState;
+            PIndexState indexState = parent == null ||
+                    (tableType == PTableType.VIEW || tableType == PTableType.CDC) ?
+                    null : defaultCreateState;
             if (indexState == null && tableProps.containsKey(INDEX_STATE)) {
                 indexState = PIndexState.fromSerializedValue(tableProps.get(INDEX_STATE).toString());
             }
