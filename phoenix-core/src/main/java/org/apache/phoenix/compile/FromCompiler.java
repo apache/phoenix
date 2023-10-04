@@ -167,8 +167,8 @@ public class FromCompiler {
                 connection.getQueryServices().getProps())) {
             // To ensure schema set through properties or connection
             // string exists before creating table
-            schemaName = statement.getTableName().getSchemaName() != null ?
-                    statement.getTableName().getSchemaName() : connection.getSchema();
+            schemaName = statement.getTableName().getSchemaName() != null
+                    ? statement.getTableName().getSchemaName() : connection.getSchema();
             if (schemaName != null) {
                 // Only create SchemaResolver object to check
                 // if constructor throws exception.
