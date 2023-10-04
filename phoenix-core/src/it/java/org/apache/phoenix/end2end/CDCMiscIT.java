@@ -147,6 +147,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertCDCState(conn, cdcName, null, 2);
         assertPTable(cdcName, null);
 
+        String viewName = generateUniqueName();
+        conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " +
+                tableName);
+        cdcName = generateUniqueName();
+        try {
+            conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + viewName +
+                    "(PHOENIX_ROW_TIMESTAMP())");
+            fail("Expected to fail on VIEW");
+        }
+        catch(SQLException e) {
+            assertEquals(SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC.getErrorCode(),
+                    e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(
+                    SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC.getMessage() + " tableType=VIEW"));
+        }
+
         conn.close();
     }
 }

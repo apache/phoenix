@@ -460,6 +460,8 @@ public enum SQLExceptionCode {
             "Missing ENCODED_QUALIFIER."),
     EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
             + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
+    INVALID_TABLE_TYPE_FOR_CDC(1152, "XCL52",
+            "Invalid table type for creating CDC."),
 
 
     /**
