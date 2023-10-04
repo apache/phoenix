@@ -489,11 +489,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
 
                                 //verify metadata for the table/view/index in the query plan
-                                //only do this for non-system tables
                                 //plan.getTableRef can be null in some cases like EXPLAIN <query>
-                                String schemaName = plan.getTableRef().getTable().getSchemaName().toString();
-                                boolean isSystemTable = SYSTEM_CATALOG_SCHEMA.equals(schemaName);
-                                if (validateLastDdlTimestamp && !isSystemTable && plan.getTableRef() != null) {
+                                if (validateLastDdlTimestamp && plan.getTableRef() != null) {
                                     validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
 

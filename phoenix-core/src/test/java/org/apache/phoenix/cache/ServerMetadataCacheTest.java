@@ -20,6 +20,7 @@ package org.apache.phoenix.cache;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
@@ -386,12 +387,13 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     @Test
     public void testInvalidateCacheForBaseTableWithUpdateIndexStatement() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config, "client");
         String tableNameStr = "TBL_" + generateUniqueName();
         String indexNameStr = "IND_" + generateUniqueName();
         byte[] indexNameBytes = Bytes.toBytes(indexNameStr);
         PTable indexTable;
         ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (Connection conn = DriverManager.getConnection(url, props)) {
             conn.setAutoCommit(false);
             // Create a test table.
             createTable(conn, tableNameStr, NEVER);
@@ -656,6 +658,23 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             expectedNumCacheUpdates = 3; // table, view1, view2
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
+        }
+    }
+
+    /**
+     * Verify queries on system tables work as we will validate last ddl timestamps for them also.
+     */
+    @Test
+    public void testSelectQueryOnSystemTables() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config, "client");
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+
+        try (Connection conn = cqs.connect(url, props)) {
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
         }
     }
 
