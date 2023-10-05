@@ -612,10 +612,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         byte[] cf = colExpression.getColumnFamily();
                         byte[] cq = colExpression.getColumnQualifier();
                         try {
-                            if (dataTable.hasOnlyPkColumns()) {
-                                return null;
-                            }
-
                             PColumn dataColumn =
                                     cf == null ? dataTable.getColumnForColumnQualifier(null, cq)
                                             : dataTable.getColumnFamily(cf)
@@ -634,6 +630,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                             }
                         } catch (ColumnNotFoundException | ColumnFamilyNotFoundException
                                 | AmbiguousColumnException e) {
+                            if (dataTable.hasOnlyPkColumns()) {
+                                return null;
+                            }
                             throw new RuntimeException(e);
                         }
                         return null;
