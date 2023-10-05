@@ -1739,6 +1739,11 @@ public class MetaDataClient {
                         SortOrder.getDefault()) }));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
+        if (TableProperty.SALT_BUCKETS.getValue(tableProps) != null) {
+            indexProps.put(QueryConstants.ALL_FAMILY_PROPERTIES_KEY, new Pair<>(
+                    TableProperty.SALT_BUCKETS.getPropertyName(),
+                    TableProperty.SALT_BUCKETS.getValue(tableProps)));
+        }
         // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,

@@ -22,6 +22,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -65,6 +66,15 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
         assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(table));
         assertNull(table.getIndexState()); // Index state should be null for CDC.
+    }
+
+    private void assertSaltBuckets(String cdcName, Integer nbuckets) throws SQLException {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
+        assertEquals(nbuckets, cdcTable.getBucketNum());
+        PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
+        assertEquals(nbuckets, indexTable.getBucketNum());
     }
 
     @Test
@@ -163,6 +173,11 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertTrue(e.getMessage().endsWith(
                     SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC.getMessage() + " tableType=VIEW"));
         }
+
+        cdcName = generateUniqueName();
+        conn.createStatement().execute("CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) SALT_BUCKETS = 4");
+        assertSaltBuckets(cdcName, 4);
 
         conn.close();
     }
