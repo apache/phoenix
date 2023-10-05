@@ -106,7 +106,8 @@ public enum SQLExceptionCode {
         }
     }),
     CANNOT_INDEX_COLUMN_ON_TYPE(302, "23100", "The column cannot be index due to its type."),
-
+    INVALID_INDEX_WHERE_WITH_SUBQUERY(303, "23101", " Index where clause cannot include a subquery."),
+    CANNOT_EVALUATE_INDEX_WHERE(304, "23102", "Invalid index where clause. It cannot be evaluated on a data table row."),
     /**
      * Invalid Cursor State (errorcode 04, sqlstate 24)
      */

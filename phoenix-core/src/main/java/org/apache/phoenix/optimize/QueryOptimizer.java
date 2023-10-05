@@ -19,6 +19,7 @@
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -37,6 +38,7 @@ import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -197,16 +199,40 @@ public class QueryOptimizer {
         return Collections.singletonList(compiler.compile());
     }
 
+    private static boolean isPartialIndexUsable(SelectStatement select, QueryPlan dataPlan,
+            PTable index) throws SQLException {
+
+        StatementContext context = new StatementContext(dataPlan.getContext());
+        context.setResolver(FromCompiler.getResolver(dataPlan.getTableRef()));
+        return WhereCompiler.contains(
+                index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
+                WhereCompiler.transformDNF(select.getWhere(), context));
+    }
+
     private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
         if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
-
-        List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
-        if (dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))) {
+        List<PTable> indexList =  dataPlan.getTableRef().getTable().getIndexes();
+        if (dataPlan.isApplicable() &&
+                (indexList.isEmpty() ||
+                        dataPlan.isDegenerate() ||
+                        dataPlan.getTableRef().hasDynamicCols() ||
+                        select.getHint().hasHint(Hint.NO_INDEX))) {
             return Collections.<QueryPlan> singletonList(dataPlan);
+        }
+        // Include full indexes, and usable partial indexes
+        List<PTable> indexes = new ArrayList<>(indexList.size());
+        for (PTable index : indexList) {
+            if (index.getIndexWhere() != null) {
+                if (isPartialIndexUsable(select, dataPlan, index)) {
+                    indexes.add(index);
+                }
+            } else {
+                indexes.add(index);
+            }
         }
         
         // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes place.
@@ -580,6 +606,13 @@ public class QueryOptimizer {
                     }
                 }
 
+                // Partial secondary index is preferred
+                if (table1.getIndexWhere() != null && table2.getIndexWhere() == null) {
+                    return -1;
+                }
+                if (table1.getIndexWhere() == null && table2.getIndexWhere() != null) {
+                    return 1;
+                }
                 // Use the plan that has fewer "dataColumns" (columns that need to be merged in)
                 c = plan1.getContext().getDataColumns().size() - plan2.getContext().getDataColumns().size();
                 if (c != 0) return c;

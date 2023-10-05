@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.compile.WhereCompiler.transformDNF;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -63,6 +64,7 @@ import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -83,6 +85,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -712,6 +715,16 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
+    public void testBoolean() throws SQLException {
+
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        pconn.createStatement().execute("create table MyTable (ID INTEGER PRIMARY KEY, A BOOLEAN, B BOOLEAN )");
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, "select * from MyTable where NOT (NOT A AND NOT B)");
+        QueryPlan plan = pstmt.optimizeQuery();
+        Scan scan = plan.getContext().getScan();
+        System.out.println(scan);
+    }
+    @Test
     public void testSecondPkColInListFilter() throws SQLException {
         String tenantId = "000000000000001";
         String entityId1 = "00000000000000X";
@@ -889,7 +902,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testBetweenFilter() throws SQLException {
         String tenantId = "000000000000001";
-        String query = "select * from atable where organization_id='" + tenantId + "' and a_integer between 0 and 10";
+        String query = "select * from atable where '" + tenantId +"' =organization_id" + " and a_integer between 0 and 10";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
@@ -1026,4 +1039,78 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(FETCH_SIZE, pstmt.getFetchSize());
         assertEquals(FETCH_SIZE, scan.getCaching());
     }
+    private Expression getDNF(PhoenixConnection pconn, String query) throws SQLException {
+        //SQLParser parser = new SQLParser("where ID = 'i1' or (ID = 'i2' and A > 1)");
+        //        ParseNode where = parser.parseWhereClause()
+        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
+        QueryPlan plan = pstmt.compileQuery();
+        ParseNode where = plan.getStatement().getWhere();
+
+        return transformDNF(where, plan.getContext());
+    }
+    @Test
+    public void testWhereInclusion() throws SQLException {
+        PhoenixConnection pconn = DriverManager.getConnection(getUrl(),
+                PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
+        String ddl = "create table myTable(ID varchar primary key, A integer, B varchar, " +
+                "C date, D double, E integer)";
+        pconn.createStatement().execute(ddl);
+        ddl = "create table myTableDesc(ID varchar primary key DESC, A integer, B varchar, " +
+                "C date, D double, E integer)";
+        pconn.createStatement().execute(ddl);
+
+        final int NUM = 12;
+        String[] containingQueries = new String[NUM];
+        String[] containedQueries = new String[NUM];
+
+        containingQueries[0] = "select * from myTable where ID = 'i1' or (ID = 'i2' and A > 1)";
+        containedQueries[0] = "select * from myTableDesc where ID = 'i1' or (ID = 'i2' and " +
+                "A > 2 + 2)";
+
+        containingQueries[1] = "select * from myTable where ID > 'i3' and A > 1";
+        containedQueries[1] = "select * from myTableDesc where (ID > 'i7' or ID = 'i4') and " +
+                "A > 2 * 10";
+
+        containingQueries[2] = "select * from myTable where ID IN ('i3', 'i7', 'i1') and A < 10";
+        containedQueries[2] = "select * from myTableDesc where ID IN ('i1', 'i7') and A < 10 / 2";
+
+        containingQueries[3] = "select * from myTableDesc where (ID, B) > ('i3', 'a') and A >= 10";
+        containedQueries[3] = "select * from myTable where ID = 'i3' and B = 'c' and A = 10";
+
+        containingQueries[4] = "select * from myTable where ID >= 'i3' and A between 5 and 15";
+        containedQueries[4] = "select * from myTableDesc where ID = 'i3' and A between 5 and 10";
+
+        containingQueries[5] = "select * from myTable where (A between 5 and 15) and " +
+                "(D < 10.67 or C <= CURRENT_DATE())";
+        containedQueries[5] = "select * from myTable where (A = 5 and D between 1.5 and 9.99) or " +
+                "(A = 6 and C <= CURRENT_DATE() - 1000)";
+
+        containingQueries[6] = "select * from myTable where A is not null";
+        containedQueries[6] = "select * from myTable where A > 0";
+
+        containingQueries[7] = "select * from myTable where NOT (B is null)";
+        containedQueries[7] = "select * from myTable where (B > 'abc')";
+
+        containingQueries[8] = "select * from myTable where A >= E and D <= A";
+        containedQueries[8] = "select * from myTable where (A > E and D = A)";
+
+        containingQueries[9] = "select * from myTable where A > E";
+        containedQueries[9] = "select * from myTable where (A > E  and B is not null)";
+
+        containingQueries[10] = "select * from myTable where B like '%abc'";
+        containedQueries[10] = "select * from myTable where (B like '%abc' and ID > 'i1')";
+
+        containingQueries[11] = "select * from myTable where " +
+                "PHOENIX_ROW_TIMESTAMP() < CURRENT_TIME()";
+        containedQueries[11] = "select * from myTable where " +
+                "(PHOENIX_ROW_TIMESTAMP() < CURRENT_TIME() - 1)";
+
+        for (int i = 0; i < NUM; i++) {
+            Assert.assertTrue(WhereCompiler.contains(getDNF(pconn, containingQueries[i]),
+                    getDNF(pconn, containedQueries[i])));
+            Assert.assertFalse(WhereCompiler.contains(getDNF(pconn, containedQueries[i]),
+                    getDNF(pconn, containingQueries[i])));
+        }
+    }
+
 }

@@ -141,7 +141,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private static final int EXPRESSION_NOT_PRESENT = -1;
     private static final int ESTIMATED_EXPRESSION_SIZE = 8;
     
-    public static IndexMaintainer create(PTable dataTable, PTable index, PhoenixConnection connection) {
+    public static IndexMaintainer create(PTable dataTable, PTable index,
+            PhoenixConnection connection) throws SQLException {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
         }
@@ -198,13 +199,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param dataTable data table
      * @param ptr bytes pointer to hold returned serialized value
      */
-    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr, PhoenixConnection connection) {
+    public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
+            PhoenixConnection connection) throws SQLException {
         List<PTable> indexes = dataTable.getIndexes();
         serializeServerMaintainedIndexes(dataTable, ptr, indexes, connection);
     }
 
     public static void serializeServerMaintainedIndexes(PTable dataTable, ImmutableBytesWritable ptr,
-            List<PTable> indexes, PhoenixConnection connection) {
+            List<PTable> indexes, PhoenixConnection connection) throws SQLException {
         Iterator<PTable> indexesItr = Collections.emptyListIterator();
         boolean onlyLocalIndexes = dataTable.isImmutableRows() || dataTable.isTransactional();
         if (onlyLocalIndexes) {
@@ -225,7 +227,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param indexes indexes to serialize
      */
     public static void serialize(PTable dataTable, ImmutableBytesWritable ptr,
-            List<PTable> indexes, PhoenixConnection connection) {
+            List<PTable> indexes, PhoenixConnection connection) throws SQLException {
         if (indexes.isEmpty() && dataTable.getTransformingNewTable() == null) {
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             return;
@@ -279,7 +281,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * @param keyValueIndexes indexes to serialize
      */
     public static void serializeAdditional(PTable table, ImmutableBytesWritable indexMetaDataPtr,
-            List<PTable> keyValueIndexes, PhoenixConnection connection) {
+            List<PTable> keyValueIndexes, PhoenixConnection connection) throws SQLException {
         int nMutableIndexes = indexMetaDataPtr.getLength() == 0 ? 0 : ByteUtil.vintFromBytes(indexMetaDataPtr);
         int nIndexes = nMutableIndexes + keyValueIndexes.size();
         int estimatedSize = indexMetaDataPtr.getLength() + 1; // Just in case new size increases buffer
@@ -430,13 +432,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private String logicalIndexName;
 
     private boolean isUncovered;
+    private Expression indexWhere;
+    private Set<ColumnReference> indexWhereColumns;
 
     protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
         this.isDataTableSalted = isDataTableSalted;
     }
     
-    private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection) {
+    private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection)
+            throws SQLException {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
@@ -658,6 +663,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
         this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
         this.logicalIndexName = index.getName().getString();
+        if (index.getIndexWhere() != null) {
+            this.indexWhere = index.getIndexWhereExpression(connection);
+            this.indexWhereColumns = index.getIndexWhereColumns(connection);
+        }
+
         initCachedState();
     }
 
@@ -1694,6 +1704,25 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         } else {
             maintainer.isUncovered = false;
         }
+        if (proto.hasIndexWhere()) {
+            try (ByteArrayInputStream stream = new ByteArrayInputStream(proto.getIndexWhere().toByteArray())) {
+                DataInput input = new DataInputStream(stream);
+                int expressionOrdinal = WritableUtils.readVInt(input);
+                Expression expression = ExpressionType.values()[expressionOrdinal].newInstance();
+                expression.readFields(input);
+                maintainer.indexWhere = expression;
+                List<ServerCachingProtos.ColumnReference> indexWhereColumnsList = proto.getIndexWhereColumnsList();
+                maintainer.indexWhereColumns = new HashSet<ColumnReference>(indexWhereColumnsList.size());
+                for (ServerCachingProtos.ColumnReference colRefFromProto : indexWhereColumnsList) {
+                    maintainer.indexWhereColumns.add(new ColumnReference(
+                            colRefFromProto.getFamily().toByteArray(),
+                            colRefFromProto.getQualifier().toByteArray()));
+                }
+            }
+        } else {
+            maintainer.indexWhere = null;
+            maintainer.indexWhereColumns = null;
+        }
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1821,6 +1850,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         builder.setDataEncodingScheme(maintainer.dataEncodingScheme.getSerializedMetadataValue());
         builder.setDataImmutableStorageScheme(maintainer.dataImmutableStorageScheme.getSerializedMetadataValue());
         builder.setIsUncovered(maintainer.isUncovered);
+        if (maintainer.indexWhere != null) {
+            try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
+                DataOutput output = new DataOutputStream(stream);
+                WritableUtils.writeVInt(output,
+                        ExpressionType.valueOf(maintainer.indexWhere).ordinal());
+                maintainer.indexWhere.write(output);
+                builder.setIndexWhere(ByteStringer.wrap(stream.toByteArray()));
+                for (ColumnReference colRef : maintainer.indexWhereColumns) {
+                    ServerCachingProtos.ColumnReference.Builder cRefBuilder =
+                            ServerCachingProtos.ColumnReference.newBuilder();
+                    cRefBuilder.setFamily(ByteStringer.wrap(colRef.getFamily()));
+                    cRefBuilder.setQualifier(ByteStringer.wrap(colRef.getQualifier()));
+                    builder.addIndexWhereColumns(cRefBuilder.build());
+                }
+            }
+        }
         return builder.build();
     }
 
@@ -1859,7 +1904,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         size += estimatedExpressionSize;
         return size;
     }
-    
+    public Expression getIndexWhere() {
+        return indexWhere;
+    }
+
+    public Set<ColumnReference> getIndexWhereColumns() {
+        return indexWhereColumns;
+    }
     private int estimateIndexRowKeyByteSize(int indexColByteSize) {
         int estimatedIndexRowKeyBytes = indexColByteSize + dataRowKeySchema.getEstimatedValueLength() + (nIndexSaltBuckets == 0 || isLocalIndex || this.isDataTableSalted ? 0 : SaltingUtil.NUM_SALTING_BYTES);
         return estimatedIndexRowKeyBytes;

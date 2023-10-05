@@ -42,6 +42,7 @@ import org.apache.phoenix.util.ScanUtil;
 
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Set;
 
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ScanUtil.addEmptyColumnToScan;
@@ -89,6 +90,15 @@ public class ServerBuildIndexCompiler {
         this.tableName = tableName;
     }
 
+    private static void addColumnsToScan(Set<ColumnReference> columns, Scan scan, PTable index) {
+        for (ColumnReference columnRef : columns) {
+            if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                scan.addFamily(columnRef.getFamily());
+            } else {
+                scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
+            }
+        }
+    }
     public MutationPlan compile(PTable index) throws SQLException {
         try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
             String query = "SELECT /*+ NO_INDEX */ count(*) FROM " + tableName;
@@ -104,12 +114,9 @@ public class ServerBuildIndexCompiler {
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(dataTable, connection);
             // By default, we'd use a FirstKeyOnly filter as nothing else needs to be projected for count(*).
             // However, in this case, we need to project all of the data columns that contribute to the index.
-            for (ColumnReference columnRef : indexMaintainer.getAllColumns()) {
-                if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                    scan.addFamily(columnRef.getFamily());
-                } else {
-                    scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());
-                }
+            addColumnsToScan(indexMaintainer.getAllColumns(), scan, index);
+            if (indexMaintainer.getIndexWhereColumns() != null) {
+                addColumnsToScan(indexMaintainer.getIndexWhereColumns(), scan, index);
             }
             IndexMaintainer.serialize(dataTable, ptr, Collections.singletonList(index), plan.getContext().getConnection());
             scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
