@@ -2417,6 +2417,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // table/index/views.
                 tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
                     clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
+                if (tableType == INDEX) {
+                    // Invalidate the cache on each regionserver for parent table/view.
+                    invalidateServerMetadataCache(tenantIdBytes, parentSchemaName, parentTableName);
+                    long currentTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    // If table type is index, then update the last ddl timestamp of the parent
+                    // table or immediate parent view.
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(parentTableKey,
+                            currentTimestamp, currentTimestamp));
+                }
 
                 //and if we're doing change detection on this table or view, notify the
                 //external schema registry and get its schema id

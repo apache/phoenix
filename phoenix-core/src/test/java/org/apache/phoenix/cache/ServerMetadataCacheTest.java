@@ -25,6 +25,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -38,6 +39,8 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
@@ -420,6 +423,83 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
 
+    /**
+     *  Test that we invalidate the cache for parent table and update the last ddl timestamp
+     *  of the parent table while we add an index.
+     * @throws Exception
+     */
+    @Test
+    public void testUpdateLastDDLTimestampTableAfterIndexCreation() throws Exception {
+        String tableName = generateUniqueName();
+        byte[] tableNameBytes = Bytes.toBytes(tableName);
+        String indexName = generateUniqueName();
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        String ddl =
+                "create table  " + tableName + " ( k integer PRIMARY KEY," + " v1 integer,"
+                        + " v2 integer)";
+        String indexDdl = "create index  " + indexName + " on " + tableName + " (v1)";
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(true);
+            stmt.execute(ddl);
+            long tableLastDDLTimestampBefore = getLastDDLTimestamp(tableName);
+            // Populate the cache
+            assertNotNull(cache.getLastDDLTimestampForTable(null, null, tableNameBytes));
+            Thread.sleep(1);
+            stmt.execute(indexDdl);
+            // Make sure that we have invalidated the last ddl timestamp for parent table
+            // on all regionservers
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableNameBytes));
+            long tableLastDDLTimestampAfter = getLastDDLTimestamp(tableName);
+            assertTrue(tableLastDDLTimestampAfter > tableLastDDLTimestampBefore);
+        }
+    }
+
+    /**
+     *  Test that we invalidate the cache of the immediate parent view
+     *  and update the last ddl timestamp of the immediate parent view while we add an index.
+     * @throws Exception
+     */
+    @Test
+    public void testUpdateLastDDLTimestampViewAfterIndexCreation() throws Exception {
+        String tableName = "T_" + generateUniqueName();
+        String globalViewName = "V_" + generateUniqueName();
+        byte[] globalViewNameBytes = Bytes.toBytes(globalViewName);
+        String globalViewIndexName = "GV_" + generateUniqueName();
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String whereClause = " WHERE COL1 < 1000";
+            String tableDDLStmt = getCreateTableStmt(tableName);
+            String viewDDLStmt = getCreateViewStmt(globalViewName, tableName, whereClause);
+            String viewIdxDDLStmt = getCreateViewIndexStmt(globalViewIndexName, globalViewName,
+                    "COL1");
+            stmt.execute(tableDDLStmt);
+            stmt.execute(viewDDLStmt);
+            // Populate the cache
+            assertNotNull(cache.getLastDDLTimestampForTable(null, null, globalViewNameBytes));
+            long tableLastDDLTimestampBefore = getLastDDLTimestamp(globalViewName);
+            stmt.execute(viewIdxDDLStmt);
+            // Make sure that we have invalidated the last ddl timestamp for parent global view
+            // on all regionservers
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null,
+                    globalViewNameBytes));
+            long tableLastDDLTimestampAfter = getLastDDLTimestamp(globalViewName);
+            assertTrue(tableLastDDLTimestampAfter > tableLastDDLTimestampBefore);
+        }
+    }
+
+    public long getLastDDLTimestamp(String tableName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        // Need to use different connection than what is used for creating table or indexes.
+        String url = QueryUtil.getConnectionUrl(props, config, "client1");
+        try (Connection conn = DriverManager.getConnection(url)) {
+            PTable table = PhoenixRuntime.getTableNoCache(conn, tableName);
+            return table.getLastDDLTimestamp();
+        }
+    }
+
+
     private String getCreateTableStmt(String tableName) {
         return   "CREATE TABLE " + tableName +
                 "  (a_string varchar not null, col1 integer" +
@@ -430,5 +510,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String viewStmt =  "CREATE VIEW " + viewName +
                 " AS SELECT * FROM "+ fullTableName + whereClause;
         return  viewStmt;
+    }
+
+    private String getCreateViewIndexStmt(String indexName, String viewName, String indexColumn) {
+        String viewIndexName =
+                "CREATE INDEX " + indexName + " ON " + viewName + "(" + indexColumn + ")";
+        return viewIndexName;
     }
 }
