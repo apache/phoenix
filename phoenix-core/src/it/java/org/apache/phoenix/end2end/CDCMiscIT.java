@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
@@ -32,6 +33,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
@@ -180,5 +182,30 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertSaltBuckets(cdcName, 4);
 
         conn.close();
+    }
+
+    @Test
+    public void testCreateCDCMultitenant() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute("CREATE TABLE  " + tableName +
+                " (tenantId INTEGER NOT NULL, k INTEGER NOT NULL," + " v1 INTEGER, v2 DATE, " +
+                "CONSTRAINT pk PRIMARY KEY (tenantId, k)) MULTI_TENANT=true");
+        String cdcName = generateUniqueName();
+        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
+                "(PHOENIX_ROW_TIMESTAMP())");
+
+        PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
+        List<PColumn> idxPkColumns = indexTable.getPKColumns();
+        assertEquals(":TENANTID", idxPkColumns.get(0).getName().getString());
+        assertEquals(": PHOENIX_ROW_TIMESTAMP()", idxPkColumns.get(1).getName().getString());
+        assertEquals(":K", idxPkColumns.get(2).getName().getString());
+
+        PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
+        List<PColumn> cdcPkColumns = cdcTable.getPKColumns();
+        assertEquals(" PHOENIX_ROW_TIMESTAMP()", cdcPkColumns.get(0).getName().getString());
+        assertEquals("TENANTID", cdcPkColumns.get(1).getName().getString());
+        assertEquals("K", cdcPkColumns.get(2).getName().getString());
     }
 }
