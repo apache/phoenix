@@ -612,7 +612,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         byte[] cf = colExpression.getColumnFamily();
                         byte[] cq = colExpression.getColumnQualifier();
                         try {
-                            if (tableHasOnlyPkCols(dataTable, cf)) {
+                            if (dataTable.hasOnlyPkColumns()) {
                                 return null;
                             }
 
@@ -637,22 +637,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                             throw new RuntimeException(e);
                         }
                         return null;
-                    }
-
-                    private boolean tableHasOnlyPkCols(PTable dataTable, byte[] cf) {
-                        try {
-                            dataTable.getColumnFamily(cf);
-                        } catch (ColumnFamilyNotFoundException e) {
-                            List<PColumn> columns = dataTable.getColumns();
-                            if (columns != null && columns.size() > 0) {
-                                boolean nonPkPresent = columns.stream()
-                                        .anyMatch(column -> column.getFamilyName() != null);
-                                if (!nonPkPresent) {
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
                     }
 
                 };
