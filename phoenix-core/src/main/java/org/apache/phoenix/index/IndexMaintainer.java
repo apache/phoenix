@@ -598,10 +598,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                             }
                         } catch (ColumnNotFoundException | ColumnFamilyNotFoundException
                                 | AmbiguousColumnException e) {
+                            if (dataTable.hasOnlyPkColumns()) {
+                                return null;
+                            }
                             throw new RuntimeException(e);
                         }
                         return null;
                     }
+
                 };
                 expression.accept(kvVisitor);
             }
