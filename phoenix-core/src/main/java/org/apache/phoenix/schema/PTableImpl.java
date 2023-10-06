@@ -2013,8 +2013,7 @@ public class PTableImpl implements PTable {
         }
         String cdcIncludeScopesStr = null;
         if (table.hasCDCIncludeScopes()) {
-            cdcIncludeScopesStr =
-                    (String) PVarchar.INSTANCE.toObject(table.getCDCIncludeScopes().toByteArray());
+            cdcIncludeScopesStr = table.getCDCIncludeScopes();
         }
         try {
             return new PTableImpl.Builder()
