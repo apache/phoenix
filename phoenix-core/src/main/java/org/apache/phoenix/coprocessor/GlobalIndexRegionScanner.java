@@ -1174,7 +1174,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return mutationList;
     }
 
-    private static Put prepareIndexPutForRebuid(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
+    private static Put prepareIndexPutForRebuild(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
                                                 ValueGetter mergedRowVG, long ts)
             throws IOException {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
@@ -1317,7 +1317,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                         continue;
                     }
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRow);
-                    Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
+                    Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
                     if (indexRowKeyForCurrentDataRow != null) {
@@ -1366,7 +1366,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                         continue;
                     }
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
-                    Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr,
+                    Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
                             nextDataRowVG, ts);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one

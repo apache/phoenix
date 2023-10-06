@@ -715,16 +715,6 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     }
 
     @Test
-    public void testBoolean() throws SQLException {
-
-        PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
-        pconn.createStatement().execute("create table MyTable (ID INTEGER PRIMARY KEY, A BOOLEAN, B BOOLEAN )");
-        PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, "select * from MyTable where NOT (NOT A AND NOT B)");
-        QueryPlan plan = pstmt.optimizeQuery();
-        Scan scan = plan.getContext().getScan();
-        System.out.println(scan);
-    }
-    @Test
     public void testSecondPkColInListFilter() throws SQLException {
         String tenantId = "000000000000001";
         String entityId1 = "00000000000000X";

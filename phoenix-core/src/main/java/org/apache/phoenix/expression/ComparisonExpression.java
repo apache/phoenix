@@ -382,18 +382,15 @@ public class ComparisonExpression extends BaseCompoundExpression {
                 return false;
             }
             switch (opA) {
-                case LESS:
-                    if (opB == LESS) {
-                        return true;
-                    }
-                    return false;
                 case LESS_OR_EQUAL:
                     if (opB == LESS || opB == LESS_OR_EQUAL || opB == EQUAL) {
                         return true;
                     }
                     return false;
+                case LESS:
                 case EQUAL:
                 case NOT_EQUAL:
+                case GREATER:
                     if (opA == opB) {
                         return true;
                     }
@@ -403,13 +400,8 @@ public class ComparisonExpression extends BaseCompoundExpression {
                         return true;
                     }
                     return false;
-                case GREATER:
-                    if (opB == GREATER) {
-                        return true;
-                    }
-                    return false;
                 default:
-                    throw new IllegalArgumentException("Unexpected CompareOp of " + opA);
+                    throw new IllegalArgumentException("Unexpected CompareOp " + opA);
             }
         }
         LiteralExpression rhsA = WhereCompiler.getLiteralExpression(this.getChildren().get(1));

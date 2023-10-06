@@ -109,35 +109,34 @@ public class CreateIndexCompiler {
         }
         PDataType dataType = dataTable.getColumns().get(i).getDataType();
         stringBuilder.append(getValue(dataType)+ ")");
-        PreparedStatement ps = context.getConnection().prepareStatement(stringBuilder.toString());
-        ps.execute();
-        Iterator<Pair<byte[],List<Cell>>> dataTableNameAndMutationIterator =
-                PhoenixRuntime.getUncommittedDataIterator(connection);
-        Pair<byte[], List<Cell>> dataTableNameAndMutation = null;
-        while (dataTableNameAndMutationIterator.hasNext()) {
-            dataTableNameAndMutation = dataTableNameAndMutationIterator.next();
-            if (!java.util.Arrays.equals(dataTableNameAndMutation.getFirst(),
-                    dataTableName.toString().getBytes())) {
-                dataTableNameAndMutation = null;
+        try (PreparedStatement ps =
+                context.getConnection().prepareStatement(stringBuilder.toString())) {
+            ps.execute();
+            Iterator<Pair<byte[], List<Cell>>> dataTableNameAndMutationIterator = PhoenixRuntime.getUncommittedDataIterator(connection);
+            Pair<byte[], List<Cell>> dataTableNameAndMutation = null;
+            while (dataTableNameAndMutationIterator.hasNext()) {
+                dataTableNameAndMutation = dataTableNameAndMutationIterator.next();
+                if (java.util.Arrays.equals(dataTableNameAndMutation.getFirst(),
+                        dataTableName.toString().getBytes())) {
+                    break;
+                } else {
+                    dataTableNameAndMutation = null;
+                }
             }
-        }
-        if (dataTableNameAndMutation == null) {
-            ps.close();
+            if (dataTableNameAndMutation == null) {
+                throw new RuntimeException(
+                        "Unexpected result from " + "PhoenixRuntime#getUncommittedDataIterator for "
+                                + dataTableName);
+            }
+            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            MultiKeyValueTuple tuple = new MultiKeyValueTuple(dataTableNameAndMutation.getSecond());
+            if (!indexWhereExpression.evaluate(tuple, ptr)) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_EVALUATE_INDEX_WHERE).build().buildException();
+            }
+        } finally {
             connection.setAutoCommit(autoCommit);
-            throw new RuntimeException("Unexpected result from " +
-                    "PhoenixRuntime#getUncommittedDataIterator for " + dataTableName);
         }
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-        MultiKeyValueTuple tuple = new MultiKeyValueTuple(dataTableNameAndMutation.getSecond());
-        if (!indexWhereExpression.evaluate(tuple, ptr)) {
-            ps.close();
-            connection.setAutoCommit(autoCommit);
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_EVALUATE_INDEX_WHERE).
-                    build().buildException();
-        }
-        ps.close();
-        connection.setAutoCommit(autoCommit);
     }
     public MutationPlan compile(final CreateIndexStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();

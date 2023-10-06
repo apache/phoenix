@@ -853,7 +853,7 @@ public class WhereCompiler {
 
     /**
      * Determines if nodeA contains/implies nodeB. Both nodeA and B are DNF (Disjunctive Normal
-     * Form) expressionse. nodeA contains nodeB on if every query disjunct of nodeB is contained
+     * Form) expressions. nodeA contains nodeB if every query disjunct of nodeB is contained
      * by a nodeA disjunct. A disjunct x contains another disjunct y if every conjunct of x
      * contains at least one conjunct of y.
      *
