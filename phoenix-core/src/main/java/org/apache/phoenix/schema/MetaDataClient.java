@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.exception.SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
@@ -1711,6 +1712,16 @@ public class MetaDataClient {
     }
 
     public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
+        // TODO: Do we need to borrow the schema name of the table?
+        ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
+        TableRef tableRef = resolver.getTables().get(0);
+        PTable dataTable = tableRef.getTable();
+        // Check if data table is a view and give a not supported error.
+        if (dataTable.getType() != TABLE) {
+            throw new SQLExceptionInfo.Builder(INVALID_TABLE_TYPE_FOR_CDC).setTableType(
+                    dataTable.getType()).build().buildException();
+        }
+
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
@@ -1728,6 +1739,11 @@ public class MetaDataClient {
                         SortOrder.getDefault()) }));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
+        if (TableProperty.SALT_BUCKETS.getValue(tableProps) != null) {
+            indexProps.put(QueryConstants.ALL_FAMILY_PROPERTIES_KEY, new Pair<>(
+                    TableProperty.SALT_BUCKETS.getPropertyName(),
+                    TableProperty.SALT_BUCKETS.getValue(tableProps)));
+        }
         // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
@@ -1749,10 +1765,6 @@ public class MetaDataClient {
             throw e;
         }
 
-        // TODO: Do we need to borrow the schema name of the table?
-        ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
-        TableRef tableRef = resolver.getTables().get(0);
-        PTable dataTable = tableRef.getTable();
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
@@ -3058,7 +3070,9 @@ public class MetaDataClient {
                     defaultCreateState = PIndexState.BUILDING;
                 }
             }
-            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : defaultCreateState;
+            PIndexState indexState = parent == null ||
+                    (tableType == PTableType.VIEW || tableType == PTableType.CDC) ?
+                    null : defaultCreateState;
             if (indexState == null && tableProps.containsKey(INDEX_STATE)) {
                 indexState = PIndexState.fromSerializedValue(tableProps.get(INDEX_STATE).toString());
             }

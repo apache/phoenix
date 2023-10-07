@@ -355,17 +355,6 @@ public enum TableProperty {
 
     INCLUDE(PhoenixDatabaseMetaData.CDC_INCLUDE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, false, false) {
         @Override
-        public Object getValue(Object value) {
-            try {
-                return value == null ? PTable.CDCChangeScope.CHANGE : PTable.CDCChangeScope.valueOf(value.toString().toUpperCase());
-            } catch (IllegalArgumentException e) {
-                throw new RuntimeException(new SQLExceptionInfo.Builder(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE)
-                        .setMessage(value.toString())
-                        .build().buildException());
-            }
-        }
-
-        @Override
         public Object getPTableValue(PTable table) {
             return table.getCDCIncludeScopes();
         }
