@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -1494,7 +1495,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
 
-    private void addColumnRefForScan(Set<ColumnReference> to, Set<ColumnReference> from) {
+    private void addColumnRefForScan(Set<ColumnReference> from, Set<ColumnReference> to) {
         for (ColumnReference colRef : from) {
             if (getDataImmutableStorageScheme()==ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
                 to.add(colRef);
@@ -1508,7 +1509,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         Set<ColumnReference> result = Sets.newLinkedHashSetWithExpectedSize(
                 indexedExpressions.size() + coveredColumnsMap.size() +
                         (indexWhereColumns == null ? 0 : indexWhereColumns.size()));
-        addColumnRefForScan(getIndexedColumns(), result);
+        addColumnRefForScan(indexedColumns, result);
         addColumnRefForScan(coveredColumnsMap.keySet(), result);
         if (indexWhereColumns != null) {
             addColumnRefForScan(indexWhereColumns, result);
