@@ -902,33 +902,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     /**
-     * Determines if the index row for a given data row should be prepared. For full
-     * indexes, index rows should always be prepared. For the partial indexes, the index row should
-     * be prepared only if the index where clause is satisfied on the given data row.
-     *
-     * @param maintainer IndexMaintainer object
-     * @param dataRowState data row represented as a put mutation, that is list of put cells
-     * @return always true for full indexes, and true for partial indexes if the index where
-     * expression evaluates to true on the given data row
-     */
-
-    public static boolean shouldPrepareIndexMutations(IndexMaintainer maintainer, Put dataRowState) {
-        if (maintainer.getIndexWhere() == null) {
-            // It is a full index and the index row should be prepared.
-            return true;
-        }
-        MultiKeyValueTuple tuple =
-                new MultiKeyValueTuple(
-                        readColumnsFromRow(dataRowState, maintainer.getIndexWhereColumns()));
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-        if (!maintainer.getIndexWhere().evaluate(tuple, ptr)) {
-            return false;
-        }
-        Object value = PBoolean.INSTANCE.toObject(ptr);
-        return value.equals(Boolean.TRUE);
-    }
-    /**
      * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
      * state with the pending row mutation.
      */
@@ -955,7 +928,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 IndexMaintainer indexMaintainer = pair.getFirst();
                 HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
                 if (nextDataRowState != null &&
-                        shouldPrepareIndexMutations(indexMaintainer, nextDataRowState)) {
+                        indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                             nextDataRowVG, rowKeyPtr, ts, null, null, false);
@@ -987,7 +960,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         }
                     }
                 } else if (currentDataRowState != null &&
-                        shouldPrepareIndexMutations(indexMaintainer, currentDataRowState)) {
+                        indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
                     ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
                     byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                             null, null, ts);
@@ -1548,7 +1521,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // stores the intermediate values as we apply conditional update expressions
       List<Cell> flattenedCells;
       // read the column values requested in the get from the current data row
-      List<Cell> cells = readColumnsFromRow(currentDataRowState, colsReadInExpr);
+      List<Cell> cells = IndexUtil.readColumnsFromRow(currentDataRowState, colsReadInExpr);
 
       if (currentDataRowState == null) { // row doesn't exist
           if (skipFirstOp) {
@@ -1640,34 +1613,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return mutations;
   }
 
-    private static List<Cell> readColumnsFromRow(Put currentDataRow, Set<ColumnReference> cols) {
-        if (currentDataRow == null) {
-            return Collections.EMPTY_LIST;
-        }
 
-        List<Cell> columnValues = Lists.newArrayList();
-
-        // just return any cell FirstKeyOnlyFilter
-        if (cols.isEmpty()) {
-            for (List<Cell> cells : currentDataRow.getFamilyCellMap().values()) {
-                if (cells == null || cells.isEmpty()) {
-                    continue;
-                }
-                columnValues.add(cells.get(0));
-                break;
-            }
-            return columnValues;
-        }
-
-        IndexUtil.SimpleValueGetter valueGetter = new IndexUtil.SimpleValueGetter(currentDataRow);
-        for (ColumnReference colRef : cols) {
-            Cell cell = valueGetter.getLatestCell(colRef, HConstants.LATEST_TIMESTAMP);
-            if (cell != null) {
-                columnValues.add(cell);
-            }
-        }
-        return columnValues;
-    }
 
     private static List<Cell> flattenCells(Mutation m) {
         List<Cell> flattenedCells = new ArrayList<>();

@@ -39,7 +39,14 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
-import org.apache.phoenix.schema.types.*;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PNumericType;
+import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 
@@ -81,11 +88,18 @@ public class CreateIndexCompiler {
             return "0x00";
         }
     }
+
+    /**
+     * Verifies that index WHERE clause does not include a subquery and it can
+     * be evaluated on a single data table row.
+     *
+     */
     private void verifyIndexWhere(ParseNode indexWhere, StatementContext context,
             TableName dataTableName) throws SQLException {
         if (indexWhere == null) {
             return;
         }
+        // Verify that index WHERE clause does not include a subquery
         PhoenixConnection connection = context.getConnection();
         IndexWhereParseNodeVisitor indexWhereParseNodeVisitor = new IndexWhereParseNodeVisitor();
         indexWhere.accept(indexWhereParseNodeVisitor);
@@ -93,10 +107,15 @@ public class CreateIndexCompiler {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_WHERE_WITH_SUBQUERY).
                     build().buildException();
         }
+
+        // Verify that index WHERE clause can be evaluated on a single data table row
+
+        // Convert the index WHERE ParseNode to an Expression
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         Expression indexWhereExpression = indexWhere.accept(expressionCompiler);
         PTable dataTable = PhoenixRuntime.getTable(connection, dataTableName.toString());
 
+        // Create a full data table row
         boolean autoCommit = connection.getAutoCommit();
         connection.setAutoCommit(false);
         StringBuilder stringBuilder = new StringBuilder("UPSERT INTO ");
@@ -128,6 +147,8 @@ public class CreateIndexCompiler {
                         "Unexpected result from " + "PhoenixRuntime#getUncommittedDataIterator for "
                                 + dataTableName);
             }
+
+            // Evaluate the WHERE expression on the data table row
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             MultiKeyValueTuple tuple = new MultiKeyValueTuple(dataTableNameAndMutation.getSecond());

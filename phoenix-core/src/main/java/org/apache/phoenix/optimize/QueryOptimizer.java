@@ -201,7 +201,6 @@ public class QueryOptimizer {
 
     private static boolean isPartialIndexUsable(SelectStatement select, QueryPlan dataPlan,
             PTable index) throws SQLException {
-
         StatementContext context = new StatementContext(dataPlan.getContext());
         context.setResolver(FromCompiler.getResolver(dataPlan.getTableRef()));
         return WhereCompiler.contains(
@@ -215,26 +214,14 @@ public class QueryOptimizer {
         if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
-        List<PTable> indexList =  dataPlan.getTableRef().getTable().getIndexes();
+        List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
         if (dataPlan.isApplicable() &&
-                (indexList.isEmpty() ||
+                (indexes.isEmpty() ||
                         dataPlan.isDegenerate() ||
                         dataPlan.getTableRef().hasDynamicCols() ||
                         select.getHint().hasHint(Hint.NO_INDEX))) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
-        // Include full indexes, and usable partial indexes
-        List<PTable> indexes = new ArrayList<>(indexList.size());
-        for (PTable index : indexList) {
-            if (index.getIndexWhere() != null) {
-                if (isPartialIndexUsable(select, dataPlan, index)) {
-                    indexes.add(index);
-                }
-            } else {
-                indexes.add(index);
-            }
-        }
-        
         // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes place.
         // For a SELECT, it is empty. In this case, we want to set the targetColumns to match the projection
         // from the dataPlan to ensure that the metadata for when an index is used matches the metadata for
@@ -253,7 +240,10 @@ public class QueryOptimizer {
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {
-            if (stopAtBestPlan && hintedPlan.isApplicable()) {
+            PTable index = hintedPlan.getTableRef().getTable();
+            if (stopAtBestPlan && hintedPlan.isApplicable() &&
+                    (index.getIndexWhere() == null ||
+                            isPartialIndexUsable(select, dataPlan, index))) {
                 return Collections.singletonList(hintedPlan);
             }
             plans.add(0, hintedPlan);
@@ -261,7 +251,9 @@ public class QueryOptimizer {
         
         for (PTable index : indexes) {
             QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan, false);
-            if (plan != null) {
+            if (plan != null &&
+                    (index.getIndexWhere() == null ||
+                            isPartialIndexUsable(select, dataPlan, index))) {
                 // Query can't possibly return anything so just return this plan.
                 if (plan.isDegenerate()) {
                     return Collections.singletonList(plan);

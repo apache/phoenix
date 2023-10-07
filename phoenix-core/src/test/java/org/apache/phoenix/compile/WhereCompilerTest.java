@@ -892,7 +892,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     @Test
     public void testBetweenFilter() throws SQLException {
         String tenantId = "000000000000001";
-        String query = "select * from atable where '" + tenantId +"' =organization_id" + " and a_integer between 0 and 10";
+        String query = "select * from atable where organization_id='" + tenantId + "' and a_integer between 0 and 10";
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = newPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();

@@ -188,7 +188,7 @@ public class PartialIndexIT extends BaseTest {
     }
 
     @Test
-    public void testComparison() throws Exception {
+    public void testAtomicUpsert() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +
@@ -196,6 +196,8 @@ public class PartialIndexIT extends BaseTest {
                     "A integer, B integer, C double, D varchar)" +
                     (salted ? " SALT_BUCKETS=4" : ""));
             String indexTableName = generateUniqueName();
+            // Add rows to the data table before creating a partial index to test that the index
+            // will be built correctly by IndexTool
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id1', 25, 2, 3.14, 'a')");
 
@@ -208,25 +210,29 @@ public class PartialIndexIT extends BaseTest {
                     (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE A > 50 ASYNC");
 
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
+
             String selectSql = "SELECT  D from " + dataTableName + " WHERE A > 60";
-            // Verify that the index table is used
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that the index table is used
             assertPlan((PhoenixResultSet) rs,  "", indexTableName);
             assertTrue(rs.next());
             assertEquals("b", rs.getString(1));
             assertFalse(rs.next());
 
             selectSql = "SELECT  D from " + dataTableName + " WHERE A = 50";
-            // Verify that the index table is not used
             rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that the index table is not used
             assertPlan((PhoenixResultSet) rs,  "", dataTableName);
+
+            // Add more rows to test the index write path
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('id3', 50, 2, 9.5, 'c')");
+            conn.commit();
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('id4', 75, 2, 9.5, 'd')");
+            conn.commit();
+
             // Verify that index table includes only the rows with A > 50
-            conn.createStatement().execute("upsert into " + dataTableName +
-                    " values ('id1', 50, 2, 9.5, 'c')");
-            conn.commit();
-            conn.createStatement().execute("upsert into " + dataTableName +
-                    " values ('id1', 75, 2, 9.5, 'd')");
-            conn.commit();
             selectSql = "SELECT * from " + indexTableName;
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -235,6 +241,26 @@ public class PartialIndexIT extends BaseTest {
             assertEquals(100, rs.getInt(1));
             assertFalse(rs.next());
 
+            // Overwrite an existing row that satisfies the index WHERE clause using an atomic
+            // upsert such that the new version of the row does not satisfy the index where clause
+            // anymore. This should result in deleting the index row.
+            String dml = "UPSERT INTO " + dataTableName + " values ('id2', 300, 2, 9.5, 'd') " +
+                    "ON DUPLICATE KEY UPDATE A = 0";
+            conn.createStatement().execute(dml);
+            conn.commit();
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(75, rs.getInt(1));
+            assertFalse(rs.next());
+
+            // Retrieve update row from the data table and verify that the index table is not used
+            selectSql = "SELECT  ID from " + dataTableName + " WHERE A = 0";
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertPlan((PhoenixResultSet) rs,  "", dataTableName);
+            assertTrue(rs.next());
+            assertEquals("id2", rs.getString(1));
+
+            // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
@@ -253,6 +279,9 @@ public class PartialIndexIT extends BaseTest {
                     "A integer, B integer, C double, D varchar) COLUMN_ENCODED_BYTES=0" +
                     (salted ? ", SALT_BUCKETS=4" : ""));
             String indexTableName = generateUniqueName();
+
+            // Add rows to the data table before creating a partial index to test that the index
+            // will be built correctly by IndexTool
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id1', 25, 2, 3.14, 'a')");
             conn.commit();
@@ -265,7 +294,7 @@ public class PartialIndexIT extends BaseTest {
                     (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE A > B ASYNC");
             conn.commit();
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
-            PTable indexTable = PhoenixRuntime.getTable(conn, indexTableName);
+
             String selectSql = "SELECT D from " + dataTableName + " WHERE A > B and D is not NULL";
 
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -274,11 +303,13 @@ public class PartialIndexIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals("a", rs.getString(1));
             assertFalse(rs.next());
+
             selectSql = "SELECT  D from " + dataTableName + " WHERE A > 100";
-            // Verify that the index table is not used
             rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that the index table is not used
             assertPlan((PhoenixResultSet) rs,  "", dataTableName);
-            // Verify that index table includes only the rows with A > B
+
+            // Add more rows to test the index write path
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id3', 50, 300, 9.5, 'c')");
             conn.commit();
@@ -288,6 +319,8 @@ public class PartialIndexIT extends BaseTest {
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id4', 76, 2, 9.5, 'd')");
             conn.commit();
+
+            // Verify that index table includes only the rows with A >  B
             selectSql = "SELECT * from " + indexTableName;
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
@@ -296,10 +329,22 @@ public class PartialIndexIT extends BaseTest {
             assertEquals(76, rs.getInt(1));
             assertFalse(rs.next());
 
+            // Overwrite an existing row that satisfies the index WHERE clause such that
+            // the new version of the row does not satisfy the index where clause anymore. This
+            // should result in deleting the index row.
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " (ID, B) values ('id1', 100)");
+            conn.commit();
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(76, rs.getInt(1));
+            assertFalse(rs.next());
+
+            // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
+                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
                 assertTrue(indexTable.getIndexWhere().equals("A > B"));
             }
         }
@@ -314,6 +359,9 @@ public class PartialIndexIT extends BaseTest {
                     "A integer, B integer, C double, D varchar)" +
                     (salted ? " SALT_BUCKETS=4" : ""));
             String indexTableName = generateUniqueName();
+
+            // Add rows to the data table before creating a partial index to test that the index
+            // will be built correctly by IndexTool
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id1', 70, 2, 3.14, 'a')");
             conn.commit();
@@ -325,6 +373,7 @@ public class PartialIndexIT extends BaseTest {
                     + indexTableName + " on " + dataTableName + " (A) " +
                     (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE B IS NOT NULL ASYNC");
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
+
             String selectSql = "SELECT A, D from " + dataTableName +
                     " WHERE A > 60 AND B IS NOT NULL";
 
@@ -335,7 +384,8 @@ public class PartialIndexIT extends BaseTest {
             assertEquals(70, rs.getInt(1));
             assertEquals("a", rs.getString(2));
             assertFalse(rs.next());
-            // Add more rows after index build
+
+            // Add more rows to test the index write path
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id3', 20, 2, 3.14, 'a')");
             conn.commit();
@@ -346,6 +396,7 @@ public class PartialIndexIT extends BaseTest {
                     " (id, A, D) values ('id5', 150, 'b')");
             conn.commit();
 
+            // Verify that index table includes only the rows where B is not null
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(70, rs.getInt(1));
@@ -362,6 +413,21 @@ public class PartialIndexIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(5, rs.getInt(1));
 
+            // Overwrite an existing row that satisfies the index WHERE clause such that
+            // the new version of the row does not satisfy the index where clause anymore. This
+            // should result in deleting the index row.
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " (ID, B) values ('id4', null)");
+            conn.commit();
+            selectSql = "SELECT A, D from " + dataTableName +
+                    " WHERE A > 60 AND B IS NOT NULL";
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(70, rs.getInt(1));
+            assertEquals("a", rs.getString(2));
+            assertFalse(rs.next());
+
+            // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
@@ -380,6 +446,9 @@ public class PartialIndexIT extends BaseTest {
                     "A integer, B integer, C double, D varchar)" +
                     (salted ? " SALT_BUCKETS=4" : ""));
             String indexTableName = generateUniqueName();
+
+            // Add rows to the data table before creating a partial index to test that the index
+            // will be built correctly by IndexTool
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id1', 70, 2, 3.14, 'abcdef')");
             conn.commit();
@@ -391,16 +460,17 @@ public class PartialIndexIT extends BaseTest {
                     + indexTableName + " on " + dataTableName + " (A) " +
                     (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE D like '%cde_' ASYNC");
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
+
             String selectSql = "SELECT D from " + dataTableName +
                     " WHERE B is not NULL AND D like '%cde_'";
-
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             // Verify that the index table is used
             assertPlan((PhoenixResultSet) rs,  "", indexTableName);
             assertTrue(rs.next());
             assertEquals("abcdef", rs.getString(1));
             assertFalse(rs.next());
-            // Add more rows after index build
+
+            // Add more rows to test the index write path
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('id3', 20, 2, 3.14, 'abcdegg')");
             conn.commit();
@@ -425,6 +495,20 @@ public class PartialIndexIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(5, rs.getInt(1));
 
+            // Overwrite an existing row that satisfies the index WHERE clause such that
+            // the new version of the row does not satisfy the index where clause anymore. This
+            // should result in deleting the index row.
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " (id, D) values ('id4',  'zzz')");
+            conn.commit();
+            selectSql = "SELECT D from " + dataTableName +
+                    " WHERE B is not NULL AND D like '%cde_'";
+            rs = conn.createStatement().executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals("abcdef", rs.getString(1));
+            assertFalse(rs.next());
+
+            // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
@@ -433,6 +517,7 @@ public class PartialIndexIT extends BaseTest {
             }
         }
     }
+
     @Test
     public void testPartialIndexPreferredOverFullIndex() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {

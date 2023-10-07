@@ -1305,8 +1305,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     // Add this put on top of the current data row state to get the next data row state
                     Put nextDataRow = (currentDataRowState == null) ? new Put((Put)mutation) :
                             applyNew((Put)mutation, currentDataRowState);
-                    if (!IndexRegionObserver.shouldPrepareIndexMutations(indexMaintainer,
-                            nextDataRow)) {
+                    if (!indexMaintainer.shouldPrepareIndexMutations(nextDataRow)) {
                         currentDataRowState = nextDataRow;
                         if (indexRowKeyForCurrentDataRow != null) {
                             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
@@ -1355,8 +1354,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     currentDataRowState = null;
                     indexRowKeyForCurrentDataRow = null;
                 } else if (indexRowKeyForCurrentDataRow != null) {
-                    if (!IndexRegionObserver.shouldPrepareIndexMutations(indexMaintainer,
-                            nextDataRowState)) {
+                    if (!indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
                         currentDataRowState = nextDataRowState;
                         Mutation del = indexMaintainer.buildRowDeleteMutation(
                                 indexRowKeyForCurrentDataRow,

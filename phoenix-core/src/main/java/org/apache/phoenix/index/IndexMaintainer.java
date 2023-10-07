@@ -101,7 +101,9 @@ import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.BaseTuple;
+import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 
@@ -929,6 +931,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     public boolean checkIndexRow(final byte[] indexRowKey,
                                         final Put dataRow) {
+        if (!shouldPrepareIndexMutations(dataRow)) {
+            return false;
+        }
         byte[] builtIndexRowKey = getIndexRowKey(dataRow);
         if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
                 indexRowKey, 0, indexRowKey.length) != 0) {
@@ -937,6 +942,32 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return true;
     }
 
+    /**
+     * Determines if the index row for a given data row should be prepared. For full
+     * indexes, index rows should always be prepared. For the partial indexes, the index row should
+     * be prepared only if the index where clause is satisfied on the given data row.
+     *
+     * @param dataRowState data row represented as a put mutation, that is list of put cells
+     * @return always true for full indexes, and true for partial indexes if the index where
+     * expression evaluates to true on the given data row
+     */
+
+    public boolean shouldPrepareIndexMutations(Put dataRowState) {
+        if (getIndexWhere() == null) {
+            // It is a full index and the index row should be prepared.
+            return true;
+        }
+        MultiKeyValueTuple tuple =
+                new MultiKeyValueTuple(
+                        IndexUtil.readColumnsFromRow(dataRowState, getIndexWhereColumns()));
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+        if (!getIndexWhere().evaluate(tuple, ptr)) {
+            return false;
+        }
+        Object value = PBoolean.INSTANCE.toObject(ptr);
+        return value.equals(Boolean.TRUE);
+    }
     public void deleteRowIfAgedEnough(byte[] indexRowKey, long ts, long ageThreshold,
                                       boolean singleVersion, Region region) throws IOException {
         if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
@@ -1462,15 +1493,25 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return allColumns;
     }
 
-    public Set<ColumnReference> getAllColumnsForDataTable() {
-        Set<ColumnReference> result = Sets.newLinkedHashSetWithExpectedSize(indexedExpressions.size() + coveredColumnsMap.size());
-        result.addAll(indexedColumns);
-        for (ColumnReference colRef : coveredColumnsMap.keySet()) {
+
+    private void addColumnRefForScan(Set<ColumnReference> to, Set<ColumnReference> from) {
+        for (ColumnReference colRef : from) {
             if (getDataImmutableStorageScheme()==ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
-                result.add(colRef);
+                to.add(colRef);
             } else {
-                result.add(new ColumnReference(colRef.getFamily(), QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES));
+                to.add(new ColumnReference(colRef.getFamily(),
+                        QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES));
             }
+        }
+    }
+    public Set<ColumnReference> getAllColumnsForDataTable() {
+        Set<ColumnReference> result = Sets.newLinkedHashSetWithExpectedSize(
+                indexedExpressions.size() + coveredColumnsMap.size() +
+                        (indexWhereColumns == null ? 0 : indexWhereColumns.size()));
+        addColumnRefForScan(getIndexedColumns(), result);
+        addColumnRefForScan(coveredColumnsMap.keySet(), result);
+        if (indexWhereColumns != null) {
+            addColumnRefForScan(indexWhereColumns, result);
         }
         return result;
     }
