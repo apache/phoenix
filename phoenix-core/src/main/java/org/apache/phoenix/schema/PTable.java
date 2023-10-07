@@ -708,6 +708,13 @@ public interface PTable extends PMetaDataEntity {
     List<PColumnFamily> getColumnFamilies();
 
     /**
+     * Return true if the table only has pk columns and no non-pk columns.
+     *
+     * @return true if the table only has pk columns and no non-pk columns.
+     */
+    boolean hasOnlyPkColumns();
+
+    /**
      * Get the column family with the given name
      * @param family the column family name
      * @return the PColumnFamily with the given name

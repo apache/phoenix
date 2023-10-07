@@ -1151,6 +1151,11 @@ public class PTableImpl implements PTable {
     }
 
     @Override
+    public boolean hasOnlyPkColumns() {
+        return allColumns.stream().allMatch(SchemaUtil::isPKColumn);
+    }
+
+    @Override
     public int newKey(ImmutableBytesWritable key, byte[][] values) {
         List<PColumn> columns = getPKColumns();
         int nValues = values.length;
