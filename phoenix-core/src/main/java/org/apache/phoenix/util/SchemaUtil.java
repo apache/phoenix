@@ -247,7 +247,7 @@ public class SchemaUtil {
         String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
         String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
         String normalizedTableName = StringUtil.EMPTY_STRING;
-        if(!schemaName.isEmpty()) {
+        if (!schemaName.isEmpty()) {
             normalizedTableName =  normalizeIdentifier(schemaName) + QueryConstants.NAME_SEPARATOR;
         }
         return normalizedTableName + normalizeIdentifier(tableName);
@@ -692,12 +692,12 @@ public class SchemaUtil {
                 stmt.executeUpdate("ALTER TABLE SYSTEM.\"TABLE\" ADD IF NOT EXISTS " + columnDef);
                 return metaConnection;
             } finally {
-                if(stmt != null) {
+                if (stmt != null) {
                     stmt.close();
                 }
             }
         } finally {
-            if(metaConnection != null) {
+            if (metaConnection != null) {
                 metaConnection.close();
             }
         }
@@ -845,7 +845,7 @@ public class SchemaUtil {
     }
     
     public static String getEscapedFullColumnName(String fullColumnName) {
-        if(fullColumnName.startsWith(ESCAPE_CHARACTER)) {
+        if (fullColumnName.startsWith(ESCAPE_CHARACTER)) {
             return fullColumnName;
         }
         int index = fullColumnName.indexOf(QueryConstants.NAME_SEPARATOR);
@@ -1131,7 +1131,8 @@ public class SchemaUtil {
     }
 
     public static boolean isSchemaCheckRequired(PTableType tableType, ReadOnlyProps props) {
-        return PTableType.TABLE.equals(tableType) && isNamespaceMappingEnabled(tableType, props);
+        return (PTableType.TABLE.equals(tableType) || PTableType.VIEW.equals(tableType))
+                && isNamespaceMappingEnabled(tableType, props);
     }
     
     public static boolean isNamespaceMappingEnabled(PTableType type, Configuration conf) {
@@ -1265,7 +1266,7 @@ public class SchemaUtil {
             fullTableName = tableName;
         }
 
-        if(schemaName != null && schemaName.length() != 0) {
+        if (schemaName != null && schemaName.length() != 0) {
             if (schemaNameCaseSensitive) {
                 fullTableName = "\"" + schemaName + "\"" + QueryConstants.NAME_SEPARATOR + fullTableName;
             } else {
@@ -1317,7 +1318,7 @@ public class SchemaUtil {
 
     public static String formatIndexColumnName(String name) {
         String[] splitName = name.split("\\.");
-        if(splitName.length < 2) {
+        if (splitName.length < 2) {
             if (!name.contains("\"")) {
                 if (quotesNeededForColumn(name)) {
                     name = "\"" + name + "\"";
@@ -1364,13 +1365,13 @@ public class SchemaUtil {
         boolean tableNameNeedsQuotes = isQuotesNeeded(pTableName);
         boolean schemaNameNeedsQuotes = isQuotesNeeded(pSchemaName);
 
-        if(schemaNameNeedsQuotes) {
+        if (schemaNameNeedsQuotes) {
             pSchemaName= "\""+pSchemaName+"\"";
         }
-        if(tableNameNeedsQuotes) {
+        if (tableNameNeedsQuotes) {
             pTableName = "\""+pTableName+"\"";
         }
-        if(tableNameNeedsQuotes || schemaNameNeedsQuotes) {
+        if (tableNameNeedsQuotes || schemaNameNeedsQuotes) {
             if (!Strings.isNullOrEmpty(pSchemaName)) {
                 return String.format("%s.%s", pSchemaName, pTableName);
             } else {
