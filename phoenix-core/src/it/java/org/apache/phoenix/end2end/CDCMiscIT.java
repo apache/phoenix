@@ -60,7 +60,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void assertPTable(String cdcName, Set<PTable.CDCChangeScope> expIncludeScopes)
+    private void assertPTable(String cdcName, Set<PTable.CDCChangeScope> expIncludeScopes,
+                              String datatableName)
             throws SQLException {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
@@ -68,6 +69,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
         assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(table));
         assertNull(table.getIndexState()); // Index state should be null for CDC.
+        assertEquals(datatableName, table.getParentName().getString());
     }
 
     private void assertSaltBuckets(String cdcName, Integer nbuckets) throws SQLException {
@@ -152,13 +154,13 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 "(v2) INCLUDE (pre, post) INDEX_TYPE=g");
         assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
-                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName);
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
                 "(v2) INDEX_TYPE=l");
         assertCDCState(conn, cdcName, null, 2);
-        assertPTable(cdcName, null);
+        assertPTable(cdcName, null, tableName);
 
         String viewName = generateUniqueName();
         conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " +
