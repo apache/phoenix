@@ -376,7 +376,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
                 = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
-
         setLastDDLTimestampRequestParameters(innerBuilder, tableRef.getTable());
         requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
@@ -436,11 +435,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
             throw parsedException;
         }
-        // do nothing if the validation succeeded.
     }
 
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit, boolean validateLastDdlTimestamp) throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit, boolean shouldValidateLastDdlTimestamp) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
 
         try {
@@ -490,7 +488,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                                 //verify metadata for the table/view/index in the query plan
                                 //plan.getTableRef can be null in some cases like EXPLAIN <query>
-                                if (validateLastDdlTimestamp && plan.getTableRef() != null) {
+                                if (shouldValidateLastDdlTimestamp && plan.getTableRef() != null) {
                                     validateLastDDLTimestamp(plan.getTableRef(), true);
                                 }
 
@@ -540,7 +538,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                     e.getSchemaName(), e.getTableName(), true)
                                             .wasUpdated()) {
                                         //TODO we can log retry count and error for debugging in LOG table
-                                        return executeQuery(stmt, false, queryLogger, noCommit, validateLastDdlTimestamp);
+                                        return executeQuery(stmt, false, queryLogger, noCommit, shouldValidateLastDdlTimestamp);
                                     }
                                 }
                                 throw e;

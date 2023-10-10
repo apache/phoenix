@@ -73,8 +73,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(REGIONSERVER_COPROCESSOR_CONF_KEY,
-                PhoenixRegionServerEndpoint.class.getName());
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
@@ -512,7 +510,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Test Select query with old ddl timestamp and ddl timestamp validation encounters an exception.
+     * Test Select query works when ddl timestamp validation with old timestamp encounters an exception.
+     * Verify that the list of live region servers was refreshed when ddl timestamp validation is retried.
+     * Verify that the client cache was updated after encountering StaleMetadataCacheException.
      */
     @Test
     public void testSelectQueryWithOldDDLTimestampWithExceptionRetry() throws Exception {
@@ -586,7 +586,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             cache = ServerMetadataCache.getInstance(config);
             ServerMetadataCache spyCache = Mockito.spy(cache);
             SQLException e = new SQLException("FAIL");
-            Mockito.doThrow(e).doThrow(e).when(spyCache)
+            Mockito.doThrow(e).when(spyCache)
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
             ServerMetadataCache.setInstance(spyCache);
 

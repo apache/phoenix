@@ -24,7 +24,6 @@ import com.google.protobuf.Service;
 import java.io.IOException;
 import java.util.Collections;
 
-import com.google.protobuf.Service;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
