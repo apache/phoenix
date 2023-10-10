@@ -20,6 +20,8 @@ package org.apache.phoenix.parse;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -36,9 +38,10 @@ public class HintNode {
     public static final char SEPARATOR = ' ';
     public static final String PREFIX = "(";
     public static final String SUFFIX = ")";
-    // Split on whitespace and parenthesis, keeping the parenthesis in the token array
-    private static final String SPLIT_REGEXP = "\\s+|((?<=\\" + PREFIX + ")|(?=\\" + PREFIX + "))|((?<=\\" + SUFFIX + ")|(?=\\" + SUFFIX + "))";
-    
+    // Each hint is of the generic syntax hintWord(hintArgs) where hintArgs in parent are optional.
+    private static final Pattern HINT_PATTERN = Pattern.compile(
+            "(?<hintWord>\\w+)\\s*(?<hintArgs>\\([^)]+\\))?");
+
     public enum Hint {
         /**
          * Forces a range scan to be used to process the query.
@@ -160,35 +163,12 @@ public class HintNode {
 
     public HintNode(String hint) {
         Map<Hint,String> hints = new HashMap<Hint,String>();
-        // Split on whitespace or parenthesis. We do not need to handle escaped or
-        // embedded whitespace/parenthesis, since we are parsing what will be HBase
-        // table names which are not allowed to contain whitespace or parenthesis.
-        String[] hintWords = hint.split(SPLIT_REGEXP);
-        for (int i = 0; i < hintWords.length; i++) {
-            String hintWord = hintWords[i];
-            if (hintWord.isEmpty()) {
-                continue;
-            }
+        Matcher m = HINT_PATTERN.matcher(hint);
+        while (m.find()) {
             try {
-                Hint key = Hint.valueOf(hintWord.toUpperCase());
-                String hintValue = "";
-                if (i+1 < hintWords.length && PREFIX.equals(hintWords[i+1])) {
-                    StringBuffer hintValueBuf = new StringBuffer(hint.length());
-                    hintValueBuf.append(PREFIX);
-                    i+=2;
-                    while (i < hintWords.length && !SUFFIX.equals(hintWords[i])) {
-                        hintValueBuf.append(SchemaUtil.normalizeIdentifier(hintWords[i++]));
-                        hintValueBuf.append(SEPARATOR);
-                    }
-                    // Replace trailing separator with suffix
-                    hintValueBuf.replace(hintValueBuf.length()-1, hintValueBuf.length(), SUFFIX);
-                    hintValue = hintValueBuf.toString();
-                }
-                String oldValue = hints.put(key, hintValue);
-                // Concatenate together any old value with the new value
-                if (oldValue != null) {
-                    hints.put(key, oldValue + hintValue);
-                }
+                Hint hintWord = Hint.valueOf(m.group("hintWord"));
+                String hintArgs = m.group("hintArgs");
+                hints.put(hintWord, hintArgs != null ? hintArgs.toUpperCase() : "");
             } catch (IllegalArgumentException e) { // Ignore unknown/invalid hints
             }
         }
