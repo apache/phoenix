@@ -101,7 +101,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
             // Ignore last byte, as it's only there so we can have a way to differentiate null
             // from the absence of a value.
             ptr.set(viewConstant, 0, viewConstant.length-1);
-            Object literal = dataCol.getDataType().toObject(ptr);
+            Object literal = dataCol.getDataType().toObject(ptr, dataCol.getSortOrder());
             return new LiteralParseNode(literal, dataCol.getDataType());
         }
         TableName tName = getReplacedTableName(dataTableRef);
