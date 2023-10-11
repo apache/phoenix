@@ -128,7 +128,7 @@
     <stream.version>2.9.5</stream.version>
     <icu4j.version>72.1</icu4j.version>
     <guice.version>5.1.0</guice.version>
-    <zookeeper.version>3.5.7</zookeeper.version>
+    <zookeeper.version>3.7.2</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
     <jetty.version>9.4.52.v20230823</jetty.version>
