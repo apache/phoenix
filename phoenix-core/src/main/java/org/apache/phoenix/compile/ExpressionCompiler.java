@@ -423,7 +423,9 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         // If the column is matched in a WHERE clause against a constant not equal to it's constant, then the entire
         // query would become degenerate.
         if (!resolveViewConstants && IndexUtil.getViewConstantValue(column, ptr)) {
-            return LiteralExpression.newConstant(column.getDataType().toObject(ptr), column.getDataType());
+            return LiteralExpression.newConstant(
+                    column.getDataType().toObject(ptr, column.getSortOrder()),
+                    column.getDataType(), column.getSortOrder());
         }
         if (tableRef.equals(context.getCurrentTable()) && !SchemaUtil.isPKColumn(column)) { // project only kv columns
             addColumn(column);
