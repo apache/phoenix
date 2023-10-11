@@ -461,6 +461,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             long indexLastDDLTimestampAfterCreation = getLastDDLTimestamp(indexName);
             // Make sure that last ddl timestamp is cached on the regionserver.
             assertNotNull(indexLastDDLTimestampAfterCreation);
+            // Adding a sleep for 1 ms so that we get new last ddl timestamp.
             Thread.sleep(1);
             stmt.execute(dropIndexDDL);
             // Make sure that we invalidate the cache on regionserver for base table and an index
@@ -479,6 +480,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     /**
      *  Test that we invalidate the cache of the immediate parent view
      *  and update the last ddl timestamp of the immediate parent view while we add an index.
+     *  Test that we invalidate the cache for parent view and view index when we drop an index.
+     *  Also we update the last ddl timestamp for parent view when we drop an index.
      * @throws Exception
      */
     @Test
@@ -515,6 +518,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             long indexLastDDLTimestampAfterCreation = getLastDDLTimestamp(globalViewIndexName);
             // Make sure that last ddl timestamp is cached on the regionserver.
             assertNotNull(indexLastDDLTimestampAfterCreation);
+            // Adding a sleep for 1 ms so that we get new last ddl timestamp.
             Thread.sleep(1);
             stmt.execute(dropIndexDDL);
             // Make sure that we invalidate the cache on regionservers for view and its index after

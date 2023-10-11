@@ -3527,14 +3527,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     ServerRpcController controller = new ServerRpcController();
                     for (InvalidateServerMetadataCacheRequest invalidateCacheRequest:
                             invalidateCacheRequests) {
-                        String tenantIDStr = Bytes.toString(invalidateCacheRequest.getTenantId());
-                        String schemaNameStr
-                                = Bytes.toString(invalidateCacheRequest.getSchemaName());
-                        String tableNameStr
-                                = Bytes.toString(invalidateCacheRequest.getTableName());
-                        String fullTableName = SchemaUtil.getTableName(schemaNameStr, tableNameStr);
-                        LOGGER.info("Sending invalidate metadata cache for tenantID: {}, tableName: {}"
-                                + " to region server: {}", tenantIDStr, fullTableName, serverName);
+                        LOGGER.info("Sending invalidate metadata cache for {}  to region server:" +
+                                " {}", invalidateCacheRequest.toString(), serverName);
                     }
                     RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
                             service = RegionServerEndpointProtos.RegionServerEndpointService

@@ -17,15 +17,19 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.util.SchemaUtil;
+
 public class InvalidateServerMetadataCacheRequest {
     private final byte[] tenantId;
-    private final byte[] schema;
-    private final byte[] name;
+    private final byte[] schemaName;
+    private final byte[] tableName;
 
-    public InvalidateServerMetadataCacheRequest(byte[] tenantId, byte[] schema, byte[] name) {
+    public InvalidateServerMetadataCacheRequest(byte[] tenantId, byte[] schemaName,
+                                                byte[] tableName) {
         this.tenantId = tenantId;
-        this.schema = schema;
-        this.name = name;
+        this.schemaName = schemaName;
+        this.tableName = tableName;
     }
 
     public byte[] getTenantId() {
@@ -33,10 +37,17 @@ public class InvalidateServerMetadataCacheRequest {
     }
 
     public byte[] getSchemaName() {
-        return schema;
+        return schemaName;
     }
 
     public byte[] getTableName() {
-        return name;
+        return tableName;
+    }
+
+    @Override
+    public String toString() {
+        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        return "tenantId = " + Bytes.toString(tenantId) +
+                ", table name = " + fullTableName;
     }
 }
