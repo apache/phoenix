@@ -246,15 +246,15 @@ public class CreateTableCompiler {
                                      final Set<PColumn> pkColumnsInWhere,
                                      final Set<PColumn> nonPkColumnsInWhere)
             throws IOException, SQLException {
-        if (nonPkColumnsInWhere.size() > 0 ||
-                !isPkColumnsInOrder(pkColumnsInWhere, parentToBe.getPKColumns())) {
+        if (nonPkColumnsInWhere.size() > 0
+                || !isPkColumnsInOrder(pkColumnsInWhere, parentToBe.getPKColumns())) {
             return ViewType.READ_ONLY;
         }
 
-        byte[] parentTenantIdInBytes = parentToBe.getTenantId() != null ?
-                parentToBe.getTenantId().getBytes() : null;
-        byte[] parentSchemaNameInBytes = parentToBe.getSchemaName() != null ?
-                parentToBe.getSchemaName().getBytes() : null;
+        byte[] parentTenantIdInBytes = parentToBe.getTenantId() != null
+                ? parentToBe.getTenantId().getBytes() : null;
+        byte[] parentSchemaNameInBytes = parentToBe.getSchemaName() != null
+                ? parentToBe.getSchemaName().getBytes() : null;
 
         ConnectionQueryServices cqs = connection.unwrap(PhoenixConnection.class)
                 .getQueryServices();
@@ -299,8 +299,8 @@ public class CreateTableCompiler {
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
         BitSet isViewColumnReferencedToBe = new BitSet(view.getColumns().size());
-        ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context, isViewColumnReferencedToBe);
-
+        ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context,
+                isViewColumnReferencedToBe);
         ParseNode whereNode = select.getWhere();
         Expression where = whereNode.accept(expressionCompiler);
         return where;
@@ -319,19 +319,19 @@ public class CreateTableCompiler {
             return true;
         }
 
-        List<Integer> allPkPositions = new ArrayList<>();
+        List<Integer> tablePkPositions = new ArrayList<>();
         List<Integer> pkPositions = new ArrayList<>();
-        tablePkColumns.forEach((pkColumn) -> allPkPositions.add(pkColumn.getPosition()));
-        pkColumns.forEach((pkColumn) -> pkPositions.add(pkColumn.getPosition()));
+        tablePkColumns.forEach(tablePkColumn -> tablePkPositions.add(tablePkColumn.getPosition()));
+        pkColumns.forEach(pkColumn -> pkPositions.add(pkColumn.getPosition()));
 
         Collections.sort(pkPositions);
-        int allPkIndex = Collections.binarySearch(allPkPositions, pkPositions.get(0));
+        int allPkIndex = Collections.binarySearch(tablePkPositions, pkPositions.get(0));
         if (allPkIndex < 0) {
             return false;
         }
         for (int i = 1; i < pkPositions.size(); i++) {
             allPkIndex++;
-            if (pkPositions.get(i) != allPkPositions.get(allPkIndex)) {
+            if (pkPositions.get(i) != tablePkPositions.get(allPkIndex)) {
                 return false;
             }
         }
@@ -493,13 +493,18 @@ public class CreateTableCompiler {
         
     }
 
-    public static class ViewWhereExpressionValidatorVisitor extends StatelessTraverseNoExpressionVisitor<Boolean> {
+    /**
+     * Visitor for view's where expression, which updates primary key columns and non-primary key
+     * columns for validating if the view is updatable
+     */
+    public static class ViewWhereExpressionValidatorVisitor extends
+            StatelessTraverseNoExpressionVisitor<Boolean> {
         private boolean isUpdatable = true;
         private final PTable table;
         Set<PColumn> pkColumns;
         Set<PColumn> nonPKColumns;
 
-        public ViewWhereExpressionValidatorVisitor (PTable table, Set<PColumn> pkColumns,
+        public ViewWhereExpressionValidatorVisitor(PTable table, Set<PColumn> pkColumns,
                                                     Set<PColumn> nonPKColumns) {
             this.table = table;
             this.pkColumns = pkColumns;
@@ -530,8 +535,9 @@ public class CreateTableCompiler {
 
         @Override
         public Iterator<Expression> visitEnter(ComparisonExpression node) {
-            if (node.getFilterOp() == CompareOperator.EQUAL && node.getChildren().get(1).isStateless()
-                    && node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS ) {
+            if (node.getFilterOp() == CompareOperator.EQUAL
+                    && node.getChildren().get(1).isStateless()
+                    && node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS) {
                 return Iterators.singletonIterator(node.getChildren().get(0));
             }
             return super.visitEnter(node);
@@ -565,7 +571,9 @@ public class CreateTableCompiler {
         @Override
         public Boolean visit(KeyValueColumnExpression node) {
             try {
-                this.nonPKColumns.add(table.getColumnFamily(node.getColumnFamily()).getPColumnForColumnQualifier(node.getColumnQualifier()));
+                this.nonPKColumns.add(
+                        table.getColumnFamily(node.getColumnFamily())
+                                .getPColumnForColumnQualifier(node.getColumnQualifier()));
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }
