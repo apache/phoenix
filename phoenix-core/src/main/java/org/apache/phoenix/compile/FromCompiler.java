@@ -163,16 +163,19 @@ public class FromCompiler {
     	
         TableName baseTable = statement.getBaseTableName();
         String schemaName;
-        if (baseTable == null) {
-            if (SchemaUtil.isSchemaCheckRequired(statement.getTableType(), connection.getQueryServices().getProps())) {
-                schemaName = statement.getTableName().getSchemaName();
-                if (schemaName != null) {
-                    new SchemaResolver(connection, statement.getTableName().getSchemaName(), true);
-                } else if (connection.getSchema() != null) {
-                    // To ensure schema set through properties or connection string exists before creating table
-                    new SchemaResolver(connection, connection.getSchema(), true);
-                }
+        if (SchemaUtil.isSchemaCheckRequired(statement.getTableType(),
+                connection.getQueryServices().getProps())) {
+            // To ensure schema set through properties or connection
+            // string exists before creating table
+            schemaName = statement.getTableName().getSchemaName() != null
+                    ? statement.getTableName().getSchemaName() : connection.getSchema();
+            if (schemaName != null) {
+                // Only create SchemaResolver object to check if constructor throws exception.
+                // No exception means schema exists
+                new SchemaResolver(connection, schemaName, true);
             }
+        }
+        if (baseTable == null) {
             return EMPTY_TABLE_RESOLVER;
         }
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
@@ -245,7 +248,7 @@ public class FromCompiler {
      */
     public static TableRef refreshDerivedTableNode(
             ColumnResolver columnResolver, DerivedTableNode derivedTableNode) throws SQLException {
-        if(!(columnResolver instanceof MultiTableColumnResolver)) {
+        if (!(columnResolver instanceof MultiTableColumnResolver)) {
             throw new UnsupportedOperationException();
         }
         return ((MultiTableColumnResolver)columnResolver).refreshDerivedTableNode(derivedTableNode);
@@ -595,13 +598,13 @@ public class FromCompiler {
             List<PFunction> functionsFound = new ArrayList<PFunction>(functionNames.size());
             if (updateCacheImmediately || connection.getAutoCommit()) {
                 getFunctionFromCache(functionNames, functionsFound, true);
-                if(functionNames.isEmpty()) {
+                if (functionNames.isEmpty()) {
                     return functionsFound;
                 }
                 MetaDataMutationResult result = client.updateCache(functionNames);
                 timeStamp = result.getMutationTime();
                 functionsFound = result.getFunctions();
-                if(functionNames.size() != functionsFound.size()){
+                if (functionNames.size() != functionsFound.size()) {
                     throw new FunctionNotFoundException("Some of the functions in " +
                             functionNames.toString()+" are not found");
                 }
@@ -612,11 +615,11 @@ public class FromCompiler {
                 if (!functionNames.isEmpty()) {
                     result = client.updateCache(functionNames);
                 }
-                if(result!=null) {
+                if (result != null) {
                     if (!result.getFunctions().isEmpty()) {
                         functionsFound.addAll(result.getFunctions());
                     }
-                    if(result.wasUpdated()) {
+                    if (result.wasUpdated()) {
                         timeStamp = result.getMutationTime();
                     }
                 }
@@ -640,7 +643,7 @@ public class FromCompiler {
                                           List<PFunction> functionsFound,
                                           boolean getOnlyTemporyFunctions) {
             Iterator<String> iterator = functionNames.iterator();
-            while(iterator.hasNext()) {
+            while (iterator.hasNext()) {
                 PFunction function = null;
                 String functionName = iterator.next();
                 try {
@@ -672,7 +675,7 @@ public class FromCompiler {
         @Override
         public PFunction resolveFunction(String functionName) throws SQLException {
             PFunction function = functionMap.get(functionName);
-            if(function == null) {
+            if (function == null) {
                 throw new FunctionNotFoundException(functionName);
             }
             return function;
@@ -1010,14 +1013,14 @@ public class FromCompiler {
          * @throws SQLException
          */
         public TableRef refreshDerivedTableNode(DerivedTableNode derivedTableNode) throws SQLException {
-              String tableAlias = derivedTableNode.getAlias();
-              List<TableRef> removedTableRefs = this.tableMap.removeAll(tableAlias);
-              if(removedTableRefs == null || removedTableRefs.isEmpty()) {
-                  return null;
-              }
-              tables.removeAll(removedTableRefs);
-              this.visit(derivedTableNode);
-              return this.resolveTable(null, tableAlias);
+            String tableAlias = derivedTableNode.getAlias();
+            List<TableRef> removedTableRefs = this.tableMap.removeAll(tableAlias);
+            if (removedTableRefs == null || removedTableRefs.isEmpty()) {
+                return null;
+            }
+            tables.removeAll(removedTableRefs);
+            this.visit(derivedTableNode);
+            return this.resolveTable(null, tableAlias);
         }
 
         private static class ColumnFamilyRef {

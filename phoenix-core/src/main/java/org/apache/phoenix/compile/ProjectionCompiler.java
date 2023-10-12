@@ -176,7 +176,10 @@ public class ProjectionCompiler {
             expression = coerceIfNecessary(i-posOffset+projectedOffset, targetColumns, expression);
             ImmutableBytesWritable ptr = context.getTempPtr();
             if (IndexUtil.getViewConstantValue(column, ptr)) {
-                expression = LiteralExpression.newConstant(column.getDataType().toObject(ptr), expression.getDataType());
+                expression = LiteralExpression.newConstant(
+                        column.getDataType().toObject(ptr, column.getSortOrder()),
+                        expression.getDataType(),
+                        column.getSortOrder());
             }
             projectedExpressions.add(expression);
             boolean isCaseSensitive = !SchemaUtil.normalizeIdentifier(colName).equals(colName);

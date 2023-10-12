@@ -2417,6 +2417,18 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // table/index/views.
                 tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
                     clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
+                if (tableType == INDEX) {
+                    // Invalidate the cache on each regionserver for parent table/view.
+                    List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
+                    requests.add(new InvalidateServerMetadataCacheRequest(tenantIdBytes,
+                            parentSchemaName, parentTableName));
+                    invalidateServerMetadataCache(requests);
+                    long currentTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    // If table type is index, then update the last ddl timestamp of the parent
+                    // table or immediate parent view.
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(parentTableKey,
+                            currentTimestamp, currentTimestamp));
+                }
 
                 //and if we're doing change detection on this table or view, notify the
                 //external schema registry and get its schema id
@@ -2771,8 +2783,20 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (parentLockKey != null) {
                     acquireLock(region, parentLockKey, locks);
                 }
-                invalidateServerMetadataCache(tenantIdBytes, schemaName, tableOrViewName);
-                List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
+                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
+                requests.add(new InvalidateServerMetadataCacheRequest(tenantIdBytes, schemaName,
+                        tableOrViewName));
+                if (pTableType == INDEX) {
+                    requests.add(new InvalidateServerMetadataCacheRequest(tenantIdBytes, schemaName,
+                            parentTableName));
+                    long currentTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    // If table type is index, then update the last ddl timestamp of the parent
+                    // table or immediate parent view.
+                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(parentLockKey,
+                            currentTimestamp, currentTimestamp));
+                }
+                invalidateServerMetadataCache(requests);
+                List<ImmutableBytesPtr> invalidateList = new ArrayList<>();
                 result = doDropTable(lockKey, tenantIdBytes, schemaName, tableOrViewName,
                         parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata,
                         childLinkMutations, invalidateList, tableNamesToDelete,
@@ -3187,7 +3211,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // We take a write row lock for tenantId, schemaName, tableOrViewName
                 acquireLock(region, key, locks);
                 // Invalidate the cache from all the regionservers.
-                invalidateServerMetadataCache(tenantId, schemaName, tableOrViewName);
+                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
+                requests.add(new InvalidateServerMetadataCacheRequest(tenantId, schemaName,
+                        tableOrViewName));
+                invalidateServerMetadataCache(requests);
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<>();
                 invalidateList.add(cacheKey);
@@ -3438,23 +3465,19 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     }
 
     /**
-     * Invalidate metadata cache from all region servers for the given tenant and table name.
-     * @param tenantId
-     * @param schemaName
-     * @param tableOrViewName
+     * Invalidate metadata cache from all region servers for the given list of
+     * InvalidateServerMetadataCacheRequest.
      * @throws Throwable
      */
-    private void invalidateServerMetadataCache(byte[] tenantId, byte[]schemaName,
-            byte[] tableOrViewName) throws Throwable {
+    private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
+            throws Throwable {
         Configuration conf = env.getConfiguration();
         String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         if (value == null
                 || !value.contains(PhoenixRegionServerEndpoint.class.getName())) {
             // PhoenixRegionServerEndpoint is not loaded. We don't have to invalidate the cache.
-            LOGGER.info("Skip invalidating server metadata cache for tenantID: {},"
-                            + " schema name: {}, table Name: {} since PhoenixRegionServerEndpoint"
-                            + " is not loaded", Bytes.toString(tenantId),
-                    Bytes.toString(schemaName), Bytes.toString(tableOrViewName));
+            LOGGER.info("Skip invalidating server metadata cache since PhoenixRegionServerEndpoint"
+                            + " is not loaded");
             return;
         }
         Properties properties = new Properties();
@@ -3467,33 +3490,28 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // This will incur an extra RPC to the master. This RPC is required since we want to
             // get current list of regionservers.
             Collection<ServerName> serverNames = admin.getRegionServers(true);
-            invalidateServerMetadataCacheWithRetries(admin, serverNames, tenantId, schemaName,
-                    tableOrViewName, false);
+            invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
         }
     }
 
     /**
-     * Invalidate metadata cache on all regionservers with retries for the given tenantID
-     * and tableName with retries. We retry once before failing the operation.
+     * Invalidate metadata cache on all regionservers with retries for the given list of
+     * InvalidateServerMetadataCacheRequest. Each InvalidateServerMetadataCacheRequest contains
+     * tenantID, schema name and table name.
+     * We retry once before failing the operation.
      *
      * @param admin
      * @param serverNames
-     * @param tenantId
-     * @param schemaName
-     * @param tableOrViewName
+     * @param invalidateCacheRequests
      * @param isRetry
      * @throws Throwable
      */
     private void invalidateServerMetadataCacheWithRetries(Admin admin,
-            Collection<ServerName> serverNames, byte[] tenantId, byte[] schemaName,
-            byte[] tableOrViewName, boolean isRetry) throws Throwable {
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableOrViewName);
-        String tenantIDStr = Bytes.toString(tenantId);
-        LOGGER.info("Invalidating metadata cache for tenantID: {}, tableName: {} for"
-                        + " region servers: {}, isRetry: {}", tenantIDStr, fullTableName,
-                serverNames, isRetry);
-        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest request =
-                getRequest(tenantId, schemaName, tableOrViewName);
+            Collection<ServerName> serverNames,
+            List<InvalidateServerMetadataCacheRequest> invalidateCacheRequests,
+            boolean isRetry) throws Throwable {
+        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest protoRequest =
+                getRequest(invalidateCacheRequests);
         // TODO Do I need my own executor or can I re-use QueryServices#Executor
         //  since it is supposed to be used only for scans according to documentation?
         List<CompletableFuture<Void>> futures = new ArrayList<>();
@@ -3507,23 +3525,24 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // DDL operations. We also need to think of we need separate RPC handler
                     // threads for this?
                     ServerRpcController controller = new ServerRpcController();
+                    for (InvalidateServerMetadataCacheRequest invalidateCacheRequest
+                            : invalidateCacheRequests) {
+                        LOGGER.info("Sending invalidate metadata cache for {}  to region server:"
+                                + " {}", invalidateCacheRequest.toString(), serverName);
+                    }
                     RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
                             service = RegionServerEndpointProtos.RegionServerEndpointService
                             .newBlockingStub(admin.coprocessorService(serverName));
-                    LOGGER.info("Sending invalidate metadata cache for tenantID: {}, tableName: {}"
-                            + " to region server: {}", tenantIDStr, fullTableName, serverName);
                     // The timeout for this particular request is managed by config parameter:
                     // hbase.rpc.timeout. Even if the future times out, this runnable can be in
                     // RUNNING state and will not be interrupted.
-                    service.invalidateServerMetadataCache(controller, request);
-                    LOGGER.info("Invalidating metadata cache for tenantID: {}, tableName: {}"
+                    service.invalidateServerMetadataCache(controller, protoRequest);
+                    LOGGER.info("Invalidating metadata cache"
                             + " on region server: {} completed successfully and it took {} ms",
-                            tenantIDStr, fullTableName, serverName,
-                            innerWatch.stop().elapsedMillis());
+                            serverName, innerWatch.stop().elapsedMillis());
                     // TODO Create a histogram metric for time taken for invalidating the cache.
                 } catch (ServiceException se) {
-                    LOGGER.error("Invalidating metadata cache for tenantID: {}, tableName: {}"
-                                    + " failed for regionserver {}", tenantIDStr, fullTableName,
+                    LOGGER.error("Invalidating metadata cache failed for regionserver {}",
                             serverName, se);
                     IOException ioe = ServerUtil.parseServiceException(se);
                     throw new CompletionException(ioe);
@@ -3541,8 +3560,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             allFutures.get(metadataCacheInvalidationTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (Throwable t) {
             List<ServerName> failedServers = getFailedServers(futures, map);
-            LOGGER.error("Invalidating metadata cache for tenantID: {}, tableName: {} failed for "
-                    + "region servers: {}", tenantIDStr, fullTableName, failedServers, t);
+            LOGGER.error("Invalidating metadata cache for failed for region servers: {}",
+                    failedServers, t);
             if (isRetry) {
                 // If this is a retry attempt then just fail the operation.
                 if (allFutures.isCompletedExceptionally()) {
@@ -3555,7 +3574,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // This is the first attempt, we can retry once.
                 // Indicate that this is a retry attempt.
                 invalidateServerMetadataCacheWithRetries(admin, failedServers,
-                        tenantId, schemaName, tableOrViewName, true);
+                        invalidateCacheRequests, true);
             }
         }
     }
@@ -3585,16 +3604,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     }
 
     private RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest getRequest(
-            byte[] tenantID, byte[] schemaName, byte[] tableOrViewName) {
+            List<InvalidateServerMetadataCacheRequest> requests) {
         RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.Builder builder =
                 RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.newBuilder();
-
-        RegionServerEndpointProtos.InvalidateServerMetadataCache.Builder innerBuilder
-                = RegionServerEndpointProtos.InvalidateServerMetadataCache.newBuilder();
-        innerBuilder.setTenantId(ByteStringer.wrap(tenantID));
-        innerBuilder.setSchemaName(ByteStringer.wrap(schemaName));
-        innerBuilder.setTableName(ByteStringer.wrap(tableOrViewName));
-        builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
+        for (InvalidateServerMetadataCacheRequest request: requests) {
+            RegionServerEndpointProtos.InvalidateServerMetadataCache.Builder innerBuilder
+                    = RegionServerEndpointProtos.InvalidateServerMetadataCache.newBuilder();
+            innerBuilder.setTenantId(ByteStringer.wrap(request.getTenantId()));
+            innerBuilder.setSchemaName(ByteStringer.wrap(request.getSchemaName()));
+            innerBuilder.setTableName(ByteStringer.wrap(request.getTableName()));
+            builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
+        }
         return builder.build();
     }
 
@@ -4158,7 +4178,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     done.run(builder.build());
                     return;
                 }
-                invalidateServerMetadataCache(tenantId, schemaName, tableName);
+                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
+                requests.add(new InvalidateServerMetadataCacheRequest(tenantId, schemaName,
+                        tableName));
+                invalidateServerMetadataCache(requests);
                 getCoprocessorHost().preIndexUpdate(Bytes.toString(tenantId),
                         SchemaUtil.getTableName(schemaName, tableName),
                         TableName.valueOf(loadedTable.getPhysicalName().getBytes()),
