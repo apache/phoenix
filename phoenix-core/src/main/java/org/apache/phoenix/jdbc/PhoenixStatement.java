@@ -537,7 +537,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
-                                updateMetrics = false;
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
@@ -547,6 +546,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                             .updateCache(connection.getTenantId(),
                                                     e.getSchemaName(), e.getTableName(), true)
                                             .wasUpdated()) {
+                                        updateMetrics = false;
                                         //TODO we can log retry count and error for debugging in LOG table
                                         return executeQuery(stmt, false, queryLogger, noCommit, shouldValidateLastDdlTimestamp);
                                     }
