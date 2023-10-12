@@ -490,14 +490,12 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         try(Connection conn = DriverManager.getConnection(getUrl());
             Statement stmt = conn.createStatement()) {
             String whereClause = " WHERE v1 < 1000";
-            String viewIdxDDLStmt = getCreateViewIndexStmt(globalViewIndexName, globalViewName,
-                    "v1");
             createTable(conn, tableName, NEVER);
             createViewWhereClause(conn, tableName, globalViewName, whereClause);
             // Populate the cache
             assertNotNull(cache.getLastDDLTimestampForTable(null, null, globalViewNameBytes));
             long viewLastDDLTimestampBeforeIndexCreation = getLastDDLTimestamp(globalViewName);
-            stmt.execute(viewIdxDDLStmt);
+            createIndex(conn, globalViewName, globalViewIndexName, "v1");
 
             // Make sure that we have invalidated the last ddl timestamp for parent global view
             // on all regionserver after we create a view index.
@@ -973,11 +971,5 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     private void dropIndex(Connection conn, String tableName, String indexName) throws SQLException {
         conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
-    }
-
-    private String getCreateViewIndexStmt(String indexName, String viewName, String indexColumn) {
-        String viewIndexName =
-                "CREATE INDEX " + indexName + " ON " + viewName + "(" + indexColumn + ")";
-        return viewIndexName;
     }
 }
