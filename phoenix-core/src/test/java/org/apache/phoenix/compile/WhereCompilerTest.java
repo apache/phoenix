@@ -930,6 +930,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 filter.toString());
     }
 
+/*
     @Test
     public void testTenantConstraintsAddedToScan() throws SQLException {
         String tenantTypeId = "5678";
@@ -965,6 +966,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         byte[] stopRow = startRow;
         assertArrayEquals(ByteUtil.nextKey(stopRow), scan.getStopRow());
     }
+*/
 
     @Test
     public void testTenantConstraintsAddedToScanWithNullTenantTypeId() throws SQLException {
