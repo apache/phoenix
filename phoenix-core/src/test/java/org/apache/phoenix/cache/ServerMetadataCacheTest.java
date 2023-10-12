@@ -25,6 +25,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -38,6 +39,8 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
 
@@ -420,6 +423,130 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
 
+    /**
+     *  Test that we invalidate the cache for parent table and update the last ddl timestamp
+     *  of the parent table while we add an index.
+     *  Test that we invalidate the cache for parent table and index when we drop an index.
+     *  Also we update the last ddl timestamp for parent table when we drop an index.
+     * @throws Exception
+     */
+    @Test
+    public void testUpdateLastDDLTimestampTableAfterIndexCreation() throws Exception {
+        String tableName = generateUniqueName();
+        byte[] tableNameBytes = Bytes.toBytes(tableName);
+        String indexName = generateUniqueName();
+        byte[] indexNameBytes = Bytes.toBytes(indexName);
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        String ddl =
+                "create table  " + tableName + " ( k integer PRIMARY KEY," + " v1 integer,"
+                        + " v2 integer)";
+        String createIndexDDL = "create index  " + indexName + " on " + tableName + " (v1)";
+        String dropIndexDDL = "DROP INDEX " + indexName + " ON " + tableName;
+        try (Connection conn = DriverManager.getConnection(getUrl());
+             Statement stmt = conn.createStatement()) {
+            conn.setAutoCommit(true);
+            stmt.execute(ddl);
+            long tableLastDDLTimestampBeforeIndexCreation = getLastDDLTimestamp(tableName);
+            // Populate the cache
+            assertNotNull(cache.getLastDDLTimestampForTable(null, null, tableNameBytes));
+            Thread.sleep(1);
+            stmt.execute(createIndexDDL);
+            // Make sure that we have invalidated the last ddl timestamp for parent table
+            // on all regionservers after we create an index.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableNameBytes));
+            long tableLastDDLTimestampAfterIndexCreation = getLastDDLTimestamp(tableName);
+            assertNotNull(tableLastDDLTimestampAfterIndexCreation);
+            assertTrue(tableLastDDLTimestampAfterIndexCreation >
+                    tableLastDDLTimestampBeforeIndexCreation);
+            long indexLastDDLTimestampAfterCreation = getLastDDLTimestamp(indexName);
+            // Make sure that last ddl timestamp is cached on the regionserver.
+            assertNotNull(indexLastDDLTimestampAfterCreation);
+            // Adding a sleep for 1 ms so that we get new last ddl timestamp.
+            Thread.sleep(1);
+            stmt.execute(dropIndexDDL);
+            // Make sure that we invalidate the cache on regionserver for base table and an index
+            // after we dropped an index.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableNameBytes));
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, indexNameBytes));
+            long tableLastDDLTimestampAfterIndexDeletion = getLastDDLTimestamp(tableName);
+            // Verify that last ddl timestamp after index deletion is greater than
+            // the previous last ddl timestamp.
+            assertNotNull(tableLastDDLTimestampAfterIndexDeletion);
+            assertTrue(tableLastDDLTimestampAfterIndexDeletion >
+                    tableLastDDLTimestampAfterIndexCreation);
+        }
+    }
+
+    /**
+     *  Test that we invalidate the cache of the immediate parent view
+     *  and update the last ddl timestamp of the immediate parent view while we add an index.
+     *  Test that we invalidate the cache for parent view and view index when we drop an index.
+     *  Also we update the last ddl timestamp for parent view when we drop an index.
+     * @throws Exception
+     */
+    @Test
+    public void testUpdateLastDDLTimestampViewAfterIndexCreation() throws Exception {
+        String tableName = "T_" + generateUniqueName();
+        String globalViewName = "GV_" + generateUniqueName();
+        byte[] globalViewNameBytes = Bytes.toBytes(globalViewName);
+        String globalViewIndexName = "GV_IDX_" + generateUniqueName();
+        byte[] globalViewIndexNameBytes = Bytes.toBytes(globalViewIndexName);
+
+        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String whereClause = " WHERE COL1 < 1000";
+            String tableDDLStmt = getCreateTableStmt(tableName);
+            String viewDDLStmt = getCreateViewStmt(globalViewName, tableName, whereClause);
+            String viewIdxDDLStmt = getCreateViewIndexStmt(globalViewIndexName, globalViewName,
+                    "COL1");
+            String dropIndexDDL = "DROP INDEX " + globalViewIndexName + " ON " + globalViewName;
+            stmt.execute(tableDDLStmt);
+            stmt.execute(viewDDLStmt);
+            // Populate the cache
+            assertNotNull(cache.getLastDDLTimestampForTable(null, null, globalViewNameBytes));
+            long viewLastDDLTimestampBeforeIndexCreation = getLastDDLTimestamp(globalViewName);
+            stmt.execute(viewIdxDDLStmt);
+
+            // Make sure that we have invalidated the last ddl timestamp for parent global view
+            // on all regionserver after we create a view index.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null,
+                    globalViewNameBytes));
+            long viewLastDDLTimestampAfterIndexCreation = getLastDDLTimestamp(globalViewName);
+            assertTrue(viewLastDDLTimestampAfterIndexCreation >
+                    viewLastDDLTimestampBeforeIndexCreation);
+            long indexLastDDLTimestampAfterCreation = getLastDDLTimestamp(globalViewIndexName);
+            // Make sure that last ddl timestamp is cached on the regionserver.
+            assertNotNull(indexLastDDLTimestampAfterCreation);
+            // Adding a sleep for 1 ms so that we get new last ddl timestamp.
+            Thread.sleep(1);
+            stmt.execute(dropIndexDDL);
+            // Make sure that we invalidate the cache on regionservers for view and its index after
+            // we drop a view index.
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null,
+                    globalViewNameBytes));
+            assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null,
+                    globalViewIndexNameBytes));
+            long viewLastDDLTimestampAfterIndexDeletion = getLastDDLTimestamp(globalViewName);
+            // Verify that last ddl timestamp of view after index deletion is greater than
+            // the previous last ddl timestamp.
+            assertNotNull(viewLastDDLTimestampAfterIndexDeletion);
+            assertTrue(viewLastDDLTimestampAfterIndexDeletion >
+                    viewLastDDLTimestampAfterIndexCreation);
+        }
+    }
+
+    public long getLastDDLTimestamp(String tableName) throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        // Need to use different connection than what is used for creating table or indexes.
+        String url = QueryUtil.getConnectionUrl(props, config, "client1");
+        try (Connection conn = DriverManager.getConnection(url)) {
+            PTable table = PhoenixRuntime.getTableNoCache(conn, tableName);
+            return table.getLastDDLTimestamp();
+        }
+    }
+
+
     private String getCreateTableStmt(String tableName) {
         return   "CREATE TABLE " + tableName +
                 "  (a_string varchar not null, col1 integer" +
@@ -430,5 +557,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String viewStmt =  "CREATE VIEW " + viewName +
                 " AS SELECT * FROM "+ fullTableName + whereClause;
         return  viewStmt;
+    }
+
+    private String getCreateViewIndexStmt(String indexName, String viewName, String indexColumn) {
+        String viewIndexName =
+                "CREATE INDEX " + indexName + " ON " + viewName + "(" + indexColumn + ")";
+        return viewIndexName;
     }
 }
