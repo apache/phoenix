@@ -506,11 +506,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 config.getInt(CONNECTION_ACTIVITY_LOGGING_INTERVAL,
                         QueryServicesOptions.DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS);
 
-        String connectionProfileName = this.config.get(QUERY_SERVICES_NAME);
         if (enableConnectionActivityLogging) {
             LoggingConnectionLimiter.Builder builder = new LoggingConnectionLimiter.Builder(shouldThrottleNumConnections);
             connectionLimiter = builder
-                    .withConnectionProfile(connectionProfileName)
                     .withLoggingIntervalInMins(loggingIntervalInMins)
                     .withLogging(true)
                     .withMaxAllowed(this.maxConnectionsAllowed)
@@ -519,7 +517,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } else {
             DefaultConnectionLimiter.Builder builder = new DefaultConnectionLimiter.Builder(shouldThrottleNumConnections);
             connectionLimiter = builder
-                    .withConnectionProfile(connectionProfileName)
                     .withMaxAllowed(this.maxConnectionsAllowed)
                     .withMaxInternalAllowed(this.maxInternalConnectionsAllowed)
                     .build();

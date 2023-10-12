@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.LoggingConnectionLimiter;
