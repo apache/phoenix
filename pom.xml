@@ -170,8 +170,9 @@
 
     <!-- JVM version dependent JVM options for running tests. Keep mostly in sync with HBase-->
     <surefire.Xmx>2200m</surefire.Xmx>
+    <surefire.Xms>1000m</surefire.Xms>
 
-    <phoenix-surefire.argLine>-enableassertions -Xmx${surefire.Xmx}
+    <phoenix-surefire.argLine>-enableassertions -Xmx${surefire.Xmx} -Xms${surefire.Xms}
       -Djava.security.egd=file:/dev/./urandom -Djava.net.preferIPv4Stack=true
       -Djava.awt.headless=true -Djdk.net.URLClassPath.disableClassPathURLCheck=true
       -Dorg.apache.hbase.thirdparty.io.netty.leakDetection.level=advanced
