@@ -18,9 +18,9 @@
 package org.apache.phoenix.cache;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConnectionProperty;
@@ -51,7 +51,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -678,6 +677,139 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test query on index with stale last ddl timestamp.
+     * Client-1 creates a table and an index on it. Client-2 queries table (with index hint) to populate its cache.
+     * Client-1 alters a property on the index. Client-2 queries the table again.
+     * Verify that the second query works and the index metadata was updated in the client cache.
+     */
+    @Test
+    public void testSelectQueryAfterAlterIndex() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates a table and an index on it
+            createTable(conn1, tableName, NEVER);
+            createIndex(conn1, tableName, indexName, "v1");
+            TestUtil.waitForIndexState(conn1, indexName, PIndexState.ACTIVE);
+
+            //client-2 populates its cache, 1 getTable&addTable call for the table
+            //no getTable calls for Index since we add all indexes in the cache from a table's PTable object
+            queryWithNoIndexHint(conn2, tableName);
+
+            //client-1 updates index property
+            alterIndexChangeStateToRebuild(conn1, tableName, indexName);
+
+            //client-2's query using the index should work
+            queryWithIndexHint(conn2, tableName, indexName);
+
+            //verify client-2 cache was updated with the index's base table metadata
+            //this would have also updated the index metadata in its cache
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2))
+                    .addTable(any(PTable.class), anyLong());
+
+            //client-2 queries again with latest metadata
+            //verify no more getTable/addTable calls
+            queryWithIndexHint(conn2, tableName, indexName);
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2))
+                    .addTable(any(PTable.class), anyLong());
+        }
+    }
+
+    /**
+     * Test that a client can learn about a newly created index.
+     * Client-1 creates a table, client-2 queries the table to populate its cache.
+     * Client-1 creates an index on the table. Client-2 queries the table using the index.
+     * Verify that client-2 uses the index for the query.
+     */
+    @Test
+    public void testSelectQueryAddIndex() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates table
+            createTable(conn1, tableName, NEVER);
+
+            //client-2 populates its cache
+            query(conn2, tableName);
+
+            //client-1 creates an index on the table
+            createIndex(conn1, tableName, indexName, "v1");
+            TestUtil.waitForIndexState(conn1, indexName, PIndexState.ACTIVE);
+
+            //simulate changing table's ddl timestamp by altering it for now
+            //TODO: remove this when PHOENIX-7056 is committed.
+            alterTableAddColumn(conn1, tableName, "col1");
+
+            //client-2 query should be able to use this index
+            PhoenixStatement stmt = conn2.createStatement().unwrap(PhoenixStatement.class);
+            ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ * FROM " + tableName + " WHERE v1=1");
+            Assert.assertEquals("", indexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+        }
+    }
+
+    /**
+     * Test that a client can learn about a dropped index.
+     * Client-1 creates a table and an index, client-2 queries the table to populate its cache.
+     * Client-1 drops the index. Client-2 queries the table with index hint.
+     * Verify that client-2 uses the data table for the query.
+     */
+    @Test
+    public void testSelectQueryDropIndex() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates table and index on it
+            createTable(conn1, tableName, NEVER);
+            createIndex(conn1, tableName, indexName, "v1");
+
+            //client-2 populates its cache
+            query(conn2, tableName);
+
+            //client-1 drops the index
+            dropIndex(conn1, tableName, indexName);
+
+            //simulate changing table's ddl timestamp by altering it for now
+            //TODO: remove this when PHOENIX-7056 is committed.
+            alterTableAddColumn(conn1, tableName, "col1");
+
+            //client-2 queries should use data table and not run into table not found error even when index hint is given
+            PhoenixStatement stmt = conn2.createStatement().unwrap(PhoenixStatement.class);
+            ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ * FROM " + tableName + " WHERE v1=1");
+            Assert.assertEquals("", tableName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+        }
+    }
+
 
     //Helper methods
 
@@ -696,6 +828,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                 " AS SELECT * FROM "+ parentName + whereClause);
     }
 
+    private void createIndex(Connection conn, String tableName, String indexName, String col) throws SQLException {
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(" + col + ")");
+    }
 
     private void upsert(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("UPSERT INTO " + tableName +
@@ -708,6 +843,16 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         rs.next();
     }
 
+    private void queryWithIndexHint(Connection conn, String tableName, String indexName) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ * FROM " + tableName + " WHERE v1=1");
+        rs.next();
+    }
+
+    private void queryWithNoIndexHint(Connection conn, String tableName) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName);
+        rs.next();
+    }
+
     private void alterTableAddColumn(Connection conn, String tableName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER TABLE " + tableName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
@@ -716,5 +861,14 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER VIEW " + viewName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
+    }
+
+    private void alterIndexChangeStateToRebuild(Connection conn, String tableName, String indexName) throws SQLException, InterruptedException {
+        conn.createStatement().execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+        TestUtil.waitForIndexState(conn, indexName, PIndexState.ACTIVE);
+    }
+
+    private void dropIndex(Connection conn, String tableName, String indexName) throws SQLException {
+        conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
     }
 }

@@ -73,6 +73,11 @@ public class PhoenixRegionServerEndpoint
                 LOGGER.error(errorMsg,  t);
                 IOException ioe = ServerUtil.createIOException(errorMsg, t);
                 ProtobufUtil.setControllerException(controller, ioe);
+                //In case an index was dropped and a client tries to query it, we will validate table
+                //first and encounter stale metadata, if we don't break the coproc will run into
+                //table not found error since it will not be able to validate the dropped index.
+                //this should be fine for views too since we will update the entire hierarchy in the client.
+                break;
             }
         }
     }

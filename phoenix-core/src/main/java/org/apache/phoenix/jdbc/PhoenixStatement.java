@@ -376,13 +376,23 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
                 = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
+        /*
+        when querying an index, we need to validate its parent table in case the index was dropped
+         */
+        if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
+            PTable parentTable = this.connection.getTable(new PTableKey(this.connection.getTenantId(), tableRef.getTable().getParentName().getString()));
+            setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
+            requestBuilder.addLastDDLTimestampRequests(innerBuilder);
+        }
+
+        innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
         setLastDDLTimestampRequestParameters(innerBuilder, tableRef.getTable());
         requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
         /*
         when querying a view, we need to validate last ddl timestamps for all its ancestors.
          */
-        if (tableRef.getTable().getType().equals(PTableType.VIEW)) {
+        if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
             PTable pTable = tableRef.getTable();
             while (pTable.getParentName() != null) {
                 PTable parentTable = this.connection.getTable(new PTableKey(this.connection.getTenantId(), pTable.getParentName().getString()));
@@ -545,12 +555,20 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             }
                             catch (StaleMetadataCacheException e) {
                                 updateMetrics = false;
-                                String planSchemaName = lastQueryPlan.getTableRef().getTable().getSchemaName().toString();
-                                String planTableName = lastQueryPlan.getTableRef().getTable().getTableName().toString();
                                 LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
-                                // force update client metadata cache for the table/view/index
-                                // this also updates the cache for all its ancestors
-                                new MetaDataClient(connection).updateCache(connection.getTenantId(), planSchemaName, planTableName, true);
+                                String schemaN = lastQueryPlan.getTableRef().getTable().getSchemaName().toString();
+                                String tableN = lastQueryPlan.getTableRef().getTable().getTableName().toString();
+
+                                // if the index metadata was stale, we will update the client cache
+                                // for the parent table, which will also add the new index metadata
+                                PTableType tableType = lastQueryPlan.getTableRef().getTable().getType();
+                                if (tableType == PTableType.INDEX) {
+                                    schemaN = lastQueryPlan.getTableRef().getTable().getParentSchemaName().toString();
+                                    tableN = lastQueryPlan.getTableRef().getTable().getParentTableName().toString();
+                                }
+                                // force update client metadata cache for the table/view
+                                // this also updates the cache for all ancestors in case of a view
+                                new MetaDataClient(connection).updateCache(connection.getTenantId(), schemaN, tableN, true);
                                 // skip last ddl timestamp validation in the retry
                                 return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
                             }
