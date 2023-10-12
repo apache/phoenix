@@ -258,12 +258,11 @@ public class CreateTableCompiler {
 
         ConnectionQueryServices cqs = connection.unwrap(PhoenixConnection.class)
                 .getQueryServices();
-        try (Table childLinkTable = cqs.getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
+
+        try (Table linkTable = cqs.getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
             List<PTable> legitimateSiblingViewList =
-                    ViewUtil.findAllDescendantViews(childLinkTable,
-                            cqs.getConfiguration(),
-                            parentTenantIdInBytes,
-                            parentSchemaNameInBytes,
+                    ViewUtil.findAllDescendantViews(linkTable, cqs.getConfiguration(),
+                            parentTenantIdInBytes, parentSchemaNameInBytes,
                             parentToBe.getTableName().getBytes(),
                             HConstants.LATEST_TIMESTAMP, true).getFirst();
 
@@ -273,10 +272,12 @@ public class CreateTableCompiler {
                 Expression siblingViewWhere = getWhereFromView(connection, siblingView);
 
                 Set<PColumn> siblingViewPkColsInWhere = new HashSet<>();
-                ViewWhereExpressionValidatorVisitor siblingViewValidatorVisitor =
-                        new ViewWhereExpressionValidatorVisitor(parentToBe,
-                                siblingViewPkColsInWhere, new HashSet<>());
-                siblingViewWhere.accept(siblingViewValidatorVisitor);
+                if (siblingViewWhere != null) {
+                    ViewWhereExpressionValidatorVisitor siblingViewValidatorVisitor =
+                            new ViewWhereExpressionValidatorVisitor(parentToBe,
+                                    siblingViewPkColsInWhere, new HashSet<>());
+                    siblingViewWhere.accept(siblingViewValidatorVisitor);
+                }
 
                 if (!pkColumnsInWhere.equals(siblingViewPkColsInWhere)) {
                     return ViewType.READ_ONLY;
@@ -295,7 +296,11 @@ public class CreateTableCompiler {
      */
     private Expression getWhereFromView(final PhoenixConnection connection, final PTable view)
             throws SQLException {
-        SelectStatement select = new SQLParser(view.getViewStatement()).parseQuery();
+        String viewStatement = view.getViewStatement();
+        if (viewStatement == null) {
+            return null;
+        }
+        SelectStatement select = new SQLParser(viewStatement).parseQuery();
         ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
         StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
         BitSet isViewColumnReferencedToBe = new BitSet(view.getColumns().size());
