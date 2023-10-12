@@ -69,14 +69,12 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
     
     @Override
     public void addConnection(PhoenixConnection connection) throws SQLException {
-        super.addConnection(connection);
         connections.add(connection);
         super.addConnection(connection);
     }
     
     @Override
     public void removeConnection(PhoenixConnection connection) throws SQLException {
-        super.removeConnection(connection);
         connections.remove(connection);
         super.removeConnection(connection);
     }
