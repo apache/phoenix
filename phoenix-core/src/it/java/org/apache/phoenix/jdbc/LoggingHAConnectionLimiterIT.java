@@ -70,8 +70,6 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
          *  INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS : max allowed internal connections before throttling
          *  HA_MAX_POOL_SIZE : HA thread pool size for open and other activities
          *  HA_MAX_QUEUE_SIZE : Queue size of the core thread pool
-         *  HA_CLOSE_MAX_POOL_SIZE : HA thread pool size for close activities
-         *  HA_CLOSE_MAX_QUEUE_SIZE : Queue size of the close thread pool
          *
          */
         GLOBAL_PROPERTIES = new HashMap<String, String>() {{
@@ -88,7 +86,7 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         GLOBAL_PROPERTIES.put(PHOENIX_HA_GROUP_ATTR, PARALLEL.name());
 
 
-        CONNECTIONS = Lists.newArrayList(CLUSTERS.getCluster1Connection(), CLUSTERS.getCluster1Connection());
+        CONNECTIONS = Lists.newArrayList(CLUSTERS.getCluster1Connection(), CLUSTERS.getCluster2Connection());
         LOG.info(String.format("************* Num connections : %d", CONNECTIONS.size()));
 
         for (Connection conn : CONNECTIONS) {

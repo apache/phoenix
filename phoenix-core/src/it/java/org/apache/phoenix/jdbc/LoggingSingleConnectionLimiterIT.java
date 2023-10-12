@@ -51,8 +51,6 @@ public class LoggingSingleConnectionLimiterIT extends LoggingConnectionLimiterIT
          *  INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS : max allowed internal connections before throttling
          *  HA_MAX_POOL_SIZE : HA thread pool size for open and other activities
          *  HA_MAX_QUEUE_SIZE : Queue size of the core thread pool
-         *  HA_CLOSE_MAX_POOL_SIZE : HA thread pool size for close activities
-         *  HA_CLOSE_MAX_QUEUE_SIZE : Queue size of the close thread pool
          */
 
         InstanceResolver.clearSingletons();
