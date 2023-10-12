@@ -807,14 +807,15 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             TestUtil.waitForIndexState(conn1, indexName, PIndexState.ACTIVE);
 
             //client-2 populates its cache, 1 getTable&addTable call for the table
-            //no getTable calls for Index since we add all indexes in the cache from a table's PTable object
-            queryWithNoIndexHint(conn2, tableName);
+            query(conn2, tableName);
 
             //client-1 updates index property
             alterIndexChangeStateToRebuild(conn1, tableName, indexName);
 
             //client-2's query using the index should work
-            queryWithIndexHint(conn2, tableName, indexName);
+            PhoenixStatement stmt = conn2.createStatement().unwrap(PhoenixStatement.class);
+            stmt.executeQuery("SELECT k FROM " + tableName + " WHERE v1=1");
+            Assert.assertEquals("Query on secondary key should have used index.", indexName, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
 
             //verify client-2 cache was updated with the index's base table metadata
             //this would have also updated the index metadata in its cache
@@ -826,7 +827,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             //client-2 queries again with latest metadata
             //verify no more getTable/addTable calls
-            queryWithIndexHint(conn2, tableName, indexName);
+            queryWithIndex(conn2, tableName);
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
                     anyLong(), anyLong());
@@ -866,8 +867,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             //client-2 query should be able to use this index
             PhoenixStatement stmt = conn2.createStatement().unwrap(PhoenixStatement.class);
-            ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ * FROM " + tableName + " WHERE v1=1");
-            Assert.assertEquals("", indexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+            ResultSet rs = stmt.executeQuery("SELECT k FROM " + tableName + " WHERE v1=1");
+            Assert.assertEquals("Query on secondary key should have used index.", indexName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
         }
     }
 
@@ -903,7 +904,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             //client-2 queries should use data table and not run into table not found error even when index hint is given
             PhoenixStatement stmt = conn2.createStatement().unwrap(PhoenixStatement.class);
             ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ * FROM " + tableName + " WHERE v1=1");
-            Assert.assertEquals("", tableName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
+            Assert.assertEquals("Query should have used data table since index was dropped", tableName, stmt.getQueryPlan().getContext().getCurrentTable().getTable().getName().getString());
         }
     }
 
@@ -950,13 +951,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         rs.next();
     }
 
-    private void queryWithIndexHint(Connection conn, String tableName, String indexName) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ * FROM " + tableName + " WHERE v1=1");
-        rs.next();
-    }
-
-    private void queryWithNoIndexHint(Connection conn, String tableName) throws SQLException {
-        ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ * FROM " + tableName);
+    private void queryWithIndex(Connection conn, String tableName) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT k FROM " + tableName + " WHERE v1=1");
         rs.next();
     }
 
