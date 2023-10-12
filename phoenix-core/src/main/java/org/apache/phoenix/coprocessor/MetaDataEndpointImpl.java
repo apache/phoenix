@@ -3525,10 +3525,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // DDL operations. We also need to think of we need separate RPC handler
                     // threads for this?
                     ServerRpcController controller = new ServerRpcController();
-                    for (InvalidateServerMetadataCacheRequest invalidateCacheRequest:
-                            invalidateCacheRequests) {
-                        LOGGER.info("Sending invalidate metadata cache for {}  to region server:" +
-                                " {}", invalidateCacheRequest.toString(), serverName);
+                    for (InvalidateServerMetadataCacheRequest invalidateCacheRequest
+                            : invalidateCacheRequests) {
+                        LOGGER.info("Sending invalidate metadata cache for {}  to region server:"
+                                + " {}", invalidateCacheRequest.toString(), serverName);
                     }
                     RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
                             service = RegionServerEndpointProtos.RegionServerEndpointService

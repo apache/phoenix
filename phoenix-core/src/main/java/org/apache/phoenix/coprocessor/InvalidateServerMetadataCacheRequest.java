@@ -47,7 +47,7 @@ public class InvalidateServerMetadataCacheRequest {
     @Override
     public String toString() {
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        return "tenantId = " + Bytes.toString(tenantId) +
-                ", table name = " + fullTableName;
+        return "tenantId = " + Bytes.toString(tenantId)
+                + ", table name = " + fullTableName;
     }
 }
