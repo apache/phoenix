@@ -995,6 +995,61 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testUpsertViewWithOldDDLTimestamp() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates a table and views
+            createTable(conn1, tableName, NEVER);
+            createView(conn1, tableName, viewName1);
+            createView(conn1, viewName1, viewName2);
+
+            //client-2 populates its cache, 1 getTable RPC each for table, view1, view2
+            query(conn2, viewName2);
+
+            //client-1 alters first level view
+            alterViewAddColumn(conn1, viewName1, "v3");
+
+            //client-2 upserts into second level view
+            //verify there was a getTable RPC for the view and all its ancestors
+            upsert(conn2, viewName2);
+
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
+                    anyLong(), anyLong());
+
+            //client-2 upserts into first level view
+            //verify no getTable RPCs
+            upsert(conn2, viewName1);
+
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
+                    anyLong(), anyLong());
+        }
+    }
+
     //Helper methods
 
     private long getLastDDLTimestamp(String tableName) throws SQLException {

@@ -768,9 +768,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 throw e;
                             }
                             catch (StaleMetadataCacheException e) {
+                                String tableN = plan.getTargetRef().getTable().getTableName().toString();
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view
-                                new MetaDataClient(connection).updateCache(connection.getTenantId(), schemaName, tableName, true);
+                                new MetaDataClient(connection).updateCache(connection.getTenantId(), schemaName, tableN, true);
                                 state.markMetadataValidated(key);
                                 // skip last ddl timestamp validation in the retry
                                 return executeMutation(stmt, doRetryOnMetaNotFoundError, queryLogger, false);
