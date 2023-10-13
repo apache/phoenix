@@ -782,7 +782,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     /**
      * Test query on index with stale last ddl timestamp.
-     * Client-1 creates a table and an index on it. Client-2 queries table (with index hint) to populate its cache.
+     * Client-1 creates a table and an index on it. Client-2 queries table to populate its cache.
      * Client-1 alters a property on the index. Client-2 queries the table again.
      * Verify that the second query works and the index metadata was updated in the client cache.
      */
@@ -804,8 +804,13 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             createIndex(conn1, tableName, indexName, "v1");
             TestUtil.waitForIndexState(conn1, indexName, PIndexState.ACTIVE);
 
-            //client-2 populates its cache, 1 getTable&addTable call for the table
+            //client-2 populates its cache, 1 getTable and 1 addTable call for the table
             query(conn2, tableName);
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(1))
+                    .addTable(any(PTable.class), anyLong());
 
             //client-1 updates index property
             alterIndexChangeStateToRebuild(conn1, tableName, indexName);
