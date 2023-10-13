@@ -23,8 +23,11 @@ import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 
@@ -32,6 +35,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -631,6 +635,36 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             compareJson(rs.getString(3), JsonDatatypes, "$.datatypes.doubleArray");
             compareJson(rs.getString(4), JsonDatatypes, "$.datatypes.stringArray");
             compareJson(rs.getString(5), JsonDatatypes, "$.datatypes.mixedArray");
+        }
+    }
+
+    @Test
+    public void testExpressionIndex() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String
+                    ddl =
+                    "create table if not exists " + tableName +
+                            " (pk integer primary key, col integer, jsoncol.jsoncol json)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (1,2, '" + JsonDoc1 + "')");
+            conn.createStatement().execute(
+                    "CREATE INDEX " + indexName + " ON " + tableName
+                            + " (JSON_VALUE(JSONCOL,'$.type'), JSON_VALUE(JSONCOL,'$.info.address.town')) include (col)");
+            String
+                    selectSql =
+                    "SELECT JSON_VALUE(JSONCOL,'$.type'), " +
+                    "JSON_VALUE(JSONCOL,'$.info.address.town') FROM " + tableName +
+                    " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Basic'";
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
+            String actualExplainPlan = QueryUtil.getExplainPlan(rs);
+            IndexToolIT.assertExplainPlan(false, actualExplainPlan, tableName, indexName);
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
         }
     }
 }

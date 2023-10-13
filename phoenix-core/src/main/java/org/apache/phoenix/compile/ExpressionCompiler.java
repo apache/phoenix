@@ -89,6 +89,8 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
+import org.apache.phoenix.parse.JsonModifyParseNode;
+import org.apache.phoenix.parse.JsonQueryParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -141,6 +143,7 @@ import org.apache.phoenix.util.StringUtil;
 
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
     private boolean isAggregate;
+    private boolean isJsonFragment;
     protected ParseNode aggregateFunction;
     protected final StatementContext context;
     protected final GroupBy groupBy;
@@ -171,6 +174,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return isAggregate;
     }
 
+    public boolean isJsonFragment() {
+        return isJsonFragment;
+    }
+
     public boolean isTopLevel() {
         return nodeCount == 0;
     }
@@ -179,6 +186,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         this.isAggregate = false;
         this.nodeCount = 0;
         this.totalNodeCount = 0;
+        this.isJsonFragment = false;
     }
 
     @Override
@@ -289,10 +297,14 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     @Override
     public boolean visitEnter(FunctionParseNode node) throws SQLException {
+        if (node instanceof JsonQueryParseNode || node instanceof JsonModifyParseNode) {
+            this.isJsonFragment = true;
+        }
         // TODO: Oracle supports nested aggregate function while other DBs don't. Should we?
         if (node.isAggregate()) {
             if (aggregateFunction != null) {
-                throw new SQLFeatureNotSupportedException("Nested aggregate functions are not supported");
+                throw new SQLFeatureNotSupportedException(
+                        "Nested aggregate functions are not supported");
             }
             this.aggregateFunction = node;
             this.isAggregate = true;
