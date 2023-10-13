@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.end2end.json;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -32,7 +37,7 @@ import java.util.Properties;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
-public class JsonValueIT extends ParallelStatsDisabledIT {
+public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     private String JsonDoc1 = "{  \n" +
             "     \"info\":{    \n" +
             "       \"type\":1,  \n" +
@@ -56,7 +61,11 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             "        \"doubletype\": 2.5, \n" +
             "        \"longtype\": 1490020778457845, \n" +
             "        \"intArray\": [1, 2, 3], \n" +
-            "        \"nullcheck\": null \n"+
+            "        \"nullcheck\": null, \n"+
+            "        \"boolArray\": [true, false, false], \n" +
+            "        \"doubleArray\": [1.2,2.3,3.4], \n" +
+            "        \"stringArray\": [\"hello\",\"world\"], \n" +
+            "        \"mixedArray\": [2, \"string\", 1.2 , false] \n" +
             "    }\n" +
             "}";
 
@@ -448,7 +457,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             TestUtil.dumpTable(conn, TableName.valueOf(tableName));
 
             String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_VALUE(jsoncol, '$.info.tags'), JSON_VALUE(jsoncol, '$.info') " +
+                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info') " +
                 " FROM " + tableName +
                 " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
             String query = String.format(queryTemplate, "AndersenFamily");
@@ -457,6 +466,9 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals("Basic", rs.getString(1));
             assertEquals("Bristol", rs.getString(2));
             assertEquals("Water polo", rs.getString(3));
+            // returned format is different
+            compareJson(rs.getString(4), JsonDoc1, "$.info.tags");
+            compareJson(rs.getString(5), JsonDoc1, "$.info");
             assertFalse(rs.next());
 
             // Now check for empty match
@@ -488,7 +500,7 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT pk, col, JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from " + tableName);
 
             String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_VALUE(jsoncol, '$.info.tags'), JSON_VALUE(jsoncol, '$.info'), " +
+                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
                 "JSON_VALUE(jsoncol, '$.info.tags[2]') " +
                 " FROM " + tableName +
                 " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
@@ -498,6 +510,8 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals("Basic", rs.getString(1));
             assertEquals("Manchester", rs.getString(2));
             assertEquals("alto1", rs.getString(3));
+            assertEquals("[\"Sport\", \"alto1\", \"UpsertSelectVal\"]", rs.getString(4));
+            assertEquals("{\"type\": 1, \"address\": {\"town\": \"Manchester\", \"county\": \"Avon\", \"country\": \"England\"}, \"tags\": [\"Sport\", \"alto1\", \"UpsertSelectVal\"]}", rs.getString(5));
             assertEquals("UpsertSelectVal", rs.getString(6));
 
             // Now check for empty match
@@ -513,7 +527,6 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            //String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol.v varchar)";
             String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol json)";
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
@@ -522,12 +535,30 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             stmt.setString(3, JsonDoc2);
             stmt.execute();
             conn.commit();
-            ResultSet rs = conn.createStatement().executeQuery("SELECT JSON_VALUE(JSONCOL,'$.test'), JSON_VALUE(JSONCOL, '$.testCnt'), JSON_VALUE(JSONCOL, '$.infoTop[5].info.address.state'),JSON_VALUE(JSONCOL, '$.infoTop[4].tags[1]')  FROM "
-                + tableName + " WHERE JSON_VALUE(JSONCOL, '$.test')='test1'");
+            ResultSet rs = conn.createStatement().executeQuery("SELECT JSON_VALUE(JSONCOL,'$.test'), " +
+                    "JSON_VALUE(JSONCOL, '$.testCnt'), " +
+                    "JSON_VALUE(JSONCOL, '$.infoTop[5].info.address.state')," +
+                    "JSON_VALUE(JSONCOL, '$.infoTop[4].tags[1]'),  " +
+                    "JSON_QUERY(JSONCOL, '$.infoTop'), " +
+                    "JSON_QUERY(JSONCOL, '$.infoTop[5].info'), " +
+                    "JSON_QUERY(JSONCOL, '$.infoTop[5].friends') " +
+                    "FROM " + tableName + " WHERE JSON_VALUE(JSONCOL, '$.test')='test1'");
             assertTrue(rs.next());
             assertEquals("test1", rs.getString(1));
             assertEquals("SomeCnt1", rs.getString(2));
+            assertEquals("North Dakota", rs.getString(3));
+            assertEquals("sint", rs.getString(4));
+            compareJson(rs.getString(5), JsonDoc2, "$.infoTop");
+            compareJson(rs.getString(6), JsonDoc2, "$.infoTop[5].info");
+            compareJson(rs.getString(7), JsonDoc2, "$.infoTop[5].friends");
         }
+    }
+
+    private void compareJson(String result, String json, String path) throws JsonProcessingException {
+        Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).build();
+        Object read = JsonPath.using(conf).parse(json).read(path);
+        ObjectMapper mapper = new ObjectMapper();
+        assertEquals(mapper.readTree(read.toString()), mapper.readTree(result));
     }
 
     @Test
@@ -570,6 +601,36 @@ public class JsonValueIT extends ParallelStatsDisabledIT {
             assertEquals(null, rs.getString(10));
             assertEquals(null, rs.getString(11));
             assertEquals(null, rs.getString(12));
+        }
+    }
+
+    @Test
+    public void testJsonQuery() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, JsonDatatypes);
+            stmt.execute();
+            conn.commit();
+            ResultSet rs = conn.createStatement().executeQuery("SELECT " +
+                    "JSON_QUERY(JSONCOL, '$.datatypes.intArray')," +
+                    "JSON_QUERY(JSONCOL, '$.datatypes.boolArray')," +
+                    "JSON_QUERY(JSONCOL, '$.datatypes.doubleArray')," +
+                    "JSON_QUERY(JSONCOL, '$.datatypes.stringArray')," +
+                    "JSON_QUERY(JSONCOL, '$.datatypes.mixedArray')  FROM "
+                    + tableName + " WHERE JSON_VALUE(JSONCOL, '$.datatypes.stringtype')='someString'");
+            assertTrue(rs.next());
+            compareJson(rs.getString(1), JsonDatatypes, "$.datatypes.intArray");
+            compareJson(rs.getString(2), JsonDatatypes, "$.datatypes.boolArray");
+            compareJson(rs.getString(3), JsonDatatypes, "$.datatypes.doubleArray");
+            compareJson(rs.getString(4), JsonDatatypes, "$.datatypes.stringArray");
+            compareJson(rs.getString(5), JsonDatatypes, "$.datatypes.mixedArray");
         }
     }
 }

@@ -102,7 +102,7 @@ public class DistinctCountAggregateFunction extends DelegateConstantToCountAggre
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         for (Expression child : getChildren()) {
-            if (!child.getDataType().isComparisonSupported()) {
+            if (child.getDataType() != null && !child.getDataType().isComparisonSupported()) {
                 throw new ComparisonNotSupportedException(child.getDataType());
             }
         }

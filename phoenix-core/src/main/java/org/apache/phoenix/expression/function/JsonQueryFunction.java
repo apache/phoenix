@@ -20,41 +20,40 @@ package org.apache.phoenix.expression.function;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
-import org.apache.phoenix.parse.JsonModifyParseNode;
+import org.apache.phoenix.parse.JsonQueryParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.json.JsonDataFormat;
 import org.apache.phoenix.util.json.JsonDataFormatFactory;
 
-import java.nio.ByteBuffer;
+import java.sql.Types;
 import java.util.List;
 
 /**
- * Built-in function for JSON_MODIFY JSON_MODIFY(<column_with_json/json_string>, <path> [returning
- * <type>], newValue) Updates the value of a property in a JSON string and returns the updated JSON
- * string.
+ * Built-in function for JSON_QUERY JSON_QUERY(<column_with_json/json_string>, <path> [returning
+ * <type>]) Extracts an object or an array from a JSON string.
  */
-@FunctionParseNode.BuiltInFunction(name = JsonModifyFunction.NAME,
-        nodeClass = JsonModifyParseNode.class,
-        args = { @FunctionParseNode.Argument(allowedTypes = { PJson.class, PVarchar.class }),
-                @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
+@FunctionParseNode.BuiltInFunction(name = JsonQueryFunction.NAME,
+        nodeClass = JsonQueryParseNode.class,
+        args = { @FunctionParseNode.Argument(allowedTypes = { PJson.class, PVarbinary.class }),
                 @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
-public class JsonModifyFunction extends ScalarFunction {
+public class JsonQueryFunction extends ScalarFunction {
 
-    public static final String NAME = "JSON_MODIFY";
+    public static final String NAME = "JSON_QUERY";
     private final JsonDataFormat
             jsonDataFormat =
             JsonDataFormatFactory.getJsonDataFormat(JsonDataFormatFactory.DataFormat.BSON);
 
     // This is called from ExpressionType newInstance
-    public JsonModifyFunction() {
+    public JsonQueryFunction() {
 
     }
 
-    public JsonModifyFunction(List<Expression> children) {
+    public JsonQueryFunction(List<Expression> children) {
         super(children);
         Preconditions.checkNotNull(getJSONPathExpr());
     }
@@ -90,19 +89,20 @@ public class JsonModifyFunction extends ScalarFunction {
         if (jsonPathExprStr == null) {
             return true;
         }
-
-        if (!getNewValueExpr().evaluate(tuple, ptr)) {
-            return false;
+        Object value = jsonDataFormat.getValue(top, jsonPathExprStr);
+        int valueType = jsonDataFormat.getValueType(top, jsonPathExprStr);
+        if (value != null) {
+            switch (valueType) {
+            case Types.ARRAY:
+            case Types.NVARCHAR:
+                ptr.set(PVarchar.INSTANCE.toBytes(value));
+                break;
+            default:
+                return false;
+            }
         }
 
-        String newVal = (String) PVarchar.INSTANCE.toObject(ptr, getNewValueExpr().getSortOrder());
-        ByteBuffer buffer = jsonDataFormat.updateValue(top, jsonPathExprStr, newVal);
-        ptr.set(buffer.array(), buffer.arrayOffset(), buffer.limit());
         return true;
-    }
-
-    private Expression getNewValueExpr() {
-        return getChildren().get(2);
     }
 
     private Expression getColValExpr() {
@@ -115,6 +115,6 @@ public class JsonModifyFunction extends ScalarFunction {
 
     @Override
     public PDataType getDataType() {
-        return PJson.INSTANCE;
+        return PVarchar.INSTANCE;
     }
 }
