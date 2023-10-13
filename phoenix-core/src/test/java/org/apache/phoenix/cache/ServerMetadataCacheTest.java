@@ -911,6 +911,89 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testUpsertTableWithOldDDLTimestamp() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates a table
+            createTable(conn1, tableName, NEVER);
+
+            //client-2 populates cache, 1 getTable and 1 addTable call
+            query(conn2, tableName);
+
+            //client-1 alters table
+            alterTableAddColumn(conn1, tableName, "v3");
+
+            //client-2 upserts into table
+            //verify the upsert works and table metadata was refreshed in client-2's cache
+            upsert(conn2, tableName);
+
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2))
+                    .addTable(any(PTable.class), anyLong());
+
+            verifyCount(conn2, tableName, 1);
+
+            //client-2 upserts again with latest metadata
+            //verify upsert worked and no cache updates
+            upsert(conn2, tableName);
+
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2))
+                    .addTable(any(PTable.class), anyLong());
+
+            verifyCount(conn2, tableName, 2);
+        }
+    }
+
+    @Test
+    public void testUpsertMultipleTablesWithOldDDLTimestamp() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates 2 tables
+            createTable(conn1, tableName1, NEVER);
+            createTable(conn1, tableName2, NEVER);
+
+            //client-2 populates its cache, 1 getTable call for each table
+            query(conn2, tableName1);
+            query(conn2, tableName2);
+
+            //client-1 alters both tables
+            alterTableAddColumn(conn1, tableName1, "v3");
+            alterTableAddColumn(conn1, tableName2, "v3");
+
+            //client-2 upserts multiple rows to both tables before calling commit
+            //verify the table metadata was fetched only once for each table
+            multiTableUpsert(conn2, tableName1, tableName2);
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName2)),
+                    anyLong(), anyLong());
+        }
+    }
 
     //Helper methods
 
@@ -976,5 +1059,25 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     private void dropIndex(Connection conn, String tableName, String indexName) throws SQLException {
         conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
+    }
+
+    private void verifyCount(Connection conn, String tableName, int expectedCount) throws SQLException {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
+        rs.next();
+        Assert.assertEquals("Row count was not correct.", expectedCount, rs.getInt(1));
+    }
+
+    private void multiTableUpsert(Connection conn, String tableName1, String tableName2) throws SQLException {
+        conn.createStatement().execute("UPSERT INTO " + tableName1 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName1 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName2 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName1 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName2 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.commit();
     }
 }

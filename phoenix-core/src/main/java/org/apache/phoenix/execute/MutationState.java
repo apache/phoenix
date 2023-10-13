@@ -41,6 +41,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -98,6 +99,7 @@ import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
@@ -167,6 +169,7 @@ public class MutationState implements SQLCloseable {
     private ReadMetricQueue readMetricQueue;
 
     private Map<String, Long> timeInExecuteMutationMap = new HashMap<>();
+    private Set<PTableKey> metadataValidatedTables = new HashSet<>();
     private static boolean allUpsertsMutations = true;
     private static boolean allDeletesMutations = true;
 
@@ -2251,6 +2254,12 @@ public class MutationState implements SQLCloseable {
     public void resetExecuteMutationTimeMap() {
         timeInExecuteMutationMap.clear();
     }
+
+    public void resetMetadataValidatedTablesSet() { metadataValidatedTables.clear(); }
+
+    public void markMetadataValidated(PTableKey key) { metadataValidatedTables.add(key); }
+
+    public boolean isMetadataValidated(PTableKey key) { return metadataValidatedTables.contains(key); }
 
     public boolean isEmpty() {
         return mutationsMap != null ? mutationsMap.isEmpty() : true;

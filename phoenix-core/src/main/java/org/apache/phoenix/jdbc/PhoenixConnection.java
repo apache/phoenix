@@ -792,6 +792,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                     mutationState.commit();
                 } finally {
                     mutationState.resetExecuteMutationTimeMap();
+                    mutationState.resetMetadataValidatedTablesSet();
                 }
                 return null;
             }
