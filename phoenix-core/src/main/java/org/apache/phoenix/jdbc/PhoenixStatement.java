@@ -113,6 +113,7 @@ import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.MaterializedResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.log.ActivityLogInfo;
 import org.apache.phoenix.log.AuditQueryLogger;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.log.QueryLogInfo;
@@ -276,10 +277,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     protected final PhoenixConnection connection;
     private static final int NO_UPDATE = -1;
+    private static final String TABLE_UNKNOWN = "";
     private List<PhoenixResultSet> resultSets = new ArrayList<PhoenixResultSet>();
     private QueryPlan lastQueryPlan;
     private PhoenixResultSet lastResultSet;
     private int lastUpdateCount = NO_UPDATE;
+
+    private String lastUpdateTable = TABLE_UNKNOWN;
     private Operation lastUpdateOperation;
     private boolean isClosed = false;
     private int maxRows;
@@ -397,6 +401,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 setLastQueryPlan(plan);
                                 setLastResultSet(rs);
                                 setLastUpdateCount(NO_UPDATE);
+                                setLastUpdateTable(tableName == null ? TABLE_UNKNOWN : tableName);
                                 setLastUpdateOperation(stmt.getOperation());
                                 // If transactional, this will move the read pointer forward
                                 if (connection.getAutoCommit() && !noCommit) {
@@ -568,6 +573,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 int lastUpdateCount = (int) Math.min(Integer.MAX_VALUE, lastState.getUpdateCount());
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
+                                setLastUpdateTable(tableName == null ? TABLE_UNKNOWN : tableName);
                                 connection.incrementStatementExecutionCounter();
                                 if (queryLogger.isAuditLoggingEnabled()) {
                                     queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));
@@ -2477,12 +2483,31 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         this.lastUpdateCount = lastUpdateCount;
     }
 
+    private String getLastUpdateTable() {
+        return lastUpdateTable;
+    }
+
+    private void setLastUpdateTable(String lastUpdateTable) {
+        if (!Strings.isNullOrEmpty(lastUpdateTable)) {
+            this.lastUpdateTable = lastUpdateTable;
+        }
+        if (getConnection().getActivityLogger().isLevelEnabled(ActivityLogInfo.TABLE_NAME.getLogLevel())) {
+            updateActivityOnConnection(ActivityLogInfo.TABLE_NAME, this.lastUpdateTable);
+        }
+    }
+
     private Operation getLastUpdateOperation() {
         return lastUpdateOperation;
     }
 
     private void setLastUpdateOperation(Operation lastUpdateOperation) {
         this.lastUpdateOperation = lastUpdateOperation;
+        if (getConnection().getActivityLogger().isLevelEnabled(ActivityLogInfo.OP_NAME.getLogLevel())) {
+            updateActivityOnConnection(ActivityLogInfo.OP_NAME, this.lastUpdateOperation.toString());
+        }
+        if (getConnection().getActivityLogger().isLevelEnabled(ActivityLogInfo.OP_TIME.getLogLevel())) {
+            updateActivityOnConnection(ActivityLogInfo.OP_TIME, String.valueOf(EnvironmentEdgeManager.currentTimeMillis()));
+        }
     }
 
     private QueryPlan getLastQueryPlan() {
@@ -2491,8 +2516,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private void setLastQueryPlan(QueryPlan lastQueryPlan) {
         this.lastQueryPlan = lastQueryPlan;
+
     }
-    
+
+    private void updateActivityOnConnection(ActivityLogInfo item, String value) {
+        getConnection().getActivityLogger().log(item, value);
+    }
+
     private void throwIfUnallowedUserDefinedFunctions(Map<String, UDFParseNode> udfParseNodes) throws SQLException {
         if (!connection
                 .getQueryServices()
