@@ -3479,8 +3479,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             openConnection();
                             hConnectionEstablished = true;
                             boolean lastDDLTimestampValidationEnabled
-                                    = getProps().getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                                            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+                                = getProps().getBoolean(
+                                    QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                                    QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
                             if (lastDDLTimestampValidationEnabled) {
                                 refreshLiveRegionServers();
                             }
@@ -5199,8 +5200,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         synchronized (liveRegionServersLock) {
             try (Admin admin = getAdmin()) {
                 this.liveRegionServers = new ArrayList<>(admin.getRegionServers(true));
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 throw ServerUtil.parseServerException(e);
             }
         }

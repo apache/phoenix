@@ -370,7 +370,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * @param tableRef
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
-    private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest getValidateDDLTimestampRequest(TableRef tableRef) throws TableNotFoundException {
+    private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
+                getValidateDDLTimestampRequest(TableRef tableRef) throws TableNotFoundException {
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
@@ -380,7 +381,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         when querying an index, we need to validate its parent table in case the index was dropped
          */
         if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
-            PTable parentTable = this.connection.getTable(new PTableKey(this.connection.getTenantId(), tableRef.getTable().getParentName().getString()));
+            PTableKey key = new PTableKey(this.connection.getTenantId(),
+                                                tableRef.getTable().getParentName().getString());
+            PTable parentTable = this.connection.getTable(key);
             setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
             requestBuilder.addLastDDLTimestampRequests(innerBuilder);
         }
@@ -395,7 +398,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
             PTable pTable = tableRef.getTable();
             while (pTable.getParentName() != null) {
-                PTable parentTable = this.connection.getTable(new PTableKey(this.connection.getTenantId(), pTable.getParentName().getString()));
+                PTableKey key = new PTableKey(this.connection.getTenantId(),
+                                                pTable.getParentName().getString());
+                PTable parentTable = this.connection.getTable(key);
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                 setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
@@ -555,16 +560,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             }
                             catch (StaleMetadataCacheException e) {
                                 updateMetrics = false;
+                                PTable pTable = lastQueryPlan.getTableRef().getTable();
                                 LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
-                                String schemaN = lastQueryPlan.getTableRef().getTable().getSchemaName().toString();
-                                String tableN = lastQueryPlan.getTableRef().getTable().getTableName().toString();
+                                String schemaN = pTable.getSchemaName().toString();
+                                String tableN = pTable.getTableName().toString();
 
                                 // if the index metadata was stale, we will update the client cache
                                 // for the parent table, which will also add the new index metadata
-                                PTableType tableType = lastQueryPlan.getTableRef().getTable().getType();
+                                PTableType tableType =pTable.getType();
                                 if (tableType == PTableType.INDEX) {
-                                    schemaN = lastQueryPlan.getTableRef().getTable().getParentSchemaName().toString();
-                                    tableN = lastQueryPlan.getTableRef().getTable().getParentTableName().toString();
+                                    schemaN = pTable.getParentSchemaName().toString();
+                                    tableN = pTable.getParentTableName().toString();
                                 }
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view

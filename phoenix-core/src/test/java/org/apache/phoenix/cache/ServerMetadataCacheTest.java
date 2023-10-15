@@ -209,7 +209,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     any(), any(),  eq(tenantViewNameBytes), anyLong(), anyLong());
         }
     }
-  
+
     /**
      * Make sure we are invalidating the cache for table with no tenant connection, no schema name
      * and valid table name.
@@ -237,7 +237,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             assertNull(cache.getLastDDLTimestampForTableFromCacheOnly(null, null, tableName));
         }
     }
-  
+
     /**
      * Make sure we are invalidating the cache for table with no tenant connection,
      * valid schema name and table name.
@@ -268,7 +268,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     Bytes.toBytes(schemaName), Bytes.toBytes(tableName)));
         }
     }
-  
+
   /**
      * Make sure we are invalidating the cache for view with tenant connection.
      * @throws Exception
@@ -344,7 +344,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             assertTrue(lastDDLTimestampAfterAlterStmt > lastDDLTimestamp);
         }
     }
-  
+
   /**
      * Make sure we are invalidating the cache for table with no tenant connection, no schema name
      * and valid table name when we run drop table statement.
@@ -700,8 +700,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Assert.assertTrue("SQLException was not thrown when last ddl timestamp validation encountered errors twice.", e instanceof SQLException);
         }
     }
-  
-    
+
+
     /**
      * Client-1 creates a table, 2 level of views on it and alters the first level view.
      * Client-2 queries the second level view, verify that there were 3 cache updates in client-2,
