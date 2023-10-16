@@ -911,6 +911,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Verify that a client's upsert using old metadata trigger a cache update and the upsert succeeds.
+     */
     @Test
     public void testUpsertTableWithOldDDLTimestamp() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -958,6 +961,10 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test the case when a client upserts into multiple tables before calling commit.
+     * Verify that last ddl timestamp was validated for all involved tables only once.
+     */
     @Test
     public void testUpsertMultipleTablesWithOldDDLTimestamp() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -995,6 +1002,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test upserts into a multi-level view hierarchy.
+     */
     @Test
     public void testUpsertViewWithOldDDLTimestamp() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
