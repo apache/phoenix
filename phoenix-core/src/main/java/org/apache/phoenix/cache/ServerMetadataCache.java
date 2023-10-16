@@ -179,4 +179,9 @@ public class ServerMetadataCache {
         LOGGER.info("Resetting ServerMetadataCache");
         INSTANCE = null;
     }
+
+    @VisibleForTesting
+    public static void setInstance(ServerMetadataCache cache) {
+        INSTANCE = cache;
+    }
 }

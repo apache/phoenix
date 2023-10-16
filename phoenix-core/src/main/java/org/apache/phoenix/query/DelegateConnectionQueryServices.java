@@ -25,6 +25,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -177,6 +178,16 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public int getLowestClusterHBaseVersion() {
         return getDelegate().getLowestClusterHBaseVersion();
+    }
+
+    @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        getDelegate().refreshLiveRegionServers();
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        return getDelegate().getLiveRegionServers();
     }
 
     @Override
