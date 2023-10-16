@@ -710,7 +710,8 @@ public class MetaDataClient {
                             // In this case, we update the parent table which may in turn pull
                             // in indexes to add to this table.
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                            if (addColumnsAndIndexesFromAncestors(result, resolvedTimestamp, true, false)) {
+                            if (addColumnsAndIndexesFromAncestors(result, resolvedTimestamp,
+                                    true, false)) {
                                 connection.addTable(result.getTable(), resolvedTime);
                             } else {
                                 // if we aren't adding the table, we still need to update the
@@ -893,7 +894,8 @@ public class MetaDataClient {
      */
     private boolean addColumnsAndIndexesFromAncestors(MetaDataMutationResult result, Long resolvedTimestamp,
                                                       boolean alwaysAddAncestorColumnsAndIndexes,
-                                                      boolean alwaysHitServerForAncestors) throws SQLException {
+                                                      boolean alwaysHitServerForAncestors)
+            throws SQLException {
         PTable table = result.getTable();
         boolean hasIndexId = table.getViewIndexId() != null;
         // only need to inherit columns and indexes for view indexes and views
@@ -5070,11 +5072,14 @@ public class MetaDataClient {
         }
     }
 
-    private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors) throws SQLException {
-        addTableToCache(result, alwaysHitServerForAncestors, TransactionUtil.getResolvedTime(connection, result));
+    private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors)
+            throws SQLException {
+        addTableToCache(result, alwaysHitServerForAncestors,
+                TransactionUtil.getResolvedTime(connection, result));
     }
 
-    private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors, long timestamp) throws SQLException {
+    private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors,
+                                 long timestamp) throws SQLException {
         addColumnsAndIndexesFromAncestors(result, null, false, alwaysHitServerForAncestors);
         PTable table = result.getTable();
         connection.addTable(table, timestamp);

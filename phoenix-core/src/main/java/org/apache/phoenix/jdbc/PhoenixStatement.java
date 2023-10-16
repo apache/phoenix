@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
@@ -202,6 +201,7 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -377,9 +377,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
                 = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
-        /*
-        when querying an index, we need to validate its parent table in case the index was dropped
-         */
+        //when querying an index, we need to validate its parent table in case the index was dropped
         if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
             PTableKey key = new PTableKey(this.connection.getTenantId(),
                                                 tableRef.getTable().getParentName().getString());
@@ -392,9 +390,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         setLastDDLTimestampRequestParameters(innerBuilder, tableRef.getTable());
         requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
-        /*
-        when querying a view, we need to validate last ddl timestamps for all its ancestors.
-         */
+        //when querying a view, we need to validate last ddl timestamps for all its ancestors
         if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
             PTable pTable = tableRef.getTable();
             while (pTable.getParentName() != null) {
@@ -422,7 +418,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         String infoString = getInfoString(tableRef);
         try (Admin admin = this.connection.getQueryServices().getAdmin()) {
             // get all live region servers
-            List<ServerName> regionServers = this.connection.getQueryServices().getLiveRegionServers();
+            List<ServerName> regionServers
+                    = this.connection.getQueryServices().getLiveRegionServers();
             // pick one at random
             ServerName regionServer
                     = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
@@ -453,7 +450,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit, boolean shouldValidateLastDdlTimestamp) throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError,
+                                          final QueryLogger queryLogger, final boolean noCommit,
+                                          boolean shouldValidateLastDdlTimestamp)
+            throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
 
         try {
@@ -553,17 +553,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                             .wasUpdated()) {
                                         updateMetrics = false;
                                         //TODO we can log retry count and error for debugging in LOG table
-                                        return executeQuery(stmt, false, queryLogger, noCommit, shouldValidateLastDdlTimestamp);
+                                        return executeQuery(stmt, false, queryLogger, noCommit,
+                                                                shouldValidateLastDdlTimestamp);
                                     }
                                 }
                                 throw e;
-                            }
-                            catch (StaleMetadataCacheException e) {
+                            } catch (StaleMetadataCacheException e) {
                                 updateMetrics = false;
                                 PTable pTable = lastQueryPlan.getTableRef().getTable();
-                                LOGGER.debug("Force updating client metadata cache for {}", getInfoString(getLastQueryPlan().getTableRef()));
+                                LOGGER.debug("Force updating client metadata cache for {}",
+                                        getInfoString(getLastQueryPlan().getTableRef()));
                                 String schemaN = pTable.getSchemaName().toString();
                                 String tableN = pTable.getTableName().toString();
+                                PName tenantId = connection.getTenantId();
 
                                 // if the index metadata was stale, we will update the client cache
                                 // for the parent table, which will also add the new index metadata
@@ -574,9 +576,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view
-                                new MetaDataClient(connection).updateCache(connection.getTenantId(), schemaN, tableN, true);
+                                new MetaDataClient(connection)
+                                        .updateCache(tenantId, schemaN, tableN, true);
                                 // skip last ddl timestamp validation in the retry
-                                return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger, noCommit, false);
+                                return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger,
+                                                        noCommit, false);
                             }
                             catch (RuntimeException e) {
                                 // FIXME: Expression.evaluate does not throw SQLException
