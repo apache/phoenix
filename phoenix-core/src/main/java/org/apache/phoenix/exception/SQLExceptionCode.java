@@ -355,8 +355,11 @@ public enum SQLExceptionCode {
             + "view has TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
-    TTL_SUPPORTED_FOR_TABLES_ONLY(10955, "44A37", TTL
-            + "property can only be set for tables"),
+    TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10955, "44A37", TTL
+            + "property can only be set for tables and updatable views only"),
+
+    TTL_ALREADY_DEFINED_IN_HIERARCHY(10956, "44A37", TTL
+            + " property is already defined in hierarchy for this entity"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

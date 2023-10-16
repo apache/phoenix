@@ -247,7 +247,7 @@ public enum TableProperty {
         }
     },
 
-    TTL(PhoenixDatabaseMetaData.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, false, false) {
+    TTL(PhoenixDatabaseMetaData.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, true, true) {
         /**
          * PHOENIX_TTL can take any values ranging between 0 < PHOENIX_TTL <= HConstants.LATEST_TIMESTAMP.
          * special values :-

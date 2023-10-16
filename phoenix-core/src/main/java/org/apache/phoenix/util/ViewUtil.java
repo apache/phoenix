@@ -15,7 +15,9 @@
  */
 package org.apache.phoenix.util;
 
+import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -65,7 +67,9 @@ import org.apache.phoenix.schema.types.PLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -77,14 +81,8 @@ import java.util.Properties;
 import java.util.Set;
 
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -113,6 +111,9 @@ public class ViewUtil {
      *                                       and all orphan views (views that no longer exist)
      *                                       stemming from this table/view and all of its legitimate
      *                                       child views.
+     * @param isTTLDefinedOnAnyChild while going through child views updating this to true to
+     *                               confirm that TTL is defined in the Hierarchy below of the
+     *                               entity for which we are trying to find Descendant Views.
      *
      * @return a Pair where the first element is a list of all legitimate child views (or just 1
      * child view in case findJustOneLegitimateChildView is true) and where the second element is
@@ -132,20 +133,35 @@ public class ViewUtil {
         List<PTable> legitimateChildViews = new ArrayList<>();
         List<TableInfo> orphanChildViews = new ArrayList<>();
 
-        findAllDescendantViews(sysCatOrsysChildLink, serverSideConfig, tenantId, schemaName,
+        return findAllDescendantViews(sysCatOrsysChildLink, serverSideConfig, tenantId, schemaName,
                 tableOrViewName, clientTimeStamp, legitimateChildViews, orphanChildViews,
                 findJustOneLegitimateChildView);
-        return new Pair<>(legitimateChildViews, orphanChildViews);
     }
 
-    private static void findAllDescendantViews(Table sysCatOrsysChildLink,
-            Configuration serverSideConfig, byte[] parentTenantId, byte[] parentSchemaName,
-            byte[] parentTableOrViewName, long clientTimeStamp, List<PTable> legitimateChildViews,
-            List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView)
+    public static Pair<List<PTable>, List<TableInfo>> findAllDescendantViews(Table sysCatOrsysChildLink,
+           Configuration serverSideConfig, byte[] parentTenantId, byte[] parentSchemaName,
+           byte[] parentTableOrViewName, long clientTimeStamp, List<PTable> legitimateChildViews,
+           List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView)
+           throws IOException, SQLException{
+
+         return findAllDescendantViews(sysCatOrsysChildLink, null, serverSideConfig,
+                 parentTenantId, parentSchemaName, parentTableOrViewName, clientTimeStamp,
+                 legitimateChildViews, orphanChildViews, findJustOneLegitimateChildView,
+                 new Pair<>(false, false));
+
+    }
+
+    public static Pair<List<PTable>, List<TableInfo>> findAllDescendantViews(
+            Table sysCatOrsysChildLink, Table sysCat, Configuration serverSideConfig,
+            byte[] parentTenantId, byte[] parentSchemaName, byte[] parentTableOrViewName,
+            long clientTimeStamp, List<PTable> legitimateChildViews,
+            List<TableInfo> orphanChildViews, boolean findJustOneLegitimateChildView,
+            Pair<Boolean, Boolean> scanSysCatForTTLDefinedOnAnyChildPair)
             throws IOException, SQLException {
         TableViewFinderResult currentResult =
-                findImmediateRelatedViews(sysCatOrsysChildLink, parentTenantId, parentSchemaName,
-                        parentTableOrViewName, LinkType.CHILD_TABLE, clientTimeStamp);
+                findImmediateRelatedViews(sysCatOrsysChildLink, sysCat, parentTenantId,
+                        parentSchemaName, parentTableOrViewName, LinkType.CHILD_TABLE,
+                        clientTimeStamp, scanSysCatForTTLDefinedOnAnyChildPair);
         for (TableInfo viewInfo : currentResult.getLinks()) {
             byte[] viewTenantId = viewInfo.getTenantId();
             byte[] viewSchemaName = viewInfo.getSchemaName();
@@ -185,10 +201,11 @@ public class ViewUtil {
                     }
                     // Note that we only explore this branch if the current view is a legitimate
                     // child view, else we ignore it and move on to the next potential child view
-                    findAllDescendantViews(sysCatOrsysChildLink, serverSideConfig,
+                    findAllDescendantViews(sysCatOrsysChildLink, sysCat, serverSideConfig,
                             viewInfo.getTenantId(), viewInfo.getSchemaName(),
                             viewInfo.getTableName(), clientTimeStamp, legitimateChildViews,
-                            orphanChildViews, findJustOneLegitimateChildView);
+                            orphanChildViews, findJustOneLegitimateChildView,
+                            scanSysCatForTTLDefinedOnAnyChildPair);
                 } else {
                     logger.error("Found an orphan parent->child link keyed by this parent."
                             + " Parent Tenant Id: '" + Bytes.toString(parentTenantId)
@@ -201,6 +218,7 @@ public class ViewUtil {
                 }
             }
         }
+        return new Pair<>(legitimateChildViews, orphanChildViews);
     }
 
     private static boolean isLegitimateChildView(PTable view, byte[] parentSchemaName,
@@ -246,16 +264,31 @@ public class ViewUtil {
         }
     }
 
+    private static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
+        byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp)
+        throws IOException {
+
+        return findImmediateRelatedViews(sysCatOrsysChildLink, null, tenantId, schema, table,
+                linkType, timestamp, new Pair<>(false, false));
+    }
+
     /**
      * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the immediate related tables/views.
      */
     private static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
-            byte[] tenantId, byte[] schema, byte[] table, PTable.LinkType linkType, long timestamp)
+            @Nullable Table sysCat, byte[] tenantId, byte[] schema, byte[] table,
+            PTable.LinkType linkType, long timestamp,
+            Pair<Boolean, Boolean> scanSysCatForTTLDefinedOnAnyChildPair)
             throws IOException {
         if (linkType==PTable.LinkType.INDEX_TABLE || linkType==PTable.LinkType.EXCLUDED_COLUMN) {
             throw new IllegalArgumentException("findAllRelatives does not support link type "
                     + linkType);
         }
+        if (sysCat == null) {
+            //Means no scan is need on SYSCAT for TTL Values of each child view.
+            scanSysCatForTTLDefinedOnAnyChildPair.setFirst(false);
+        }
+
         byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
 		Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                 timestamp);
@@ -281,7 +314,7 @@ public class ViewUtil {
                     viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX];
                 } else if (linkType==PTable.LinkType.VIEW_INDEX_PARENT_TABLE) {
                     viewTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-                } 
+                }
                 else if (linkType==PTable.LinkType.PHYSICAL_TABLE &&
                         result.getValue(TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES)!=null) {
                     // do not links from indexes to their physical table
@@ -294,6 +327,18 @@ public class ViewUtil {
                         rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
                         .getBytes(StandardCharsets.UTF_8);
                 tableInfoList.add(new TableInfo(viewTenantId, viewSchemaName, viewName));
+                if (scanSysCatForTTLDefinedOnAnyChildPair.getFirst()) {
+                    byte[] viewKey = SchemaUtil.getTableKey(viewTenantId, viewSchemaName, viewName);
+                    Scan ttlScan = MetaDataUtil.newTableRowsScan(viewKey,
+                            MetaDataProtocol.MIN_TABLE_TIMESTAMP, timestamp);
+                    Result ttlResult = sysCat.getScanner(ttlScan).next();
+                    if (ttlResult != null) {
+                        if (ttlResult.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+                            scanSysCatForTTLDefinedOnAnyChildPair.setSecond(true);
+                            scanSysCatForTTLDefinedOnAnyChildPair.setFirst(false);
+                        }
+                    }
+                }
             }
             return new TableViewFinderResult(tableInfoList);
         } 
@@ -819,6 +864,10 @@ public class ViewUtil {
                 view.hasViewModifiedUseStatsForParallelization()) ?
                 view.useStatsForParallelization() : parentTable.useStatsForParallelization();
 
+//        //Inherit TTL from parent if ttl is not defined already.
+//        int ttl = (view.getViewType() != PTable.ViewType.UPDATABLE) ? TTL_NOT_DEFINED
+//                : (view.getTTL() != TTL_NOT_DEFINED ? view.getTTL() : parentTable.getTTL());
+
         // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
         // inherited from the physical base table.
         // if a TableProperty is not valid on a view we set it to the base table value
@@ -842,6 +891,7 @@ public class ViewUtil {
                 .setUpdateCacheFrequency(updateCacheFreq)
                 .setUseStatsForParallelization(useStatsForParallelization)
                 .setLastDDLTimestamp(maxDDLTimestamp)
+//                .setTTL(ttl)
                 .build();
         pTable = WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
 
@@ -956,7 +1006,7 @@ public class ViewUtil {
         byte[] parentUseStatsForParallelizationBytes = null;
         //Commenting out phoenixTTL property to exclude.
         //TODO:- re-enable after introducing TTL for views.
-        //byte[] parentPhoenixTTLBytes = null;
+//        byte[] parentTTLBytes = null;
         if (parent != null) {
             parentUpdateCacheFreqBytes = new byte[PLong.INSTANCE.getByteSize()];
             PLong.INSTANCE.getCodec().encodeLong(parent.getUpdateCacheFrequency(),
@@ -965,9 +1015,9 @@ public class ViewUtil {
                 parentUseStatsForParallelizationBytes =
                         PBoolean.INSTANCE.toBytes(parent.useStatsForParallelization());
             }
-            //parentPhoenixTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
-            //PLong.INSTANCE.getCodec().encodeLong(parent.getPhoenixTTL(),
-            //        parentPhoenixTTLBytes, 0);
+//            parentTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
+//            PLong.INSTANCE.getCodec().encodeLong(parent.getTTL(),
+//                    parentTTLBytes, 0);
         }
         for (Mutation m: tableMetaData) {
             if (m instanceof Put) {
@@ -983,12 +1033,12 @@ public class ViewUtil {
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
                         MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
-                //MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
-                //        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-                //        PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES,
-                //        extendedCellBuilder,
-                //        parentPhoenixTTLBytes,
-                //        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
+//                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
+//                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
+//                        PhoenixDatabaseMetaData.TTL_BYTES,
+//                        extendedCellBuilder,
+//                        parentTTLBytes,
+//                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 
         }
