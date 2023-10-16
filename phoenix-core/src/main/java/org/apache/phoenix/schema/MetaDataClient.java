@@ -1700,7 +1700,16 @@ public class MetaDataClient {
         return buildIndex(table, tableRef);
     }
 
-    private void verifyIfDescViewsExtendPk(PTable dataTable,
+    /**
+     * Go through all the descendent views from the child view hierarchy and find if any of the
+     * descendent views extends the primary key, throw error.
+     *
+     * @param view view table on which view index is being created.
+     * @param config the configuration.
+     * @throws SQLException if any of the descendent views extends pk or if something goes wrong
+     * while querying descendent view hierarchy.
+     */
+    private void verifyIfDescViewsExtendPk(PTable view,
                                            Configuration config) throws SQLException {
         if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
             return;
@@ -1709,8 +1718,8 @@ public class MetaDataClient {
                      connection.getQueryServices().getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
             byte[] tenantId = connection.getTenantId() == null ? null :
                     connection.getTenantId().getBytes();
-            byte[] schemaNameBytes = dataTable.getSchemaName().getBytes();
-            byte[] viewName = dataTable.getTableName().getBytes();
+            byte[] schemaNameBytes = view.getSchemaName().getBytes();
+            byte[] viewName = view.getTableName().getBytes();
             Pair<List<PTable>, List<TableInfo>> descViews =
                     ViewUtil.findAllDescendantViews(
                             childLinkTable,
@@ -1721,7 +1730,7 @@ public class MetaDataClient {
                             HConstants.LATEST_TIMESTAMP,
                             false);
             List<PTable> legitimateChildViews = descViews.getFirst();
-            int dataTableOrViewPkCols = dataTable.getPKColumns().size();
+            int dataTableOrViewPkCols = view.getPKColumns().size();
             if (legitimateChildViews != null && legitimateChildViews.size() > 0) {
                 for (PTable childView : legitimateChildViews) {
                     if (childView.getPKColumns().size() > dataTableOrViewPkCols) {
