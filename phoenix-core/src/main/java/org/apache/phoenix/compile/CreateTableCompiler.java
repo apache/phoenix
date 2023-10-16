@@ -173,6 +173,14 @@ public class CreateTableCompiler {
                 validateCreateViewCompilation(connection, parentToBe,
                     columnDefs, pkConstraint);
             }
+            if (parentToBe.getIndexes().size() > 0 &&
+                    viewExtendsParentPk(columnDefs, pkConstraint)) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode
+                                .VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES)
+                        .build()
+                        .buildException();
+            }
         }
         final ViewType viewType = viewTypeToBe;
         final String viewStatement = viewStatementToBe;
@@ -247,6 +255,24 @@ public class CreateTableCompiler {
             throw new SQLExceptionInfo
                 .Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
                 .build().buildException();
+        }
+    }
+
+    /**
+     * Returns true if the view extends the primary key of the parent table/view, returns false
+     * otherwise.
+     *
+     * @param columnDefs column def list.
+     * @param pkConstraint primary key constraint.
+     * @return true if the view extends the primary key of the parent table/view, false otherwise.
+     */
+    private boolean viewExtendsParentPk(
+            final List<ColumnDef> columnDefs,
+            final PrimaryKeyConstraint pkConstraint) {
+        if (pkConstraint.getColumnNames().size() > 0) {
+            return true;
+        } else {
+            return columnDefs.stream().anyMatch(ColumnDef::isPK);
         }
     }
 

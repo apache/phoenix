@@ -351,6 +351,10 @@ public enum SQLExceptionCode {
             + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
+    CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK(10955, "44A37", "View index can be created "
+            + "only if none of the child views extends primary key"),
+    VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES(10956, "44A38", "View can extend parent primary key" +
+            " only if parent does not have indexes"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

@@ -20,6 +20,7 @@ package org.apache.phoenix.schema;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
@@ -44,7 +45,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_DEF;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_FAMILY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
@@ -64,7 +64,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
@@ -121,7 +120,6 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
-import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -155,6 +153,8 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -1598,12 +1598,14 @@ public class MetaDataClient {
                 }
             }
 
+            Configuration config = connection.getQueryServices().getConfiguration();
             // for view indexes
             if (dataTable.getType() == PTableType.VIEW) {
                 String physicalName = dataTable.getPhysicalName().getString();
                 physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
                 physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
                 List<ColumnName> requiredCols = Lists.newArrayList(indexedColumnNames);
+                verifyIfDescViewsExtendPk(physicalSchemaName, dataTable, config);
                 requiredCols.addAll(includedColumns);
                 for (ColumnName colName : requiredCols) {
                     // acquire the mutex using the global physical table name to
@@ -1622,7 +1624,6 @@ public class MetaDataClient {
                 }
             }
 
-            Configuration config = connection.getQueryServices().getConfiguration();
             long threshold = Long.parseLong(config.get(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD));
 
             if (threshold > 0 && !statement.isAsync()) {
@@ -1696,6 +1697,47 @@ public class MetaDataClient {
         }
 
         return buildIndex(table, tableRef);
+    }
+
+    private void verifyIfDescViewsExtendPk(String schemaName, PTable dataTable,
+                                           Configuration config)
+            throws SQLException {
+        try (Table childLinkTable =
+                     connection.getQueryServices().getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
+            byte[] tenantId = connection.getTenantId() == null ? null :
+                    connection.getTenantId().getBytes();
+            byte[] schemaNameBytes =
+                    Strings.isNullOrEmpty(schemaName) ? ByteUtil.EMPTY_BYTE_ARRAY :
+                            schemaName.getBytes(StandardCharsets.UTF_8);
+            byte[] viewName = dataTable.getName().getBytes();
+            Pair<List<PTable>, List<TableInfo>> descViews =
+                    ViewUtil.findAllDescendantViews(
+                            childLinkTable,
+                            config,
+                            tenantId,
+                            schemaNameBytes,
+                            viewName,
+                            HConstants.LATEST_TIMESTAMP,
+                            false);
+            List<PTable> legitimateChildViews = descViews.getFirst();
+            int dataTableOrViewPkCols = dataTable.getPKColumns().size();
+            if (legitimateChildViews != null && legitimateChildViews.size() > 0) {
+                for (PTable childView : legitimateChildViews) {
+                    if (childView.getPKColumns().size() > dataTableOrViewPkCols) {
+                        LOGGER.error("Creation of view index not allowed as child view {}"
+                                + " extends pk", childView.getName());
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode
+                                        .CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK)
+                                .build()
+                                .buildException();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error while retrieving descendent views", e);
+            throw new SQLException(e);
+        }
     }
 
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {
