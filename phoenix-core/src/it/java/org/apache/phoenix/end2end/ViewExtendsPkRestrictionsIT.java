@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -28,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Properties;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES;
@@ -42,6 +44,14 @@ import static org.junit.Assert.fail;
 public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewExtendsPkRestrictionsIT.class);
+
+    private static final String TENANT_ID = "tenant_01";
+
+    private Connection getTenantConnection(final String tenantId) throws Exception {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), tenantProps);
+    }
 
     @Test
     public void testViewExtendsPkWithParentTableIndex1() {
@@ -107,6 +117,42 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             }
         }
         assertTrue("All statements could not be executed", allStmtExecuted);
+    }
+
+    @Test
+    public void testTenantSchemaViewExtendsPkWithParentTableIndex1() throws Exception {
+        final String tableName = generateUniqueName();
+        final String schemaName = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        final String indexName = "idx_" + tableName;
+        final String view01 = SchemaUtil.getTableName(schemaName, "v01_" + tableName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            final Statement stmt = conn.createStatement();
+            stmt.execute("CREATE TABLE " + fullTableName
+                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                    + "COL1, COL2)) MULTI_TENANT = true");
+            stmt.execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (COL3) INCLUDE "
+                    + "(COL4)");
+            try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+                tenantStmt.execute("CREATE VIEW " + view01
+                        + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
+                        + fullTableName + " WHERE COL1 = 'col1'");
+                fail();
+            } catch (SQLException e) {
+                try {
+                    assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(),
+                            e.getErrorCode());
+                    assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(),
+                            e.getSQLState());
+                } catch (AssertionError ae) {
+                    LOGGER.error("Exception: ", e);
+                    throw ae;
+                }
+            }
+        }
     }
 
     @Test
@@ -242,6 +288,52 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testTenantSchemaViewExtendsPkWithViewIndex2() throws Exception {
+        final String tableName = generateUniqueName();
+        final String schemaName = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        final String view01 = SchemaUtil.getTableName(schemaName, "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(schemaName, "v02_" + tableName);
+        final String index_view01 = "idx_v01_" + tableName;
+        boolean allStmtExecuted = false;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            final Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + fullTableName
+                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                    + "COL1, COL2)) MULTI_TENANT = true");
+
+            try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+
+                tenantStmt.execute("CREATE VIEW " + view01
+                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute(
+                        "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                                + "(COL1, COL2, COL3)");
+                allStmtExecuted = true;
+                tenantStmt.execute(
+                        "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
+                                + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01
+                                + " WHERE VCOL1 = 'vcol1'");
+                fail();
+            }
+        } catch (SQLException e) {
+            try {
+                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
+            } catch (AssertionError ae) {
+                LOGGER.error("Exception: ", e);
+                throw ae;
+            }
+        }
+        assertTrue("All statements could not be executed", allStmtExecuted);
+    }
+
+    @Test
     public void testViewExtendsPkWithViewIndex3() {
         final String tableName = generateUniqueName();
         final String view01 = "v01_" + tableName;
@@ -272,6 +364,62 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
                     + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
             fail();
+        } catch (SQLException e) {
+            try {
+                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
+            } catch (AssertionError ae) {
+                LOGGER.error("Exception: ", e);
+                throw ae;
+            }
+        }
+        assertTrue("All statements could not be executed", allStmtExecuted);
+    }
+
+    @Test
+    public void testTenantSchemaViewExtendsPkWithViewIndex3() throws Exception {
+        final String tableName = generateUniqueName();
+        final String schemaName1 = generateUniqueName();
+        final String schemaName2 = generateUniqueName();
+        final String schemaName3 = generateUniqueName();
+        final String schemaName4 = generateUniqueName();
+        final String schemaName5 = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName1, tableName);
+        final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(schemaName3, "v02_" + tableName);
+        final String view03 = SchemaUtil.getTableName(schemaName4, "v03_" + tableName);
+        final String view04 = SchemaUtil.getTableName(schemaName5, "v04_" + tableName);
+        final String index_view01 = "idx_v01_" + tableName;
+        boolean allStmtExecuted = false;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            final Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + fullTableName
+                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                    + "COL1, COL2)) MULTI_TENANT = true");
+
+            try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+
+                stmt.execute("CREATE VIEW " + view01
+                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02
+                        + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03
+                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                        + "(COL1, COL2, COL3)");
+                allStmtExecuted = true;
+                tenantStmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), "
+                        + "COL6 VARCHAR PRIMARY KEY) AS "
+                        + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                fail();
+            }
         } catch (SQLException e) {
             try {
                 assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
@@ -381,6 +529,65 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testTenantSchemaViewIndexWithChildViewExtendedPk1() throws Exception {
+        final String tableName = generateUniqueName();
+        final String schemaName = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+        final String view01 = SchemaUtil.getTableName(generateUniqueName(), "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(generateUniqueName(), "v02_" + tableName);
+        final String view03 = SchemaUtil.getTableName(generateUniqueName(), "v03_" + tableName);
+        final String view04 = SchemaUtil.getTableName(generateUniqueName(), "v04_" + tableName);
+        final String index_view01 = "idx_v01_" + tableName;
+        final String index_view02 = "idx_v02_" + tableName;
+        boolean allStmtExecuted = false;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            final Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + fullTableName
+                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                    + "COL1, COL2)) MULTI_TENANT = true");
+
+            try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+
+                tenantStmt.execute("CREATE VIEW " + view01
+                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute(
+                        "CREATE VIEW " + view02 + " (VCOL2 CHAR(10) PRIMARY KEY, COL6 VARCHAR)"
+                                + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                tenantStmt.execute(
+                        "CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
+                                + "(COL1, COL2, COL3)");
+                tenantStmt.execute("CREATE VIEW " + view03
+                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                        "CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
+                                + "SELECT * FROM " + view03 + " WHERE VCOL1 = 'vcol4'");
+                allStmtExecuted = true;
+                tenantStmt.execute(
+                        "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                                + "(COL1, COL2, COL3)");
+                fail();
+            }
+        } catch (SQLException e) {
+            try {
+                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                        e.getErrorCode());
+                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                        e.getSQLState());
+            } catch (AssertionError ae) {
+                LOGGER.error("Exception: ", e);
+                throw ae;
+            }
+        }
+        assertTrue("All statements could not be executed", allStmtExecuted);
+    }
+
+    @Test
     public void testViewIndexWithChildViewExtendedPk2() {
         final String tableName = generateUniqueName();
         final String view01 = "v01_" + tableName;
@@ -462,6 +669,65 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
                     + "(COL1, COL2, COL3)");
             fail();
+        } catch (SQLException e) {
+            try {
+                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                        e.getErrorCode());
+                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                        e.getSQLState());
+            } catch (AssertionError ae) {
+                LOGGER.error("Exception: ", e);
+                throw ae;
+            }
+        }
+        assertTrue("All statements could not be executed", allStmtExecuted);
+    }
+
+    @Test
+    public void testTenantSchemaViewIndexWithChildViewExtendedPk2() throws Exception {
+        final String tableName = generateUniqueName();
+        final String schemaName1 = generateUniqueName();
+        final String schemaName2 = generateUniqueName();
+        final String schemaName3 = generateUniqueName();
+        final String schemaName4 = generateUniqueName();
+        final String schemaName5 = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName1, tableName);
+        final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(schemaName3, "v02_" + tableName);
+        final String view03 = SchemaUtil.getTableName(schemaName4, "v03_" + tableName);
+        final String view04 = SchemaUtil.getTableName(schemaName5, "v04_" + tableName);
+        final String index_view01 = "idx_v01_" + tableName;
+        boolean allStmtExecuted = false;
+
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            final Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + fullTableName
+                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                    + "COL1, COL2)) MULTI_TENANT = true");
+
+            try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+
+                stmt.execute("CREATE VIEW " + view01
+                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute(
+                        "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
+                                + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01 +
+                                " WHERE VCOL1 = 'vcol1'");
+                tenantStmt.execute("CREATE VIEW " + view03
+                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                        "CREATE VIEW " + view04 + " (VCOL3 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
+                                + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
+                allStmtExecuted = true;
+                stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                        + "(COL1, COL2, COL3)");
+                fail();
+            }
         } catch (SQLException e) {
             try {
                 assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),

@@ -1606,7 +1606,7 @@ public class MetaDataClient {
                 physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
                 physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
                 List<ColumnName> requiredCols = Lists.newArrayList(indexedColumnNames);
-                verifyIfDescViewsExtendPk(physicalSchemaName, dataTable, config);
+                verifyIfDescViewsExtendPk(dataTable, config);
                 requiredCols.addAll(includedColumns);
                 for (ColumnName colName : requiredCols) {
                     // acquire the mutex using the global physical table name to
@@ -1700,9 +1700,8 @@ public class MetaDataClient {
         return buildIndex(table, tableRef);
     }
 
-    private void verifyIfDescViewsExtendPk(String schemaName, PTable dataTable,
-                                           Configuration config)
-            throws SQLException {
+    private void verifyIfDescViewsExtendPk(PTable dataTable,
+                                           Configuration config) throws SQLException {
         if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
             return;
         }
@@ -1710,9 +1709,7 @@ public class MetaDataClient {
                      connection.getQueryServices().getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
             byte[] tenantId = connection.getTenantId() == null ? null :
                     connection.getTenantId().getBytes();
-            byte[] schemaNameBytes =
-                    Strings.isNullOrEmpty(schemaName) ? ByteUtil.EMPTY_BYTE_ARRAY :
-                            schemaName.getBytes(StandardCharsets.UTF_8);
+            byte[] schemaNameBytes = dataTable.getSchemaName().getBytes();
             byte[] viewName = dataTable.getTableName().getBytes();
             Pair<List<PTable>, List<TableInfo>> descViews =
                     ViewUtil.findAllDescendantViews(
@@ -1738,6 +1735,8 @@ public class MetaDataClient {
                     }
                 }
             }
+        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
+            LOGGER.error("Table not found or not accessible.", e);
         } catch (IOException e) {
             LOGGER.error("Error while retrieving descendent views", e);
             throw new SQLException(e);
