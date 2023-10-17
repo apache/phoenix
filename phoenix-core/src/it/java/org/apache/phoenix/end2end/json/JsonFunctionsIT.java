@@ -26,6 +26,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
@@ -36,10 +37,12 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -48,8 +51,12 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+@Category(ParallelStatsDisabledTest.class)
 public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     public static String BASIC_JSON = "json/json_functions_basic.json";
     public static String FUNCTIONS_TEST_JSON = "json/json_functions_tests.json";
@@ -70,35 +77,44 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            String ddl = "create table " + tableName + " (pk integer primary key, randomVal integer ,col integer, jsoncol json)";
             conn.createStatement().execute(ddl);
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?,?)");
             stmt.setInt(1, 1);
-            stmt.setInt(2, 2);
-            stmt.setString(3, basicJson);
+            stmt.setInt(2, 123);
+            stmt.setInt(3, 2);
+            stmt.setString(4, basicJson);
             stmt.execute();
             conn.commit();
             TestUtil.dumpTable(conn, TableName.valueOf(tableName));
 
-            String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info') " +
+            String queryTemplate ="SELECT pk, randomVal, JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
+                "JSON_VALUE(jsoncol, '$.info.tags[0]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
+                    "JSON_VALUE(jsoncol, '$.info.tags[1]') " +
                 " FROM " + tableName +
                 " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
             String query = String.format(queryTemplate, "AndersenFamily");
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
-            assertEquals("Basic", rs.getString(1));
-            assertEquals("Bristol", rs.getString(2));
-            assertEquals("Water polo", rs.getString(3));
+            assertEquals("1", rs.getString(1));
+            assertEquals("123", rs.getString(2));
+            assertEquals("Basic", rs.getString(3));
+            assertEquals("Bristol", rs.getString(4));
+            assertEquals("Sport", rs.getString(5));
             // returned format is different
-            compareJson(rs.getString(4), basicJson, "$.info.tags");
-            compareJson(rs.getString(5), basicJson, "$.info");
+            compareJson(rs.getString(6), basicJson, "$.info.tags");
+            compareJson(rs.getString(7), basicJson, "$.info");
+            assertEquals("Water polo", rs.getString(8));
             assertFalse(rs.next());
 
             // Now check for empty match
             query = String.format(queryTemplate, "Windsors");
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
+
+            // check if the explain plan indicates server side execution
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON FUNCTION PROJECTION"));
         }
     }
 
@@ -438,5 +454,93 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).build();
         Object read = JsonPath.using(conf).parse(json).read(jsonPath);
         return read.toString();
+    }
+
+    /**
+     * This test case is used to check if the Server Side execution optimization doesn't take place
+     * when we include the complte JSON column. The case for optimization is covered in
+     * {@link #testSimpleJsonValue()}
+     * @throws Exception
+     */
+    @Test
+    public void testJsonFunctionOptimization() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, basicJson);
+            stmt.execute();
+            conn.commit();
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+
+            String queryTemplate ="SELECT jsoncol, JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
+                    "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
+            String query = String.format(queryTemplate, "AndersenFamily");
+            // check if the explain plan indicates server side execution
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            assertFalse(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON FUNCTION PROJECTION"));
+        }
+    }
+
+    @Test
+    public void testArrayIndexAndJsonFunctionExpressions() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json, arr INTEGER ARRAY)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, basicJson);
+            Array array = conn.createArrayOf("INTEGER", new Integer[]{1, 2});
+            stmt.setArray(4, array);
+            stmt.execute();
+            conn.commit();
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+
+            String query ="SELECT arr, arr[1], jsoncol, JSON_VALUE(jsoncol, '$.type')" +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            // Since we are using complete array and json col, no server side execution
+            ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
+            assertFalse(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+
+            // since we are using Array Index and Json function without full column, optimization
+            // should happen
+            query ="SELECT arr[1], JSON_VALUE(jsoncol, '$.type')" +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
+            assertTrue(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+
+            // only Array optimization and not Json
+            query ="SELECT arr[1], jsoncol, JSON_VALUE(jsoncol, '$.type')" +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
+            assertTrue(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+
+            // only Json optimization and not Array Index
+            query ="SELECT arr, arr[1], JSON_VALUE(jsoncol, '$.type')" +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            explainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
+            assertFalse(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+        }
     }
 }
