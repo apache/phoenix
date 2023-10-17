@@ -162,6 +162,7 @@ import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.parse.CreateCDCStatement;
+import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
@@ -3629,6 +3630,18 @@ public class MetaDataClient {
         String tableName = statement.getIndexName().getName();
         String parentTableName = statement.getTableName().getTableName();
 		return dropTable(schemaName, tableName, parentTableName, PTableType.INDEX, statement.ifExists(), false, false);
+    }
+
+    public MutationState dropCDC(DropCDCStatement statement) throws SQLException {
+        String schemaName = statement.getTableName().getSchemaName();
+        String cdcTableName = statement.getCdcObjName().getName();
+        String parentTableName = statement.getTableName().getTableName();
+        // Dropping the virtual CDC Table
+        dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(), false, false);
+
+        String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
+        // Dropping the uncovered index associated with the CDC Table
+        return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX, statement.ifExists(), false, false);
     }
 
     private MutationState dropFunction(String functionName,

@@ -208,4 +208,43 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals("TENANTID", cdcPkColumns.get(1).getName().getString());
         assertEquals("K", cdcPkColumns.get(2).getName().getString());
     }
+
+    @Test
+    public void testDropCDC () throws SQLException {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE)");
+        String cdcName = generateUniqueName();
+
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+        conn.createStatement().execute(cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
+
+        String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(drop_cdc_sql);
+
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT cdc_include FROM " +
+                "system.catalog WHERE table_name = '" + cdcName +
+                "' AND column_name IS NULL and column_family IS NULL")) {
+            assertEquals(false, rs.next());
+        }
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT index_type FROM " +
+                "system.catalog WHERE table_name = '" + CDCUtil.getCDCIndexName(cdcName) +
+                "' AND column_name IS NULL and column_family IS NULL")) {
+            assertEquals(false, rs.next());
+        }
+
+        try {
+            conn.createStatement().execute(drop_cdc_sql);
+            fail("Expected to fail as cdc table doesn't exist");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(cdcName));
+        }
+
+    }
 }
