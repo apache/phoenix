@@ -1335,6 +1335,7 @@ public class MutationState implements SQLCloseable {
                 Table hTable = connection.getQueryServices().getTable(htableName);
                 List<Mutation> currentMutationBatch = null;
                 boolean areAllBatchesSuccessful = false;
+
                 try {
                     if (table.isTransactional()) {
                         // Track tables to which we've sent uncommitted data
@@ -1485,8 +1486,9 @@ public class MutationState implements SQLCloseable {
                     // were not committed successfully.
                     int[] uncommittedStatementIndexes = getUncommittedStatementIndexes();
                     sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
+
                     numFailedMutations = uncommittedStatementIndexes.length;
-                    GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
+
                     if (isVerifiedPhase) {
                         numFailedPhase3Mutations = numFailedMutations;
                         GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
@@ -1570,10 +1572,12 @@ public class MutationState implements SQLCloseable {
             String tableName,
             long numFailedMutations,
             boolean isTransactional) {
+
         if (failedMutationBatch == null || failedMutationBatch.isEmpty() ||
                 Strings.isNullOrEmpty(tableName)) {
             return MutationMetricQueue.MutationMetric.EMPTY_METRIC;
         }
+
         long numUpsertMutationsInBatch = 0L;
         long numDeleteMutationsInBatch = 0L;
 
@@ -1584,12 +1588,27 @@ public class MutationState implements SQLCloseable {
                 numDeleteMutationsInBatch++;
             }
         }
+
+        long totalFailedMutation = numUpsertMutationsInBatch + numDeleteMutationsInBatch;
+        //TODO: this case is something that should not happen
+        //but still if condition makes sese if this ever happens
+        if (totalFailedMutation < numFailedMutations) {
+            LOGGER.warn(
+                    "total failed mutation less than num of failed mutation.  This is not expected.");
+            totalFailedMutation = numFailedMutations;
+        }
+        System.out.println(GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
+
+        GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(
+                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch :
+                        totalFailedMutation);
+
         // Update the MUTATION_BATCH_FAILED_SIZE counter with the number of failed delete mutations
         // in case we are dealing with all deletes for a non-transactional table, since there is a
         // bug in sendMutations where we don't get the correct value for numFailedMutations when
         // we don't use transactions
         return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0, 0,
-                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : numFailedMutations,
+                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : totalFailedMutation,
                 0, 0, 0, 0,
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,
