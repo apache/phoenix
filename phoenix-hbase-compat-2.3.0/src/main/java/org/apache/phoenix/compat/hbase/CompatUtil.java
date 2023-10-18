@@ -18,9 +18,12 @@
 package org.apache.phoenix.compat.hbase;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.RegionMetrics;
 import org.apache.hadoop.hbase.ServerName;
@@ -29,17 +32,22 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.io.hfile.BlockCacheFactory;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.mob.MobFileCache;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
 import org.apache.hadoop.hbase.util.ChecksumType;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hbase.thirdparty.com.google.common.collect.ListMultimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -157,5 +165,44 @@ public class CompatUtil {
     public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
             throws IOException {
         return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
+    }
+
+    /**
+     * Initialize region for snapshot scanner utility. This is client side region initialization and
+     * hence it should follow the same region init pattern as the one used by hbase
+     * ClientSideRegionScanner.
+     *
+     * @param conf The configuration.
+     * @param fs The filesystem instance.
+     * @param rootDir Restored region root dir.
+     * @param htd The table descriptor instance used to retrieve the region root dir.
+     * @param hri The region info.
+     * @throws IOException If region init throws IOException.
+     */
+    public static HRegion initRegionForSnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
+                                              TableDescriptor htd,
+                                              RegionInfo hri) throws IOException {
+      HRegion region = HRegion.newHRegion(CommonFSUtils.getTableDir(rootDir, htd.getTableName()), null, fs,
+              conf, hri, htd, null);
+      region.setRestoredRegion(true);
+      // non RS process does not have a block cache, and this a client side scanner,
+      // create one for MapReduce jobs to cache the INDEX block by setting to use
+      // IndexOnlyLruBlockCache and set a value to HBASE_CLIENT_SCANNER_BLOCK_CACHE_SIZE_KEY
+      conf.set(BlockCacheFactory.BLOCKCACHE_POLICY_KEY, "IndexOnlyLRU");
+      // HConstants.HFILE_ONHEAP_BLOCK_CACHE_FIXED_SIZE_KEY is only available from HBase 2.3.7
+      // We are using the string directly here to let Phoenix compile with earlier HBase versions.
+      // Note that it won't do anything before HBase 2.3.7
+      conf.setIfUnset("hfile.onheap.block.cache.fixed.size",
+              String.valueOf(32 * 1024 * 1024L));
+      // don't allow L2 bucket cache for non RS process to avoid unexpected disk usage.
+      conf.unset(HConstants.BUCKET_CACHE_IOENGINE_KEY);
+      region.setBlockCache(BlockCacheFactory.createBlockCache(conf));
+      // we won't initialize the MobFileCache when not running in RS process. so provided an
+      // initialized cache. Consider the case: an CF was set from an mob to non-mob. if we only
+      // initialize cache for MOB region, NPE from HMobStore will still happen. So Initialize the
+      // cache for every region although it may hasn't any mob CF, BTW the cache is very light-weight.
+      region.setMobFileCache(new MobFileCache(conf));
+      region.initialize();
+      return region;
     }
 }

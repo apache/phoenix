@@ -18,6 +18,8 @@
 package org.apache.phoenix.compat.hbase;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.MetaTableAccessor;
@@ -26,9 +28,11 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HStore;
 import org.apache.hadoop.hbase.regionserver.StoreFileWriter;
 import org.apache.hadoop.hbase.security.access.AccessControlLists;
@@ -97,5 +101,25 @@ public class CompatUtil {
     public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
             throws IOException {
         return MetaTableAccessor.getMergeRegions(conn, regionInfo.getRegionName());
+    }
+
+    /**
+     * Initialize region for snapshot scanner utility. This is client side region initialization and
+     * hence it should follow the same region init pattern as the one used by hbase
+     * ClientSideRegionScanner.
+     *
+     * @param conf The configuration.
+     * @param fs The filesystem instance.
+     * @param rootDir Restored region root dir.
+     * @param htd The table descriptor instance used to retrieve the region root dir.
+     * @param hri The region info.
+     * @throws IOException If region init throws IOException.
+     */
+    public static HRegion initRegionForSnapshotScanner(Configuration conf, FileSystem fs, Path rootDir,
+                                              TableDescriptor htd,
+                                              RegionInfo hri) throws IOException {
+        // This doesn't include any of the changes from PHOENIX-7039, because HBase 2.1 doesn't
+        // have the functionality
+        return HRegion.openHRegion(conf, fs, rootDir, hri, htd, null, null, null);
     }
 }
