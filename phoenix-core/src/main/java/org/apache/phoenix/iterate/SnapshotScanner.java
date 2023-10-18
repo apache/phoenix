@@ -136,8 +136,11 @@ public class SnapshotScanner extends AbstractClientScanner {
     // create one for MapReduce jobs to cache the INDEX block by setting to use
     // IndexOnlyLruBlockCache and set a value to HBASE_CLIENT_SCANNER_BLOCK_CACHE_SIZE_KEY
     conf.set(BlockCacheFactory.BLOCKCACHE_POLICY_KEY, "IndexOnlyLRU");
-    conf.setIfUnset(HConstants.HFILE_ONHEAP_BLOCK_CACHE_FIXED_SIZE_KEY,
-            String.valueOf(HConstants.HBASE_CLIENT_SCANNER_ONHEAP_BLOCK_CACHE_FIXED_SIZE_DEFAULT));
+    // HConstants.HFILE_ONHEAP_BLOCK_CACHE_FIXED_SIZE_KEY is only available from 2.4.6
+    // We are using the string directly here to let Phoenix compile with earlier versions.
+    // Note that it won't do anything before HBase 2.4.6
+    conf.setIfUnset("hfile.onheap.block.cache.fixed.size",
+            String.valueOf(32 * 1024 * 1024L));
     // don't allow L2 bucket cache for non RS process to avoid unexpected disk usage.
     conf.unset(HConstants.BUCKET_CACHE_IOENGINE_KEY);
     region.setBlockCache(BlockCacheFactory.createBlockCache(conf));
