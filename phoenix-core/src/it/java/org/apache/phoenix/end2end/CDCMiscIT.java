@@ -245,6 +245,6 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
             assertTrue(e.getMessage().endsWith(cdcName));
         }
-
     }
+
 }

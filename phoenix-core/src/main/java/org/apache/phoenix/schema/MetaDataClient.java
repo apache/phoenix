@@ -3641,7 +3641,12 @@ public class MetaDataClient {
 
         String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
         // Dropping the uncovered index associated with the CDC Table
-        return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX, statement.ifExists(), false, false);
+        try {
+            return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX, statement.ifExists(), false, false);
+        } catch (SQLException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
+                    .setTableName(statement.getCdcObjName().getName()).build().buildException();
+        }
     }
 
     private MutationState dropFunction(String functionName,
