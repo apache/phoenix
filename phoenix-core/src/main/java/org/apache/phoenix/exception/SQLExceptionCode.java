@@ -353,8 +353,8 @@ public enum SQLExceptionCode {
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
     CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK(10955, "44A37", "View index can be created "
             + "only if none of the child views extends primary key"),
-    VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES(10956, "44A38", "View can extend parent primary key" +
-            " only if none of the parents have indexes in the parent hierarchy"),
+    VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES(10956, "44A38", "View can extend parent primary key"
+            + " only if none of the parents have indexes in the parent hierarchy"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

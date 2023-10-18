@@ -1716,8 +1716,8 @@ public class MetaDataClient {
         }
         try (Table childLinkTable =
                      connection.getQueryServices().getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
-            byte[] tenantId = connection.getTenantId() == null ? null :
-                    connection.getTenantId().getBytes();
+            byte[] tenantId = connection.getTenantId() == null ? null
+                    : connection.getTenantId().getBytes();
             byte[] schemaNameBytes = view.getSchemaName().getBytes();
             byte[] viewName = view.getTableName().getBytes();
             Pair<List<PTable>, List<TableInfo>> descViews =
