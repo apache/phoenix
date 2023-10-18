@@ -58,6 +58,7 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
@@ -179,11 +180,13 @@ public class CreateTableCompiler {
                                 new ViewWhereExpressionValidatorVisitor(parentToBe,
                                         pkColumnsInWhere, nonPkColumnsInWhere);
                         where.accept(validatorVisitor);
-                        try {
-                            viewTypeToBe = setViewTypeToBe(connection, parentToBe, pkColumnsInWhere,
-                                    nonPkColumnsInWhere);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
+                        if (!(connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl)) {
+                            try {
+                                viewTypeToBe = setViewTypeToBe(connection, parentToBe, pkColumnsInWhere,
+                                        nonPkColumnsInWhere);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
                         }
                     }
 
