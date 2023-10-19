@@ -1611,6 +1611,7 @@
         <hbase.compat.version>2.1.6</hbase.compat.version>
         <hbase.version>${hbase-2.1.runtime.version}</hbase.version>
         <hadoop.version>3.0.3</hadoop.version>
+        <guice.version>4.0</guice.version>
         <tephra.hbase.compat.version>2.1</tephra.hbase.compat.version>
       </properties>
     </profile>
