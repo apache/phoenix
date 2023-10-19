@@ -20,9 +20,7 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.omid.committable.CommitTable;
 import org.apache.omid.transaction.OmidCompactor;
-import org.apache.omid.transaction.OmidSnapshotFilter;
 
 import java.io.IOException;
 import java.util.Optional;
