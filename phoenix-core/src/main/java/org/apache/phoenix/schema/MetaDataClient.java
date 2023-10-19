@@ -3637,12 +3637,14 @@ public class MetaDataClient {
         String cdcTableName = statement.getCdcObjName().getName();
         String parentTableName = statement.getTableName().getTableName();
         // Dropping the virtual CDC Table
-        dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(), false, false);
+        dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
+                false, false);
 
         String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
         // Dropping the uncovered index associated with the CDC Table
         try {
-            return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX, statement.ifExists(), false, false);
+            return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,
+                    statement.ifExists(), false, false);
         } catch (SQLException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
                     .setTableName(statement.getCdcObjName().getName()).build().buildException();

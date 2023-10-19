@@ -377,7 +377,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             }
         }
         //checking similar permission checked during the create of the view.
-        if (tableType == PTableType.VIEW || tableType == PTableType.INDEX || tableType == PTableType.CDC) {
+        if (tableType == PTableType.VIEW || tableType == PTableType.INDEX ||
+                tableType == PTableType.CDC) {
             if (execPermissionsCheckEnabled) {
                 requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
             } else {
