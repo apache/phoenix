@@ -23,78 +23,34 @@ import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_FAILED_SIZ
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.index.ImmutableIndexIT;
-import org.apache.phoenix.hbase.index.Indexer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends ParallelStatsDisabledIT {
-    String create_table =
-            "CREATE TABLE IF NOT EXISTS %s(ID VARCHAR NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER)";
-    String indexName = generateUniqueName();
-    String create_index = "CREATE INDEX " + indexName + " ON %s(VAL1 DESC) INCLUDE (VAL2)";
-    String upsertStatement = "UPSERT INTO %s VALUES(?, ?, ?)";
-    String deleteTableName = generateUniqueName();
-    private final boolean transactional;
-    private String transactionProvider;
-
+public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends BaseMutationBatchFailedStateMetricIT {
+    String transactionProvider;
     public MutationBatchFailedStateMetricWithDeleteAndUpsertIT(String transactionProvider) {
-        this.transactional = transactionProvider != null;
-        if (this.transactional) {
-            create_table =
-                    create_table + (this.transactional
-                            ? (" TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + transactionProvider
-                            + "'")
-                            : "");
-        }
+        super(transactionProvider);
         this.transactionProvider = transactionProvider;
-        System.out.println("transaction provider " + this.transactionProvider);
-        createTables();
-        populateTables();
     }
-
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
-        serverProps.put("hbase.coprocessor.abortonerror", "false");
-        serverProps.put(Indexer.CHECK_VERSION_CONF_KEY, "false");
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
-        clientProps.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
-        clientProps.put(QueryServices.TRANSACTIONS_ENABLED, "true");
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-                new ReadOnlyProps(clientProps.entrySet().iterator()));
-
-    }
-
-    @Parameterized.Parameters(name = "MutationBatchFailedStateMetricWithDeleteAndUpsertIT_transactionProvider={0}")
-    public static synchronized Collection<Object[]> data() {
-        return Arrays.asList(new Object[][] { { "OMID" }, { null } });
-    }
-
 
     @Test
     public void testFailedUpsertAndDelete() throws Exception {
@@ -105,9 +61,8 @@ public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends Paralle
             conn = DriverManager.getConnection(getUrl(), props);
 
             Statement stmt = conn.createStatement();
-            // adding coprocessor which basically overrides prebatchmutate whiich is called for all
-            // the mutations
-            // it is called before applying mutation to region
+            // adding coprocessor which basically overrides pre batch mutate which is called for all the mutations
+            // Note :- it is called before applying mutation to region
             TestUtil.addCoprocessor(conn, deleteTableName,
                     ImmutableIndexIT.DeleteFailingRegionObserver.class);
             // trying to delete 4 rows with this single delete statement
@@ -123,7 +78,7 @@ public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends Paralle
 
             conn.commit();
 
-            throw new AssertionError("Commit should not have succeeded");
+            Assert.fail("Commit should not have succeeded");
         } catch (SQLException e) {
             Map<String, Map<MetricType, Long>> mutationMetrics =
                     conn.unwrap(PhoenixConnection.class).getMutationMetrics();
@@ -135,7 +90,6 @@ public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends Paralle
                     mutationMetrics.get(deleteTableName).get(UPSERT_BATCH_FAILED_SIZE).intValue();
             long gfs =
                     GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue();
-
 
             Assert.assertEquals(4, dbfs);
             Assert.assertEquals(5, mfs);
@@ -149,33 +103,5 @@ public class MutationBatchFailedStateMetricWithDeleteAndUpsertIT extends Paralle
             }
         }
 
-    }
-
-    private void populateTables() {
-        final int NROWS = 5;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            try (PreparedStatement dataPreparedStatement =
-                         conn.prepareStatement(String.format(upsertStatement, deleteTableName))) {
-                for (int i = 1; i <= NROWS; i++) {
-                    dataPreparedStatement.setString(1, "ROW_" + i);
-                    dataPreparedStatement.setInt(2, i);
-                    dataPreparedStatement.setInt(3, i * 2);
-                    dataPreparedStatement.execute();
-                }
-            }
-            conn.commit();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    private void createTables() {
-        try (Connection con = DriverManager.getConnection(getUrl())) {
-            Statement stmt = con.createStatement();
-            stmt.execute(String.format(create_table, deleteTableName));
-            stmt.execute(String.format(create_index, deleteTableName));
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
     }
 }
