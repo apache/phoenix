@@ -639,7 +639,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testExpressionIndex() throws Exception {
+    public void testJsonExpressionIndex() {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
@@ -664,7 +664,37 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             IndexToolIT.assertExplainPlan(false, actualExplainPlan, tableName, indexName);
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.DIVIDE_BY_ZERO.getErrorCode(), e.getErrorCode());
+            assertFalse("Failed to execute test", true);
+        }
+    }
+
+    @Test
+    public void testJsonExpressionIndexInvalid() {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        String indexName = "IDX_" + generateUniqueName();
+        checkInvalidJsonIndexExpression(props, tableName, indexName,
+                " (JSON_QUERY(JSONCOL,'$.info.address')) include (col)");
+        checkInvalidJsonIndexExpression(props, tableName, indexName,
+                " (JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"newValue\"')) include (col)");
+    }
+
+    private void checkInvalidJsonIndexExpression(Properties props, String tableName,
+            String indexName, String indexExpression) {
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String
+                    ddl =
+                    "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol json)";
+            conn.createStatement().execute(ddl);
+            conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (1,2, '" + JsonDoc1 + "')");
+            conn.createStatement()
+                    .execute("CREATE INDEX " + indexName + " ON " + tableName + indexExpression);
+        } catch (SQLException e) {
+            assertEquals(
+                    SQLExceptionCode.JSON_FRAGMENT_NOT_ALLOWED_IN_INDEX_EXPRESSION.getErrorCode(),
+                    e.getErrorCode());
         }
     }
 }

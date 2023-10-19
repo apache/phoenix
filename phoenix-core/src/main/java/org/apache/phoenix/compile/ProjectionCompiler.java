@@ -47,7 +47,6 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
-import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ProjectedColumnExpressionVisitor;
 import org.apache.phoenix.expression.visitor.ReplaceArrayFunctionExpressionVisitor;
@@ -739,51 +738,48 @@ public class ProjectionCompiler {
         }
         
         @Override
-        public Expression visitLeave(FunctionParseNode node, final List<Expression> children)
-                throws SQLException {
+        public Expression visitLeave(FunctionParseNode node, final List<Expression> children) throws SQLException {
 
             // this need not be done for group by clause with array. Hence the below check
-            if (!statement.isAggregate() && (ArrayIndexFunction.NAME.equals(
-                    node.getName()) || JsonValueFunction.NAME.equals(
-                    node.getName())) && children.get(0) instanceof ProjectedColumnExpression) {
-                final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
-                final List<ProjectedColumnExpression> indexProjectedColumns = Lists.newArrayList();
-                final List<Expression> copyOfChildren = new ArrayList<>(children);
-                // Create anon visitor to find reference to array in a generic way
-                children.get(0).accept(new ProjectedColumnExpressionVisitor() {
-                    @Override
-                    public Void visit(ProjectedColumnExpression expression) {
-                        if (expression.getDataType().isArrayType()) {
-                            indexProjectedColumns.add(expression);
-                            PColumn col = expression.getColumn();
-                            // hack'ish... For covered columns with local indexes we defer to the server.
-                            if (col instanceof ProjectedColumn && ((ProjectedColumn) col)
-                                    .getSourceColumnRef() instanceof IndexUncoveredDataColumnRef) {
-                                return null;
-                            }
-                            PTable table = context.getCurrentTable().getTable();
-                            KeyValueColumnExpression keyValueColumnExpression;
-                            if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
+            if (!statement.isAggregate() && ArrayIndexFunction.NAME.equals(node.getName()) && children.get(0) instanceof ProjectedColumnExpression) {
+                 final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
+                 final List<ProjectedColumnExpression> indexProjectedColumns = Lists.newArrayList();
+                 final List<Expression> copyOfChildren = new ArrayList<>(children);
+                 // Create anon visitor to find reference to array in a generic way
+                 children.get(0).accept(new ProjectedColumnExpressionVisitor() {
+                     @Override
+                     public Void visit(ProjectedColumnExpression expression) {
+                         if (expression.getDataType().isArrayType()) {
+                             indexProjectedColumns.add(expression);
+                             PColumn col = expression.getColumn();
+                             // hack'ish... For covered columns with local indexes we defer to the server.
+                             if (col instanceof ProjectedColumn && ((ProjectedColumn) col)
+                                     .getSourceColumnRef() instanceof IndexUncoveredDataColumnRef) {
+                                 return null;
+                             }
+                             PTable table = context.getCurrentTable().getTable();
+                             KeyValueColumnExpression keyValueColumnExpression;
+                             if (table.getImmutableStorageScheme() != ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
                                 keyValueColumnExpression =
                                         new SingleCellColumnExpression(col,
                                                 col.getName().getString(),
                                                 table.getEncodingScheme(),
                                                 table.getImmutableStorageScheme());
-                            } else {
-                                keyValueColumnExpression = new KeyValueColumnExpression(col);
-                            }
-                            indexKVs.add(keyValueColumnExpression);
-                            copyOfChildren.set(0, keyValueColumnExpression);
-                            Integer count = arrayExpressionCounts.get(expression);
-                            arrayExpressionCounts.put(expression, count != null ? (count - 1) : -1);
-                        }
-                        return null;
-                    }
-                });
+                             } else {
+                                 keyValueColumnExpression = new KeyValueColumnExpression(col);
+                             }
+                             indexKVs.add(keyValueColumnExpression);
+                             copyOfChildren.set(0, keyValueColumnExpression);
+                             Integer count = arrayExpressionCounts.get(expression);
+                             arrayExpressionCounts.put(expression, count != null ? (count - 1) : -1);
+                         }
+                         return null;
+                     }
+                 });
 
-                Expression func = super.visitLeave(node, children);
-                // Add the keyvalues which is of type array
-                if (!indexKVs.isEmpty()) {
+                 Expression func = super.visitLeave(node,children);
+                 // Add the keyvalues which is of type array
+                 if (!indexKVs.isEmpty()) {
                     arrayKVRefs.addAll(indexKVs);
                     arrayProjectedColumnRefs.addAll(indexProjectedColumns);
                     Expression funcModified = super.visitLeave(node, copyOfChildren);
@@ -793,7 +789,7 @@ public class ProjectionCompiler {
                 }
                 return func;
             } else {
-                return super.visitLeave(node, children);
+                return super.visitLeave(node,children);
             }
         }
     }
