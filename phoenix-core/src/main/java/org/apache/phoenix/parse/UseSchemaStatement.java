@@ -35,4 +35,8 @@ public class UseSchemaStatement extends MutableStatement {
         return schemaName;
     }
 
+    @Override
+    public String getKeyword() {
+        return "USE SCHEMA";
+    }
 }

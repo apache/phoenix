@@ -41,7 +41,6 @@ import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.htrace.SpanReceiver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
@@ -52,6 +51,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.opentelemetry.api.trace.Span;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 
@@ -215,7 +216,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
         TableMapReduceUtil.addDependencyJars(job);
         TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(),
                 PhoenixConnection.class, Chronology.class, CharStream.class,
-                SpanReceiver.class, Gauge.class, MetricRegistriesImpl.class);
+                Span.class, Gauge.class, MetricRegistriesImpl.class);
 
         LOGGER.info("UpdateStatisticsTool running for: " + tableName
                 + " on snapshot: " + snapshotName + " with restore dir: " + restoreDir);

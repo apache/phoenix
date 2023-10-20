@@ -45,8 +45,8 @@
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-core</module>
+    <module>phoenix-opentelemetry-trace-sampler</module>
     <module>phoenix-pherf</module>
-    <module>phoenix-tracing-webapp</module>
     <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
@@ -120,7 +120,6 @@
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
-    <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.31</joni.version>
@@ -133,6 +132,10 @@
     <jcodings.version>1.0.55</jcodings.version>
     <jetty.version>9.4.53.v20231009</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
+    <opentelemetry.version>1.31.0</opentelemetry.version>
+    <opentelemetry-javaagent.version>1.31.0</opentelemetry-javaagent.version>
+    <opentelemetry-semconv.version>1.21.0-alpha</opentelemetry-semconv.version>
+
     <!-- Test Dependencies -->
     <mockito.version>1.10.19</mockito.version>
     <junit.version>4.13.1</junit.version>
@@ -725,11 +728,6 @@
         <version>${project.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-tracing-webapp</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.phoenix.thirdparty</groupId>
         <artifactId>phoenix-shaded-guava</artifactId>
         <version>${phoenix.thirdparty.version}</version>
@@ -754,6 +752,12 @@
         <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-opentelemetry-trace-sampler</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
       <!-- Intra-project test dependencies -->
       <dependency>
         <groupId>org.apache.phoenix</groupId>
@@ -1399,11 +1403,6 @@
         <version>${slf4j.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.apache.htrace</groupId>
-        <artifactId>htrace-core</artifactId>
-        <version>${htrace.version}</version>
-      </dependency>
-      <dependency>
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
         <version>${commons-codec.version}</version>
@@ -1483,7 +1482,23 @@
         <artifactId>HdrHistogram</artifactId>
         <version>${hdrhistogram.version}</version>
       </dependency>
-
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom</artifactId>
+        <version>${opentelemetry.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-semconv</artifactId>
+        <version>${opentelemetry-semconv.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.opentelemetry.javaagent</groupId>
+        <artifactId>opentelemetry-javaagent</artifactId>
+        <version>${opentelemetry-javaagent.version}</version>
+      </dependency>
       <!-- Other test dependencies -->
       <dependency>
         <groupId>junit</groupId>

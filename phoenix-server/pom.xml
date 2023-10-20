@@ -121,6 +121,8 @@
                         <exclude>org.slf4j:*</exclude>
                         <exclude>org.apache.logging.log4j:*</exclude>
                         <exclude>org.apache.hbase.thirdparty:*</exclude>
+                        <!-- This would break support for Hbase 2.4 
+                        <exclude>io.opentelemetry:*</exclude> -->
                     </excludes>
                 </artifactSet>
                 <filters>

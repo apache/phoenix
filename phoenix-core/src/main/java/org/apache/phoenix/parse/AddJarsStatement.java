@@ -35,4 +35,9 @@ public class AddJarsStatement extends MutableStatement {
     public List<LiteralParseNode> getJarPaths() {
         return jarPaths;
     }
+
+    @Override
+    public String getKeyword() {
+        return "ADD JARS";
+    }
 }

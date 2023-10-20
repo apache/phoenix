@@ -22,8 +22,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingHBaseRpcController;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 
 import com.google.protobuf.RpcController;
 
@@ -34,18 +32,15 @@ import com.google.protobuf.RpcController;
 class IndexRpcController extends DelegatingHBaseRpcController {
 
     private final int priority;
-    private final String tracingTableName;
     
     public IndexRpcController(HBaseRpcController delegate, Configuration conf) {
         super(delegate);
         this.priority = PhoenixRpcSchedulerFactory.getIndexPriority(conf);
-        this.tracingTableName = conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
-                QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
     }
     
     @Override
     public void setPriority(final TableName tn) {
-		if (!tn.isSystemTable() && !tn.getNameAsString().equals(tracingTableName)) {
+		if (!tn.isSystemTable()) {
 			setPriority(this.priority);
 		}  
         else {

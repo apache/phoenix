@@ -30,4 +30,8 @@ public abstract class AlterTableStatement extends SingleTableStatement {
     public PTableType getTableType() {
         return tableType;
     }
+
+    public String getKeyword() {
+        return "ALTER TABLE";
+    }
 }

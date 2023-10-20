@@ -49,4 +49,9 @@ public class FetchStatement implements BindableStatement {
     public int getFetchSize(){
     	return fetchSize;
     }
+    
+    @Override
+    public String getKeyword() {
+        return "FETCH";
+    }
 }

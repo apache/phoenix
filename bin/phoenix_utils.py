@@ -86,11 +86,15 @@ def setPath():
     LOGGING_JAR_PATTERN2 = "log4j-api*.jar"
     LOGGING_JAR_PATTERN3 = "log4j-1.2-api*.jar"
     SQLLINE_WITH_DEPS_PATTERN = "sqlline-*-jar-with-dependencies.jar"
+    OPENTELEMETRY_AGENT_PATTERN = "opentelemetry-javaagent*.jar"
+    OPENTELEMETRY_AGENT_EXTENSION_PATTERN = "phoenix-opentelemetry-trace-sampler-*[!s].jar"
 
 
     OVERRIDE_SLF4J_BACKEND = "OVERRIDE_SLF4J_BACKEND_JAR_LOCATION"
     OVERRIDE_LOGGING = "OVERRIDE_LOGGING_JAR_LOCATION"
     OVERRIDE_SQLLINE = "OVERRIDE_SQLLINE_JAR_LOCATION"
+    OVERRIDE_OPENTELEMETRY_AGENT = "OVERRIDE_OPENTELEMETRY_AGENT_JAR_LOCATION"
+    OVERRIDE_OPENTELEMETRY_AGENT_EXTENSION = "OVERRIDE_OPENTELEMETRY_AGENT_EXTENSION_JAR_LOCATION"
 
     # Backward support old env variable PHOENIX_LIB_DIR replaced by PHOENIX_CLASS_PATH
     global phoenix_class_path
@@ -159,14 +163,14 @@ def setPath():
         testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
     global phoenix_traceserver_jar
-    phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target", "*"))
+    phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target"))
     if phoenix_traceserver_jar == "":
         phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
     if phoenix_traceserver_jar == "":
         phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, ".."))
 
     global phoenix_pherf_jar
-    phoenix_pherf_jar = find(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-pherf", "target", "*"))
+    phoenix_pherf_jar = find(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-pherf", "target"))
     if phoenix_pherf_jar == "":
         phoenix_pherf_jar = findFileInPathWithoutRecursion(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
     if phoenix_pherf_jar == "":
@@ -185,10 +189,44 @@ def setPath():
     global logging_jar
     logging_jar = os.environ.get(OVERRIDE_LOGGING)
     if logging_jar is None or logging_jar == "":
-        logging_jar = findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN, os.path.join(current_dir, "..","lib"))
-        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN2, os.path.join(current_dir, "..","lib"))
-        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN3, os.path.join(current_dir, "..","lib"))
+        logging_jar = findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
+        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN2, os.path.join(current_dir, "..", "lib"))
+        logging_jar += ":"+findFileInPathWithoutRecursion(LOGGING_JAR_PATTERN3, os.path.join(current_dir, "..", "lib"))
 
+    global opentelemetry_agent_jar
+    opentelemetry_agent_jar = os.environ.get(OVERRIDE_OPENTELEMETRY_AGENT)
+    if opentelemetry_agent_jar is None or opentelemetry_agent_jar == "":
+        opentelemetry_agent_jar = findFileInPathWithoutRecursion(OPENTELEMETRY_AGENT_PATTERN, os.path.join(current_dir, "..", "lib/tracing"))
+
+    global opentelemetry_agent_extension_jar
+    opentelemetry_agent_extension_jar = os.environ.get(OVERRIDE_OPENTELEMETRY_AGENT_EXTENSION)
+    if opentelemetry_agent_extension_jar is None or opentelemetry_agent_extension_jar == "":
+        opentelemetry_agent_extension_jar = findFileInPathWithoutRecursion(OPENTELEMETRY_AGENT_EXTENSION_PATTERN, os.path.join(current_dir, "..", "lib/tracing"))
+    if opentelemetry_agent_extension_jar is None or opentelemetry_agent_extension_jar == "":
+        opentelemetry_agent_extension_jar = findFileInPathWithoutRecursion(OPENTELEMETRY_AGENT_EXTENSION_PATTERN, os.path.join(current_dir, "..", "phoenix-opentelemetry-trace-sampler", "target"))
+    return ""
+
+def set_tracing():
+    global phoenix_trace_opts
+    phoenix_trace_opts = os.environ.get("PHOENIX_TRACE_OPTS")
+    #FIXME detect the OTEL Agent extension Jar 
+    if phoenix_trace_opts is None or phoenix_trace_opts == "":
+        phoenix_trace_opts = "  -Dotel.metrics.exporter=none -Dotel.instrumentation.jdbc.enabled=false -Dotel.javaagent.extensions="+opentelemetry_agent_extension_jar+" -Dotel.traces.sampler=phoenix_hintable_sampler -Dotel.traces.sampler.arg=0.0 "
+        # -Dotel.traces.exporter=phoenix_hintable_sampler
+        # -Dotel.javaagent.extensions=build/libs/opentelemetry-java-instrumentation-extension-demo-1.0-all.jar
+        # -Dotel.traces.exporter=logging
+        # -Dotel.instrumentation.jdbc.enabled=false
+        # -Dotel.javaagent.debug=true
+        print("TRACE_OPTS="+phoenix_trace_opts)
+    return ""
+
+def set_sandbox_tracing():
+    global phoenix_trace_opts
+    phoenix_trace_opts = os.environ.get("PHOENIX_TRACE_OPTS")
+    if phoenix_trace_opts is None or phoenix_trace_opts == "":
+        phoenix_trace_opts = " -Dotel.metrics.exporter=none -Dotel.instrumentation.jdbc.enabled=false"
+        #-Dotel.traces.exporter=logging
+        # -Dotel.instrumentation.jdbc.enabled=false
     return ""
 
 def shell_quote(args):
@@ -226,3 +264,4 @@ if __name__ == "__main__":
     print("sqlline_with_deps_jar:", sqlline_with_deps_jar)
     print("slf4j_backend_jar:", slf4j_backend_jar)
     print("logging_jar:", logging_jar)
+    print("opentelemetry_agent_jar:", opentelemetry_agent_jar)

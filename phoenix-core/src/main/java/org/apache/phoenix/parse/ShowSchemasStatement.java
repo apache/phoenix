@@ -67,4 +67,9 @@ public class ShowSchemasStatement extends ShowStatement {
     public int hashCode() {
       return Objects.hashCode(schemaPattern);
     }
+
+    @Override
+    public String getKeyword() {
+        return "SHOW SCHEMAS";
+    }
 }

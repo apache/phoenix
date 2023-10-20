@@ -60,8 +60,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
@@ -107,6 +105,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
@@ -125,6 +124,10 @@ import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.WALAnnotationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Predicate;
@@ -1208,12 +1211,16 @@ public class MutationState implements SQLCloseable {
     }
 
     private void sendBatch(Map<TableRef, MultiRowMutationState> commitBatch, long[] serverTimeStamps, boolean sendAll) throws SQLException {
+        if (commitBatch.isEmpty()) {
+            return;
+        }
+
         int i = 0;
         Map<TableInfo, List<Mutation>> physicalTableMutationMap = Maps.newLinkedHashMap();
 
         // add tracing for this operation
-        try (TraceScope trace = Tracing.startNewSpan(connection, "Committing mutations to tables")) {
-            Span span = trace.getSpan();
+        Span span = TraceUtil.createSpan(connection, "Committing mutations to tables");
+        try (Scope ignored = span.makeCurrent()) {
             ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
             for (Map.Entry<TableRef, MultiRowMutationState> entry : commitBatch.entrySet()) {
                 // at this point we are going through mutations for each table
@@ -1277,23 +1284,28 @@ public class MutationState implements SQLCloseable {
                     verifiedOrDeletedIndexMutations);
 
             // Phase 1: Send index mutations with the empty column value = "unverified"
-            sendMutations(unverifiedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr, false);
+            sendMutations(unverifiedIndexMutations.entrySet().iterator(), indexMetaDataPtr, false);
 
             // Phase 2: Send data table and other indexes
-            sendMutations(physicalTableMutationMap.entrySet().iterator(), span, indexMetaDataPtr, false);
+            sendMutations(physicalTableMutationMap.entrySet().iterator(), indexMetaDataPtr, false);
 
             // Phase 3: Send put index mutations with the empty column value = "verified" and/or delete index mutations
             try {
-                sendMutations(verifiedOrDeletedIndexMutations.entrySet().iterator(), span, indexMetaDataPtr, true);
+                sendMutations(verifiedOrDeletedIndexMutations.entrySet().iterator(), indexMetaDataPtr, true);
             } catch (SQLException ex) {
                 LOGGER.warn(
                         "Ignoring exception that happened during setting index verified value to verified=TRUE ",
                         ex);
             }
+            span.setStatus(StatusCode.OK);
+        } catch (SQLException e) {
+            TraceUtil.setError(span, e);
+        } finally {
+            span.end();
         }
     }
 
-    private void sendMutations(Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator, Span span, ImmutableBytesWritable indexMetaDataPtr, boolean isVerifiedPhase)
+    private void sendMutations(Iterator<Entry<TableInfo, List<Mutation>>> mutationsIterator, ImmutableBytesWritable indexMetaDataPtr, boolean isVerifiedPhase)
             throws SQLException {
         while (mutationsIterator.hasNext()) {
             Entry<TableInfo, List<Mutation>> pair = mutationsIterator.next();
@@ -1306,8 +1318,6 @@ public class MutationState implements SQLCloseable {
 
             // create a span per target table
             // TODO maybe we can be smarter about the table name to string here?
-            Span child = Tracing.child(span, "Writing mutation batch for table: " + Bytes.toString(htableName));
-
             int retryCount = 0;
             boolean shouldRetry = false;
             long numMutations = 0;
@@ -1321,240 +1331,242 @@ public class MutationState implements SQLCloseable {
             boolean shouldRetryIndexedMutation = false;
             IndexWriteException iwe = null;
             do {
-                TableRef origTableRef = tableInfo.getOrigTableRef();
-                PTable table = origTableRef.getTable();
-                table.getIndexMaintainers(indexMetaDataPtr, connection);
-                final ServerCache cache = tableInfo.isDataTable() ?
-                        IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
-                                mutationList, indexMetaDataPtr) : null;
-                // If we haven't retried yet, retry for this case only, as it's possible that
-                // a split will occur after we send the index metadata cache to all known
-                // region servers.
-                shouldRetry = cache != null;
-                SQLException sqlE = null;
-                Table hTable = connection.getQueryServices().getTable(htableName);
-                List<Mutation> currentMutationBatch = null;
-                boolean areAllBatchesSuccessful = false;
-
-                try {
-                    if (table.isTransactional()) {
-                        // Track tables to which we've sent uncommitted data
-                        if (tableInfo.isDataTable()) {
-                            uncommittedPhysicalNames.add(table.getPhysicalName().getString());
-                            phoenixTransactionContext.markDMLFence(table);
+                Span span = TraceUtil.createSpan(connection, "Writing mutation batch for table: " + Bytes.toString(htableName));
+                try (Scope scope = span.makeCurrent()) {
+                    TableRef origTableRef = tableInfo.getOrigTableRef();
+                    PTable table = origTableRef.getTable();
+                    table.getIndexMaintainers(indexMetaDataPtr, connection);
+                    final ServerCache cache = tableInfo.isDataTable() ?
+                            IndexMetaDataCacheClient.setMetaDataOnMutations(connection, table,
+                                    mutationList, indexMetaDataPtr) : null;
+                    // If we haven't retried yet, retry for this case only, as it's possible that
+                    // a split will occur after we send the index metadata cache to all known
+                    // region servers.
+                    shouldRetry = cache != null;
+                    SQLException sqlE = null;
+                    Table hTable = connection.getQueryServices().getTable(htableName);
+                    List<Mutation> currentMutationBatch = null;
+                    boolean areAllBatchesSuccessful = false;
+                    try {
+                        if (table.isTransactional()) {
+                            // Track tables to which we've sent uncommitted data
+                            if (tableInfo.isDataTable()) {
+                                uncommittedPhysicalNames.add(table.getPhysicalName().getString());
+                                phoenixTransactionContext.markDMLFence(table);
+                            }
+                            // Only pass true for last argument if the index is being written to on it's own (i.e. initial
+                            // index population), not if it's being written to for normal maintenance due to writes to
+                            // the data table. This case is different because the initial index population does not need
+                            // to be done transactionally since the index is only made active after all writes have
+                            // occurred successfully.
+                            hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, tableInfo.isDataTable() && table.getType() == PTableType.INDEX);
                         }
-                        // Only pass true for last argument if the index is being written to on it's own (i.e. initial
-                        // index population), not if it's being written to for normal maintenance due to writes to
-                        // the data table. This case is different because the initial index population does not need
-                        // to be done transactionally since the index is only made active after all writes have
-                        // occurred successfully.
-                        hTable = phoenixTransactionContext.getTransactionalTableWriter(connection, table, hTable, tableInfo.isDataTable() && table.getType() == PTableType.INDEX);
-                    }
-                    numMutations = mutationList.size();
-                    GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
-                    totalMutationBytesObject = calculateMutationSize(mutationList, true);
-
-                    child.addTimelineAnnotation("Attempt " + retryCount);
-                    Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
-                    while (itrListMutation.hasNext()) {
-                        final List<Mutation> mutationBatch = itrListMutation.next();
-                        currentMutationBatch = mutationBatch;
-                        if (shouldRetryIndexedMutation) {
-                            // if there was an index write failure, retry the mutation in a loop
-                            final Table finalHTable = hTable;
-                            final ImmutableBytesWritable finalindexMetaDataPtr =
-                                    indexMetaDataPtr;
-                            final PTable finalPTable = table;
-                            PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
-                                @Override
-                                public void doMutation() throws IOException {
-                                    try {
-                                        finalHTable.batch(mutationBatch, null);
-                                    } catch (InterruptedException e) {
-                                        Thread.currentThread().interrupt();
-                                        throw new IOException(e);
-                                    } catch (IOException e) {
-                                        e = updateTableRegionCacheIfNecessary(e);
-                                        throw e;
-                                    }
-                                }
-
-                                @Override
-                                public List<Mutation> getMutationList() {
-                                    return mutationBatch;
-                                }
-
-                                private IOException
-                                updateTableRegionCacheIfNecessary(IOException ioe) {
-                                    SQLException sqlE =
-                                            ServerUtil.parseLocalOrRemoteServerException(ioe);
-                                    if (sqlE != null
-                                            && sqlE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND
-                                            .getErrorCode()) {
+                        numMutations = mutationList.size();
+                        GLOBAL_MUTATION_BATCH_SIZE.update(numMutations);
+                        totalMutationBytesObject = calculateMutationSize(mutationList, true);
+    
+                        span.addEvent("Attempt " + retryCount);
+                        Iterator<List<Mutation>> itrListMutation = mutationBatchList.iterator();
+                        while (itrListMutation.hasNext()) {
+                            final List<Mutation> mutationBatch = itrListMutation.next();
+                            currentMutationBatch = mutationBatch;
+                            if (shouldRetryIndexedMutation) {
+                                // if there was an index write failure, retry the mutation in a loop
+                                final Table finalHTable = hTable;
+                                final ImmutableBytesWritable finalindexMetaDataPtr =
+                                        indexMetaDataPtr;
+                                final PTable finalPTable = table;
+                                PhoenixIndexFailurePolicy.doBatchWithRetries(new MutateCommand() {
+                                    @Override
+                                    public void doMutation() throws IOException {
                                         try {
-                                            connection.getQueryServices().clearTableRegionCache(
-                                                    finalHTable.getName());
-                                            IndexMetaDataCacheClient.setMetaDataOnMutations(
-                                                    connection, finalPTable, mutationBatch,
-                                                    finalindexMetaDataPtr);
-                                        } catch (SQLException e) {
-                                            return ServerUtil.createIOException(
-                                                    "Exception during updating index meta data cache",
-                                                    ioe);
+                                            finalHTable.batch(mutationBatch, null);
+                                        } catch (InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                            throw new IOException(e);
+                                        } catch (IOException e) {
+                                            e = updateTableRegionCacheIfNecessary(e);
+                                            throw e;
                                         }
                                     }
-                                    return ioe;
-                                }
-                            }, iwe, connection, connection.getQueryServices().getProps());
-                            shouldRetryIndexedMutation = false;
-                        } else {
-                            hTable.batch(mutationBatch, null);
-                        }
-                        // remove each batch from the list once it gets applied
-                        // so when failures happens for any batch we only start
-                        // from that batch only instead of doing duplicate reply of already
-                        // applied batches from entire list, also we can set
-                        // REPLAY_ONLY_INDEX_WRITES for first batch
-                        // only in case of 1121 SQLException
-                        itrListMutation.remove();
-
-                        batchCount++;
-                        if (LOGGER.isDebugEnabled())
-                            LOGGER.debug("Sent batch of " + mutationBatch.size() + " for "
-                                    + Bytes.toString(htableName));
-                    }
-                    child.stop();
-                    child.stop();
-                    shouldRetry = false;
-                    numFailedMutations = 0;
-
-                    // Remove batches as we process them
-                    removeMutations(this.mutationsMap, origTableRef);
-                    if (tableInfo.isDataTable()) {
-                        numRows -= numMutations;
-                        // recalculate the estimated size
-                        estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
-                    }
-                    areAllBatchesSuccessful = true;
-                } catch (Exception e) {
-                    long serverTimestamp = ServerUtil.parseServerTimestamp(e);
-                    SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
-                    if (inferredE != null) {
-                        if (shouldRetry
-                                && retryCount == 0
-                                && inferredE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND
-                                .getErrorCode()) {
-                            // Swallow this exception once, as it's possible that we split after sending the index
-                            // metadata
-                            // and one of the region servers doesn't have it. This will cause it to have it the next
-                            // go around.
-                            // If it fails again, we don't retry.
-                            String msg = "Swallowing exception and retrying after clearing meta cache on connection. "
-                                    + inferredE;
-                            LOGGER.warn(LogUtil.addCustomAnnotations(msg, connection));
-                            connection.getQueryServices().clearTableRegionCache(TableName.valueOf(htableName));
-
-                            // add a new child span as this one failed
-                            child.addTimelineAnnotation(msg);
-                            child.stop();
-                            child = Tracing.child(span, "Failed batch, attempting retry");
-
-                            continue;
-                        } else if (inferredE.getErrorCode() == SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
-                            iwe = PhoenixIndexFailurePolicy.getIndexWriteException(inferredE);
-                            if (iwe != null && !shouldRetryIndexedMutation) {
-                                // For an index write failure, the data table write succeeded,
-                                // so when we retry we need to set REPLAY_WRITES
-                                // for first batch in list only.
-                                for (Mutation m : mutationBatchList.get(0)) {
-                                    if (!PhoenixIndexMetaData.isIndexRebuild(
-                                            m.getAttributesMap())){
-                                        m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
-                                                BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
-                                        );
+    
+                                    @Override
+                                    public List<Mutation> getMutationList() {
+                                        return mutationBatch;
                                     }
-                                    PhoenixKeyValueUtil.setTimestamp(m, serverTimestamp);
-                                }
-                                shouldRetry = true;
-                                shouldRetryIndexedMutation = true;
-                                continue;
+    
+                                    private IOException
+                                    updateTableRegionCacheIfNecessary(IOException ioe) {
+                                        SQLException sqlE =
+                                                ServerUtil.parseLocalOrRemoteServerException(ioe);
+                                        if (sqlE != null
+                                                && sqlE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND
+                                                .getErrorCode()) {
+                                            try {
+                                                connection.getQueryServices().clearTableRegionCache(
+                                                        finalHTable.getName());
+                                                IndexMetaDataCacheClient.setMetaDataOnMutations(
+                                                        connection, finalPTable, mutationBatch,
+                                                        finalindexMetaDataPtr);
+                                            } catch (SQLException e) {
+                                                return ServerUtil.createIOException(
+                                                        "Exception during updating index meta data cache",
+                                                        ioe);
+                                            }
+                                        }
+                                        return ioe;
+                                    }
+                                }, iwe, connection, connection.getQueryServices().getProps());
+                                shouldRetryIndexedMutation = false;
+                            } else {
+                                hTable.batch(mutationBatch, null);
                             }
+                            // remove each batch from the list once it gets applied
+                            // so when failures happens for any batch we only start
+                            // from that batch only instead of doing duplicate reply of already
+                            // applied batches from entire list, also we can set
+                            // REPLAY_ONLY_INDEX_WRITES for first batch
+                            // only in case of 1121 SQLException
+                            itrListMutation.remove();
+    
+                            batchCount++;
+                            if (LOGGER.isDebugEnabled())
+                                LOGGER.debug("Sent batch of " + mutationBatch.size() + " for "
+                                        + Bytes.toString(htableName));
                         }
-                        e = inferredE;
-                    }
-                    // Throw to client an exception that indicates the statements that
-                    // were not committed successfully.
-                    int[] uncommittedStatementIndexes = getUncommittedStatementIndexes();
-                    sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
-
-                    numFailedMutations = uncommittedStatementIndexes.length;
-
-                    if (isVerifiedPhase) {
-                        numFailedPhase3Mutations = numFailedMutations;
-                        GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
+                        shouldRetry = false;
+                        numFailedMutations = 0;
+    
+                        // Remove batches as we process them
+                        removeMutations(this.mutationsMap, origTableRef);
+                        if (tableInfo.isDataTable()) {
+                            numRows -= numMutations;
+                            // recalculate the estimated size
+                            estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
+                        }
+                        areAllBatchesSuccessful = true;
+                        span.setStatus(StatusCode.OK);
+                    } catch (Exception e) {
+                        long serverTimestamp = ServerUtil.parseServerTimestamp(e);
+                        SQLException inferredE = ServerUtil.parseServerExceptionOrNull(e);
+                        if (inferredE != null) {
+                            if (shouldRetry
+                                    && retryCount == 0
+                                    && inferredE.getErrorCode() == SQLExceptionCode.INDEX_METADATA_NOT_FOUND
+                                    .getErrorCode()) {
+                                // Swallow this exception once, as it's possible that we split after sending the index
+                                // metadata
+                                // and one of the region servers doesn't have it. This will cause it to have it the next
+                                // go around.
+                                // If it fails again, we don't retry.
+                                String msg = "Swallowing exception and retrying after clearing meta cache on connection. "
+                                        + inferredE;
+                                LOGGER.warn(LogUtil.addCustomAnnotations(msg, connection));
+                                connection.getQueryServices().clearTableRegionCache(TableName.valueOf(htableName));
+    
+                                // The HTRace implementation started a new child span here.
+                                // Now we're just adding an event to the same span.
+                                span.addEvent(msg);
+                                continue;
+                            } else if (inferredE.getErrorCode() == SQLExceptionCode.INDEX_WRITE_FAILURE.getErrorCode()) {
+                                iwe = PhoenixIndexFailurePolicy.getIndexWriteException(inferredE);
+                                if (iwe != null && !shouldRetryIndexedMutation) {
+                                    // For an index write failure, the data table write succeeded,
+                                    // so when we retry we need to set REPLAY_WRITES
+                                    // for first batch in list only.
+                                    for (Mutation m : mutationBatchList.get(0)) {
+                                        if (!PhoenixIndexMetaData.isIndexRebuild(
+                                                m.getAttributesMap())){
+                                            m.setAttribute(BaseScannerRegionObserver.REPLAY_WRITES,
+                                                    BaseScannerRegionObserver.REPLAY_ONLY_INDEX_WRITES
+                                            );
+                                        }
+                                        PhoenixKeyValueUtil.setTimestamp(m, serverTimestamp);
+                                    }
+                                    shouldRetry = true;
+                                    shouldRetryIndexedMutation = true;
+                                    continue;
+                                }
+                            }
+                            e = inferredE;
+                        }
+                        TraceUtil.setError(span, inferredE);
+                        // Throw to client an exception that indicates the statements that
+                        // were not committed successfully.
+                        int[] uncommittedStatementIndexes = getUncommittedStatementIndexes();
+                        sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
+                        numFailedMutations = uncommittedStatementIndexes.length;
+                        GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
+                        if (isVerifiedPhase) {
+                            numFailedPhase3Mutations = numFailedMutations;
+                            GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
+                        }
+                    } finally {
+                        mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                        GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
+                        MutationMetric failureMutationMetrics = MutationMetric.EMPTY_METRIC;
+                        if (!areAllBatchesSuccessful) {
+                            failureMutationMetrics =
+                                    updateMutationBatchFailureMetrics(currentMutationBatch,
+                                            htableNameStr, numFailedMutations,
+                                            table.isTransactional());
+                        }
+    
+                        MutationMetric committedMutationsMetric =
+                                getCommittedMutationsMetric(
+                                        totalMutationBytesObject,
+                                        mutationBatchList,
+                                        numMutations,
+                                        numFailedMutations,
+                                        numFailedPhase3Mutations,
+                                        mutationCommitTime);
+                        // Combine failure mutation metrics with committed ones for the final picture
+                        committedMutationsMetric.combineMetric(failureMutationMetrics);
+                        mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
+    
+                        if (allUpsertsMutations ^ allDeletesMutations) {
+                            //success cases are updated for both cases autoCommit=true and conn.commit explicit
+                            if (areAllBatchesSuccessful){
+                                TableMetricsManager
+                                        .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
+                                                DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
+                            }
+                            //Failures cases are updated only for conn.commit explicit case.
+                            if (!areAllBatchesSuccessful && !connection.getAutoCommit()){
+                                TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
+                                        DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                            }
+                            // Update size and latency histogram metrics.
+                            TableMetricsManager.updateSizeHistogramMetricsForMutations(htableNameStr,
+                                    committedMutationsMetric.getTotalMutationsSizeBytes().getValue(), allUpsertsMutations);
+                            Long latency = timeInExecuteMutationMap.get(htableNameStr);
+                            if (latency == null) {
+                                latency = 0l;
+                            }
+                            latency += mutationCommitTime;
+                            TableMetricsManager.updateLatencyHistogramForMutations(htableNameStr,
+                                    latency, allUpsertsMutations);
+                        }
+                        resetAllMutationState();
+    
+                        try {
+                            if (cache != null) cache.close();
+                        } finally {
+                            try {
+                                hTable.close();
+                            } catch (IOException e) {
+                                if (sqlE != null) {
+                                    sqlE.setNextException(ServerUtil.parseServerException(e));
+                                } else {
+                                    sqlE = ServerUtil.parseServerException(e);
+                                }
+                            }
+                            if (sqlE != null) { throw sqlE; }
+                        }
                     }
                 } finally {
-                    mutationCommitTime = EnvironmentEdgeManager.currentTimeMillis() - startTime;
-                    GLOBAL_MUTATION_COMMIT_TIME.update(mutationCommitTime);
-                    MutationMetric failureMutationMetrics = MutationMetric.EMPTY_METRIC;
-                    if (!areAllBatchesSuccessful) {
-                        failureMutationMetrics =
-                                updateMutationBatchFailureMetrics(currentMutationBatch,
-                                        htableNameStr, numFailedMutations,
-                                        table.isTransactional());
-                    }
+                    span.end();
 
-                    MutationMetric committedMutationsMetric =
-                            getCommittedMutationsMetric(
-                                    totalMutationBytesObject,
-                                    mutationBatchList,
-                                    numMutations,
-                                    numFailedMutations,
-                                    numFailedPhase3Mutations,
-                                    mutationCommitTime);
-                    // Combine failure mutation metrics with committed ones for the final picture
-                    committedMutationsMetric.combineMetric(failureMutationMetrics);
-                    mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
-
-                    if (allUpsertsMutations ^ allDeletesMutations) {
-                        //success cases are updated for both cases autoCommit=true and conn.commit explicit
-                        if (areAllBatchesSuccessful){
-                            TableMetricsManager
-                                    .updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER :
-                                            DELETE_AGGREGATE_SUCCESS_SQL_COUNTER, 1);
-                        }
-                        //Failures cases are updated only for conn.commit explicit case.
-                        if (!areAllBatchesSuccessful && !connection.getAutoCommit()){
-                            TableMetricsManager.updateMetricsMethod(htableNameStr, allUpsertsMutations ? UPSERT_AGGREGATE_FAILURE_SQL_COUNTER :
-                                    DELETE_AGGREGATE_FAILURE_SQL_COUNTER, 1);
-                        }
-                        // Update size and latency histogram metrics.
-                        TableMetricsManager.updateSizeHistogramMetricsForMutations(htableNameStr,
-                                committedMutationsMetric.getTotalMutationsSizeBytes().getValue(), allUpsertsMutations);
-                        Long latency = timeInExecuteMutationMap.get(htableNameStr);
-                        if (latency == null) {
-                            latency = 0l;
-                        }
-                        latency += mutationCommitTime;
-                        TableMetricsManager.updateLatencyHistogramForMutations(htableNameStr,
-                                latency, allUpsertsMutations);
-                    }
-                    resetAllMutationState();
-
-                    try {
-                        if (cache != null) cache.close();
-                    } finally {
-                        try {
-                            hTable.close();
-                        } catch (IOException e) {
-                            if (sqlE != null) {
-                                sqlE.setNextException(ServerUtil.parseServerException(e));
-                            } else {
-                                sqlE = ServerUtil.parseServerException(e);
-                            }
-                        }
-                        if (sqlE != null) { throw sqlE; }
-                    }
                 }
             } while (shouldRetry && retryCount++ < 1);
         }
@@ -1572,12 +1584,10 @@ public class MutationState implements SQLCloseable {
             String tableName,
             long numFailedMutations,
             boolean isTransactional) {
-
         if (failedMutationBatch == null || failedMutationBatch.isEmpty() ||
                 Strings.isNullOrEmpty(tableName)) {
             return MutationMetricQueue.MutationMetric.EMPTY_METRIC;
         }
-
         long numUpsertMutationsInBatch = 0L;
         long numDeleteMutationsInBatch = 0L;
 
@@ -1588,25 +1598,12 @@ public class MutationState implements SQLCloseable {
                 numDeleteMutationsInBatch++;
             }
         }
-
-        long totalFailedMutation = numUpsertMutationsInBatch + numDeleteMutationsInBatch;
-        //this case should not happen but the if condition makes sense if this ever happens
-        if (totalFailedMutation < numFailedMutations) {
-            LOGGER.warn(
-                    "total failed mutation less than num of failed mutation.  This is not expected.");
-            totalFailedMutation = numFailedMutations;
-        }
-
-        long totalNumFailedMutations = allDeletesMutations && !isTransactional
-                ? numDeleteMutationsInBatch : totalFailedMutation;
-        GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(totalNumFailedMutations);
-
         // Update the MUTATION_BATCH_FAILED_SIZE counter with the number of failed delete mutations
         // in case we are dealing with all deletes for a non-transactional table, since there is a
         // bug in sendMutations where we don't get the correct value for numFailedMutations when
         // we don't use transactions
         return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0, 0,
-                totalNumFailedMutations,
+                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : numFailedMutations,
                 0, 0, 0, 0,
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,

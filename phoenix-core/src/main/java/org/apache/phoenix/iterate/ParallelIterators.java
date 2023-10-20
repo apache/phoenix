@@ -36,6 +36,7 @@ import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.LogUtil;
@@ -119,7 +120,7 @@ public class ParallelIterators extends BaseResultIterators {
                         mutationState, tableRef, scan, scanMetricsHolder, renewLeaseThreshold, plan,
                         scanGrouper, caches, maxQueryEndTime);
             context.getConnection().addIteratorForLeaseRenewal(tableResultItr);
-            Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
+            Future<PeekingResultIterator> future = executor.submit(TraceUtil.wrap(new JobCallable<PeekingResultIterator>() {
                 
                 @Override
                 public PeekingResultIterator call() throws Exception {

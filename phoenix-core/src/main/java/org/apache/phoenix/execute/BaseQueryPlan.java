@@ -34,7 +34,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -47,10 +46,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -76,11 +73,10 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.TracingIterator;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -89,6 +85,8 @@ import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 
 
 /**
@@ -357,19 +355,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
                     "Scan on table " + context.getCurrentTable().getTable().getName() + " ready for iteration: " + scan, connection));
         }
         
+
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Iterator for table " + context.getCurrentTable().getTable().getName() + " ready: " + iterator, connection));
         }
 
-        // wrap the iterator so we start/end tracing as we expect
-        if (Tracing.isTracing()) {
-            TraceScope scope = Tracing.startNewSpan(context.getConnection(),
-                    "Creating basic query for " + getPlanSteps(iterator));
-            if (scope.getSpan() != null) return new TracingIterator(scope, iterator);
-        }
-        return iterator;
+        return new TracingIterator(iterator);
+        
     }
 
     private void serializeIndexMaintainerIntoScan(Scan scan, PTable dataTable) throws SQLException {
@@ -519,12 +513,6 @@ public abstract class BaseQueryPlan implements QueryPlan {
             planSteps.getRight());
         iterator.close();
         return explainPlan;
-    }
-
-    private List<String> getPlanSteps(ResultIterator iterator) {
-        List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
-        iterator.explain(planSteps);
-        return planSteps;
     }
 
     private Pair<List<String>, ExplainPlanAttributes> getPlanStepsV2(

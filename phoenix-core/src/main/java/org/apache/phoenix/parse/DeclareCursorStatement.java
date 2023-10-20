@@ -57,4 +57,9 @@ public class DeclareCursorStatement implements BindableStatement {
     public Operation getOperation(){
         return Operation.UPSERT;
     }
+
+    @Override
+    public String getKeyword() {
+        return "DECLARE CURSOR";
+    }
 }

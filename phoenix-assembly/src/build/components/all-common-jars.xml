@@ -47,5 +47,14 @@
         <include>phoenix-pherf.jar</include>
       </includes>
     </fileSet>
+    <fileSet>
+      <directory>${project.basedir}/../phoenix-opentelemetry-trace-sampler/target</directory>
+      <!-- Should we copy this to the root dir like the other phoenix JARs ? -->
+      <outputDirectory>/lib/tracing/</outputDirectory>
+      <includes>
+        <!-- Would a versionless sampler JAR makes sense ? -->
+        <include>phoenix-opentelemetry-trace-sampler-${project.version}.jar</include>
+      </includes>
+    </fileSet>
   </fileSets>
 </component>

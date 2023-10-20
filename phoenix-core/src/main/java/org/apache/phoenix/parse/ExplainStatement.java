@@ -45,4 +45,9 @@ public class ExplainStatement implements BindableStatement {
     public ExplainType getExplainType() {
         return explainType;
     }
+
+    @Override
+    public String getKeyword() {
+        return "EXPLAIN";
+    }
 }

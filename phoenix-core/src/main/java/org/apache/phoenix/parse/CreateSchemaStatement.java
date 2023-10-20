@@ -41,4 +41,8 @@ public class CreateSchemaStatement extends MutableStatement {
 		return ifNotExists;
 	}
 
+    @Override
+    public String getKeyword() {
+        return "CREATE SCHEMA";
+    }
 }

@@ -155,11 +155,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-pherf</artifactId>
+      <artifactId>phoenix-opentelemetry-trace-sampler</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-tracing-webapp</artifactId>
+      <artifactId>phoenix-pherf</artifactId>
     </dependency>
     <dependency>
       <groupId>sqlline</groupId>
@@ -167,7 +167,26 @@
       <version>${sqlline.version}</version>
       <classifier>jar-with-dependencies</classifier>
     </dependency>
-
+    <dependency>
+      <groupId>io.opentelemetry.javaagent</groupId>
+      <artifactId>opentelemetry-javaagent</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j-impl</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-1.2-api</artifactId>
+    </dependency>
   </dependencies>
 
   <profiles>
@@ -205,11 +224,6 @@
           <groupId>org.apache.phoenix.thirdparty</groupId>
           <artifactId>phoenix-shaded-guava</artifactId>
           <version>${phoenix.thirdparty.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.apache.phoenix</groupId>
-          <artifactId>phoenix-tracing-webapp</artifactId>
-          <version>${project.version}</version>
         </dependency>
         <dependency>
           <groupId>org.apache.phoenix</groupId>

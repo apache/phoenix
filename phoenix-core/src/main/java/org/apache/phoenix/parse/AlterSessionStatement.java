@@ -35,4 +35,9 @@ public class AlterSessionStatement extends MutableStatement {
     public Map<String, Object> getProps(){
         return props;
     }
+
+    @Override
+    public String getKeyword() {
+        return "ALTER SESSION";
+    }
 }

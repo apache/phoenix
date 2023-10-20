@@ -37,4 +37,9 @@ public class CloseStatement implements BindableStatement {
     public Operation getOperation(){
         return Operation.UPSERT;
     }
+
+    @Override
+    public String getKeyword() {
+        return "CLOSE CURSOR";
+    }
 }

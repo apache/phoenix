@@ -184,6 +184,8 @@
                 <pattern>io/</pattern>
                 <shadedPattern>${shaded.package}.io.</shadedPattern>
                 <excludes>
+                  <!-- Must interoperate with opentelemetry-javaagent -->
+                  <exclude>io.opentelemetry/**</exclude>
                   <!-- Exclude config keys for Hadoop that look like package names -->
                   <exclude>io/compression/**</exclude>
                   <exclude>io/mapfile/**</exclude>

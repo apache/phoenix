@@ -94,6 +94,10 @@
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
       <optional>false</optional>
     </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-opentelemetry-trace-sampler</artifactId>
+    </dependency>
     <!-- Exclude servlet and Jetty. We don't need it, and it causes problems with minicluster -->
     <dependency>
       <groupId>org.eclipse.jetty</groupId>

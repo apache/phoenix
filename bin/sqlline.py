@@ -46,6 +46,7 @@ def kill_child():
 atexit.register(kill_child)
 
 phoenix_utils.setPath()
+phoenix_utils.set_tracing()
 
 parser = argparse.ArgumentParser(description='Launches the Apache Phoenix Client.')
 # Positional argument 'zookeepers' is optional. The PhoenixDriver will automatically populate
@@ -123,7 +124,7 @@ if os.uname()[4].startswith('ppc'):
 else:
     disable_jna = ""
 
-java_cmd = java + ' $PHOENIX_OPTS ' + \
+java_cmd = java + ' -javaagent:' + phoenix_utils.opentelemetry_agent_jar + ' $PHOENIX_OPTS ' + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
@@ -131,6 +132,7 @@ java_cmd = java + ' $PHOENIX_OPTS ' + \
     phoenix_utils.logging_jar + os.pathsep + \
     phoenix_utils.phoenix_client_embedded_jar + \
     '" -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
+    ' ' + phoenix_utils.phoenix_trace_opts + ' -Dotel.service.name="phoenix-sqlline" ' + \
     disable_jna + \
     " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
     (not args.noconnect and " -u " + phoenix_utils.shell_quote([jdbc_url]) or "") + \

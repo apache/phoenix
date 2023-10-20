@@ -46,8 +46,6 @@ import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTrack
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -58,8 +56,13 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
@@ -300,9 +303,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 // and region servers to crash. See https://issues.apache.org/jira/browse/PHOENIX-1596
                 // TraceScope can't be used here because closing the scope will end up calling
                 // currentSpan.stop() and that should happen only when we are closing the scanner.
-                final Span savedSpan = Trace.currentSpan();
-                final Span child = Trace.startSpan(SCANNER_OPENED_TRACE_INFO, savedSpan).getSpan();
-                try {
+                //FIXME I don't think the above is true for OpenTelemetry.
+                //Just use the standard pattern, and see if it works.
+                Span span = TraceUtil.createServerSideSpan(SCANNER_OPENED_TRACE_INFO);
+                try (Scope scope = span.makeCurrent();){
                     RegionScanner scanner = doPostScannerOpen(c, scan, delegate);
                     scanner = new DelegateRegionScanner(scanner) {
                         // This isn't very obvious but close() could be called in a thread
@@ -312,9 +316,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                             try {
                                 delegate.close();
                             } finally {
-                                if (child != null) {
-                                    child.stop();
-                                }
+                                span.end();
                             }
                         }
                     };
@@ -322,16 +324,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     wasOverriden = true;
                     success = true;
                 } catch (Throwable t) {
+                    TraceUtil.setError(span, t);
                     ServerUtil.throwIOException(c.getEnvironment().getRegionInfo().getRegionNameAsString(), t);
-                } finally {
-                    try {
-                        if (!success && child != null) {
-                            child.stop();
-                        }
-                    } finally {
-                        Trace.continueSpan(savedSpan);
-                    }
                 }
+                // span is closed in scanner.close()
             }
 
             @Override

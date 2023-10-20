@@ -108,7 +108,13 @@ public class CreateIndexStatement extends SingleTableStatement {
     public Map<String, UDFParseNode> getUdfParseNodes() {
         return udfParseNodes;
     }
+
     public ParseNode getWhere() {
         return where;
+    }
+
+    @Override
+    public String getKeyword() {
+        return "CREATE INDEX";
     }
 }

@@ -51,4 +51,10 @@ public class DropIndexStatement extends MutableStatement {
     public Operation getOperation() {
         return Operation.DELETE;
     }
+
+    @Override
+    public String getKeyword() {
+        return "DROP INDEX";
+    }
 }
+

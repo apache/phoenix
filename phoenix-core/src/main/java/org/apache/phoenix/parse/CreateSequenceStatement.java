@@ -88,4 +88,9 @@ public class CreateSequenceStatement extends MutableStatement {
     public boolean ifNotExists() {
         return ifNotExists;
     }
+
+    @Override
+    public String getKeyword() {
+        return "CREATE SEQUENCE";
+    }
 }

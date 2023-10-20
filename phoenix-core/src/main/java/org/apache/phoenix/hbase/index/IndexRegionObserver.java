@@ -74,9 +74,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -115,8 +112,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -126,6 +122,10 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.apache.phoenix.util.WALAnnotationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -984,12 +984,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                           PhoenixIndexMetaData indexMetaData) throws Throwable {
         List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
         // get the current span, or just use a null-span to avoid a bunch of if statements
-        try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-            Span current = scope.getSpan();
-            if (current == null) {
-                current = NullSpan.INSTANCE;
-            }
-            current.addTimelineAnnotation("Built index updates, doing preStep");
+        Span span = TraceUtil.createServerSideSpan("Starting to build index updates");
+        try (Scope ignored = span.makeCurrent()) {
+            span.addEvent("Built index updates, doing preStep");
             // The rest of this method is for handling global index updates
             context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
             prepareIndexMutations(context, maintainers, now);
@@ -1018,7 +1015,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     }
                 }
             }
-            TracingUtils.addAnnotation(current, "index update count", updateCount);
+            span.setAttribute("index update count", updateCount);
+            span.setStatus(StatusCode.OK);
+        } catch (Throwable t) {
+            TraceUtil.setError(span, t);
+            throw t;
+        } finally {
+            span.end();
         }
     }
 
@@ -1361,18 +1364,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           return;
       }
 
-      // get the current span, or just use a null-span to avoid a bunch of if statements
-      try (TraceScope scope = Trace.startSpan("Completing " + (post ? "post" : "pre") + " index writes")) {
-          Span current = scope.getSpan();
-          if (current == null) {
-              current = NullSpan.INSTANCE;
-          }
-          current.addTimelineAnnotation("Actually doing " + (post ? "post" : "pre") + " index update for first time");
+      Span span = TraceUtil.createServerSideSpan("Completing " + (post ? "post" : "pre") + " index writes");
+      try (Scope ignored = span.makeCurrent()) {
+          span.addEvent("Actually doing " + (post ? "post" : "pre") + " index update for first time");
           if (post) {
               postWriter.write(indexUpdates, false, context.clientVersion);
           } else {
               preWriter.write(indexUpdates, false, context.clientVersion);
           }
+          span.setStatus(StatusCode.OK);
+      } catch (IOException e) {
+          span.setStatus(StatusCode.ERROR);
+          span.recordException(e);
+          throw e;
+      } finally {
+          span.end();
       }
   }
 

@@ -101,11 +101,7 @@ import static org.apache.phoenix.query.QueryServices.STATS_USE_CURRENT_TIME_ATTR
 import static org.apache.phoenix.query.QueryServices.TABLE_LEVEL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.THREAD_POOL_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.THREAD_TIMEOUT_MS_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TRACING_BATCH_SIZE;
 import static org.apache.phoenix.query.QueryServices.TRACING_ENABLED;
-import static org.apache.phoenix.query.QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.TRACING_THREAD_POOL_SIZE;
-import static org.apache.phoenix.query.QueryServices.TRACING_TRACE_BUFFER_SIZE;
 import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
@@ -254,9 +250,9 @@ public class QueryServicesOptions {
     /**
      * Configuration key to overwrite the tablename that should be used as the target table
      */
-    public static final String DEFAULT_TRACING_STATS_TABLE_NAME = "SYSTEM.TRACING_STATS";
-    public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
-    public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
+    // These are external parameters for OpenTelemetry 
+    //public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
+    //public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
 
     public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
     public static final int DEFAULT_STATS_GUIDEPOST_PER_REGION = 0; // Uses guidepost width by default
@@ -494,8 +490,6 @@ public class QueryServicesOptions {
             .setIfUnset(AUTO_UPGRADE_ENABLED, DEFAULT_AUTO_UPGRADE_ENABLED)
             .setIfUnset(UPLOAD_BINARY_DATA_TYPE_ENCODING, DEFAULT_UPLOAD_BINARY_DATA_TYPE_ENCODING)
             .setIfUnset(TRACING_ENABLED, DEFAULT_TRACING_ENABLED)
-            .setIfUnset(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE)
-            .setIfUnset(TRACING_THREAD_POOL_SIZE, DEFAULT_TRACING_THREAD_POOL_SIZE)
             .setIfUnset(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)
             .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
             .setIfUnset(USE_STATS_FOR_PARALLELIZATION, DEFAULT_USE_STATS_FOR_PARALLELIZATION)
@@ -730,23 +724,6 @@ public class QueryServicesOptions {
         config.setBoolean(TRACING_ENABLED, enable);
         return this;
     }
-
-    public int getTracingThreadPoolSize() {
-        return config.getInt(TRACING_THREAD_POOL_SIZE, DEFAULT_TRACING_THREAD_POOL_SIZE);
-    }
-
-    public int getTracingBatchSize() {
-        return config.getInt(TRACING_BATCH_SIZE, DEFAULT_TRACING_BATCH_SIZE);
-    }
-
-    public int getTracingTraceBufferSize() {
-        return config.getInt(TRACING_TRACE_BUFFER_SIZE, DEFAULT_TRACING_TRACE_BUFFER_SIZE);
-    }
-
-    public String getTableName() {
-        return config.get(TRACING_STATS_TABLE_NAME_ATTRIB, DEFAULT_TRACING_STATS_TABLE_NAME);
-    }
-
 
     public boolean isGlobalMetricsEnabled() {
         return config.getBoolean(GLOBAL_METRICS_ENABLED, DEFAULT_IS_GLOBAL_METRICS_ENABLED);

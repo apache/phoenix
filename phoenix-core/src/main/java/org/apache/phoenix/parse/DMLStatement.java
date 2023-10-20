@@ -19,7 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.util.Map;
 
-public class DMLStatement extends SingleTableStatement {
+public abstract class DMLStatement extends SingleTableStatement {
 
     private final Map<String, UDFParseNode> udfParseNodes;
     

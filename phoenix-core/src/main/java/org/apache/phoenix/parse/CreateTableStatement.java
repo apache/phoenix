@@ -165,4 +165,9 @@ public class CreateTableStatement extends MutableStatement {
     public boolean isNoVerify() {
         return noVerify;
     }
+
+    @Override
+    public String getKeyword() {
+        return "CREATE TABLE";
+    }
 }

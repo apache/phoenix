@@ -26,6 +26,7 @@ import sys
 import phoenix_utils
 
 phoenix_utils.setPath()
+phoenix_utils.set_sandbox_tracing()
 
 base_dir = os.path.join(phoenix_utils.current_dir, '..')
 phoenix_target_dir = os.path.join(base_dir, 'phoenix-core', 'target')
@@ -44,9 +45,10 @@ cp_components = [phoenix_target_dir + "/*"]
 with open(cp_file_path, 'r') as cp_file:
     cp_components.append(cp_file.read())
 
-java_cmd = ("java $PHOENIX_OPTS -Dlog4j2.configurationFile=file:%s " +
-                "-cp %s org.apache.phoenix.Sandbox") % (
-                            logging_config, ":".join(cp_components))
+java_cmd = ("java -javaagent:%s -Dlog4j2.configurationFile=file:%s " +
+            ' ' + phoenix_utils.phoenix_trace_opts + ' -Dotel.service.name="phoenix-sandbox" ' +
+                "-cp %s org.apache.phoenix.Sandbox") % ( 
+                    phoenix_utils.opentelemetry_agent_jar, logging_config, ":".join(cp_components))
 
 proc = subprocess.Popen(java_cmd, shell=True)
 try:

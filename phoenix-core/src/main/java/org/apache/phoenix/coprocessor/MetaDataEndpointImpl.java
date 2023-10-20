@@ -631,8 +631,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
-        // Start the phoenix trace collection
-        Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     }

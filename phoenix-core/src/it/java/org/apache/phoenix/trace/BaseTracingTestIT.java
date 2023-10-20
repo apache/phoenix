@@ -29,13 +29,9 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.impl.MilliSpan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.DelegateConnection;
 import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.trace.util.Tracing.Frequency;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
@@ -49,131 +45,93 @@ import org.slf4j.LoggerFactory;
  */
 
 public abstract class BaseTracingTestIT extends ParallelStatsDisabledIT {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(BaseTracingTestIT.class);
-
-    protected CountDownLatch latch;
-    protected int defaultTracingThreadPoolForTest = 1;
-    protected int defaultTracingBatchSizeForTest = 1;
-    protected String tracingTableName;
-    protected TraceSpanReceiver traceSpanReceiver = null;
-    protected TestTraceWriter testTraceWriter = null;
-
-    @Before
-    public void setup() {
-        tracingTableName = "TRACING_" + generateUniqueName();
-        traceSpanReceiver = new TraceSpanReceiver();
-        Trace.addReceiver(traceSpanReceiver);
-        testTraceWriter =
-                new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest,
-                        defaultTracingBatchSizeForTest);
-    }
-
-    @After
-    public void cleanUp() {
-        Trace.removeReceiver(traceSpanReceiver);
-        if (testTraceWriter != null) testTraceWriter.stop();
-    }
-
-    public static Connection getConnectionWithoutTracing() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        return getConnectionWithoutTracing(props);
-    }
-
-    public static Connection getConnectionWithoutTracing(Properties props) throws SQLException {
-        Connection conn = getConnectionWithTracingFrequency(props, Frequency.NEVER);
-        return conn;
-    }
-
-    public static Connection getTracingConnection() throws Exception {
-        return getTracingConnection(Collections.<String, String> emptyMap(), null);
-    }
-
-    public static Connection getTracingConnection(Map<String, String> customAnnotations,
-            String tenantId) throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        for (Map.Entry<String, String> annot : customAnnotations.entrySet()) {
-            props.put(ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
-        }
-        if (tenantId != null) {
-            props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        }
-        return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
-    }
-
-    public static Connection getConnectionWithTracingFrequency(Properties props,
-            Tracing.Frequency frequency) throws SQLException {
-        Tracing.setSampling(props, frequency);
-        return DriverManager.getConnection(getUrl(), props);
-    }
-
-    protected Span createNewSpan(long traceid, long parentid, long spanid, String description,
-            long startTime, long endTime, String processid, String... tags) {
-
-        Span span =
-                new MilliSpan.Builder().description(description).traceId(traceid)
-                        .parents(new long[] { parentid }).spanId(spanid).processId(processid)
-                        .begin(startTime).end(endTime).build();
-
-        int tagCount = 0;
-        for (String annotation : tags) {
-            span.addKVAnnotation((Integer.toString(tagCount++)).getBytes(), annotation.getBytes());
-        }
-        return span;
-    }
-
-    private static class CountDownConnection extends DelegateConnection {
-        private CountDownLatch commit;
-
-        public CountDownConnection(Connection conn, CountDownLatch commit) {
-            super(conn);
-            this.commit = commit;
-        }
-
-        @Override
-        public void commit() throws SQLException {
-            super.commit();
-            commit.countDown();
-        }
-
-    }
-
-    protected class TestTraceWriter extends TraceWriter {
-
-        public TestTraceWriter(String tableName, int numThreads, int batchSize) {
-            super(tableName, numThreads, batchSize);
-        }
-
-        @Override
-        protected Connection getConnection(String tableName) {
-            try {
-                Connection connection =
-                        new CountDownConnection(getConnectionWithoutTracing(), latch);
-                if (!traceTableExists(connection, tableName)) {
-                    createTable(connection, tableName);
-                }
-                return connection;
-            } catch (SQLException e) {
-                LOGGER.error("New connection failed for tracing Table: " + tableName, e);
-                return null;
-            }
-        }
-
-        @Override
-        protected TraceSpanReceiver getTraceSpanReceiver() {
-            return traceSpanReceiver;
-        }
-
-        public void stop() {
-            if (executor == null) return;
-            try {
-                executor.shutdownNow();
-                executor.awaitTermination(5, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                LOGGER.error("Failed to stop the thread. ", e);
-            }
-        }
-
-    }
+//
+//    private static final Logger LOGGER = LoggerFactory.getLogger(BaseTracingTestIT.class);
+//
+//    protected CountDownLatch latch;
+//    protected int defaultTracingThreadPoolForTest = 1;
+//    protected int defaultTracingBatchSizeForTest = 1;
+//    protected String tracingTableName;
+//    protected TraceSpanReceiver traceSpanReceiver = null;
+//    protected TestTraceWriter testTraceWriter = null;
+//
+//    @Before
+//    public void setup() {
+//        tracingTableName = "TRACING_" + generateUniqueName();
+//        traceSpanReceiver = new TraceSpanReceiver();
+//        Trace.addReceiver(traceSpanReceiver);
+//        testTraceWriter =
+//                new TestTraceWriter(tracingTableName, defaultTracingThreadPoolForTest,
+//                        defaultTracingBatchSizeForTest);
+//    }
+//
+//    @After
+//    public void cleanUp() {
+//        Trace.removeReceiver(traceSpanReceiver);
+//        if (testTraceWriter != null) testTraceWriter.stop();
+//    }
+//
+//    public static Connection getConnectionWithoutTracing() throws SQLException {
+//        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+//        return getConnectionWithoutTracing(props);
+//    }
+//
+//    public static Connection getConnectionWithoutTracing(Properties props) throws SQLException {
+//        Connection conn = getConnectionWithTracingFrequency(props, Frequency.NEVER);
+//        return conn;
+//    }
+//
+//    public static Connection getTracingConnection() throws Exception {
+//        return getTracingConnection(Collections.<String, String> emptyMap(), null);
+//    }
+//
+//    public static Connection getTracingConnection(Map<String, String> customAnnotations,
+//            String tenantId) throws Exception {
+//        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+//        for (Map.Entry<String, String> annot : customAnnotations.entrySet()) {
+//            props.put(ANNOTATION_ATTRIB_PREFIX + annot.getKey(), annot.getValue());
+//        }
+//        if (tenantId != null) {
+//            props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+//        }
+//        return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
+//    }
+//
+//    public static Connection getConnectionWithTracingFrequency(Properties props,
+//            Tracing.Frequency frequency) throws SQLException {
+//        Tracing.setSampling(props, frequency);
+//        return DriverManager.getConnection(getUrl(), props);
+//    }
+//
+//    protected Span createNewSpan(long traceid, long parentid, long spanid, String description,
+//            long startTime, long endTime, String processid, String... tags) {
+//
+//        Span span =
+//                new MilliSpan.Builder().description(description).traceId(traceid)
+//                        .parents(new long[] { parentid }).spanId(spanid).processId(processid)
+//                        .begin(startTime).end(endTime).build();
+//
+//        int tagCount = 0;
+//        for (String annotation : tags) {
+//            span.addKVAnnotation((Integer.toString(tagCount++)).getBytes(), annotation.getBytes());
+//        }
+//        return span;
+//    }
+//
+//    private static class CountDownConnection extends DelegateConnection {
+//        private CountDownLatch commit;
+//
+//        public CountDownConnection(Connection conn, CountDownLatch commit) {
+//            super(conn);
+//            this.commit = commit;
+//        }
+//
+//        @Override
+//        public void commit() throws SQLException {
+//            super.commit();
+//            commit.countDown();
+//        }
+//
+//    }
 
 }
