@@ -58,6 +58,8 @@ public class MutationBatchFailedStateMetricWithAllUpsertIT extends BaseMutationB
      */
     @Test
     public void testFailedUpsert() throws Exception {
+        int numUpsertCount = 3;
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = null;
         try {
@@ -68,36 +70,37 @@ public class MutationBatchFailedStateMetricWithAllUpsertIT extends BaseMutationB
             TestUtil.addCoprocessor(conn, deleteTableName,
                     ImmutableIndexIT.DeleteFailingRegionObserver.class);
 
-            String upsertSQL = String.format(upsertStatement, deleteTableName);
-            PreparedStatement preparedStatement = conn.prepareStatement(upsertSQL);
-            preparedStatement.setString(1, "ROW_6");
-            preparedStatement.setInt(2, 6);
-            preparedStatement.setInt(3, 12);
-            preparedStatement.execute();
-
+            for(int i = 0; i < numUpsertCount; i++){
+                String upsertSQL = String.format(upsertStatement, deleteTableName);
+                PreparedStatement preparedStatement = conn.prepareStatement(upsertSQL);
+                preparedStatement.setString(1, "ROW_"+i);
+                preparedStatement.setInt(2, i);
+                preparedStatement.setInt(3, 2*i);
+                preparedStatement.execute();
+            }
             conn.commit();
 
             Assert.fail("Commit should not have succeeded");
         } catch (SQLException e) {
             Map<String, Map<MetricType, Long>> mutationMetrics =
                     conn.unwrap(PhoenixConnection.class).getMutationMetrics();
-            int mfs =
-                    mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
             int dbfs =
                     mutationMetrics.get(deleteTableName).get(DELETE_BATCH_FAILED_SIZE).intValue();
             int upfs =
                     mutationMetrics.get(deleteTableName).get(UPSERT_BATCH_FAILED_SIZE).intValue();
+            int mfs =
+                    mutationMetrics.get(deleteTableName).get(MUTATION_BATCH_FAILED_SIZE).intValue();
             long gfs = GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue();
 
             Assert.assertEquals(0, dbfs);
-            Assert.assertEquals(1, mfs);
-            Assert.assertEquals(1, upfs);
+            Assert.assertEquals(numUpsertCount, upfs);
+            Assert.assertEquals(numUpsertCount, mfs);
             //for the second parameter the global mutation batch failed count is double the original parameter because
             //global metrics do not reset to 0 for each parameter
             if(this.transactionProvider == null){
-                Assert.assertEquals(2, gfs);
+                Assert.assertEquals(2*numUpsertCount, gfs);
             } else if(this.transactionProvider.equals("OMID")){
-                Assert.assertEquals(1, gfs);
+                Assert.assertEquals(numUpsertCount, gfs);
             }
         }
     }

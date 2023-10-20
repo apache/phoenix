@@ -1590,15 +1590,15 @@ public class MutationState implements SQLCloseable {
         }
 
         long totalFailedMutation = numUpsertMutationsInBatch + numDeleteMutationsInBatch;
-        //this case is something that should not happen but still if condition makes sense if this ever happens
+        //this case should not happen but the if condition makes sense if this ever happens
         if (totalFailedMutation < numFailedMutations) {
             LOGGER.warn(
                     "total failed mutation less than num of failed mutation.  This is not expected.");
             totalFailedMutation = numFailedMutations;
         }
 
-        long totalNumFailedMutations = allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch
-                : totalFailedMutation;
+        long totalNumFailedMutations = allDeletesMutations && !isTransactional
+                ? numDeleteMutationsInBatch : totalFailedMutation;
         GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(totalNumFailedMutations);
 
         // Update the MUTATION_BATCH_FAILED_SIZE counter with the number of failed delete mutations
