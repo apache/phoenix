@@ -22,11 +22,12 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -35,6 +36,7 @@ import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.util.ByteUtil;
 
 public class CreateIndexCompiler {
     private final PhoenixStatement statement;
@@ -49,36 +51,40 @@ public class CreateIndexCompiler {
         final PhoenixConnection connection = statement.getConnection();
         final ColumnResolver resolver = FromCompiler.getResolver(create, connection, create.getUdfParseNodes());
         Scan scan = new Scan();
-        final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
+        final StatementContext context = new StatementContext(statement, resolver, scan,
+                new SequenceManager(statement));
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         List<ParseNode> splitNodes = create.getSplitNodes();
         if (create.getIndexType() == IndexType.LOCAL) {
             if (!splitNodes.isEmpty()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SPLIT_LOCAL_INDEX)
-                .build().buildException();
-            } 
+                        .build().buildException();
+            }
             List<Pair<String, Object>> list = create.getProps() != null ? create.getProps().get("") : null;
             if (list != null) {
                 for (Pair<String, Object> pair : list) {
                     if (pair.getFirst().equals(PhoenixDatabaseMetaData.SALT_BUCKETS)) {
                         throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SALT_LOCAL_INDEX)
-                        .build().buildException();
+                                .build().buildException();
                     }
                 }
             }
         }
         final byte[][] splits = new byte[splitNodes.size()][];
+        ImmutableBytesWritable ptr = context.getTempPtr();
         for (int i = 0; i < splits.length; i++) {
             ParseNode node = splitNodes.get(i);
             if (!node.isStateless()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
-                    .setMessage("Node: " + node).build().buildException();
+                        .setMessage("Node: " + node).build().buildException();
             }
-            LiteralExpression expression = (LiteralExpression)node.accept(expressionCompiler);
-            splits[i] = expression.getBytes();
+            Expression expression = node.accept(expressionCompiler);
+            if (expression.evaluate(null, ptr)) {
+                splits[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
+            }
         }
         final MetaDataClient client = new MetaDataClient(connection);
-        
+
         return new BaseMutationPlan(context, operation) {
             @Override
             public MutationState execute() throws SQLException {
@@ -89,7 +95,7 @@ public class CreateIndexCompiler {
             public ExplainPlan getExplainPlan() throws SQLException {
                 return new ExplainPlan(Collections.singletonList("CREATE INDEX"));
             }
-        	
+
         };
     }
 }
