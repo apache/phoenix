@@ -251,8 +251,8 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
                 generateUniqueName(), generateUniqueName());
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + parentName
-                    + " (A INTEGER PRIMARY KEY, B INTEGER, C"
-                    + " VARCHAR, D INTEGER)");
+                    + " (A INTEGER NOT NULL, B INTEGER NOT NULL, C VARCHAR, D INTEGER"
+                    + " CONSTRAINT pk PRIMARY KEY (A, B))");
             conn.createStatement().execute("CREATE VIEW " + viewName
                     + " (VA INTEGER, VB INTEGER)"
                     + " AS SELECT * FROM " + parentName + " WHERE B=200");

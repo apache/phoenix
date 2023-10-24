@@ -180,10 +180,11 @@ public class CreateTableCompiler {
                                 new ViewWhereExpressionValidatorVisitor(parentToBe,
                                         pkColumnsInWhere, nonPkColumnsInWhere);
                         where.accept(validatorVisitor);
-                        if (!(connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl)) {
+                        if (!(connection.getQueryServices() instanceof
+                                ConnectionlessQueryServicesImpl)) {
                             try {
-                                viewTypeToBe = setViewTypeToBe(connection, parentToBe, pkColumnsInWhere,
-                                        nonPkColumnsInWhere);
+                                viewTypeToBe = setViewTypeToBe(connection, parentToBe,
+                                        pkColumnsInWhere, nonPkColumnsInWhere);
                             } catch (IOException e) {
                                 throw new RuntimeException(e);
                             }

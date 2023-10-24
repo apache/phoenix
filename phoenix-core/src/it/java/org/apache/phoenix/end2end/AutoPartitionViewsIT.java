@@ -241,7 +241,9 @@ public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 
             String ddl =
                     String.format(
-                        "CREATE TABLE " + tableName + " (%s metricId INTEGER NOT NULL, val1 DOUBLE, val2 DOUBLE CONSTRAINT PK PRIMARY KEY( %s metricId)) %s",
+                        "CREATE TABLE " + tableName + " (%s metricId INTEGER NOT NULL, val1 " +
+                                "DOUBLE, val2 DOUBLE NOT NULL CONSTRAINT PK PRIMARY KEY( %s " +
+                                "metricId, val2)) %s",
                             isMultiTenant ? "tenantId VARCHAR NOT NULL, " : "", 
                             isMultiTenant ? "tenantId, ": "", 
                             String.format(tableDDLOptions, autoSeqName));

@@ -913,12 +913,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName + " "
-                    + "(key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
                     + "val3 BIGINT, val4 DOUBLE, val5 BIGINT, val6 VARCHAR "
-                    + "CONSTRAINT my_pk PRIMARY KEY(key1, key2)) COLUMN_ENCODED_BYTES=0");
+                    + "CONSTRAINT my_pk PRIMARY KEY(key1, key2, val6)) COLUMN_ENCODED_BYTES=0");
             conn.createStatement().execute(
-                    "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE val6 = 'def'");
+                    "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName  +
+                            " WHERE val6 = 'def'");
             conn.createStatement().execute(String.format(
                     "CREATE INDEX " + viewIndexName + " ON " + viewFullName
                             + " (val3) INCLUDE(val5) " + this.indexDDLOptions));

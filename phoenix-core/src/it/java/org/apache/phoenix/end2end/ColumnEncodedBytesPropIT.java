@@ -132,11 +132,11 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
             stmt.execute("ALTER TABLE  " + dataTableFullName + "  ADD v2 varchar");
             
             stmt.execute("CREATE VIEW  " + view1 + "(v3 varchar, v4 varchar)" +
-                    "  AS SELECT * FROM " + dataTableFullName + " WHERE v1='a'");
+                    "  AS SELECT * FROM " + dataTableFullName + " WHERE id='a'");
             stmt.execute("CREATE VIEW  " + view2 + "(v3 bigint, v4 integer)" +
-                    "  AS SELECT * FROM " + dataTableFullName + " WHERE v1='b'");
+                    "  AS SELECT * FROM " + dataTableFullName + " WHERE id='b'");
             PTable v1 = PhoenixRuntime.getTable(conn, view1);
-            PTable v2 = PhoenixRuntime.getTable(conn, view1);
+            PTable v2 = PhoenixRuntime.getTable(conn, view2);
             assertEquals(v1.getColumns().size(), v2.getColumns().size());
             for (int i = 1; i < v1.getColumns().size(); i++) {
                 PColumn c1 = v1.getColumns().get(i);
