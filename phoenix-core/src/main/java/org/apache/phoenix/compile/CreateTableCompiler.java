@@ -104,7 +104,7 @@ public class CreateTableCompiler {
         PrimaryKeyConstraint pkConstraint = create.getPrimaryKeyConstraint();
         for (int i = 0; i < columnDefs.size(); i++) {
             ColumnDef columnDef = columnDefs.get(i);
-            if(columnDef.getColumnDefName().getFamilyName()!=null && columnDef.getColumnDefName().getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+            if (columnDef.getColumnDefName().getFamilyName()!=null && columnDef.getColumnDefName().getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY)
                         .build().buildException();
             }
@@ -138,7 +138,7 @@ public class CreateTableCompiler {
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             if (whereNode == null) {
                 viewStatementToBe = parentToBe.getViewStatement();
-                if(parentToBe.getViewType() == ViewType.READ_ONLY){
+                if (parentToBe.getViewType() == ViewType.READ_ONLY) {
                     viewTypeToBe = ViewType.READ_ONLY;
                 }
             } else {
