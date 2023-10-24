@@ -138,6 +138,9 @@ public class CreateTableCompiler {
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             if (whereNode == null) {
                 viewStatementToBe = parentToBe.getViewStatement();
+                if(parentToBe.getViewType() == ViewType.READ_ONLY){
+                    viewTypeToBe = ViewType.READ_ONLY;
+                }
             } else {
                 whereNode = StatementNormalizer.normalize(whereNode, resolver);
                 if (whereNode.isStateless()) {
