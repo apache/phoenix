@@ -186,6 +186,7 @@ public class TableResultIterator implements ResultIterator {
                 if (lastTuple != null) {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
+                    ScanUtil.verifyKeyInScanRange(ptr, scan, lastTuple);
                 }
             } catch (SQLException e) {
                 try {

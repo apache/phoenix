@@ -24,6 +24,10 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTU
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
+import static org.apache.phoenix.query.QueryConstants.OFFSET_COLUMN;
+import static org.apache.phoenix.query.QueryConstants.OFFSET_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -62,6 +66,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.exception.ResultSetOutOfScanRangeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
@@ -121,6 +126,10 @@ public class ScanUtil {
     public static final int UNKNOWN_CLIENT_VERSION = VersionUtil.encodeVersion(4, 4, 0);
 
     private static final byte[] ZERO_BYTE_ARRAY = new byte[1024];
+    private static final String RESULT_IS_OUT_OF_SCAN_START_KEY =
+            "Row key of the result is out of scan start key range";
+    private static final String RESULT_IS_OUT_OF_SCAN_STOP_KEY =
+            "Row key of the result is out of scan stop key range";
 
     private ScanUtil() {
     }
@@ -1586,4 +1595,51 @@ public class ScanUtil {
         }
         return false;
     }
+
+    public static void verifyKeyInScanRange(ImmutableBytesWritable ptr, Scan scan, Tuple tuple)
+            throws ResultSetOutOfScanRangeException {
+        if ((tuple.size() == 1 && tuple.getValue(SINGLE_COLUMN_FAMILY, SINGLE_COLUMN) != null)
+                || (tuple.size() == 1 && tuple.getValue(OFFSET_FAMILY, OFFSET_COLUMN) != null)
+                || isDummy(tuple)) {
+            return;
+        }
+        if (isLocalIndex(scan)) {
+            verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_START_ROW_SUFFIX),
+                    scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
+        } else {
+            verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+        }
+    }
+
+    private static void verifyScanRanges(ImmutableBytesWritable ptr,
+                                         Scan scan,
+                                         byte[] startRow,
+                                         byte[] stopRow)
+            throws ResultSetOutOfScanRangeException {
+        if (startRow != null
+                && Bytes.compareTo(startRow, HConstants.EMPTY_START_ROW) != 0) {
+            if (scan.includeStartRow()) {
+                if (Bytes.compareTo(startRow, ptr.get()) > 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(startRow, ptr.get()) >= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            }
+        }
+        if (stopRow != null
+                && Bytes.compareTo(stopRow, HConstants.EMPTY_END_ROW) != 0) {
+            if (scan.includeStopRow()) {
+                if (Bytes.compareTo(stopRow, ptr.get()) < 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(stopRow, ptr.get()) <= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            }
+        }
+    }
+
 }
