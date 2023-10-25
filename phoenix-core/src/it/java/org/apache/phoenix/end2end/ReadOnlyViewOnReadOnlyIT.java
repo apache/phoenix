@@ -30,13 +30,14 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class ReadOnlyTenantViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
+public class ReadOnlyViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
     private static final long DEFAULT_TTL_FOR_TEST = 86400;
     @Test
     public void testReadOnlyTenantViewOnReadOnly() throws Exception {
 
         try(Connection connection = DriverManager.getConnection(getUrl())) {
             PhoenixConnection conn = connection.unwrap(PhoenixConnection.class);
+            //base table
             String tableName = generateUniqueName();
             conn.createStatement().execute("CREATE TABLE IF NOT EXISTS  " + tableName + "  ("
                     + " ID INTEGER NOT NULL,"
@@ -46,18 +47,56 @@ public class ReadOnlyTenantViewOnReadOnlyIT extends BaseTenantSpecificViewIndexI
                     + " CREATION_TIME BIGINT,"
                     + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2))"
                     + " TTL = " + DEFAULT_TTL_FOR_TEST + "," + UPDATE_CACHE_FREQUENCY + " = 100000000");
+
+            //global parent view
             String viewName = "VIEW_" + tableName + "_" + generateUniqueName();
             conn.createStatement().execute("CREATE VIEW " + viewName
                     + " (" + generateUniqueName() + " SMALLINT) as select * from "
                     + tableName + " where id > 1 "
                     + (false ? "TTL = 1000" : ""));
-            String tenantID = generateUniqueName();
 
+            String tenantID = generateUniqueName();
             Properties props = new Properties();
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantID);
+
+            //tenant view on global view
             Connection tenantConn = DriverManager.getConnection(getUrl(), props);
             tenantConn.createStatement().execute("CREATE VIEW " + "TENANT_VIEW_" + viewName + " AS SELECT * FROM " + viewName);
+
+            assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(conn,viewName ).getViewType());
             assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(tenantConn,"TENANT_VIEW_" +viewName ).getViewType());
+        }
+    }
+
+    @Test
+    public void testReadOnlyViewOnReadOnly() throws Exception {
+        try(Connection connection = DriverManager.getConnection(getUrl())) {
+            PhoenixConnection conn = connection.unwrap(PhoenixConnection.class);
+            //base table
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS  " + tableName + "  ("
+                    + " ID INTEGER NOT NULL,"
+                    + " COL1 INTEGER NOT NULL,"
+                    + " COL2 bigint NOT NULL,"
+                    + " CREATED_DATE DATE,"
+                    + " CREATION_TIME BIGINT,"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2))"
+                    + " TTL = " + DEFAULT_TTL_FOR_TEST + "," + UPDATE_CACHE_FREQUENCY + " = 100000000");
+
+            //global parent view
+            String viewName = "VIEW_" + tableName + "_" + generateUniqueName();
+            conn.createStatement().execute("CREATE VIEW " + viewName
+                    + " (" + generateUniqueName() + " SMALLINT) as select * from "
+                    + tableName + " where id > 1 "
+                    + (false ? "TTL = 1000" : ""));
+
+            //global child view
+            String childView = "VIEW_" + viewName + "_" + generateUniqueName();
+            conn.createStatement().execute("CREATE VIEW " + childView + " AS SELECT * FROM " + viewName);
+
+            assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(conn,viewName).getViewType());
+            assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(conn,childView).getViewType());
+
         }
     }
 }
