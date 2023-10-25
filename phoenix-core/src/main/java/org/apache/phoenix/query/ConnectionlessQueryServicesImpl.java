@@ -472,6 +472,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     }
 
     @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public Admin getAdmin() throws SQLException {
         throw new UnsupportedOperationException();
     }
