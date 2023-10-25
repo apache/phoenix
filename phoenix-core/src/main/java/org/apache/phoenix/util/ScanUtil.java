@@ -1596,7 +1596,17 @@ public class ScanUtil {
         return false;
     }
 
-    public static void verifyKeyInScanRange(ImmutableBytesWritable ptr, Scan scan, Tuple tuple)
+    /**
+     * Verify whether the given row key is in the scan boundaries i.e. scan start and end keys.
+     *
+     * @param ptr row key.
+     * @param scan scan object used to retrieve the result set.
+     * @param tuple list of KVs returned for the result set.
+     * @throws ResultSetOutOfScanRangeException if the row key is out of scan range.
+     */
+    public static void verifyKeyInScanRange(ImmutableBytesWritable ptr,
+                                            Scan scan,
+                                            Tuple tuple)
             throws ResultSetOutOfScanRangeException {
         if ((tuple.size() == 1 && tuple.getValue(SINGLE_COLUMN_FAMILY, SINGLE_COLUMN) != null)
                 || (tuple.size() == 1 && tuple.getValue(OFFSET_FAMILY, OFFSET_COLUMN) != null)
@@ -1607,7 +1617,13 @@ public class ScanUtil {
             verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_START_ROW_SUFFIX),
                     scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
         } else {
-            verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            try {
+                verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            } catch (ResultSetOutOfScanRangeException e) {
+                // required for Salt Buckets scan boundary changes
+                verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_ACTUAL_START_ROW),
+                        scan.getStopRow());
+            }
         }
     }
 
