@@ -1867,6 +1867,7 @@ public class MutationState implements SQLCloseable {
             boolean retryCommit = false;
             SQLException sqlE = null;
             try {
+                // validate last ddl timestamps
                 send();
                 txMutations = this.txMutations;
                 sendSuccessful = true;
