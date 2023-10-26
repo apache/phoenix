@@ -728,8 +728,11 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             String index2Name = generateUniqueName();
 
             c.setAutoCommit(true);
-            s.execute("create table " + tableName + " (i1 integer primary key, c2.i2 integer, c3.i3 integer, c4.i4 integer)");
-            s.execute("create view " + viewName + " as select * from " + tableName + " where c2.i2 = 1");
+            s.execute("create table " + tableName + " (" +
+                    "i1 integer not null, i2 integer not null, c3.i3 integer, c4.i4 integer " +
+                    "CONSTRAINT pk PRIMARY KEY (i1, i2))");
+            s.execute("create view " + viewName + " as select * from " + tableName +
+                    " where i2 = 1");
             s.executeUpdate("upsert into " + viewName + "(i1, c3.i3, c4.i4) VALUES (1, 1, 1)");
             s.execute("create index " + index1Name + " ON " + viewName + " (c3.i3)");
             s.execute("create index " + index2Name + " ON " + viewName + " (c3.i3) include (c4.i4)");

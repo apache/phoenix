@@ -142,7 +142,8 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
     public static void createTableAndUpsertRows(Connection conn, String dataTableFullName, int numOfRows, String constantVal, String tableOptions) throws SQLException {
         String stmString1 =
                 "CREATE TABLE IF NOT EXISTS " + dataTableFullName
-                        + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER, DATA VARCHAR) "
+                        + " (ID INTEGER NOT NULL, NAME VARCHAR, ZIP INTEGER NOT NULL, " +
+                        "DATA VARCHAR CONSTRAINT PK PRIMARY KEY (ID, ZIP, DATA))"
                         + tableOptions;
         conn.createStatement().execute(stmString1);
         upsertRows(conn, dataTableFullName, 1, numOfRows, constantVal);
