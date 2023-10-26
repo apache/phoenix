@@ -180,8 +180,8 @@ public class CreateTableCompiler {
                                 new ViewWhereExpressionValidatorVisitor(parentToBe,
                                         pkColumnsInWhere, nonPkColumnsInWhere);
                         where.accept(validatorVisitor);
-                        if (!(connection.getQueryServices() instanceof
-                                ConnectionlessQueryServicesImpl)) {
+                        if (!(connection.getQueryServices()
+                                instanceof ConnectionlessQueryServicesImpl)) {
                             try {
                                 viewTypeToBe = setViewTypeToBe(connection, parentToBe,
                                         pkColumnsInWhere, nonPkColumnsInWhere);
@@ -512,8 +512,8 @@ public class CreateTableCompiler {
             StatelessTraverseNoExpressionVisitor<Boolean> {
         private boolean isUpdatable = true;
         private final PTable table;
-        Set<PColumn> pkColumns;
-        Set<PColumn> nonPKColumns;
+        private final Set<PColumn> pkColumns;
+        private final Set<PColumn> nonPKColumns;
 
         public ViewWhereExpressionValidatorVisitor(PTable table, Set<PColumn> pkColumns,
                                                     Set<PColumn> nonPKColumns) {
