@@ -64,20 +64,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
-import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
@@ -107,8 +101,6 @@ import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.compile.TraceQueryPlan;
 import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
-import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
@@ -205,12 +197,10 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.Sequence;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
@@ -232,6 +222,7 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -345,109 +336,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return executeQuery(stmt, true, queryLogger, noCommit, this.validateLastDdlTimestamp);
     }
 
-    private String getInfoString(TableRef tableRef) {
-        return String.format("Tenant: %s, Schema: %s, Table: %s",
-                this.connection.getTenantId(),
-                tableRef.getTable().getSchemaName(),
-                tableRef.getTable().getTableName());
-    }
-
-    private void setLastDDLTimestampRequestParameters(
-            RegionServerEndpointProtos.LastDDLTimestampRequest.Builder builder, PTable pTable) {
-        byte[] tenantIDBytes = this.connection.getTenantId() == null
-                ? HConstants.EMPTY_BYTE_ARRAY
-                : this.connection.getTenantId().getBytes();
-        byte[] schemaBytes = pTable.getSchemaName() == null
-                                ?   HConstants.EMPTY_BYTE_ARRAY
-                                : pTable.getSchemaName().getBytes();
-        builder.setTenantId(ByteStringer.wrap(tenantIDBytes));
-        builder.setSchemaName(ByteStringer.wrap(schemaBytes));
-        builder.setTableName(ByteStringer.wrap(pTable.getTableName().getBytes()));
-        builder.setLastDDLTimestamp(pTable.getLastDDLTimestamp());
-    }
-    /**
-     * Build a request for the validateLastDDLTimestamp RPC.
-     * @param tableRef
-     * @return ValidateLastDDLTimestampRequest for the table in tableRef
-     */
-    private RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
-                getValidateDDLTimestampRequest(TableRef tableRef) throws TableNotFoundException {
-        RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
-                = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
-        RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder
-                = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-
-        //when querying an index, we need to validate its parent table in case the index was dropped
-        if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
-            PTableKey key = new PTableKey(this.connection.getTenantId(),
-                                                tableRef.getTable().getParentName().getString());
-            PTable parentTable = this.connection.getTable(key);
-            setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
-            requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-        }
-
-        innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-        setLastDDLTimestampRequestParameters(innerBuilder, tableRef.getTable());
-        requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-
-        //when querying a view, we need to validate last ddl timestamps for all its ancestors
-        if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
-            PTable pTable = tableRef.getTable();
-            while (pTable.getParentName() != null) {
-                PTableKey key = new PTableKey(this.connection.getTenantId(),
-                                                pTable.getParentName().getString());
-                PTable parentTable = this.connection.getTable(key);
-                innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
-                requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-                pTable = parentTable;
-            }
-        }
-        return requestBuilder.build();
-    }
-
-    /**
-     * Verifies that table metadata in client cache is up-to-date with server.
-     * A random live region server is picked for invoking the RPC to validate LastDDLTimestamp.
-     * Retry once if there was an error performing the RPC, otherwise throw the Exception.
-     * @param tableRef
-     * @throws SQLException
-     */
-    private void validateLastDDLTimestamp(TableRef tableRef, boolean doRetry) throws SQLException {
-
-        String infoString = getInfoString(tableRef);
-        try (Admin admin = this.connection.getQueryServices().getAdmin()) {
-            // get all live region servers
-            List<ServerName> regionServers
-                    = this.connection.getQueryServices().getLiveRegionServers();
-            // pick one at random
-            ServerName regionServer
-                    = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
-
-            LOGGER.debug("Sending DDL timestamp validation request for {} to regionserver {}",
-                    infoString, regionServer);
-
-            // RPC
-            CoprocessorRpcChannel channel = admin.coprocessorService(regionServer);
-            PhoenixRegionServerEndpoint.BlockingInterface service
-                    = PhoenixRegionServerEndpoint.newBlockingStub(channel);
-            service.validateLastDDLTimestamp(null, getValidateDDLTimestampRequest(tableRef));
-        } catch (Exception e) {
-            SQLException parsedException = ServerUtil.parseServerException(e);
-            if (parsedException instanceof StaleMetadataCacheException) {
-                throw parsedException;
-            }
-            //retry once for any exceptions other than StaleMetadataCacheException
-            LOGGER.error("Error in validating DDL timestamp for {}", infoString, parsedException);
-            if (doRetry) {
-                // update the list of live region servers
-                this.connection.getQueryServices().refreshLiveRegionServers();
-                validateLastDDLTimestamp(tableRef, false);
-                return;
-            }
-            throw parsedException;
-        }
-    }
 
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
                                           final boolean doRetryOnMetaNotFoundError,
@@ -504,7 +392,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 //verify metadata for the table/view/index in the query plan
                                 //plan.getTableRef can be null in some cases like EXPLAIN <query>
                                 if (shouldValidateLastDdlTimestamp && plan.getTableRef() != null) {
-                                    validateLastDDLTimestamp(plan.getTableRef(), true);
+                                    ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
+                                            connection, Arrays.asList(plan.getTableRef()), true);
                                 }
 
                                 // this will create its own trace internally, so we don't wrap this
@@ -561,11 +450,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             } catch (StaleMetadataCacheException e) {
                                 updateMetrics = false;
                                 PTable pTable = lastQueryPlan.getTableRef().getTable();
-                                LOGGER.debug("Force updating client metadata cache for {}",
-                                        getInfoString(getLastQueryPlan().getTableRef()));
                                 String schemaN = pTable.getSchemaName().toString();
                                 String tableN = pTable.getTableName().toString();
                                 PName tenantId = connection.getTenantId();
+                                LOGGER.debug("Force updating client metadata cache for {}",
+                                        ValidateLastDDLTimestampUtil.getInfoString(tenantId,
+                                                Arrays.asList(getLastQueryPlan().getTableRef())));
 
                                 // if the index metadata was stale, we will update the client cache
                                 // for the parent table, which will also add the new index metadata
