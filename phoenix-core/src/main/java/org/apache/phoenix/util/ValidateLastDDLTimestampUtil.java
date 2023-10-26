@@ -49,7 +49,8 @@ public class ValidateLastDDLTimestampUtil {
      * @throws SQLException
      */
     public static void validateLastDDLTimestamp(
-            PhoenixConnection conn, List<TableRef> tableRefs, boolean doRetry) throws SQLException {
+            PhoenixConnection conn, List<TableRef> tableRefs, boolean isWritePath, boolean doRetry)
+            throws SQLException {
 
         String infoString = getInfoString(conn.getTenantId(), tableRefs);
         try (Admin admin = conn.getQueryServices().getAdmin()) {
@@ -68,7 +69,7 @@ public class ValidateLastDDLTimestampUtil {
             PhoenixRegionServerEndpoint.BlockingInterface service
                     = PhoenixRegionServerEndpoint.newBlockingStub(channel);
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request
-                    = getValidateDDLTimestampRequest(conn, tableRefs);
+                    = getValidateDDLTimestampRequest(conn, tableRefs, isWritePath);
             service.validateLastDDLTimestamp(null, request);
         } catch (Exception e) {
             SQLException parsedException = ServerUtil.parseServerException(e);
@@ -80,7 +81,7 @@ public class ValidateLastDDLTimestampUtil {
             if (doRetry) {
                 // update the list of live region servers
                 conn.getQueryServices().refreshLiveRegionServers();
-                validateLastDDLTimestamp(conn, tableRefs, false);
+                validateLastDDLTimestamp(conn, tableRefs, isWritePath, false);
                 return;
             }
             throw parsedException;
@@ -91,15 +92,18 @@ public class ValidateLastDDLTimestampUtil {
      * Build a request for the validateLastDDLTimestamp RPC for the given tables.
      * 1. For a view, we need to add all its ancestors to the request in case something changed in the hierarchy.
      * 2. For an index, we need to add its parent table to the request in case the index was dropped.
+     * 3. On the write path, we need to add all indexes of a table/view in case index state was changed.
      * @param tableRefs
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private static RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
-    getValidateDDLTimestampRequest(PhoenixConnection conn, List<TableRef> tableRefs)
-            throws TableNotFoundException {
+    getValidateDDLTimestampRequest(PhoenixConnection conn, List<TableRef> tableRefs,
+                                        boolean isWritePath) throws TableNotFoundException {
+
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder;
+
         for (TableRef tableRef : tableRefs) {
              innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
@@ -129,6 +133,16 @@ public class ValidateLastDDLTimestampUtil {
                     setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), parentTable);
                     requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                     pTable = parentTable;
+                }
+            }
+
+            //on the write path, we need to validate all indexes of a table/view
+            //in case index state was changed
+            if (isWritePath) {
+                for (PTable idxPTable : tableRef.getTable().getIndexes()) {
+                    innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+                    setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), idxPTable);
+                    requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                 }
             }
         }

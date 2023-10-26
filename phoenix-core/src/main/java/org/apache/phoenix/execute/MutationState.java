@@ -68,6 +68,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -122,6 +123,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TransactionUtil;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.apache.phoenix.util.WALAnnotationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -159,6 +161,7 @@ public class MutationState implements SQLCloseable {
     private long estimatedSize = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     private boolean isExternalTxContext = false;
+    private boolean validateLastDdlTimestamp;
     private Map<TableRef, List<MultiRowMutationState>> txMutations = Collections.emptyMap();
 
     private PhoenixTransactionContext phoenixTransactionContext = PhoenixTransactionContext.NULL_CONTEXT;
@@ -221,6 +224,7 @@ public class MutationState implements SQLCloseable {
         boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
         this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
                 : NoOpMutationMetricsQueue.NO_OP_MUTATION_METRICS_QUEUE;
+        this.validateLastDdlTimestamp = getValidateLastDdlTimestampEnabled();
         if (subTask) {
             // this code path is only used while running child scans, we can't pass the txContext to child scans
             // as it is not thread safe, so we use the tx member variable
@@ -241,6 +245,12 @@ public class MutationState implements SQLCloseable {
         this.estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
 
         throwIfTooBig();
+    }
+
+    private boolean getValidateLastDdlTimestampEnabled() {
+        return connection.getQueryServices().getProps()
+                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
 
     // add a new batch of row mutations
@@ -1199,6 +1209,27 @@ public class MutationState implements SQLCloseable {
             validateServerTimestamps = true;
         } else {
             commitBatches = createCommitBatches(tableRefIterator);
+        }
+
+        //if enabled, validate last ddl timestamps for all tables in the mutationsMap
+        //for now, force update client cache for all tables if StaleMetadataCacheException is seen
+        if (this.validateLastDdlTimestamp) {
+            List<TableRef> tableRefs = new ArrayList<>(this.mutationsMap.keySet());
+            try {
+                ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
+                        connection, tableRefs, true, true);
+            }
+            catch (StaleMetadataCacheException e) {
+                MetaDataClient mc = new MetaDataClient(connection);
+                PName tenantId = connection.getTenantId();
+                LOGGER.debug("Force updating client metadata cache for {}",
+                        ValidateLastDDLTimestampUtil.getInfoString(tenantId, tableRefs));
+                for (TableRef tableRef : tableRefs) {
+                    String schemaName = tableRef.getTable().getSchemaName().toString();
+                    String tableName = tableRef.getTable().getTableName().toString();
+                    mc.updateCache(tenantId, schemaName, tableName, true);
+                }
+            }
         }
 
         for (Map<TableRef, MultiRowMutationState> commitBatch : commitBatches) {
