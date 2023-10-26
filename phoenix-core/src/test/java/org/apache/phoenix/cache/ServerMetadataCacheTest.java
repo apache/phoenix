@@ -911,7 +911,103 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test the case when a client upserts into multiple tables before calling commit.
+     * Verify that last ddl timestamp was validated for all involved tables only once.
+     */
+    @Test
+    public void testUpsertMultipleTablesWithOldDDLTimestamp() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
 
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates 2 tables
+            createTable(conn1, tableName1, NEVER);
+            createTable(conn1, tableName2, NEVER);
+
+            //client-2 populates its cache, 1 getTable call for each table
+            query(conn2, tableName1);
+            query(conn2, tableName2);
+
+            //client-1 alters one of the tables
+            alterTableAddColumn(conn1, tableName2, "v3");
+
+            //client-2 upserts multiple rows to both tables before calling commit
+            //verify the table metadata was fetched for each table
+            multiTableUpsert(conn2, tableName1, tableName2);
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName2)),
+                    anyLong(), anyLong());
+        }
+    }
+
+    /**
+     * Test upserts into a multi-level view hierarchy.
+     */
+    @Test
+    public void testUpsertViewWithOldDDLTimestamp() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates a table and views
+            createTable(conn1, tableName, NEVER);
+            createView(conn1, tableName, viewName1);
+            createView(conn1, viewName1, viewName2);
+
+            //client-2 populates its cache, 1 getTable RPC each for table, view1, view2
+            query(conn2, viewName2);
+
+            //client-1 alters first level view
+            alterViewAddColumn(conn1, viewName1, "v3");
+
+            //client-2 upserts into second level view
+            //verify there was a getTable RPC for the view and all its ancestors
+            upsert(conn2, viewName2);
+
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
+                    anyLong(), anyLong());
+
+            //client-2 upserts into first level view
+            //verify no getTable RPCs
+            upsert(conn2, viewName1);
+
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
+                    anyLong(), anyLong());
+        }
+    }
     //Helper methods
 
     private long getLastDDLTimestamp(String tableName) throws SQLException {
@@ -976,5 +1072,19 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     private void dropIndex(Connection conn, String tableName, String indexName) throws SQLException {
         conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
+    }
+
+    private void multiTableUpsert(Connection conn, String tableName1, String tableName2) throws SQLException {
+        conn.createStatement().execute("UPSERT INTO " + tableName1 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName1 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName2 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName1 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.createStatement().execute("UPSERT INTO " + tableName2 +
+                " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
+        conn.commit();
     }
 }
