@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -32,6 +33,11 @@ import org.junit.experimental.categories.Category;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ReadOnlyViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
     private static final long DEFAULT_TTL_FOR_TEST = 86400;
+    private Connection getTenantConnection(final String tenantId) throws Exception {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), tenantProps);
+    }
     @Test
     public void testReadOnlyTenantViewOnReadOnly() throws Exception {
 
@@ -46,7 +52,9 @@ public class ReadOnlyViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
                     + " CREATED_DATE DATE,"
                     + " CREATION_TIME BIGINT,"
                     + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2))"
-                    + " TTL = " + DEFAULT_TTL_FOR_TEST + "," + UPDATE_CACHE_FREQUENCY + " = 100000000");
+                    + " TTL = " + DEFAULT_TTL_FOR_TEST
+                    + "," + UPDATE_CACHE_FREQUENCY + " = 100000000"
+                    + ", MULTI_TENANT = true");
 
             //global parent view
             String viewName = "VIEW_" + tableName + "_" + generateUniqueName();
@@ -55,16 +63,15 @@ public class ReadOnlyViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
                     + tableName + " where id > 1 "
                     + (false ? "TTL = 1000" : ""));
 
-            String tenantID = generateUniqueName();
-            Properties props = new Properties();
-            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantID);
+            //tenant child view
+            String TENANT_ID = generateUniqueName();
+            try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+                tenantStmt.execute("CREATE VIEW " + "TENANT_VIEW_" + viewName + " AS SELECT * FROM " + viewName);
 
-            //tenant view on global view
-            Connection tenantConn = DriverManager.getConnection(getUrl(), props);
-            tenantConn.createStatement().execute("CREATE VIEW " + "TENANT_VIEW_" + viewName + " AS SELECT * FROM " + viewName);
-
-            assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(conn,viewName ).getViewType());
-            assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(tenantConn,"TENANT_VIEW_" +viewName ).getViewType());
+                assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(conn, viewName).getViewType());
+                assertEquals(PTable.ViewType.READ_ONLY, PhoenixRuntime.getTable(tenantConn, "TENANT_VIEW_" + viewName).getViewType());
+            }
         }
     }
 
