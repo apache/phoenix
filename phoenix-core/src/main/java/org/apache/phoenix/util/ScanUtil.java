@@ -1620,6 +1620,9 @@ public class ScanUtil {
             try {
                 verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
             } catch (ResultSetOutOfScanRangeException e) {
+                if (scan.getAttribute(SCAN_ACTUAL_START_ROW) == null) {
+                    throw e;
+                }
                 // required for Salt Buckets scan boundary changes
                 verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_ACTUAL_START_ROW),
                         scan.getStopRow());
