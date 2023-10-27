@@ -815,7 +815,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     .addTable(any(PTable.class), anyLong());
 
             //client-1 updates index property
-            alterIndexChangeStateToRebuild(conn1, tableName, indexName);
+            alterIndexChangeState(conn1, tableName, indexName, " REBUILD");
 
             //client-2's query using the index should work
             PhoenixStatement stmt = conn2.createStatement().unwrap(PhoenixStatement.class);
@@ -1159,7 +1159,53 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             conn1.commit();
         }
     }
+    /**
+     * Client-1 creates a table, index in disabled state and executes some upserts.
+     * Client-2 marks the index as Rebuild.
+     * Client-1 calls commit. Verify that index mutations were correctly generated
+     */
+    @Test
+    public void testConcurrentUpsertIndexStateChange() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
 
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // client-1 creates tables and executes upserts
+            createTable(conn1, tableName, NEVER);
+            createIndex(conn1, tableName, indexName, "v1");
+            alterIndexChangeState(conn1, tableName, indexName, " DISABLE");
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+
+            // client-2 creates an index
+            alterIndexChangeState(conn2, tableName, indexName, " REBUILD");
+
+            //client-1 commits
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            conn1.commit();
+
+            //verify index rows
+            int tableCount, indexCount;
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
+            rs.next();
+            tableCount = rs.getInt(1);
+
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexName);
+            rs.next();
+            indexCount = rs.getInt(1);
+
+            Assert.assertEquals("All index mutations were not generated when index was created concurrently with upserts.", tableCount, indexCount);
+        }
+    }
     //Helper methods
 
     private long getLastDDLTimestamp(String tableName) throws SQLException {
@@ -1223,9 +1269,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                 + columnName + " INTEGER");
     }
 
-    private void alterIndexChangeStateToRebuild(Connection conn, String tableName, String indexName) throws SQLException, InterruptedException {
-        conn.createStatement().execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
-        TestUtil.waitForIndexState(conn, indexName, PIndexState.ACTIVE);
+    private void alterIndexChangeState(Connection conn, String tableName, String indexName, String state) throws SQLException, InterruptedException {
+        conn.createStatement().execute("ALTER INDEX " + indexName + " ON " + tableName + state);
     }
 
     private void dropIndex(Connection conn, String tableName, String indexName) throws SQLException {
