@@ -95,8 +95,8 @@ public class ConnectionQueryServicesMetricsManager {
             String className = options.getConnectionQueryServiceMetricsPublisherClass();
             if (className != null) {
                 MetricServiceResolver mResolver = new MetricServiceResolver();
-                LOGGER.info("Connection query service metrics publisher className " +
-                        className);
+                LOGGER.info("Connection query service metrics publisher className "
+                        + className);
                 try {
                     mPublisher = mResolver.instantiate(className);
                     mPublisher.registerMetricProvider();
@@ -171,9 +171,9 @@ public class ConnectionQueryServicesMetricsManager {
         tInstance.setMetricValue(type, value);
 
         if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("Connection query service metrics completed updating metric " + type
-                    + " to value "+ value +", timetaken = "
-                    + (EnvironmentEdgeManager.currentTime() - startTime));
+            LOGGER.trace("Connection query service metrics completed updating metric " +
+                    type + " to value "+ value +", timetaken = " +
+                    (EnvironmentEdgeManager.currentTime() - startTime));
         }
     }
 
@@ -221,8 +221,8 @@ public class ConnectionQueryServicesMetricsManager {
      */
     public static Map<String, List<HistogramDistribution>> getHistogramsForAllConnectionQueryServices() {
         Map<String, List<HistogramDistribution>> map = new HashMap<>();
-        for (Map.Entry<String, ConnectionQueryServicesMetrics> entry :
-                connectionQueryServiceMetricsMapping.entrySet()) {
+        for (Map.Entry<String, ConnectionQueryServicesMetrics> entry
+                : connectionQueryServiceMetricsMapping.entrySet()) {
             ConnectionQueryServicesMetricsHistograms connectionQueryServiceHistogramsHistograms =
                     entry.getValue().getConnectionQueryServiceHistograms();
             map.put(entry.getKey(), connectionQueryServiceHistogramsHistograms
@@ -272,8 +272,8 @@ public class ConnectionQueryServicesMetricsManager {
     ////// Below Functions are majorly used in testing //////
     /////////////////////////////////////////////////////////
 
-    public static ConnectionQueryServicesHistogram
-        getConnectionQueryServiceOpenInternalConnectionHistogram(String connectionQueryServiceName) {
+    public static ConnectionQueryServicesHistogram getConnectionQueryServiceOpenInternalConnectionHistogram(
+            String connectionQueryServiceName) {
         ConnectionQueryServicesMetrics metrics =
                 getInstance().getConnectionQueryServiceMetricsInstance(connectionQueryServiceName);
         if (metrics == null) {

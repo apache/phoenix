@@ -19,6 +19,9 @@ package org.apache.phoenix.monitoring;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Metric class for Connection Query Services Metric.
+ */
 public class ConnectionQueryServicesMetricImpl implements ConnectionQueryServicesMetric {
 
     private AtomicLong numberOfSamples = new AtomicLong(0);

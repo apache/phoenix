@@ -28,11 +28,11 @@ public interface ConnectionQueryServicesMetric extends Metric {
     /**
      * @return Number of samples collected since the last {@link #reset()} call.
      */
-    public long getNumberOfSamples();
+    long getNumberOfSamples();
 
     /**
      * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
      */
-    public long getTotalSum();
+    long getTotalSum();
 
 }

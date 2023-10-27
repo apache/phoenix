@@ -1426,14 +1426,12 @@ public class PhoenixRuntime {
         return TableMetricsManager.getSizeHistogramsForAllTables();
     }
 
-    public static Map<String, List<HistogramDistribution>>
-        getAllConnectionQueryServicesHistograms() {
-            return ConnectionQueryServicesMetricsManager.getHistogramsForAllConnectionQueryServices();
+    public static Map<String, List<HistogramDistribution>> getAllConnectionQueryServicesHistograms() {
+        return ConnectionQueryServicesMetricsManager.getHistogramsForAllConnectionQueryServices();
     }
 
-    public static Map<String,List<ConnectionQueryServicesMetric>>
-        getAllConnectionQueryServicesCounters() {
-            return ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
+    public static Map<String,List<ConnectionQueryServicesMetric>> getAllConnectionQueryServicesCounters() {
+        return ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
     }
 
     /**

@@ -63,6 +63,6 @@ public interface Metric {
     /**
      * Set the Metric value as current value
      */
-    public void set(long value);
+    void set(long value);
 }
 
