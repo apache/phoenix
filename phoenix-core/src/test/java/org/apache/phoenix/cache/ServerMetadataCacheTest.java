@@ -1081,6 +1081,37 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     /**
      * Client-1 creates a table and executes some upserts.
+     * Client-2 adds a column to the table.
+     * Client-1 calls commit. Verify that client-1 does not get any errors.
+     */
+    @Test
+    public void testUpsertAddTableColumn() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // client-1 creates tables and executes upserts
+            createTable(conn1, tableName, NEVER);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+
+            // client-2 adds a column
+            alterTableAddColumn(conn2, tableName, "v5");
+
+            //client-1 commits
+            conn1.commit();
+        }
+    }
+
+    /**
+     * Client-1 creates a table and executes some upserts.
      * Client-2 creates an index on the table.
      * Client-1 calls commit. Verify that index mutations were correctly generated
      */
