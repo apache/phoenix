@@ -50,7 +50,7 @@ public class ConnectionQueryServicesHistogramTest {
         ConnectionQueryServicesHistogram histogram = new ConnectionQueryServicesHistogram(histoName,
                 "histogram for Number of open internal phoenix connections", conf);
         Assert.assertEquals(histoName, histogram.getName());
-        Assert.assertEquals(histogram.getDefaultRange(), histogram.getRanges());
+        Assert.assertEquals(ConnectionQueryServicesHistogram.DEFAULT_RANGE, histogram.getRanges());
 
         histogram.add(1);
         histogram.add(3);

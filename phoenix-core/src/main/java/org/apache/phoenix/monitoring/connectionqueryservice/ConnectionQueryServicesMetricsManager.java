@@ -17,6 +17,12 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.monitoring.HistogramDistribution;
@@ -27,12 +33,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Central place where we keep track of all the Connection Query Service metrics. Register each
@@ -171,9 +171,9 @@ public class ConnectionQueryServicesMetricsManager {
         tInstance.setMetricValue(type, value);
 
         if (LOGGER.isTraceEnabled()) {
-            LOGGER.trace("Connection query service metrics completed updating metric " +
-                    type + " to value "+ value +", timetaken = " +
-                    (EnvironmentEdgeManager.currentTime() - startTime));
+            LOGGER.trace("Connection query service metrics completed updating metric "
+                    + type + " to value " + value + ", timetaken = "
+                    + (EnvironmentEdgeManager.currentTime() - startTime));
         }
     }
 

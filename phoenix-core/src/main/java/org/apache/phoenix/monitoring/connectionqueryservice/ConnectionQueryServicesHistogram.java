@@ -30,7 +30,7 @@ import org.apache.phoenix.query.QueryServices;
  * If this property is not set then it will default to DEFAULT_RANGE values.
  */
 public class ConnectionQueryServicesHistogram extends RangeHistogram {
-    protected static final long[] DEFAULT_RANGE = {1, 10, 100, 500, 1000};
+    static final long[] DEFAULT_RANGE = {1, 10, 100, 500, 1000};
     public ConnectionQueryServicesHistogram(String name, String description, Configuration conf) {
         super(initializeRanges(conf), name, description);
     }
@@ -39,9 +39,5 @@ public class ConnectionQueryServicesHistogram extends RangeHistogram {
         long[] ranges = PhoenixConfigurationUtil.getLongs(
                 conf, CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES);
         return ranges != null ? ranges : DEFAULT_RANGE;
-    }
-
-    public long[] getDefaultRange() {
-        return DEFAULT_RANGE;
     }
 }

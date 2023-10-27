@@ -17,14 +17,19 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.monitoring.HistogramDistribution;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.monitoring.HistogramDistribution;
+
+/**
+ * Histogram Metrics for Connection Query Service Metrics.
+ * 1. Connection count
+ * 2. Internal Connection Count.
+ */
 public class ConnectionQueryServicesMetricsHistograms {
     private String connectionQueryServicesName;
     private ConnectionQueryServicesHistogram connectionQueryServiceOpenInternalSizeHistogram;
@@ -32,17 +37,18 @@ public class ConnectionQueryServicesMetricsHistograms {
 
     public ConnectionQueryServicesMetricsHistograms(String connectionQueryServiceName,
                                                    Configuration conf) {
-        this.connectionQueryServicesName = connectionQueryServiceName;
-        this.connectionQueryServiceOpenInternalSizeHistogram = new ConnectionQueryServicesHistogram(
+        connectionQueryServicesName = connectionQueryServiceName;
+        connectionQueryServiceOpenInternalSizeHistogram = new ConnectionQueryServicesHistogram(
                 "PhoenixInternalOpenConn",
                 "histogram for number of open internal phoenix connections", conf);
-        this.connectionQueryServicesOpenConnSizeHistogram = new ConnectionQueryServicesHistogram(
+        connectionQueryServicesOpenConnSizeHistogram = new ConnectionQueryServicesHistogram(
                 "PhoenixOpenConn", "histogram for number of open phoenix connections", conf);
     }
 
-    public String getconnectionQueryServicesName() {
+    public String getConnectionQueryServicesName() {
         return this.connectionQueryServicesName;
     }
+
     public ConnectionQueryServicesHistogram getConnectionQueryServicesInternalOpenConnHisto() {
         return connectionQueryServiceOpenInternalSizeHistogram;
     }

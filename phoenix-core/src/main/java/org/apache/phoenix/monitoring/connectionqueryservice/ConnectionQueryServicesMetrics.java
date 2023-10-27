@@ -17,19 +17,19 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
-import org.apache.phoenix.monitoring.ConnectionQueryServicesMetricImpl;
-import org.apache.phoenix.monitoring.MetricType;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
+import org.apache.phoenix.monitoring.ConnectionQueryServicesMetricImpl;
+import org.apache.phoenix.monitoring.MetricType;
 
 public class ConnectionQueryServicesMetrics {
     public enum QueryServiceMetrics {

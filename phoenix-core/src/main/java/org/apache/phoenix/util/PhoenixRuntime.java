@@ -1430,7 +1430,7 @@ public class PhoenixRuntime {
         return ConnectionQueryServicesMetricsManager.getHistogramsForAllConnectionQueryServices();
     }
 
-    public static Map<String,List<ConnectionQueryServicesMetric>> getAllConnectionQueryServicesCounters() {
+    public static Map<String, List<ConnectionQueryServicesMetric>> getAllConnectionQueryServicesCounters() {
         return ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
     }
 

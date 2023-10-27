@@ -28,7 +28,7 @@ public class ConnectionQueryServicesMetricsHistogramsTest {
         Configuration conf = new Configuration();
         ConnectionQueryServicesMetricsHistograms
                 connectionQueryServiceMetricsHistograms = new ConnectionQueryServicesMetricsHistograms(connectionQueryServiceName, conf);
-        Assert.assertEquals(connectionQueryServiceName, connectionQueryServiceMetricsHistograms.getconnectionQueryServicesName());
+        Assert.assertEquals(connectionQueryServiceName, connectionQueryServiceMetricsHistograms.getConnectionQueryServicesName());
         Assert.assertNotNull(connectionQueryServiceMetricsHistograms.getConnectionQueryServicesOpenConnHisto());
         Assert.assertNotNull(connectionQueryServiceMetricsHistograms.getConnectionQueryServicesInternalOpenConnHisto());
 
