@@ -1609,7 +1609,6 @@ public class ScanUtil {
                                             Tuple tuple)
             throws ResultSetOutOfScanRangeException {
         if ((tuple.size() == 1 && tuple.getValue(SINGLE_COLUMN_FAMILY, SINGLE_COLUMN) != null)
-                || (tuple.size() == 1 && tuple.getValue(OFFSET_FAMILY, OFFSET_COLUMN) != null)
                 || isDummy(tuple)) {
             return;
         }
