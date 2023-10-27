@@ -956,27 +956,26 @@ public class MutationState implements SQLCloseable {
                         .setTableName(table.getTableName().getString()).build().buildException(); }
             }
             long timestamp = result.getMutationTime();
-            if (timestamp != QueryConstants.UNSET_TIMESTAMP) {
-                serverTimeStamp = timestamp;
-                if (result.wasUpdated()) {
-                    List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
-                    for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
-                        RowMutationState valueEntry = rowEntry.getValue();
-                        if (valueEntry != null) {
-                            Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
-                            if (colValues != PRow.DELETE_MARKER) {
-                                for (PColumn column : colValues.keySet()) {
-                                    if (!column.isDynamic()) columns.add(column);
-                                }
-                            }
+            serverTimeStamp = timestamp;
+
+            //we don't know if this table's cache result was force updated during metadata validation
+            //so always validate columns
+            List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
+            for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+                RowMutationState valueEntry = rowEntry.getValue();
+                if (valueEntry != null) {
+                    Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
+                    if (colValues != PRow.DELETE_MARKER) {
+                        for (PColumn column : colValues.keySet()) {
+                            if (!column.isDynamic()) columns.add(column);
                         }
                     }
-                    for (PColumn column : columns) {
-                        if (column != null) {
-                            resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
-                                    column.getName().getString());
-                        }
-                    }
+                }
+            }
+            for (PColumn column : columns) {
+                if (column != null) {
+                    resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
+                            column.getName().getString());
                 }
             }
         } catch(Throwable e) {

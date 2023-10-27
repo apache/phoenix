@@ -23,9 +23,11 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -545,7 +547,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // create table with UCF=never and upsert data using client-1
             createTable(conn1, tableName, NEVER);
-            upsert(conn1, tableName);
+            upsert(conn1, tableName, true);
 
             // select query from client-2 works to populate client side metadata cache
             // there should be 1 update to the client cache
@@ -594,7 +596,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // create table and upsert using client-1
             createTable(conn1, tableName, NEVER);
-            upsert(conn1, tableName);
+            upsert(conn1, tableName, true);
 
             // Instrument ServerMetadataCache to throw a SQLException once
             cache = ServerMetadataCache.getInstance(config);
@@ -632,7 +634,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // create table and upsert using client-1
             createTable(conn1, tableName, NEVER);
-            upsert(conn1, tableName);
+            upsert(conn1, tableName, true);
 
             // query using client-2 to populate cache
             query(conn2, tableName);
@@ -682,7 +684,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // create table and upsert using client-1
             createTable(conn1, tableName, NEVER);
-            upsert(conn1, tableName);
+            upsert(conn1, tableName, true);
 
             // Instrument ServerMetadataCache to throw a SQLException twice
             cache = ServerMetadataCache.getInstance(config);
@@ -722,7 +724,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // create table using client-1
             createTable(conn1, tableName, NEVER);
-            upsert(conn1, tableName);
+            upsert(conn1, tableName, true);
 
             // create 2 level of views using client-1
             String view1 = generateUniqueName();
@@ -981,7 +983,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             //client-2 upserts into second level view
             //verify there was a getTable RPC for the view and all its ancestors
-            upsert(conn2, viewName2);
+            upsert(conn2, viewName2, true);
 
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
@@ -995,7 +997,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             //client-2 upserts into first level view
             //verify no getTable RPCs
-            upsert(conn2, viewName1);
+            upsert(conn2, viewName1, true);
 
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
@@ -1008,6 +1010,156 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     anyLong(), anyLong());
         }
     }
+
+    /**
+     * Test that upserts into a table which was dropped throws a TableNotFoundException.
+     */
+    @Test
+    public void testUpsertDroppedTable() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // client-1 creates tables and executes upserts
+            createTable(conn1, tableName, NEVER);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+
+            // client-2 drops the table
+            conn2.createStatement().execute("DROP TABLE " + tableName);
+
+            //client-1 commits
+            conn1.commit();
+            Assert.fail("Commit should have failed with TableNotFoundException");
+        }
+        catch (Exception e) {
+            Assert.assertTrue("TableNotFoundException was not thrown when table was dropped concurrently with upserts.", e instanceof TableNotFoundException);
+        }
+    }
+
+    /**
+     * Client-1 creates a table and executes some upserts.
+     * Client-2 drops a column for which client-1 had executed upserts.
+     * Client-1 calls commit. Verify that client-1 gets ColumnNotFoundException
+     */
+    @Test
+    public void testUpsertDroppedTableColumn() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // client-1 creates tables and executes upserts
+            createTable(conn1, tableName, NEVER);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+
+            // client-2 drops a column
+            alterTableDropColumn(conn2, tableName, "v1");
+
+            //client-1 commits
+            conn1.commit();
+            Assert.fail("Commit should have failed with ColumnNotFoundException");
+        }
+        catch (Exception e) {
+            Assert.assertTrue("ColumnNotFoundException was not thrown when column was dropped concurrently with upserts.", e instanceof ColumnNotFoundException);
+        }
+    }
+
+    /**
+     * Client-1 creates a table and executes some upserts.
+     * Client-2 creates an index on the table.
+     * Client-1 calls commit. Verify that index mutations were correctly generated
+     */
+    @Test
+    public void testConcurrentUpsertIndexCreation() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // client-1 creates tables and executes upserts
+            createTable(conn1, tableName, NEVER);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+
+            // client-2 creates an index
+            createIndex(conn2, tableName, indexName, "v1");
+
+            //client-1 commits
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            conn1.commit();
+
+            //verify index rows
+            int tableCount, indexCount;
+            ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName);
+            rs.next();
+            tableCount = rs.getInt(1);
+
+            rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexName);
+            rs.next();
+            indexCount = rs.getInt(1);
+
+            Assert.assertEquals("All index mutations were not generated when index was created concurrently with upserts.", tableCount, indexCount);
+        }
+    }
+
+    /**
+     * Client-1 creates a table, index and executes some upserts.
+     * Client-2 drops the index on the table.
+     * Client-1 calls commit. Verify that client-1 does not see any errors
+     */
+    @Test
+    public void testConcurrentUpsertDropIndex() throws SQLException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            // client-1 creates tables, index and executes upserts
+            createTable(conn1, tableName, NEVER);
+            createIndex(conn1, tableName, indexName, "v1");
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+
+            // client-2 drops the index
+            dropIndex(conn2, tableName, indexName);
+
+            //client-1 commits
+            upsert(conn1, tableName, false);
+            upsert(conn1, tableName, false);
+            conn1.commit();
+        }
+    }
+
     //Helper methods
 
     private long getLastDDLTimestamp(String tableName) throws SQLException {
@@ -1039,10 +1191,12 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + "(" + col + ")");
     }
 
-    private void upsert(Connection conn, String tableName) throws SQLException {
+    private void upsert(Connection conn, String tableName, boolean doCommit) throws SQLException {
         conn.createStatement().execute("UPSERT INTO " + tableName +
                 " (k, v1, v2) VALUES ("+  RANDOM.nextInt() +", " + RANDOM.nextInt() + ", " + RANDOM.nextInt() +")");
-        conn.commit();
+        if (doCommit) {
+            conn.commit();
+        }
     }
 
     private void query(Connection conn, String tableName) throws SQLException {
@@ -1058,6 +1212,10 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     private void alterTableAddColumn(Connection conn, String tableName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER TABLE " + tableName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
+    }
+
+    private void alterTableDropColumn(Connection conn, String tableName, String columnName) throws SQLException {
+        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN " + columnName);
     }
 
     private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {
