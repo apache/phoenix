@@ -40,6 +40,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.schema.PColumn;
@@ -224,4 +225,8 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     }
 
     PMetaData getMetaDataCache();
+    public default ConnectionLimiter getConnectionLimiter()  {
+        throw new UnsupportedOperationException();
+    }
+
 }

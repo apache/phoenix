@@ -39,6 +39,7 @@ import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
@@ -421,5 +422,9 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public PMetaData getMetaDataCache() {
         return getDelegate().getMetaDataCache();
+    }
+
+    public ConnectionLimiter getConnectionLimiter() {
+        return getDelegate().getConnectionLimiter();
     }
 }
