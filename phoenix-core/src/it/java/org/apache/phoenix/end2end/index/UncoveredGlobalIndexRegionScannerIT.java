@@ -27,7 +27,6 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -41,6 +40,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.KeyRange;
@@ -115,7 +115,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexTableName
                             + " on " + dataTableName + " (val1) INCLUDE (val2)");
                     Assert.fail();
-                } catch (SQLException e) {
+                } catch (PhoenixParserException e) {
                     // Expected
                 }
                 // The LOCAL keyword should not be allowed with UNCOVERED
@@ -123,7 +123,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     conn.createStatement().execute("CREATE UNCOVERED LOCAL INDEX " + indexTableName
                             + " on " + dataTableName);
                     Assert.fail();
-                } catch (SQLException e) {
+                } catch (PhoenixParserException e) {
                     // Expected
                 }
             } else {

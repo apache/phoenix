@@ -147,7 +147,7 @@ public class PartialIndexIT extends BaseTest {
     }
 
     @Test
-    public void testDDL() throws Exception {
+    public void testUnsupportedDDLs() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             conn.createStatement().execute(
@@ -186,7 +186,36 @@ public class PartialIndexIT extends BaseTest {
             }
         }
     }
-
+    @Test
+    public void testDDLWithAllDataTypes() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String fullTableName = String.format("%s.%s", "S", dataTableName);
+            conn.createStatement().execute(
+                    "create table " + fullTableName
+                            + " (id varchar not null, kp varchar not null, "
+                            + "A INTEGER, B UNSIGNED_INT, C BIGINT, D UNSIGNED_LONG, E TINYINT, "
+                            + "F UNSIGNED_TINYINT, G SMALLINT, H UNSIGNED_SMALLINT, I FLOAT, "
+                            + "J UNSIGNED_FLOAT, K DOUBLE, L UNSIGNED_DOUBLE, M DECIMAL, "
+                            + "N BOOLEAN, O TIME, P DATE, Q TIMESTAMP, R UNSIGNED_TIME, "
+                            + "S UNSIGNED_DATE, T UNSIGNED_TIMESTAMP, U CHAR(10), V BINARY(1024), "
+                            + "W VARBINARY, Y INTEGER ARRAY, Z VARCHAR ARRAY[10], AA DATE ARRAY, "
+                            + "AB TIMESTAMP ARRAY, AC UNSIGNED_TIME ARRAY, AD UNSIGNED_DATE ARRAY, "
+                            + "AE UNSIGNED_TIMESTAMP ARRAY "
+                            + "CONSTRAINT pk PRIMARY KEY (id,kp)) "
+                            + "MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0" );
+            String indexTableName = generateUniqueName();
+            try {
+                conn.createStatement().execute(
+                        "CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                                + "INDEX IF NOT EXISTS " + indexTableName + " on " + fullTableName
+                                + " (kp,A) WHERE (kp  > '5')");
+            } catch (PhoenixParserException e) {
+                e.printStackTrace();
+                Assert.fail();
+            }
+        }
+    }
     @Test
     public void testAtomicUpsert() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {

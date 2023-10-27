@@ -39,19 +39,31 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.types.PArrayDataType;
+import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PDateArray;
 import org.apache.phoenix.schema.types.PNumericType;
 import org.apache.phoenix.schema.types.PTime;
+import org.apache.phoenix.schema.types.PTimeArray;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PTimestampArray;
+import org.apache.phoenix.schema.types.PUnsignedDate;
+import org.apache.phoenix.schema.types.PUnsignedDateArray;
 import org.apache.phoenix.schema.types.PUnsignedTime;
+import org.apache.phoenix.schema.types.PUnsignedTimeArray;
+import org.apache.phoenix.schema.types.PUnsignedTimestamp;
+import org.apache.phoenix.schema.types.PUnsignedTimestampArray;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
@@ -77,15 +89,25 @@ public class CreateIndexCompiler {
         }
     }
     private String getValue(PDataType type) {
-        if (type instanceof PNumericType || type instanceof PTimestamp ||
-                type instanceof PUnsignedTime) {
+        if (type instanceof PNumericType) {
             return "0";
         } else if (type instanceof PChar || type instanceof PVarchar) {
             return "'a'";
-        } else if (type instanceof PDate || type instanceof PTime) {
-            return (new Date(System.currentTimeMillis())).toString();
+        } else if (type instanceof PDate || type instanceof PUnsignedDate || type instanceof PTime
+                || type instanceof PUnsignedTime || type instanceof PTimestamp
+                || type instanceof PUnsignedTimestamp) {
+            Timestamp now = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+            return "TO_DATE('" + now + "','yyyy-MM-dd HH:mm:ss.SSS', 'PST')";
+        } else if (type instanceof PBoolean) {
+            return "TRUE";
+        } else if (type instanceof PDateArray || type instanceof PUnsignedDateArray ||
+                type instanceof PTimeArray || type instanceof PUnsignedTimeArray ||
+                type instanceof PTimestampArray || type instanceof PUnsignedTimestampArray) {
+            return "ARRAY[" + getValue(PDate.INSTANCE) + "]";
+        } else if (type instanceof PArrayDataType) {
+            return "ARRAY" + type.getSampleValue().toString();
         } else {
-            return "0x00";
+            return "0123";
         }
     }
 
