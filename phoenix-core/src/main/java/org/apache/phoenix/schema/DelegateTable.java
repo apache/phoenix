@@ -104,6 +104,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean hasOnlyPkColumns() {
+        return delegate.hasOnlyPkColumns();
+    }
+
+    @Override
     public PColumnFamily getColumnFamily(byte[] family) throws ColumnFamilyNotFoundException {
         return delegate.getColumnFamily(family);
     }
