@@ -67,7 +67,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
@@ -235,6 +234,9 @@ import org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
+import org.apache.phoenix.log.ConnectionLimiter;
+import org.apache.phoenix.log.DefaultConnectionLimiter;
+import org.apache.phoenix.log.LoggingConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
@@ -331,6 +333,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final GuidePostsCacheProvider
             GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     protected final Configuration config;
+
+    public ConnectionInfo getConnectionInfo() {
+        return connectionInfo;
+    }
+
     protected final ConnectionInfo connectionInfo;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
     // don't need.
@@ -393,6 +400,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
     private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
     private boolean localIndexUpgradeRequired;
+
+    private final boolean enableConnectionActivityLogging;
+    private final int loggingIntervalInMins;
+
+    private final ConnectionLimiter connectionLimiter;
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -487,6 +499,30 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         this.maxInternalConnectionsAllowed = config.getInt(QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS,
                 QueryServicesOptions.DEFAULT_INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS);
         this.shouldThrottleNumConnections = (maxConnectionsAllowed > 0) || (maxInternalConnectionsAllowed > 0);
+        this.enableConnectionActivityLogging =
+                config.getBoolean(CONNECTION_ACTIVITY_LOGGING_ENABLED,
+                        QueryServicesOptions.DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED);
+        this.loggingIntervalInMins =
+                config.getInt(CONNECTION_ACTIVITY_LOGGING_INTERVAL,
+                        QueryServicesOptions.DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS);
+
+        if (enableConnectionActivityLogging) {
+            LoggingConnectionLimiter.Builder builder = new LoggingConnectionLimiter.Builder(shouldThrottleNumConnections);
+            connectionLimiter = builder
+                    .withLoggingIntervalInMins(loggingIntervalInMins)
+                    .withLogging(true)
+                    .withMaxAllowed(this.maxConnectionsAllowed)
+                    .withMaxInternalAllowed(this.maxInternalConnectionsAllowed)
+                    .build();
+        } else {
+            DefaultConnectionLimiter.Builder builder = new DefaultConnectionLimiter.Builder(shouldThrottleNumConnections);
+            connectionLimiter = builder
+                    .withMaxAllowed(this.maxConnectionsAllowed)
+                    .withMaxInternalAllowed(this.maxInternalConnectionsAllowed)
+                    .build();
+        }
+
+
         if (!QueryUtil.isServerConnection(props)) {
             //Start queryDistruptor everytime as log level can be change at connection level as well, but we can avoid starting for server connections.
             try {
@@ -1917,6 +1953,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    @VisibleForTesting
+    public ConnectionLimiter getConnectionLimiter() {
+        return connectionLimiter;
+    }
     /**
      * helper function to return the exception from the RPC
      * @param controller
@@ -5646,30 +5686,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void addConnection(PhoenixConnection connection) throws SQLException {
         if (returnSequenceValues || shouldThrottleNumConnections) {
             synchronized (connectionCountLock) {
-
-                /*
-                 * If we are throttling connections internal connections and client created connections
-                 *   are counted separately against each respective quota.
-                 */
-                if (shouldThrottleNumConnections) {
-                    int futureConnections = 1 + ( connection.isInternalConnection() ? internalConnectionCount : connectionCount);
-                    int allowedConnections = connection.isInternalConnection() ? maxInternalConnectionsAllowed : maxConnectionsAllowed;
-                    if (allowedConnections != 0 && futureConnections > allowedConnections) {
-                        GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.increment();
-                        if (connection.isInternalConnection()) {
-                            throw new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_INTERNAL_CONNECTION_THROTTLED).
-                                    build().buildException();
-                        }
-                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.NEW_CONNECTION_THROTTLED).
-                                build().buildException();
-                    }
-                }
-
-                if (!connection.isInternalConnection()) {
-                    connectionCount++;
-                } else {
-                    internalConnectionCount++;
-                }
+                connectionLimiter.acquireConnection(connection);
             }
         }
         // If lease renewal isn't enabled, these are never cleaned up. Tracking when renewals
@@ -5685,7 +5702,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             ConcurrentMap<SequenceKey,Sequence> formerSequenceMap = null;
             synchronized (connectionCountLock) {
                 if (!connection.isInternalConnection()) {
-                    if (connectionCount + internalConnectionCount - 1 <= 0) {
+                    if (connectionLimiter.isLastConnection()) {
                         if (!this.sequenceMap.isEmpty()) {
                             formerSequenceMap = this.sequenceMap;
                             this.sequenceMap = Maps.newConcurrentMap();
@@ -5700,13 +5717,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 returnAllSequences(formerSequenceMap);
             }
         }
-        if (returnSequenceValues || shouldThrottleNumConnections){ //still need to decrement connection count
+        if (returnSequenceValues || connectionLimiter.isShouldThrottleNumConnections()) { //still need to decrement connection count
             synchronized (connectionCountLock) {
-                if (connection.isInternalConnection() && internalConnectionCount > 0) {
-                    --internalConnectionCount;
-                } else if (connectionCount > 0) {
-                    --connectionCount;
-                }
+                connectionLimiter.returnConnection(connection);
             }
         }
     }

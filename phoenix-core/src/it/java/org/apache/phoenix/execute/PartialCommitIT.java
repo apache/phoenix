@@ -152,45 +152,58 @@ public class PartialCommitIT extends BaseTest {
     
     @Test
     public void testNoFailure() throws SQLException {
-        testPartialCommit(singletonList("upsert into " + aSuccessTable + " values ('testNoFailure', 'a')"), new int[0], false, singletonList("select count(*) from " + aSuccessTable + " where k='testNoFailure'"),
-                                        singletonList(new Integer(1)));
+        int[] expectedUncommittedStatementIndexes = new int[0];
+        testPartialCommit(singletonList("upsert into " + aSuccessTable + " values ('testNoFailure', 'a')"),
+                expectedUncommittedStatementIndexes, false,
+                singletonList("select count(*) from " + aSuccessTable + " where k='testNoFailure'"),
+                singletonList(new Integer(1)),expectedUncommittedStatementIndexes.length);
     }
-    
+
     @Test
     public void testUpsertFailure() throws SQLException {
-        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testUpsertFailure1', 'a')", 
-                                       upsertToFail, 
-                                       "upsert into " + aSuccessTable + " values ('testUpsertFailure2', 'b')"), 
-                                       transactional ? new int[] {0,1,2} : new int[]{1}, true,
-                                       newArrayList("select count(*) from " + aSuccessTable + " where k like 'testUpsertFailure_'",
-                                                    "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'"),
-                                       transactional ? newArrayList(new Integer(0), new Integer(0)) : newArrayList(new Integer(2), new Integer(0)));
+        int[] expectedUncommittedStatementIndexes = transactional ? new int[] {0,1,2} : new int[]{1};
+        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testUpsertFailure1', 'a')",
+                        upsertToFail,
+                        "upsert into " + aSuccessTable + " values ('testUpsertFailure2', 'b')"),
+                expectedUncommittedStatementIndexes, true,
+                newArrayList("select count(*) from " + aSuccessTable + " where k like 'testUpsertFailure_'",
+                        "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'"),
+                transactional ? newArrayList(new Integer(0), new Integer(0)) : newArrayList(new Integer(2), new Integer(0)),
+                expectedUncommittedStatementIndexes.length);
     }
     
     @Test
+    //fail
     public void testUpsertSelectFailure() throws SQLException {
+        int[] expectedUncommittedStatementIndexes = transactional ? new int[] {0,1} : new int[]{1};
         try (Connection con = DriverManager.getConnection(getUrl())) {
             con.createStatement().execute("upsert into " + aSuccessTable + " values ('" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "', 'boom!')");
             con.commit();
         }
-        
-        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testUpsertSelectFailure', 'a')", 
-                                       upsertSelectToFail), 
-                                       transactional ? new int[] {0,1} : new int[]{1}, true, 
-                                       newArrayList("select count(*) from " + aSuccessTable + " where k in ('testUpsertSelectFailure', '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "')",
-                                                    "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'"),
-                                       transactional ? newArrayList(new Integer(1) /* from commit above */, new Integer(0)) : newArrayList(new Integer(2), new Integer(0)));
+
+        //In this test we manually pass 5 for numFailureInTransactons. This is because there are 5 statements committed in aSuccessTable before the upsertSelectToFail statement
+        // where values are taken from the aSuccessTable into the bFailureTable. Since upsertion into bFailureTable is going to fail and it is transactional all the statements
+        // are going to be counted as failed hence the total number of failures are 5.
+        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testUpsertSelectFailure', 'a')",
+                        upsertSelectToFail),
+                expectedUncommittedStatementIndexes, true,
+                newArrayList("select count(*) from " + aSuccessTable + " where k in ('testUpsertSelectFailure', '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "')",
+                        "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'"),
+                transactional ? newArrayList(new Integer(1) /* from commit above */, new Integer(0)) : newArrayList(new Integer(2), new Integer(0)),
+                5);
+
     }
-    
     @Test
     public void testDeleteFailure() throws SQLException {
-        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testDeleteFailure1', 'a')", 
-                                       deleteToFail,
-                                       "upsert into " + aSuccessTable + " values ('testDeleteFailure2', 'b')"), 
-                                       transactional ? new int[] {0,1,2} : new int[]{1}, true, 
-                                       newArrayList("select count(*) from " + aSuccessTable + " where k like 'testDeleteFailure_'",
-                                                    "select count(*) from " + bFailureTable + " where k = 'z'"),
-                                       transactional ? newArrayList(new Integer(0), new Integer(1) /* original row */) : newArrayList(new Integer(2), new Integer(1)));
+        int[] expectedUncommittedStatementIndexes = transactional ? new int[] {0,1,2} : new int[]{1};
+        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testDeleteFailure1', 'a')",
+                        deleteToFail,
+                        "upsert into " + aSuccessTable + " values ('testDeleteFailure2', 'b')"),
+                expectedUncommittedStatementIndexes, true,
+                newArrayList("select count(*) from " + aSuccessTable + " where k like 'testDeleteFailure_'",
+                        "select count(*) from " + bFailureTable + " where k = 'z'"),
+                transactional ? newArrayList(new Integer(0), new Integer(1) /* original row */) : newArrayList(new Integer(2), new Integer(1)),
+                expectedUncommittedStatementIndexes.length);
     }
     
     /**
@@ -198,33 +211,36 @@ public class PartialCommitIT extends BaseTest {
      * @throws SQLException 
      */
     @Test
-    public void testOrderOfMutationsIsPredicatable() throws SQLException {
+    public void testOrderOfMutationsIsPredicatable() throws SQLException{
+        int[] expectedUncommittedStatementIndexes = transactional ? new int[] {0,1,2} : new int[]{0,1};
         testPartialCommit(newArrayList("upsert into " + cSuccessTable + " values ('testOrderOfMutationsIsPredicatable', 'c')", // will fail because c_success_table is after b_failure_table by table sort order
-                                       upsertToFail, 
-                                       "upsert into " + aSuccessTable + " values ('testOrderOfMutationsIsPredicatable', 'a')"), // will succeed because a_success_table is before b_failure_table by table sort order
-                                       transactional ? new int[] {0,1,2} : new int[]{0,1}, true, 
-                                       newArrayList("select count(*) from " + cSuccessTable + " where k='testOrderOfMutationsIsPredicatable'",
-                                                    "select count(*) from " + aSuccessTable + " where k='testOrderOfMutationsIsPredicatable'",
-                                                    "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'"),
-                                       transactional ? newArrayList(new Integer(0), new Integer(0), new Integer(0)) : newArrayList(new Integer(0), new Integer(1), new Integer(0)));
+                         upsertToFail,
+                        "upsert into " + aSuccessTable + " values ('testOrderOfMutationsIsPredicatable', 'a')"), // will succeed because a_success_table is before b_failure_table by table sort order
+                expectedUncommittedStatementIndexes, true,
+                newArrayList("select count(*) from " + cSuccessTable + " where k='testOrderOfMutationsIsPredicatable'",
+                        "select count(*) from " + aSuccessTable + " where k='testOrderOfMutationsIsPredicatable'",
+                        "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'"),
+                transactional ? newArrayList(new Integer(0), new Integer(0), new Integer(0)) : newArrayList(new Integer(0), new Integer(1), new Integer(0)),
+                expectedUncommittedStatementIndexes.length);
     }
     
     @Test
     public void testStatementOrderMaintainedInConnection() throws SQLException {
-        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testStatementOrderMaintainedInConnection', 'a')", 
-                                       "upsert into " + aSuccessTable + " select k, c from " + cSuccessTable,
-                                       deleteToFail,
-                                       "select * from " + aSuccessTable + "", 
-                                       upsertToFail), 
-                                       transactional ? new int[] {0,1,2,4} : new int[]{2,4}, true, 
-                                       newArrayList("select count(*) from " + aSuccessTable + " where k='testStatementOrderMaintainedInConnection' or k like 'z%'", // rows left: zz, zzz, checkThatAllStatementTypesMaintainOrderInConnection
-                                                    "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'",
-                                                    "select count(*) from " + bFailureTable + " where k = 'z'"),
-                                       transactional ? newArrayList(new Integer(3) /* original rows */, new Integer(0), new Integer(1) /* original row */) : newArrayList(new Integer(4), new Integer(0), new Integer(1)));
+        int[] expectedUncommittedStatementIndexes = transactional ? new int[] {0,1,2,4} : new int[]{2,4};
+        testPartialCommit(newArrayList("upsert into " + aSuccessTable + " values ('testStatementOrderMaintainedInConnection', 'a')",
+                        "upsert into " + aSuccessTable + " select k, c from " + cSuccessTable,
+                        deleteToFail,
+                        "select * from " + aSuccessTable + "",
+                        upsertToFail),
+                expectedUncommittedStatementIndexes, true,
+                newArrayList("select count(*) from " + aSuccessTable + " where k='testStatementOrderMaintainedInConnection' or k like 'z%'", // rows left: zz, zzz, checkThatAllStatementTypesMaintainOrderInConnection
+                        "select count(*) from " + bFailureTable + " where k = '" + Bytes.toString(ROW_TO_FAIL_UPSERT_BYTES) + "'",
+                        "select count(*) from " + bFailureTable + " where k = 'z'"),
+                transactional ? newArrayList(new Integer(3) /* original rows */, new Integer(0), new Integer(1) /* original row */) : newArrayList(new Integer(4), new Integer(0), new Integer(1)), expectedUncommittedStatementIndexes.length);
     }
     
     private void testPartialCommit(List<String> statements, int[] expectedUncommittedStatementIndexes, boolean willFail, List<String> countStatementsForVerification,
-                                   List<Integer> expectedCountsForVerification) throws SQLException {
+                                   List<Integer> expectedCountsForVerification, int numFailureInTransactons) throws SQLException {
         Preconditions.checkArgument(countStatementsForVerification.size() == expectedCountsForVerification.size());
         
         try (Connection con = getConnectionWithTableOrderPreservingMutationState()) {
@@ -248,8 +264,8 @@ public class PartialCommitIT extends BaseTest {
                 int[] uncommittedStatementIndexes = ((CommitException)sqle).getUncommittedStatementIndexes();
                 assertArrayEquals(expectedUncommittedStatementIndexes, uncommittedStatementIndexes);
                 Map<String, Map<MetricType, Long>> mutationWriteMetrics = PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset(con);
-                assertEquals(expectedUncommittedStatementIndexes.length, mutationWriteMetrics.get(bFailureTable).get(MUTATION_BATCH_FAILED_SIZE).intValue());
-                assertEquals(expectedUncommittedStatementIndexes.length, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
+                assertEquals(numFailureInTransactons, mutationWriteMetrics.get(bFailureTable).get(MUTATION_BATCH_FAILED_SIZE).intValue());
+                assertEquals(numFailureInTransactons, GLOBAL_MUTATION_BATCH_FAILED_COUNT.getMetric().getValue());
             }
             
             
