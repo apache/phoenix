@@ -71,7 +71,6 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SER
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
-import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
@@ -797,9 +796,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @Override
     public int getConnectionCount(boolean isInternal) {
         if (isInternal) {
-            return internalConnectionCount;
+            return connectionLimiter.getInternalConnectionCount();
         } else {
-            return connectionCount;
+            return connectionLimiter.getConnectionCount();
         }
     }
 
