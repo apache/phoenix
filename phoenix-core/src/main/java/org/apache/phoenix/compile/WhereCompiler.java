@@ -528,6 +528,7 @@ public class WhereCompiler {
             children.add(rhs);
             return new ComparisonExpression(children, op);
         }
+
         @Override public Expression visitLeave(ComparisonExpression node, List<Expression> l) {
             if (l == null || l.isEmpty()) {
                 return node;
@@ -665,7 +666,23 @@ public class WhereCompiler {
         }
 
         @Override public Expression visitLeave(InListExpression node, List<Expression> l) {
-            return transformInList(node, false, l);
+            Expression inList = transformInList(node, false, l);
+            Expression firstElement = inList.getChildren().get(0);
+            // Check if inList includes RVC expressions. If so, rewrite them
+            if (firstElement instanceof ComparisonExpression &&
+                    firstElement.getChildren().get(0) instanceof RowValueConstructorExpression) {
+                List<Expression> list = new ArrayList<>(node.getKeyExpressions().size() * 2);
+                for (Expression e : inList.getChildren()) {
+                    list.add(visitLeave((ComparisonExpression) e, e.getChildren()));
+                }
+                if (inList instanceof OrExpression) {
+                    return visitLeave(new OrExpression(list), list);
+                } else {
+                    return visitLeave(new AndExpression(list), list);
+                }
+            } else {
+                return inList;
+            }
         }
 
         @Override public Expression visitLeave(IsNullExpression node, List<Expression> l) {
