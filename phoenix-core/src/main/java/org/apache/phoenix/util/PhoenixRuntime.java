@@ -1431,7 +1431,7 @@ public class PhoenixRuntime {
     }
 
     public static Map<String, List<ConnectionQueryServicesMetric>> getAllConnectionQueryServicesCounters() {
-        return ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
+        return ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
     }
 
     /**

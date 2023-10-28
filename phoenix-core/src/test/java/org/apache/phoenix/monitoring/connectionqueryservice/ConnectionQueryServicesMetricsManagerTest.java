@@ -39,12 +39,14 @@ import static org.junit.Assert.assertTrue;
 
 public class ConnectionQueryServicesMetricsManagerTest {
     public boolean verifyMetricsReset(){
-        Map<String, List<ConnectionQueryServicesMetric>> map = ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
+        Map<String, List<ConnectionQueryServicesMetric>> map =
+                ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
         return map != null && map.isEmpty();
     }
 
     public boolean verifyConnectionQueryServiceNamesExists(String connectionQueryServiceName){
-        Map<String,List<ConnectionQueryServicesMetric>>map = ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
+        Map<String,List<ConnectionQueryServicesMetric>>map =
+                ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
         return map != null && map.containsKey(connectionQueryServiceName);
     }
 

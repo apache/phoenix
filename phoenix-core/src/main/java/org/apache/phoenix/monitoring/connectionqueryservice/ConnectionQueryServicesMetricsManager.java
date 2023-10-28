@@ -80,14 +80,25 @@ public class ConnectionQueryServicesMetricsManager {
             synchronized (ConnectionQueryServicesMetricsManager.class) {
                 if (connectionQueryServicesMetricsManager == null) {
                     QueryServicesOptions options = QueryServicesOptions.withDefaults();
-                    connectionQueryServicesMetricsManager =
-                            new ConnectionQueryServicesMetricsManager(options);
-                    LOGGER.info("Created object for Connection query service metrics manager");
+                    if (options.isConnectionQueryServiceMetricsEnabled()) {
+                        connectionQueryServicesMetricsManager = new ConnectionQueryServicesMetricsManager(options);
+                        LOGGER.info("Created object for Connection query service metrics manager");
+                    } else {
+                        connectionQueryServicesMetricsManager =
+                                NoOpConnectionQueryServicesMetricsManager.noOpsTableMetricManager;
+                        LOGGER.info("Created object for NoOp Connection query service metrics" +
+                                " manager");
+                        return connectionQueryServicesMetricsManager;
+                    }
                     registerMetricsPublisher();
                 }
             }
         }
         return connectionQueryServicesMetricsManager;
+    }
+
+    ConnectionQueryServicesMetricsManager() {
+
     }
 
     public static void registerMetricsPublisher() {
@@ -117,29 +128,30 @@ public class ConnectionQueryServicesMetricsManager {
      * @param connectionQueryServiceName Connection Query Service Name
      * @return returns instance of ConnectionQueryServicesMetrics for connectionQueryServiceName
      */
-    private ConnectionQueryServicesMetrics getConnectionQueryServiceMetricsInstance(
+    ConnectionQueryServicesMetrics getConnectionQueryServiceMetricsInstance(
             String connectionQueryServiceName) {
         if (Strings.isNullOrEmpty(connectionQueryServiceName)) {
             LOGGER.warn("Connection query service Name can't be null or empty");
             return null;
         }
 
-        ConnectionQueryServicesMetrics tInstance =
+        ConnectionQueryServicesMetrics cqsInstance =
                 connectionQueryServiceMetricsMapping.get(connectionQueryServiceName);
-        if (tInstance == null) {
+        if (cqsInstance == null) {
             synchronized (ConnectionQueryServicesMetricsManager.class) {
-                tInstance = connectionQueryServiceMetricsMapping.get(connectionQueryServiceName);
-                if (tInstance == null) {
+                cqsInstance = connectionQueryServiceMetricsMapping.get(connectionQueryServiceName);
+                if (cqsInstance == null) {
 
                     LOGGER.info("Creating connection query service metrics object for : "
                             + connectionQueryServiceName);
-                    tInstance = new ConnectionQueryServicesMetrics(connectionQueryServiceName,
+                    cqsInstance = new ConnectionQueryServicesMetrics(connectionQueryServiceName,
                             options.getConfiguration());
-                    connectionQueryServiceMetricsMapping.put(connectionQueryServiceName, tInstance);
+                    connectionQueryServiceMetricsMapping
+                            .put(connectionQueryServiceName, cqsInstance);
                 }
             }
         }
-        return tInstance;
+        return cqsInstance;
     }
 
     /**
@@ -158,17 +170,17 @@ public class ConnectionQueryServicesMetricsManager {
      * @param type
      * @param value
      */
-    private void updateMetricsAsCounter(String connectionQueryServiceName, MetricType type,
+    void updateMetricsValue(String connectionQueryServiceName, MetricType type,
             long value) {
 
         long startTime = EnvironmentEdgeManager.currentTime();
 
-        ConnectionQueryServicesMetrics tInstance =
+        ConnectionQueryServicesMetrics cqsInstance =
                 getConnectionQueryServiceMetricsInstance(connectionQueryServiceName);
-        if (tInstance == null) {
+        if (cqsInstance == null) {
             return;
         }
-        tInstance.setMetricValue(type, value);
+        cqsInstance.setMetricValue(type, value);
 
         if (LOGGER.isTraceEnabled()) {
             LOGGER.trace("Connection query service metrics completed updating metric "
@@ -187,17 +199,22 @@ public class ConnectionQueryServicesMetricsManager {
             long value) {
         try {
             ConnectionQueryServicesMetricsManager.getInstance()
-                    .updateMetricsAsCounter(connectionQueryServiceName, type, value);
+                    .updateMetricsValue(connectionQueryServiceName, type, value);
         } catch (Exception e) {
             LOGGER.error("Failed updating connection query service metrics", e);
         }
+    }
+
+    public static Map<String, List<ConnectionQueryServicesMetric>> getAllConnectionQueryServicesMetrics() {
+        return ConnectionQueryServicesMetricsManager.getInstance()
+                .getConnectionQueryServicesMetrics();
     }
 
     /**
      * This function will return all the counters for Phoenix connection query service.
      * @return Map of all ConnectionQueryService Metrics.
      */
-    public static Map<String, List<ConnectionQueryServicesMetric>> getConnectionQueryServicesMetrics() {
+    Map<String, List<ConnectionQueryServicesMetric>> getConnectionQueryServicesMetrics() {
         try {
             long startTime = EnvironmentEdgeManager.currentTime();
             Map<String, List<ConnectionQueryServicesMetric>> map = new HashMap<>();
@@ -215,11 +232,16 @@ public class ConnectionQueryServicesMetricsManager {
         return null;
     }
 
+    public static Map<String, List<HistogramDistribution>> getHistogramsForAllConnectionQueryServices() {
+        return ConnectionQueryServicesMetricsManager.getInstance()
+                .getHistogramsForConnectionQueryServices();
+    }
+
     /**
      * This function will return histogram for all the Phoenix connection query service metrics.
      * @return Map of all ConnectionServiceMetrics Histogram
      */
-    public static Map<String, List<HistogramDistribution>> getHistogramsForAllConnectionQueryServices() {
+    Map<String, List<HistogramDistribution>> getHistogramsForConnectionQueryServices() {
         Map<String, List<HistogramDistribution>> map = new HashMap<>();
         for (Map.Entry<String, ConnectionQueryServicesMetrics> entry
                 : connectionQueryServiceMetricsMapping.entrySet()) {
@@ -297,7 +319,7 @@ public class ConnectionQueryServicesMetricsManager {
     /**
      * Helps reset the localstore(connectionQueryServiceMetricsMapping)
      */
-    private void clearConnectionQueryServiceMetrics() {
+    void clearConnectionQueryServiceMetrics() {
         if (connectionQueryServiceMetricsMapping != null) {
             connectionQueryServiceMetricsMapping.clear();
         }

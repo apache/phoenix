@@ -63,7 +63,8 @@ import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConnectionQueryServicesMetricsIT extends BaseTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionQueryServicesMetricsIT.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(ConnectionQueryServicesMetricsIT.class);
     private AtomicInteger counter = new AtomicInteger();
     private static HBaseTestingUtility hbaseTestUtil;
     private String tableName;
@@ -85,8 +86,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
             @Override public Configuration getConfiguration() {
                 Configuration conf = HBaseConfiguration.create();
                 conf.set(CONNECTION_QUERY_SERVICE_METRICS_ENABLED, String.valueOf(true));
-                // Without this config, unlimited connections are allowed from client and connection counter won't be
-                // increased at all. So we need to set max allowed connection count.
+                // Without this config, unlimited connections are allowed from client and connection
+                // counter won't be increased at all. So we need to set max allowed connection count
                 conf.set(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, "2");
                 conf.set(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, "1");
                 return conf;
@@ -95,8 +96,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
             @Override public Configuration getConfiguration(Configuration confToClone) {
                 Configuration conf = HBaseConfiguration.create();
                 conf.set(CONNECTION_QUERY_SERVICE_METRICS_ENABLED, String.valueOf(true));
-                // Without this config, unlimited connections are allowed from client and connection counter won't be
-                // increased at all. So we need to set max allowed connection count.
+                // Without this config, unlimited connections are allowed from client and connection
+                // counter won't be increased at all. So we need to set max allowed connection count
                 conf.set(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, "2");
                 conf.set(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, "1");
                 Configuration copy = new Configuration(conf);
@@ -107,7 +108,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
-        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+                QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         hbaseTestUtil.startMiniCluster();
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
@@ -160,7 +162,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
                 checkConnectionQueryServiceMetricsValues(CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE);
             } catch (Exception e) {
                 e.printStackTrace();
-                if(!e.getMessage().equals("This should not be thrown for " + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE)) {
+                if(!e.getMessage().equals("This should not be thrown for "
+                        + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE)) {
                     // Increment counter for successful check. For this Connection Query Service,
                     // code will throw error since it will try to create more than 2 connections.
                     // So we would count exception as success here and increment the counter.
@@ -204,7 +207,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         assertEquals("Number of passing CSQI Metrics check should be : ",4, counter.get());
     }
 
-    private void checkConnectionQueryServiceMetricsValues(String queryServiceName) throws Exception {
+    private void checkConnectionQueryServiceMetricsValues(
+            String queryServiceName) throws Exception {
         String CREATE_TABLE_DDL = "CREATE TABLE IF NOT EXISTS %s (K VARCHAR(10) NOT NULL"
                 + " PRIMARY KEY, V VARCHAR)";
         String princURL = connUrlWithPrincipal(queryServiceName);
@@ -213,10 +217,11 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         String connQueryServiceName;
         try (Connection conn = DriverManager.getConnection(princURL);
              Statement stmt = conn.createStatement()) {
-            connQueryServiceName = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration()
-                    .get(QUERY_SERVICES_NAME);
-            // When queryServiceName is passed as null, Phoenix will change query service name to DEFAULT_CQSN.
-            // That's why we are re-assigning the query service name here to check metric in finally block.
+            connQueryServiceName = conn.unwrap(PhoenixConnection.class).getQueryServices()
+                    .getConfiguration().get(QUERY_SERVICES_NAME);
+            // When queryServiceName is passed as null, Phoenix will change query service name
+            // to DEFAULT_CQSN. That's why we are re-assigning the query service name here to check
+            // metric in finally block.
             queryServiceName = connQueryServiceName;
             stmt.execute(String.format(CREATE_TABLE_DDL, tableName + "_" + connQueryServiceName));
             if (connQueryServiceName.equals(CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE)) {
@@ -226,7 +231,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
                             0);
                     try(Connection conn2 = DriverManager.getConnection(princURL)) {
                         // This should never execute in this test.
-                        throw new RuntimeException("This should not be thrown for " + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE);
+                        throw new RuntimeException("This should not be thrown for "
+                                + CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE);
                     }
                 }
             } else {
@@ -247,7 +253,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
                 // Connection Throttled Count : 1
                 // Open Internal Connection Count : 0
                 assertMetricValues(queryServiceName, 0, 1, 0);
-                // In histogram, we will still have max open connection count as 2 while rest of the values will be 0.
+                // In histogram, we will still have max open connection count as 2
+                // while rest of the values will be 0.
                 assertHistogramMetricsForMutations(queryServiceName, 2, 0, 0, 0);
             } else {
                 // We have closed the connection in try-resource-catch block so,
@@ -269,18 +276,19 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
      * @param ioMaxValue Max value of {@link MetricType#OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER}
      * @param ioMinValue Min value of {@link MetricType#OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER}
      */
-    private void assertHistogramMetricsForMutations(String queryServiceName, int oMaxValue, int oMinValue, int ioMaxValue,
-                                                    int ioMinValue) {
+    private void assertHistogramMetricsForMutations(
+            String queryServiceName, int oMaxValue, int oMinValue, int ioMaxValue, int ioMinValue) {
         Map<String, List<HistogramDistribution>> listOfHistoDistribution =
                 PhoenixRuntime.getAllConnectionQueryServicesHistograms();
         for(HistogramDistribution histo : listOfHistoDistribution.get(queryServiceName)) {
-            assertHistogram(histo, "PhoenixInternalOpenConn", ioMaxValue, ioMinValue, CompareOp.EQ);
+            assertHistogram(histo, "PhoenixInternalOpenConn", ioMaxValue, ioMinValue,
+                    CompareOp.EQ);
             assertHistogram(histo, "PhoenixOpenConn", oMaxValue, oMinValue, CompareOp.EQ);
         }
     }
 
-    public void assertHistogram(HistogramDistribution histo, String histoName, long maxValue, long minValue,
-                                CompareOp op) {
+    public void assertHistogram(HistogramDistribution histo, String histoName, long maxValue,
+            long minValue, CompareOp op) {
         if (histo.getHistoName().equals(histoName)) {
             switch (op) {
                 case EQ:

@@ -64,7 +64,7 @@ public class ConnectionQueryServicesNameMetricsTest {
 
     public void verfiyCountOfConnectionQueryServices(int noOfConnectionQueryServiceName) {
         Map<String, List<ConnectionQueryServicesMetric>> map =
-                ConnectionQueryServicesMetricsManager.getConnectionQueryServicesMetrics();
+                ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
         assertFalse(map == null || map.isEmpty());
         for (int i = 0; i < noOfConnectionQueryServiceName; i++) {
             assertTrue(map.containsKey(connectionQueryServiceNames[i]));
