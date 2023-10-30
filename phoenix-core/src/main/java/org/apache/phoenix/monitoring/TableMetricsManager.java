@@ -323,7 +323,6 @@ public class TableMetricsManager {
         Map<String, List<HistogramDistribution>> map = new HashMap<>();
         for (Map.Entry<String, TableClientMetrics> entry : tableClientMetricsMapping.entrySet()) {
             TableHistograms tableHistograms = entry.getValue().getTableHistograms();
-            map.put(entry.getKey(), tableHistograms.getTableSizeHistogramsDistribution());
         }
         return map;
     }
