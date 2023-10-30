@@ -204,6 +204,8 @@ public interface QueryConstants {
     String OFFSET_ROW_KEY = "_OFFSET_";
     byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
     ImmutableBytesPtr OFFSET_ROW_KEY_PTR = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);
+    String OFFSET_VALUE_SEPARATOR = "_OFFSET_";
+    byte[] OFFSET_VALUE_SEPARATOR_BYTES = Bytes.toBytes(OFFSET_VALUE_SEPARATOR);
 
     long AGG_TIMESTAMP = HConstants.LATEST_TIMESTAMP;
     /**

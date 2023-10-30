@@ -984,6 +984,9 @@ public class ScanUtil {
         byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserver.CLIENT_VERSION);
         if (clientVersionBytes != null) {
             clientVersion = Bytes.toInt(clientVersionBytes);
+        } else {
+            LOGGER.warn("Scan attribute {} not found. Scan attributes: {}",
+                    BaseScannerRegionObserver.CLIENT_VERSION, scan.getAttributesMap());
         }
         return clientVersion;
     }
@@ -1563,6 +1566,20 @@ public class ScanUtil {
             }
         }
         return null;
+    }
+
+    public static boolean isIncompatibleClient(int clientVersion) {
+        boolean incompatibleClient = false;
+        if (clientVersion != UNKNOWN_CLIENT_VERSION) {
+            int majorV = VersionUtil.decodeMajorVersion(clientVersion);
+            int minorV = VersionUtil.decodeMinorVersion(clientVersion);
+            if (majorV < 5) {
+                incompatibleClient = true;
+            } else if (majorV == 5 && minorV < 2) {
+                incompatibleClient = true;
+            }
+        }
+        return incompatibleClient;
     }
 
     // This method assumes that there is at most one instance of PageFilter in a scan

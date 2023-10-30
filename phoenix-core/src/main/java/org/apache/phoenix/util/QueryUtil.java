@@ -75,6 +75,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
@@ -82,7 +83,6 @@ import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -500,11 +500,25 @@ public final class QueryUtil {
 
     public static Integer getRemainingOffset(Tuple offsetTuple) {
         if (offsetTuple != null) {
-            ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr();
-            offsetTuple.getKey(rowKeyPtr);
-            if (QueryConstants.OFFSET_ROW_KEY_PTR.compareTo(rowKeyPtr) == 0) {
-                Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
-                return PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(), PInteger.INSTANCE, SortOrder.ASC, null, null);
+            Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY,
+                    QueryConstants.OFFSET_COLUMN);
+            if (cell != null) {
+                byte[] kvValueFromCell = new byte[cell.getValueLength()];
+                System.arraycopy(cell.getValueArray(), cell.getValueOffset(),
+                        kvValueFromCell, 0, kvValueFromCell.length);
+                if (Bytes.contains(kvValueFromCell,
+                        QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES)) {
+                    int idx = Bytes.indexOf(kvValueFromCell,
+                            QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES);
+                    byte[] value =
+                            new byte[kvValueFromCell.length -
+                                    (idx + QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES.length)];
+                    System.arraycopy(kvValueFromCell,
+                            idx + QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES.length,
+                            value, 0, value.length);
+                    return PInteger.INSTANCE.toObject(value, 0,
+                            value.length, PInteger.INSTANCE, SortOrder.ASC, null, null);
+                }
             }
         }
         return null;
