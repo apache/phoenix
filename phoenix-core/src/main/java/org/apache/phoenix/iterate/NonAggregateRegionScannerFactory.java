@@ -316,12 +316,15 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         byte[] rowKey;
                         byte[] startKey = region.getRegionInfo().getStartKey();
                         byte[] endKey = region.getRegionInfo().getEndKey();
-                        if (scan.includeStartRow()) {
-                            rowKey = startKey;
-                        } else if (scan.includeStopRow()) {
-                            rowKey = endKey;
-                        } else {
-                            rowKey = ByteUtil.getRowKeyInRange(startKey, endKey);
+                        rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                        if (rowKey == null) {
+                            if (scan.includeStartRow()) {
+                                rowKey = startKey;
+                            } else if (scan.includeStopRow()) {
+                                rowKey = endKey;
+                            } else {
+                                rowKey = HConstants.EMPTY_END_ROW;
+                            }
                         }
                         kv = new KeyValue(
                                 rowKey,
