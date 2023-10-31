@@ -462,7 +462,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 }
 
                 Object result = expectSingleRow ? (values.isEmpty() ? null : values.get(0)) : PArrayDataType.instantiatePhoenixArray(baseType, values.toArray());
-                parent.getContext().setSubqueryResult(select, result);
+                if (result != null) {
+                    parent.getContext().setSubqueryResult(select, result);
+                }
                 return null;
             } finally {
                 iterator.close();
