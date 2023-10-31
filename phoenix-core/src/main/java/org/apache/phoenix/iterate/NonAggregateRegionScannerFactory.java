@@ -311,12 +311,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     if (lastScannedTuple != null) {
                         kv = getOffsetKvWithLastScannedRowKey(value, lastScannedTuple);
                     } else {
-                        byte[] rowKey = ByteUtil.previousKey(region.getRegionInfo().getEndKey());
+                        byte[] rowKey;
+                        byte[] startKey = region.getRegionInfo().getStartKey();
+                        byte[] endKey = region.getRegionInfo().getEndKey();
+                        if (endKey.length > 0) {
+                            rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
+                                    new byte[1]), endKey.length + 1);
+                        } else if (startKey.length > 0) {
+                            rowKey = ByteUtil.nextKeyWithLength(ByteUtil.concat(startKey,
+                                            new byte[1]), startKey.length + 1);
+                        } else {
+                            rowKey = HConstants.EMPTY_END_ROW;
+                        }
+                        // rowKey should never be null here
                         if (rowKey == null) {
-                            rowKey = ByteUtil.nextKey(region.getRegionInfo().getStartKey());
-                            if (rowKey == null) {
-                                rowKey = HConstants.EMPTY_END_ROW;
-                            }
+                            rowKey = HConstants.EMPTY_END_ROW;
                         }
                         kv = new KeyValue(
                                 rowKey,

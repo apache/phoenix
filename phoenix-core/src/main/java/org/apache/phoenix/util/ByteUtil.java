@@ -469,6 +469,28 @@ public class ByteUtil {
         return previousKey;
     }
 
+    public static byte[] previousKeyWithLength(byte[] key, int length) {
+        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
+                "less than least expected length " + length);
+        byte[] previousKey = new byte[length];
+        System.arraycopy(key, 0, previousKey, 0, length);
+        if (!previousKey(previousKey, length)) {
+            return null;
+        }
+        return previousKey;
+    }
+
+    public static byte[] nextKeyWithLength(byte[] key, int length) {
+        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
+                "less than least expected length " + length);
+        byte[] nextStartRow = new byte[length];
+        System.arraycopy(key, 0, nextStartRow, 0, length);
+        if (!nextKey(nextStartRow, length)) {
+            return null;
+        }
+        return nextStartRow;
+    }
+
     public static boolean previousKey(byte[] key, int length) {
         return previousKey(key, 0, length);
     }
