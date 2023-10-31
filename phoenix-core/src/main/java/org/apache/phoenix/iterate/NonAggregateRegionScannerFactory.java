@@ -176,7 +176,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                             getPageSizeMsForRegionScanner(scan),
                             isIncompatibleClient),
                     scan.getAttribute(QueryConstants.LAST_SCAN) != null,
-                    isIncompatibleClient);
+                    isIncompatibleClient,
+                    scan);
         }
         boolean spoolingEnabled =
                 env.getConfiguration().getBoolean(
@@ -283,7 +284,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     private RegionScanner getOffsetScanner(final RegionScanner s,
                                            final OffsetResultIterator iterator,
                                            final boolean isLastScan,
-                                           final boolean incompatibleClient)
+                                           final boolean incompatibleClient,
+                                           final Scan scan)
             throws IOException {
         final Tuple firstTuple;
         final Region region = getRegion();
@@ -314,18 +316,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         byte[] rowKey;
                         byte[] startKey = region.getRegionInfo().getStartKey();
                         byte[] endKey = region.getRegionInfo().getEndKey();
-                        if (endKey.length > 0) {
-                            rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
-                                    new byte[1]), endKey.length + 1);
-                        } else if (startKey.length > 0) {
-                            rowKey = ByteUtil.nextKeyWithLength(ByteUtil.concat(startKey,
-                                            new byte[1]), startKey.length + 1);
+                        if (scan.includeStartRow()) {
+                            rowKey = startKey;
+                        } else if (scan.includeStopRow()) {
+                            rowKey = endKey;
                         } else {
-                            rowKey = HConstants.EMPTY_END_ROW;
-                        }
-                        // rowKey should never be null here
-                        if (rowKey == null) {
-                            rowKey = HConstants.EMPTY_END_ROW;
+                            rowKey = ByteUtil.getRowKeyInRange(startKey, endKey);
                         }
                         kv = new KeyValue(
                                 rowKey,

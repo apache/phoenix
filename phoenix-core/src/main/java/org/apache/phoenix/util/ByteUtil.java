@@ -469,6 +469,59 @@ public class ByteUtil {
         return previousKey;
     }
 
+    public static byte[] getRowKeyInRange(byte[] startKey, byte[] endKey) {
+        byte[] rowKey;
+        if (startKey.length > 0 && endKey.length > 0) {
+            int i = 0;
+            while (i < startKey.length && i < endKey.length) {
+                if (startKey[i] == endKey[i]) {
+                    i++;
+                } else {
+                    break;
+                }
+            }
+            if (i == 0) {
+                rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
+                        new byte[startKey.length + 1]), endKey.length + 1);
+            } else {
+                byte[] newStartKey;
+                byte[] newEndKey;
+                if (i < startKey.length) {
+                    newStartKey = new byte[startKey.length - i];
+                    System.arraycopy(startKey, i, newStartKey, 0, newStartKey.length);
+                } else {
+                    newStartKey = startKey;
+                }
+                if (i < endKey.length) {
+                    newEndKey = new byte[endKey.length - i];
+                    System.arraycopy(endKey, i, newEndKey, 0, newEndKey.length);
+                } else {
+                    newEndKey = endKey;
+                }
+                byte[] commonBytes = new byte[i];
+                System.arraycopy(startKey, 0, commonBytes, 0, i);
+                byte[] tmpRowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(newEndKey,
+                        new byte[1]), newEndKey.length + 1);
+                if (tmpRowKey == null) {
+                    tmpRowKey = new byte[newEndKey.length - 1];
+                    System.arraycopy(newEndKey, 0, tmpRowKey, 0, tmpRowKey.length);
+                    rowKey = ByteUtil.concat(commonBytes, tmpRowKey);
+                } else {
+                    rowKey = ByteUtil.concat(commonBytes, tmpRowKey);
+                }
+            }
+        } else if (endKey.length > 0) {
+            rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
+                    new byte[1]), endKey.length + 1);
+        } else if (startKey.length > 0) {
+            rowKey = ByteUtil.nextKeyWithLength(ByteUtil.concat(startKey,
+                    new byte[1]), startKey.length + 1);
+        } else {
+            rowKey = HConstants.EMPTY_END_ROW;
+        }
+        return rowKey;
+    }
+
     public static byte[] previousKeyWithLength(byte[] key, int length) {
         Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
                 "less than least expected length " + length);
