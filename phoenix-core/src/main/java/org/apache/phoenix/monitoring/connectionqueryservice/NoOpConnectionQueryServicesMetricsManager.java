@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,14 +17,13 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
-import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
-import org.apache.phoenix.monitoring.HistogramDistribution;
-import org.apache.phoenix.monitoring.MetricType;
-import org.apache.phoenix.monitoring.PhoenixTableMetric;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
+import org.apache.phoenix.monitoring.HistogramDistribution;
+import org.apache.phoenix.monitoring.MetricType;
 
 /**
  * ConnectionQueryServicesMetricsManager will be replaced by this class when
@@ -33,7 +32,7 @@ import java.util.Map;
  */
 public class NoOpConnectionQueryServicesMetricsManager extends ConnectionQueryServicesMetricsManager {
 
-    public static final NoOpConnectionQueryServicesMetricsManager noOpsTableMetricManager =
+    public static final NoOpConnectionQueryServicesMetricsManager NO_OP_CONN_QUERY_SERVICES_METRICS_MANAGER =
             new NoOpConnectionQueryServicesMetricsManager();
 
     private NoOpConnectionQueryServicesMetricsManager() {

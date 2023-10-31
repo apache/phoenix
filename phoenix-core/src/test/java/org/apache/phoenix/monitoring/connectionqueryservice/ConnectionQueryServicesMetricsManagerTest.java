@@ -55,7 +55,8 @@ public class ConnectionQueryServicesMetricsManagerTest {
 
         QueryServicesOptions options = QueryServicesOptions.withDefaults();
         options.setConnectionQueryServiceMetricsEnabled();
-        ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager = new ConnectionQueryServicesMetricsManager(options);
+        ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager =
+                new ConnectionQueryServicesMetricsManager(options);
         ConnectionQueryServicesMetricsManager.setInstance(connectionQueryServicesMetricsManager);
 
         ConnectionQueryServicesNameMetricsTest
@@ -81,9 +82,11 @@ public class ConnectionQueryServicesMetricsManagerTest {
         conf.set(QueryServices.CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES, "3, 6, 9");
 
         QueryServicesOptions mockOptions = Mockito.mock(QueryServicesOptions.class);
-        Mockito.doReturn(true).when(mockOptions).isConnectionQueryServiceMetricsEnabled();
+        Mockito.doReturn(true).when(mockOptions)
+                .isConnectionQueryServiceMetricsEnabled();
         Mockito.doReturn(conf).when(mockOptions).getConfiguration();
-        ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager = new ConnectionQueryServicesMetricsManager(mockOptions);
+        ConnectionQueryServicesMetricsManager connectionQueryServicesMetricsManager =
+                new ConnectionQueryServicesMetricsManager(mockOptions);
         ConnectionQueryServicesMetricsManager.setInstance(connectionQueryServicesMetricsManager);
         for (int i=0; i<9; i++) {
             updateMetricsAndHistogram(i+1, connectionQueryServiceName);

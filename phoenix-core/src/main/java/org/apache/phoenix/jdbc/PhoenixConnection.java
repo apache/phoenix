@@ -800,7 +800,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         } finally {
             isClosing = false;
             isClosed = true;
-            if(isInternalConnection()){
+            if (isInternalConnection()){
                 GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
                 long currentInternalConnectionCount =
                         this.getQueryServices().getConnectionCount(isInternalConnection());

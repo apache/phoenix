@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -31,11 +31,19 @@ import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetricImpl;
 import org.apache.phoenix.monitoring.MetricType;
 
+/**
+ * Class for Connection Query Service Metrics.
+ */
 public class ConnectionQueryServicesMetrics {
+    /**
+     * List Metrics tracked in Connection Query Service Metrics
+     */
     public enum QueryServiceMetrics {
         CONNECTION_QUERY_SERVICE_OPEN_PHOENIX_CONNECTIONS_COUNTER(OPEN_PHOENIX_CONNECTIONS_COUNTER),
-        CONNECTION_QUERY_SERVICE_OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER(OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER),
-        CONNECTION_QUERY_SERVICE_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(PHOENIX_CONNECTIONS_THROTTLED_COUNTER);
+        CONNECTION_QUERY_SERVICE_OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER(
+                OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER),
+        CONNECTION_QUERY_SERVICE_PHOENIX_CONNECTIONS_THROTTLED_COUNTER(
+                PHOENIX_CONNECTIONS_THROTTLED_COUNTER);
 
         private MetricType metricType;
         private ConnectionQueryServicesMetric metric;

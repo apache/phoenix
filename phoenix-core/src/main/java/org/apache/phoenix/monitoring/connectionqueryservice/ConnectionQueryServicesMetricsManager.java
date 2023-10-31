@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.monitoring.HistogramDistribution;
@@ -55,6 +56,8 @@ public class ConnectionQueryServicesMetricsManager {
     private static volatile MetricPublisherSupplierFactory mPublisher = null;
     private static volatile QueryServicesOptions options;
 
+    @SuppressWarnings(value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD", justification = "This " +
+            "Object is only created once for the JVM")
     public ConnectionQueryServicesMetricsManager(QueryServicesOptions opts) {
         options = opts;
         connectionQueryServiceMetricsMapping = new ConcurrentHashMap<>();
@@ -66,6 +69,7 @@ public class ConnectionQueryServicesMetricsManager {
                 + isConnectionQueryServiceMetricPublisherEnabled);
     }
 
+    @SuppressWarnings(value = "EI_EXPOSE_STATIC_REP2", justification = "Only used for testing")
     public static void setInstance(ConnectionQueryServicesMetricsManager metricsManager) {
         connectionQueryServicesMetricsManager = metricsManager;
     }
@@ -75,19 +79,21 @@ public class ConnectionQueryServicesMetricsManager {
      * thread safe manner)
      * @return returns instance of ConnectionQueryServicesMetricsManager
      */
+    @SuppressWarnings(value = "MS_EXPOSE_REP", justification = "Only used internally, not exposed" +
+            " to external client")
     public static ConnectionQueryServicesMetricsManager getInstance() {
         if (connectionQueryServicesMetricsManager == null) {
             synchronized (ConnectionQueryServicesMetricsManager.class) {
                 if (connectionQueryServicesMetricsManager == null) {
                     QueryServicesOptions options = QueryServicesOptions.withDefaults();
                     if (options.isConnectionQueryServiceMetricsEnabled()) {
-                        connectionQueryServicesMetricsManager = new ConnectionQueryServicesMetricsManager(options);
+                        connectionQueryServicesMetricsManager =
+                                new ConnectionQueryServicesMetricsManager(options);
                         LOGGER.info("Created object for Connection query service metrics manager");
                     } else {
                         connectionQueryServicesMetricsManager =
-                                NoOpConnectionQueryServicesMetricsManager.noOpsTableMetricManager;
-                        LOGGER.info("Created object for NoOp Connection query service metrics" +
-                                " manager");
+                                NoOpConnectionQueryServicesMetricsManager.NO_OP_CONN_QUERY_SERVICES_METRICS_MANAGER;
+                        LOGGER.info("Created object for NoOp Connection query service metrics manager");
                         return connectionQueryServicesMetricsManager;
                     }
                     registerMetricsPublisher();

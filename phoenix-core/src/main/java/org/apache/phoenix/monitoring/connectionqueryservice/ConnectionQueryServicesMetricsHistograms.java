@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import edu.umd.cs.findbugs.annotations.SuppressWarnings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.monitoring.HistogramDistribution;
 
@@ -49,10 +50,14 @@ public class ConnectionQueryServicesMetricsHistograms {
         return this.connectionQueryServicesName;
     }
 
+    @SuppressWarnings(value = "EI_EXPOSE_REP",
+            justification = "It's only used in internally for metrics storage")
     public ConnectionQueryServicesHistogram getConnectionQueryServicesInternalOpenConnHisto() {
         return connectionQueryServiceOpenInternalSizeHistogram;
     }
 
+    @SuppressWarnings(value = "EI_EXPOSE_REP",
+            justification = "It's only used in internally for metrics storage")
     public ConnectionQueryServicesHistogram getConnectionQueryServicesOpenConnHisto() {
         return connectionQueryServicesOpenConnSizeHistogram;
     }
