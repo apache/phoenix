@@ -3647,7 +3647,8 @@ public class MetaDataClient {
                     statement.ifExists(), false, false);
         } catch (SQLException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
-                    .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause()).build().buildException();
+                    .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause())
+                    .build().buildException();
         }
     }
 
