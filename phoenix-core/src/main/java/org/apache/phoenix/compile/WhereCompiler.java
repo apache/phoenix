@@ -671,7 +671,7 @@ public class WhereCompiler {
             // Check if inList includes RVC expressions. If so, rewrite them
             if (firstElement instanceof ComparisonExpression &&
                     firstElement.getChildren().get(0) instanceof RowValueConstructorExpression) {
-                List<Expression> list = new ArrayList<>(node.getKeyExpressions().size() * 2);
+                List<Expression> list = new ArrayList<>(node.getKeyExpressions().size());
                 for (Expression e : inList.getChildren()) {
                     list.add(visitLeave((ComparisonExpression) e, e.getChildren()));
                 }
@@ -792,7 +792,7 @@ public class WhereCompiler {
     }
 
     /**
-     * Determines if  nodeA is contained by nodeB.
+     * Determines if nodeA is contained by nodeB.
      *
      * nodeB contains nodeA if every conjunct of nodeB contains at least one conjunct of nodeA.
      *
@@ -824,14 +824,14 @@ public class WhereCompiler {
                         return false;
                     }
                 } else {
-                    for (Expression childA : nodeA.getChildren()) {
-                        if (!nodeB.contains(childA)) {
-                            return false;
-                        }
+                    // node A is a simple term
+                    if (!childB.contains(nodeA)) {
+                        return false;
                     }
                 }
             }
         } else {
+            // node B is a simple term
             if (nodeA instanceof AndExpression) {
                 boolean contains = false;
                 for (Expression childA : nodeA.getChildren()) {
@@ -844,6 +844,7 @@ public class WhereCompiler {
                     return false;
                 }
             } else {
+                // Both nodeA and nodeB are simple terms
                 if (!nodeB.contains(nodeA)) {
                     return false;
                 }
