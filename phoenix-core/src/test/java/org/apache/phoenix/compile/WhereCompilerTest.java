@@ -1049,7 +1049,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 "C date, D double, E integer)";
         pconn.createStatement().execute(ddl);
 
-        final int NUM = 14;
+        final int NUM = 15;
         String[] containingQueries = new String[NUM];
         String[] containedQueries = new String[NUM];
 
@@ -1100,6 +1100,11 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         containingQueries[13] = "select * from myTable where ID > 'i3' and ID < 'i5'";
         containedQueries[13] = "select * from myTable where (ID = 'i4') ";
+
+        containingQueries[14] = "select * from myTable where " +
+                "CURRENT_DATE() - PHOENIX_ROW_TIMESTAMP() < 10";
+        containedQueries[14] = "select * from myTable where " +
+                " CURRENT_DATE() - PHOENIX_ROW_TIMESTAMP() < 5 ";
 
         for (int i = 0; i < NUM; i++) {
             Assert.assertTrue(WhereCompiler.contains(getDNF(pconn, containingQueries[i]),

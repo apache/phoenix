@@ -869,11 +869,44 @@ public class WhereCompiler {
         return false;
     }
 
+    private static boolean containsDisjunct(Expression nodeA, Expression nodeB)
+            throws SQLException {
+        // nodeB is a disjunct, that is, either an AND expression or a simple term
+        if (nodeA instanceof OrExpression) {
+            // node A is an OR expression. The following check if nodeB is contained by
+            // any of the disjuncts of nodeA
+            if (!contained(nodeB, nodeA.getChildren())) {
+                return false;
+            }
+        } else {
+            // Both nodeA and nodeB are either an AND expression or a simple term (e.g., C < 5)
+            if (!contained(nodeB, nodeA)) {
+                return false;
+            }
+        }
+        return true;
+    }
     /**
      * Determines if nodeA contains/implies nodeB. Both nodeA and B are DNF (Disjunctive Normal
-     * Form) expressions. nodeA contains nodeB if every query disjunct of nodeB is contained
+     * Form) expressions. nodeA contains nodeB if every disjunct of nodeB is contained
      * by a nodeA disjunct. A disjunct x contains another disjunct y if every conjunct of x
      * contains at least one conjunct of y.
+     *
+     * Example:
+     * nodeA: (A > 0 AND B > 0) OR C < 5
+     * nodeB: (A = 5 AND B > 1) OR (A = 3 AND C = 1)
+     *
+     * Disjuncts of nodeA: (A > 0 AND B > 0) and C < 5
+     * Disjuncts of nodeB: (A = 5 AND B > 1) and (A = 3 AND C = 1)
+     *
+     * Conjuncts of (A > 0 AND B > 0): A > 0 and B > 0
+     * Conjuncts of C < 5 : C < 5
+     *
+     * nodeA contains node B because every disjunct of nodeB is contained
+     * by a nodeA disjunct. The first disjunct (A = 5 AND B > 1) is contained by the disjunct
+     * (A > 0 AND B > 0). The second disjunct (A = 3 AND C = 1) is contained by C < 5. Please node
+     * a disjunct x contains another disjunct y if every conjunct of x contains at least one
+     * conjunct of y as in the example above.
      *
      * @param nodeA is an expression in DNF
      * @param nodeB is an expression in DNF
@@ -887,25 +920,17 @@ public class WhereCompiler {
             return false;
         }
         if (nodeB instanceof OrExpression) {
+            // Check if every disjunct of nodeB is contained by a nodeA disjunct
             for (Expression childB : nodeB.getChildren()) {
-                if (nodeA instanceof OrExpression) {
-                    if (!contained(childB, nodeA.getChildren())) {
-                        return false;
-                    }
-                } else if (!contained(childB, nodeA)) {
+                if (!containsDisjunct(nodeA, childB)) {
                     return false;
                 }
             }
+            return true;
         } else {
-            if (nodeA instanceof OrExpression) {
-                if (!contained(nodeB, nodeA.getChildren())) {
-                    return false;
-                }
-            } else if (!contained(nodeB, nodeA)) {
-                return false;
-            }
+            // nodeB is either an AND expression or a simple term
+            return containsDisjunct(nodeA, nodeB);
         }
-        return true;
     }
 
     private static class SubqueryParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
