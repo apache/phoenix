@@ -247,4 +247,26 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testDropCDCIndex () throws SQLException {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+        conn.createStatement().execute(cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
+        String drop_cdc_index_sql = "DROP INDEX \"" + CDCUtil.getCDCIndexName(cdcName) + "\" ON " + tableName;
+        try {
+            conn.createStatement().execute(drop_cdc_index_sql);
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.CANNOT_DROP_CDC_INDEX.getErrorCode(), e.getErrorCode());
+            assertTrue(e.getMessage().endsWith(CDCUtil.getCDCIndexName(cdcName)));
+        }
+    }
+
 }

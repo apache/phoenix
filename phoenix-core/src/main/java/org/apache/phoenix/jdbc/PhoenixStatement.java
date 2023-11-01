@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_CDC_INDEX;
+import static org.apache.phoenix.exception.SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
@@ -225,6 +227,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1591,6 +1594,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                 @Override
                 public MutationState execute() throws SQLException {
+                    if (CDCUtil.isACDCIndex(ExecutableDropIndexStatement.this.getIndexName().getName())) {
+                        throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX).setTableName(
+                                ExecutableDropIndexStatement.this.getIndexName().getName()).build().buildException();
+                    }
                     MetaDataClient client = new MetaDataClient(getContext().getConnection());
                     return client.dropIndex(ExecutableDropIndexStatement.this);
                 }
