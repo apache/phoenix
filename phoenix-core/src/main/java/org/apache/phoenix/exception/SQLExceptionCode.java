@@ -199,6 +199,8 @@ public enum SQLExceptionCode {
 
     COMPARISON_UNSUPPORTED(539, "42915", "Comparison not supported for the datatype."),
     INVALID_JSON_DATA(540, "42916", "Invalid json data."),
+    JSON_FRAGMENT_NOT_ALLOWED_IN_INDEX_EXPRESSION(541, "42917",
+            "Functions returning JSON fragments are not allowed in Index Expression."),
 
     /**
      * HBase and Phoenix specific implementation defined sub-classes.
