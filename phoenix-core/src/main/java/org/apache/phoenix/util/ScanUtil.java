@@ -1635,20 +1635,20 @@ public class ScanUtil {
         if (isDummy(tuple)) {
             return;
         }
-        if (isLocalIndex(scan)) {
-            verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_START_ROW_SUFFIX),
-                    scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
-        } else {
-            try {
-                verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
-            } catch (ResultSetOutOfScanRangeException e) {
-                if (scan.getAttribute(SCAN_ACTUAL_START_ROW) == null) {
-                    throw e;
-                }
-                // required for Salt Buckets scan boundary changes
-                verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_ACTUAL_START_ROW),
-                        scan.getStopRow());
+        try {
+            verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+        } catch (ResultSetOutOfScanRangeException e) {
+            if (isLocalIndex(scan)) {
+                verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_START_ROW_SUFFIX),
+                        scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
+                return;
             }
+            if (scan.getAttribute(SCAN_ACTUAL_START_ROW) == null) {
+                throw e;
+            }
+            // required for Salt Buckets scan boundary changes
+            verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_ACTUAL_START_ROW),
+                    scan.getStopRow());
         }
     }
 
