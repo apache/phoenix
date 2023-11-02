@@ -1095,5 +1095,29 @@ public class SubqueryIT extends BaseJoinIT {
         }
     }
 
+    @Test
+    public void testSubqueryReturnSingleAndCompare() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String table1 = getTableName(conn, JOIN_CUSTOMER_TABLE_FULL_NAME);
+            String table2 = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+            String query = "SELECT * FROM " +
+                    table1 + " WHERE \"customer_id\" = (" +
+                    "SELECT \"customer_id\" FROM " + table2 +
+                    " WHERE PRICE = ? LIMIT 1)";
+            PreparedStatement ps1 = conn.prepareStatement(query);
+
+            // PRICE = -1, not exist this data, subquery will not return any data
+            ps1.setInt(1, -1);
+            ResultSet rs1 = ps1.executeQuery();
+            assertFalse(rs1.next());
+
+            PreparedStatement ps2 = conn.prepareStatement(query);
+            ps2.setInt(1, 100);
+            ResultSet rs2 = ps2.executeQuery();
+            assertTrue(rs2.next());
+            assertEquals("0000000004", rs2.getString("customer_id"));
+            assertEquals("C4", rs2.getString("NAME"));
+        }
+    }
 }
 
