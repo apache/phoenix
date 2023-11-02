@@ -206,6 +206,8 @@ public interface QueryConstants {
     ImmutableBytesPtr OFFSET_ROW_KEY_PTR = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);
     String OFFSET_VALUE_SEPARATOR = "_OFFSET_";
     byte[] OFFSET_VALUE_SEPARATOR_BYTES = Bytes.toBytes(OFFSET_VALUE_SEPARATOR);
+    String GROUPED_AGGREGATOR_VALUE = "_GA_";
+    byte[] GROUPED_AGGREGATOR_VALUE_BYTES = Bytes.toBytes(GROUPED_AGGREGATOR_VALUE);
 
     long AGG_TIMESTAMP = HConstants.LATEST_TIMESTAMP;
     /**

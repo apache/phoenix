@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
+import static org.apache.phoenix.query.QueryConstants.GROUPED_AGGREGATOR_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 
@@ -33,7 +35,10 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 
 
 /**
@@ -87,7 +92,42 @@ public class TupleUtil {
         }
         throw new IllegalStateException("Expected single, aggregated KeyValue from coprocessor, but instead received " + r + ". Ensure aggregating coprocessors are loaded correctly on server");
     }
-    
+
+    public static Tuple getAggregateGroupTuple(Tuple tuple) {
+        if (tuple == null) {
+            return null;
+        }
+        if (tuple.size() == 1) {
+            Cell kv = tuple.getValue(0);
+            if (Bytes.compareTo(GROUPED_AGGREGATOR_VALUE_BYTES, 0,
+                    GROUPED_AGGREGATOR_VALUE_BYTES.length,
+                    kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength()) == 0) {
+                if (Bytes.compareTo(GROUPED_AGGREGATOR_VALUE_BYTES, 0,
+                        GROUPED_AGGREGATOR_VALUE_BYTES.length, kv.getQualifierArray(),
+                        kv.getQualifierOffset(), kv.getQualifierLength()) == 0) {
+                    byte[] kvValue = new byte[kv.getValueLength()];
+                    System.arraycopy(kv.getValueArray(), kv.getValueOffset(), kvValue, 0,
+                            kvValue.length);
+                    int sizeOfAggregateGroupValue =
+                            PInteger.INSTANCE.getCodec().decodeInt(kvValue, 0,
+                                    SortOrder.ASC);
+                    Cell result = PhoenixKeyValueUtil.newKeyValue(
+                            kvValue,
+                            Bytes.SIZEOF_INT,
+                            sizeOfAggregateGroupValue,
+                            SINGLE_COLUMN_FAMILY,
+                            SINGLE_COLUMN,
+                            AGG_TIMESTAMP,
+                            kvValue,
+                            Bytes.SIZEOF_INT + sizeOfAggregateGroupValue,
+                            kvValue.length - Bytes.SIZEOF_INT - sizeOfAggregateGroupValue);
+                    return new SingleKeyValueTuple(result);
+                }
+            }
+        }
+        return tuple;
+    }
+
     /** Concatenate results evaluated against a list of expressions
      * 
      * @param result the tuple for expression evaluation

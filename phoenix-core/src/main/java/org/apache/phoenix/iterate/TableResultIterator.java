@@ -61,6 +61,7 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TupleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -253,7 +254,7 @@ public class TableResultIterator implements ResultIterator {
                     }
                 }
             }
-            return lastTuple;
+            return TupleUtil.getAggregateGroupTuple(lastTuple);
         } finally {
             renewLeaseLock.unlock();
         }

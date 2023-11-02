@@ -24,10 +24,9 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTU
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
-import static org.apache.phoenix.query.QueryConstants.OFFSET_COLUMN;
-import static org.apache.phoenix.query.QueryConstants.OFFSET_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
@@ -1625,8 +1624,15 @@ public class ScanUtil {
                                             Scan scan,
                                             Tuple tuple)
             throws ResultSetOutOfScanRangeException {
-        if ((tuple.size() == 1 && tuple.getValue(SINGLE_COLUMN_FAMILY, SINGLE_COLUMN) != null)
-                || isDummy(tuple)) {
+        if (tuple.size() == 1 && tuple.getValue(SINGLE_COLUMN_FAMILY, SINGLE_COLUMN) != null) {
+            ImmutableBytesWritable p = new ImmutableBytesWritable();
+            tuple.getKey(p);
+            if (Bytes.compareTo(p.get(), p.getOffset(), p.getLength(), UNGROUPED_AGG_ROW_KEY,
+                    0, UNGROUPED_AGG_ROW_KEY.length) == 0) {
+                return;
+            }
+        }
+        if (isDummy(tuple)) {
             return;
         }
         if (isLocalIndex(scan)) {
