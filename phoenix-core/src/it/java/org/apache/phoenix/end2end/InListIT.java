@@ -792,12 +792,13 @@ public class InListIT extends ParallelStatsDisabledIT {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
                     "TENANT_ID IN ('', 'FOO')");
+            assertTrue(rs.next());
+            int result1 = rs.getInt(1);
+            assertEquals(0, result1);
             ResultSet rs2 = stmt.executeQuery("SELECT COUNT(*) FROM SYSTEM.CATALOG WHERE " +
                     "TENANT_ID = '' OR TENANT_ID = 'FOO'");
-            assertTrue(rs.next());
             assertTrue(rs2.next());
-            assertEquals(rs.getInt(1), rs2.getInt(1));
-            assertEquals(0, rs.getInt(1));
+            assertEquals(result1, rs2.getInt(1));
         }
     }
 
