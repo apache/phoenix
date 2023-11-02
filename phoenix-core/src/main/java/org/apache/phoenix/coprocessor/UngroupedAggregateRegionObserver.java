@@ -42,6 +42,7 @@ import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
@@ -106,6 +107,7 @@ import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
 import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -752,9 +754,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             LOGGER.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
                     + region.getRegionInfo().getRegionNameAsString());
         }
-        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        final boolean isIncompatibleClient =
+                ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+        byte[] rowKey = getRowKey(region, scan, callable, isIncompatibleClient);
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes(rowCount);
         final Cell aggKeyValue =
-                PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                PhoenixKeyValueUtil.newKeyValue(rowKey, SINGLE_COLUMN_FAMILY,
                         SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             @Override
@@ -790,6 +795,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return scanner;
     }
 
+    private static byte[] getRowKey(Region region, Scan scan, StatsCollectionCallable callable,
+                                   boolean isIncompatibleClient) {
+        Cell lastScannedRowCell = callable.getLastScannedRowCell();
+        byte[] rowKey;
+        if (!isIncompatibleClient) {
+            if (lastScannedRowCell == null) {
+                byte[] startKey = region.getRegionInfo().getStartKey();
+                byte[] endKey = region.getRegionInfo().getEndKey();
+                rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                if (rowKey == null) {
+                    if (scan.includeStartRow()) {
+                        rowKey = startKey;
+                    } else if (scan.includeStopRow()) {
+                        rowKey = endKey;
+                    } else {
+                        rowKey = HConstants.EMPTY_END_ROW;
+                    }
+                }
+            } else {
+                rowKey = CellUtil.cloneRow(lastScannedRowCell);
+            }
+        } else {
+            rowKey = UNGROUPED_AGG_ROW_KEY;
+        }
+        return rowKey;
+    }
+
     /**
      * 
      * Callable to encapsulate the collection of stats triggered by 
@@ -803,6 +835,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         private final RegionScanner innerScanner;
         private final Configuration config;
         private final Scan scan;
+        private Cell lastScannedRowCell = null;
 
         StatsCollectionCallable(StatisticsCollector s, Region r, RegionScanner rs,
                                 Configuration config, Scan scan) {
@@ -816,6 +849,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         @Override
         public Long call() throws IOException {
             return collectStatsInternal();
+        }
+
+        public Cell getLastScannedRowCell() {
+            return lastScannedRowCell;
         }
 
         private boolean areStatsBeingCollectedViaCompaction() {
@@ -837,6 +874,11 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         do {
                             List<Cell> results = new ArrayList<>();
                             hasMore = innerScanner.nextRaw(results);
+                            if (results.size() > 0) {
+                                Optional<Cell> nonEmptyRowCell =
+                                        results.stream().filter(ScanUtil::isDummy).findFirst();
+                                nonEmptyRowCell.ifPresent(cell -> lastScannedRowCell = cell);
+                            }
                             statsCollector.collectStatistics(results);
                             rowCount++;
                             compactionRunning = areStatsBeingCollectedViaCompaction();
