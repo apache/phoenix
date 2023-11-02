@@ -17,14 +17,10 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.compile.WhereCompiler.transformDNF;
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,31 +30,13 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.phoenix.compile.FromCompiler;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.exception.PhoenixParserException;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.filter.SkipScanFilter;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -544,6 +522,86 @@ public class PartialIndexIT extends BaseTest {
                 PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
                 assertTrue(indexTable.getIndexWhere().equals("D LIKE '%cde_'"));
             }
+        }
+    }
+
+    @Test
+    public void testPhoenixRowTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute(
+                    "create table " + dataTableName + " (id varchar not null primary key, "
+                            + "A integer, B integer)" + (salted ?
+                            " SALT_BUCKETS=4" :
+                            ""));
+            String indexTableName = generateUniqueName();
+
+            // Add rows to the data table before creating a partial index to test that the index
+            // will be built correctly by IndexTool
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values ('id1', 70, 2)");
+            conn.commit();
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values ('id5', 0, 2)");
+            conn.commit();
+            Thread.sleep(10);
+            Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+            String timeZoneID = Calendar.getInstance().getTimeZone().getID();
+            conn.createStatement().execute(
+                    "CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ") +
+                            "INDEX " + indexTableName + " on " + dataTableName + " (A) " + (
+                            uncovered ?
+                                    "" :
+                                    "INCLUDE (B)") + " WHERE PHOENIX_ROW_TIMESTAMP() < " +
+                            "TO_DATE('" + before + "', 'yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')  ASYNC");
+            IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
+
+            String selectSql = "SELECT A from " + dataTableName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + before +
+                    "', 'yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that the index table is used
+            assertPlan((PhoenixResultSet) rs,  "", indexTableName);
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+            assertTrue(rs.next());
+            assertEquals(70, rs.getInt(1));
+            assertFalse(rs.next());
+
+            // Add more rows to test the index write path
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values ('id2', 20, 3)");
+            conn.commit();
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values ('id3', 10, 4)");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
+            // Verify that the index table is not used
+            assertPlan((PhoenixResultSet) rs, "", dataTableName);
+            assertTrue(rs.next());
+            assertEquals(4, rs.getInt(1));
+
+            rs = conn.createStatement().executeQuery("SELECT Count(*) from " + indexTableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+
+            // Overwrite an existing row that satisfies the index WHERE clause such that
+            // the new version of the row does not satisfy the index where clause anymore. This
+            // should result in deleting the index row.
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('id1',  70, 2)");
+            conn.commit();
+
+            rs = conn.createStatement().executeQuery(selectSql);
+            // Verify that the index table is used
+            assertPlan((PhoenixResultSet) rs,  "", indexTableName);
+            assertTrue(rs.next());
+            assertEquals(0, rs.getInt(1));
+            assertFalse(rs.next());
+
+            // Test index verification and repair by IndexTool
+            verifyIndex(dataTableName, indexTableName);
         }
     }
 
