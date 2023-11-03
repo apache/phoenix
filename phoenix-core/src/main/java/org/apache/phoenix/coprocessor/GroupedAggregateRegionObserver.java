@@ -45,6 +45,7 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
@@ -450,12 +451,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final long pageSizeMs;
         private RegionScanner regionScanner = null;
         private final GroupByCache groupByCache;
+        private final Scan scan;
 
         private UnorderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                               final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
                                               final ServerAggregators aggregators, final long limit, final long pageSizeMs) {
             super(scanner);
             this.region = c.getEnvironment().getRegion();
+            this.scan = scan;
             this.aggregators = aggregators;
             this.limit = limit;
             this.pageSizeMs = pageSizeMs;
@@ -504,6 +507,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     if (regionScanner != null) {
                         return regionScanner.next(resultsToReturn);
                     }
+                    ImmutableBytesPtr currentRowKey = null;
                     do {
                         List<Cell> results = useQualifierAsIndex ?
                                 new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(),
@@ -517,7 +521,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         hasMore = delegate.nextRaw(results);
                         if (!results.isEmpty()) {
                             if (isDummy(results)) {
-                                getDummyResult(resultsToReturn);
+                                resultsToReturn.addAll(results);
                                 return true;
                             }
                             result.setKeyValues(results);
@@ -525,6 +529,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                                     TupleUtil.getConcatenatedValue(result, expressions);
                             ImmutableBytesPtr originalRowKey = new ImmutableBytesPtr();
                             result.getKey(originalRowKey);
+                            currentRowKey = originalRowKey;
                             Aggregator[] rowAggregators = groupByCache.cache(key);
                             groupByCache.cacheAggregateRowKey(key, originalRowKey);
                             // Aggregate values here
@@ -535,7 +540,29 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     if (hasMore && groupByCache.size() < limit && (now - startTime) >= pageSizeMs) {
                         // Return a dummy result as we have processed a page worth of rows
                         // but we are not ready to aggregate
-                        getDummyResult(resultsToReturn);
+                        if (currentRowKey != null) {
+                            byte[] rowKey = new byte[currentRowKey.getLength()];
+                            System.arraycopy(currentRowKey.get(), currentRowKey.getOffset(),
+                                    rowKey, 0, rowKey.length);
+                            ScanUtil.getDummyResult(rowKey, resultsToReturn);
+                        } else {
+                            byte[] rowKey;
+                            byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                                    region.getRegionInfo().getStartKey();
+                            byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                                    region.getRegionInfo().getEndKey();
+                            rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                            if (rowKey == null) {
+                                if (scan.includeStartRow()) {
+                                    rowKey = startKey;
+                                } else if (scan.includeStopRow()) {
+                                    rowKey = endKey;
+                                } else {
+                                    rowKey = HConstants.EMPTY_END_ROW;
+                                }
+                            }
+                            ScanUtil.getDummyResult(rowKey, resultsToReturn);
+                        }
                         return true;
                     }
                     regionScanner = groupByCache.getScanner(delegate);
@@ -632,7 +659,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         hasMore = delegate.nextRaw(kvs);
                         if (!kvs.isEmpty()) {
                             if (isDummy(kvs)) {
-                                getDummyResult(results);
+                                results.addAll(kvs);
                                 return true;
                             }
                             result.setKeyValues(kvs);
@@ -663,7 +690,29 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             if (hasMore && !aggBoundary && !atLimit && (now - startTime) >= pageSizeMs) {
                 // Return a dummy result as we have processed a page worth of rows
                 // but we are not ready to aggregate
-                getDummyResult(results);
+                if (currentKeyRowKey.get().length > 0) {
+                    byte[] rowKey = new byte[currentKeyRowKey.getLength()];
+                    System.arraycopy(currentKeyRowKey.get(), currentKeyRowKey.getOffset(),
+                            rowKey, 0, rowKey.length);
+                    ScanUtil.getDummyResult(rowKey, results);
+                } else {
+                    byte[] rowKey;
+                    byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                            region.getRegionInfo().getStartKey();
+                    byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                            region.getRegionInfo().getEndKey();
+                    rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                    if (rowKey == null) {
+                        if (scan.includeStartRow()) {
+                            rowKey = startKey;
+                        } else if (scan.includeStopRow()) {
+                            rowKey = endKey;
+                        } else {
+                            rowKey = HConstants.EMPTY_END_ROW;
+                        }
+                    }
+                    ScanUtil.getDummyResult(rowKey, results);
+                }
                 return true;
             }
             if (currentKey != null) {

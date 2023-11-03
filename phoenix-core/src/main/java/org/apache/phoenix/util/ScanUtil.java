@@ -1333,19 +1333,9 @@ public class ScanUtil {
         result.add(keyValue);
     }
 
-    public static void getDummyResult(List<Cell> result) {
-        getDummyResult(EMPTY_BYTE_ARRAY, result);
-    }
-
     public static Tuple getDummyTuple(byte[] rowKey) {
         List<Cell> result = new ArrayList<Cell>(1);
         getDummyResult(rowKey, result);
-        return new ResultTuple(Result.create(result));
-    }
-
-    public static Tuple getDummyTuple() {
-        List<Cell> result = new ArrayList<Cell>(1);
-        getDummyResult(result);
         return new ResultTuple(Result.create(result));
     }
 
@@ -1621,9 +1611,6 @@ public class ScanUtil {
                                             Scan scan,
                                             Tuple tuple)
             throws ResultSetOutOfScanRangeException {
-        if (isDummy(tuple)) {
-            return;
-        }
         try {
             verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
         } catch (ResultSetOutOfScanRangeException e) {

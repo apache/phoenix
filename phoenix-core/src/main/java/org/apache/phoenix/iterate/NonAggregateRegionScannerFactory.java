@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
@@ -471,7 +472,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         return false;
                     }
                     if (isDummy(tuple)) {
-                        getDummyResult(results);
+                        ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
                     } else {
                         for (int i = 0; i < tuple.size(); i++) {
                             results.add(tuple.getValue(i));
