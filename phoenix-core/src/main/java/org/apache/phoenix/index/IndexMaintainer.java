@@ -42,6 +42,7 @@ import java.util.Set;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -962,9 +963,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // It is a full index and the index row should be prepared.
             return true;
         }
-        MultiKeyValueTuple tuple =
-                new MultiKeyValueTuple(
-                        IndexUtil.readColumnsFromRow(dataRowState, getIndexWhereColumns()));
+        List<Cell> cols = IndexUtil.readColumnsFromRow(dataRowState, getIndexWhereColumns());
+        // Cells should be sorted as they are searched using a binary search during expression
+        // evaluation
+        Collections.sort(cols, CellComparator.getInstance());
+        MultiKeyValueTuple tuple = new MultiKeyValueTuple(cols);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
         if (!getIndexWhere().evaluate(tuple, ptr)) {

@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -173,7 +174,9 @@ public class CreateIndexCompiler {
             // Evaluate the WHERE expression on the data table row
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            MultiKeyValueTuple tuple = new MultiKeyValueTuple(dataTableNameAndMutation.getSecond());
+            List<Cell> cols = dataTableNameAndMutation.getSecond();
+            Collections.sort( cols, CellComparator.getInstance());
+            MultiKeyValueTuple tuple = new MultiKeyValueTuple(cols);
             if (!indexWhereExpression.evaluate(tuple, ptr)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_EVALUATE_INDEX_WHERE).build().buildException();
             }

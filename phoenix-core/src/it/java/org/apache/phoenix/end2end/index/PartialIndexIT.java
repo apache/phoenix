@@ -378,11 +378,12 @@ public class PartialIndexIT extends BaseTest {
             conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
                     (local ? "LOCAL " : " ") +"INDEX "
                     + indexTableName + " on " + dataTableName + " (A) " +
-                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE B IS NOT NULL ASYNC");
+                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE B IS NOT NULL AND " +
+                    "C IS NOT NULL ASYNC");
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
 
             String selectSql = "SELECT A, D from " + dataTableName +
-                    " WHERE A > 60 AND B IS NOT NULL";
+                    " WHERE A > 60 AND B IS NOT NULL AND C IS NOT NULL";
 
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             // Verify that the index table is used
@@ -413,8 +414,7 @@ public class PartialIndexIT extends BaseTest {
             assertEquals("a", rs.getString(2));
             assertFalse(rs.next());
 
-            selectSql = "SELECT Count(*) from " + dataTableName;
-            rs = conn.createStatement().executeQuery(selectSql);
+            rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
             // Verify that the index table is not used
             assertPlan((PhoenixResultSet) rs,  "", dataTableName);
             assertTrue(rs.next());
@@ -426,8 +426,6 @@ public class PartialIndexIT extends BaseTest {
             conn.createStatement().execute("upsert into " + dataTableName +
                     " (ID, B) values ('id4', null)");
             conn.commit();
-            selectSql = "SELECT A, D from " + dataTableName +
-                    " WHERE A > 60 AND B IS NOT NULL";
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(70, rs.getInt(1));
@@ -439,7 +437,7 @@ public class PartialIndexIT extends BaseTest {
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
                 PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
-                assertTrue(indexTable.getIndexWhere().equals("B IS NOT NULL "));
+                assertTrue(indexTable.getIndexWhere().equals("(B IS NOT NULL  AND C IS NOT NULL )"));
             }
         }
     }
