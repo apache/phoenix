@@ -290,9 +290,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             throws IOException {
         final Tuple firstTuple;
         final Region region = getRegion();
-        if (incompatibleClient) {
-            region.startRegionOperation();
-        }
+        region.startRegionOperation();
         try {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
@@ -346,9 +344,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null;
         } finally {
-            if (incompatibleClient) {
-                region.closeRegionOperation();
-            }
+            region.closeRegionOperation();
         }
 
         return new BaseRegionScanner(s) {
@@ -405,9 +401,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     s.close();
                 } finally {
                     try {
-                        if (iterator != null) {
-                            iterator.close();
-                        }
+                        iterator.close();
                     } catch (SQLException e) {
                         ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), e);
                     }
