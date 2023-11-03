@@ -801,8 +801,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         byte[] rowKey;
         if (!isIncompatibleClient) {
             if (lastScannedRowCell == null) {
-                byte[] startKey = region.getRegionInfo().getStartKey();
-                byte[] endKey = region.getRegionInfo().getEndKey();
+                byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                        region.getRegionInfo().getStartKey();
+                byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                        region.getRegionInfo().getEndKey();
                 rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
                 if (rowKey == null) {
                     if (scan.includeStartRow()) {
@@ -874,11 +876,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         do {
                             List<Cell> results = new ArrayList<>();
                             hasMore = innerScanner.nextRaw(results);
-                            if (results.size() > 0) {
-                                Optional<Cell> nonEmptyRowCell =
-                                        results.stream().filter(ScanUtil::isDummy).findFirst();
-                                nonEmptyRowCell.ifPresent(cell -> lastScannedRowCell = cell);
-                            }
+                            results.stream()
+                                    .filter(cell -> !ScanUtil.isDummy(cell))
+                                    .forEach(cell -> lastScannedRowCell = cell);
                             statsCollector.collectStatistics(results);
                             rowCount++;
                             compactionRunning = areStatsBeingCollectedViaCompaction();

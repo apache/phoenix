@@ -190,7 +190,9 @@ public class TableResultIterator implements ResultIterator {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
                     try {
-                        ScanUtil.verifyKeyInScanRange(ptr, scan, lastTuple);
+                        if (!ScanUtil.isAnalyzeTable(scan)) {
+                            ScanUtil.verifyKeyInScanRange(ptr, scan, lastTuple);
+                        }
                     } catch (ResultSetOutOfScanRangeException e) {
                         LOGGER.error("Row key {} of table {} is out of scan range. Scan start "
                                         + "key: {} , end key: {} , _ScanActualStartRow: {} , "

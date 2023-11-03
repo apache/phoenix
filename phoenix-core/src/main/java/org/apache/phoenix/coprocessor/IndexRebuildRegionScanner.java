@@ -284,8 +284,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             byte[] rowCountBytes =
                     PLong.INSTANCE.toBytes((long) singleRowRebuildReturnCode);
             byte[] rowKey;
-            byte[] startKey = region.getRegionInfo().getStartKey();
-            byte[] endKey = region.getRegionInfo().getEndKey();
+            byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                    region.getRegionInfo().getStartKey();
+            byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                    region.getRegionInfo().getEndKey();
             final boolean isIncompatibleClient =
                     ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
             if (!isIncompatibleClient) {
@@ -397,8 +399,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
         final Cell aggKeyValue;
         if (lastCell == null) {
             byte[] rowKey;
-            byte[] startKey = region.getRegionInfo().getStartKey();
-            byte[] endKey = region.getRegionInfo().getEndKey();
+            byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                    region.getRegionInfo().getStartKey();
+            byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                    region.getRegionInfo().getEndKey();
             final boolean isIncompatibleClient =
                     ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
             if (!isIncompatibleClient) {

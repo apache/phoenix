@@ -475,6 +475,9 @@ public class ByteUtil {
     }
 
     public static byte[] getLargestPossibleRowKeyInRange(byte[] startKey, byte[] endKey) {
+        if (startKey.length == 0 && endKey.length == 0) {
+            return HConstants.EMPTY_END_ROW;
+        }
         byte[] rowKey;
         try {
             if (startKey.length > 0 && endKey.length > 0) {
@@ -523,26 +526,22 @@ public class ByteUtil {
             } else if (endKey.length > 0) {
                 rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
                         new byte[1]), endKey.length + 1);
-            } else if (startKey.length > 0) {
+            } else {
                 rowKey = ByteUtil.nextKeyWithLength(ByteUtil.concat(startKey,
                         new byte[1]), startKey.length + 1);
-            } else {
-                rowKey = HConstants.EMPTY_END_ROW;
             }
             if (rowKey == null) {
                 LOGGER.error("Unexpected result while retrieving rowkey in range ({} , {})",
                         Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey));
                 return null;
             }
-            if (rowKey.length > 0) {
-                if (Bytes.compareTo(startKey, rowKey) >= 0 ||
-                        Bytes.compareTo(rowKey, endKey) >= 0) {
-                    LOGGER.error("Unexpected result while comparing result rowkey in range "
-                                    + "({} , {}) , rowKey: {}",
-                            Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey),
-                            Bytes.toStringBinary(rowKey));
-                    return null;
-                }
+            if (Bytes.compareTo(startKey, rowKey) >= 0 ||
+                    Bytes.compareTo(rowKey, endKey) >= 0) {
+                LOGGER.error("Unexpected result while comparing result rowkey in range "
+                                + "({} , {}) , rowKey: {}",
+                        Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey),
+                        Bytes.toStringBinary(rowKey));
+                return null;
             }
         } catch (Exception e) {
             LOGGER.error("Error while retrieving rowkey in range ({} , {})",
