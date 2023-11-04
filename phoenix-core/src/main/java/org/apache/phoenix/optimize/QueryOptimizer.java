@@ -379,7 +379,7 @@ public class QueryOptimizer {
                     // This is required to verify index rows against data table rows
                     plan.getContext().setUncoveredIndex(true);
                     PhoenixConnection connection = statement.getConnection();
-                    PTable dataTable = connection.getTable(new PTableKey(connection.getTenantId(),
+                    PTable dataTable = connection.getTable(new PTableKey(indexTable.getTenantId(),
                             SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
                                     indexTable.getParentTableName().getString())));
                     Set<org.apache.hadoop.hbase.util.Pair<String, String>> indexedColumns =

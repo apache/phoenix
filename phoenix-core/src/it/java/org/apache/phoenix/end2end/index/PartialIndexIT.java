@@ -23,7 +23,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -31,6 +33,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Properties;
 
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.phoenix.end2end.IndexToolIT;
@@ -600,6 +603,120 @@ public class PartialIndexIT extends BaseTest {
 
             // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
+        }
+    }
+
+    @Test
+    public void testViewIndexes() throws Exception {
+        String baseTableName =  generateUniqueName();
+        String globalViewName = generateUniqueName();
+        String globalViewIndexName =  generateUniqueName();
+        String tenantViewName =  generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + baseTableName +
+                    " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, " +
+                    "KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) " +
+                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2, PK3)) MULTI_TENANT=true" +
+                    (salted ? ", SALT_BUCKETS=4" : ""));
+            conn.createStatement().execute("CREATE VIEW " + globalViewName +
+                    " AS SELECT * FROM " + baseTableName);
+            conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
+                    (local ? "LOCAL " : " ") + "INDEX " + globalViewIndexName + " on " +
+                    globalViewName + " (PK3 DESC, KV3) " +
+                    (uncovered ? "" : "INCLUDE (KV1)") + " WHERE KV3 IS NOT NULL ASYNC");
+
+            String tenantId = "tenantId";
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            // Create a tenant specific view and view index
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + globalViewName);
+                String tenantViewIndexName =  generateUniqueName();
+                tenantConn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
+                        (local ? "LOCAL " : " ") + "INDEX " + tenantViewIndexName + " on " +
+                        tenantViewName + " (PK3) " +
+                        (uncovered ? "" : "INCLUDE (KV1)") + " WHERE PK3 > 4");
+                PreparedStatement
+                        stmt = tenantConn.prepareStatement("UPSERT INTO  " + tenantViewName + " (PK2, PK3, KV1, KV3) VALUES (?, ?, ?, ?)");
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 1);
+                stmt.setString(3, "KV1");
+                stmt.setString(4, "KV3");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 2);
+                stmt.setString(3, "KV4");
+                stmt.setString(4, "KV5");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 3);
+                stmt.setString(3, "KV6");
+                stmt.setString(4, "KV7");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 4);
+                stmt.setString(3, "KV8");
+                stmt.setString(4, "KV9");
+                stmt.executeUpdate();
+                stmt.setDate(1, new Date(100));
+                stmt.setInt(2, 5);
+                stmt.setString(3, "KV10");
+                stmt.setString(4, "KV11");
+                stmt.executeUpdate();
+                tenantConn.commit();
+
+                // Verify that query uses the tenant view index
+                ResultSet rs = tenantConn.createStatement().executeQuery("SELECT KV1 FROM  " +
+                        tenantViewName + " WHERE PK3 = 5");
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewIndexName);
+                assertTrue(rs.next());
+                assertEquals("KV10", rs.getString(1));
+                assertFalse(rs.next());
+
+                // Verify that query does not use the tenant view index when the partial index
+                // where clause does not contain the query where clause
+                rs = tenantConn.createStatement().executeQuery("SELECT KV1 FROM  " +
+                        tenantViewName + " WHERE PK3 = 4");
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewName);
+                assertTrue(rs.next());
+                assertEquals("KV8", rs.getString(1));
+                assertFalse(rs.next());
+
+                // Verify that the tenant view index has only one row
+                rs = tenantConn.createStatement().executeQuery("SELECT Count(*) FROM  " +
+                        tenantViewIndexName);
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewIndexName);
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1));
+            }
+
+            // Run the IndexTool MR job
+            IndexToolIT.runIndexTool(false, "", globalViewName,
+                    globalViewIndexName);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                // Verify that the query uses the global view index
+                ResultSet rs = tenantConn.createStatement().executeQuery("SELECT KV1 FROM  " +
+                        tenantViewName + " WHERE PK3 = 1 AND KV3 = KV3");
+                assertPlan((PhoenixResultSet) rs,  "", globalViewIndexName);
+                assertTrue(rs.next());
+                assertEquals("KV1", rs.getString(1));
+                assertFalse(rs.next());
+            }
+
+            // Verify that the query uses the global view index
+            ResultSet rs = conn.createStatement().executeQuery("SELECT KV1 FROM  " +
+                    globalViewName + " WHERE PK3 = 1 AND KV3 = KV3");
+            assertPlan((PhoenixResultSet) rs,  "", globalViewIndexName);
+            assertTrue(rs.next());
+            assertEquals("KV1", rs.getString(1));
+            assertFalse(rs.next());
+
+            // Verify that the global view index has five rows
+            rs = conn.createStatement().executeQuery("SELECT Count(*) FROM  " +
+                    globalViewIndexName);
+            assertPlan((PhoenixResultSet) rs,  "", globalViewIndexName);
+            assertTrue(rs.next());
+            assertEquals(5, rs.getInt(1));
         }
     }
 

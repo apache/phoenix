@@ -39,6 +39,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -145,6 +146,7 @@ public class CreateIndexCompiler {
         stringBuilder.append(dataTableName);
         stringBuilder.append(" Values(");
         int i = dataTable.getBucketNum() != null ? 1 : 0;
+        i += dataTable.getTenantId() != null ? 1 : 0;
         for (; i < dataTable.getColumns().size() - 1; i++) {
             PDataType dataType = dataTable.getColumns().get(i).getDataType();
             stringBuilder.append(getValue(dataType) + ",");
@@ -154,12 +156,13 @@ public class CreateIndexCompiler {
         try (PreparedStatement ps =
                 context.getConnection().prepareStatement(stringBuilder.toString())) {
             ps.execute();
-            Iterator<Pair<byte[], List<Cell>>> dataTableNameAndMutationIterator = PhoenixRuntime.getUncommittedDataIterator(connection);
+            Iterator<Pair<byte[], List<Cell>>> dataTableNameAndMutationIterator =
+                    PhoenixRuntime.getUncommittedDataIterator(connection);
             Pair<byte[], List<Cell>> dataTableNameAndMutation = null;
             while (dataTableNameAndMutationIterator.hasNext()) {
                 dataTableNameAndMutation = dataTableNameAndMutationIterator.next();
                 if (java.util.Arrays.equals(dataTableNameAndMutation.getFirst(),
-                        dataTableName.toString().getBytes())) {
+                        dataTable.getPhysicalName().getBytes())) {
                     break;
                 } else {
                     dataTableNameAndMutation = null;
