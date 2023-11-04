@@ -503,22 +503,14 @@ public final class QueryUtil {
             Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY,
                     QueryConstants.OFFSET_COLUMN);
             if (cell != null) {
-                byte[] kvValueFromCell = new byte[cell.getValueLength()];
-                System.arraycopy(cell.getValueArray(), cell.getValueOffset(),
-                        kvValueFromCell, 0, kvValueFromCell.length);
-                if (Bytes.contains(kvValueFromCell,
-                        QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES)) {
-                    int idx = Bytes.indexOf(kvValueFromCell,
-                            QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES);
-                    byte[] value =
-                            new byte[kvValueFromCell.length -
-                                    (idx + QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES.length)];
-                    System.arraycopy(kvValueFromCell,
-                            idx + QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES.length,
-                            value, 0, value.length);
-                    return PInteger.INSTANCE.toObject(value, 0,
-                            value.length, PInteger.INSTANCE, SortOrder.ASC, null, null);
-                }
+                return PInteger.INSTANCE.toObject(
+                        cell.getValueArray(),
+                        cell.getValueOffset(),
+                        cell.getValueLength(),
+                        PInteger.INSTANCE,
+                        SortOrder.ASC,
+                        null,
+                        null);
             }
         }
         return null;

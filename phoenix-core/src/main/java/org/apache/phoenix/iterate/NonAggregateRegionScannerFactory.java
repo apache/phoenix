@@ -306,11 +306,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                             remainingOffset);
                 } else {
                     Tuple lastScannedTuple = iterator.getLastScannedTuple();
-                    byte[] value =
-                            ByteUtil.concat(QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES,
-                                    remainingOffset);
                     if (lastScannedTuple != null) {
-                        kv = getOffsetKvWithLastScannedRowKey(value, lastScannedTuple);
+                        kv = getOffsetKvWithLastScannedRowKey(remainingOffset, lastScannedTuple);
                     } else {
                         byte[] rowKey;
                         byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
@@ -331,7 +328,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                                 rowKey,
                                 QueryConstants.OFFSET_FAMILY,
                                 QueryConstants.OFFSET_COLUMN,
-                                value);
+                                remainingOffset);
                     }
                 }
                 kvList.add(kv);
@@ -378,10 +375,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                                         QueryConstants.OFFSET_COLUMN,
                                         remainingOffset);
                             } else {
-                                byte[] value =
-                                        ByteUtil.concat(QueryConstants.OFFSET_VALUE_SEPARATOR_BYTES,
-                                                remainingOffset);
-                                kv = getOffsetKvWithLastScannedRowKey(value, tuple);
+                                kv = getOffsetKvWithLastScannedRowKey(remainingOffset, tuple);
                             }
                             results.add(kv);
                         }
