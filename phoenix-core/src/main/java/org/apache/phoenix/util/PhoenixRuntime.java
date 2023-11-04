@@ -278,7 +278,12 @@ public class PhoenixRuntime {
     public static void main(String [] args) {
 
         ExecutionCommand execCmd = ExecutionCommand.parseArgs(args);
-        String jdbcUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + execCmd.getConnectionString();
+        String jdbcUrl;
+        if (execCmd.getConnectionString().startsWith(JDBC_PROTOCOL)) {
+            jdbcUrl = execCmd.getConnectionString();
+        } else {
+            jdbcUrl = JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + execCmd.getConnectionString();
+        }
 
         int exitStatus = 0;
 
