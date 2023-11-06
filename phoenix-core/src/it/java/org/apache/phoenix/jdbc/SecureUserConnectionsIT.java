@@ -38,7 +38,6 @@ import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosName;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver.ConnectionInfo;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -235,7 +234,7 @@ public class SecureUserConnectionsIT {
         PrivilegedExceptionAction<Void> callable = new PrivilegedExceptionAction<Void>() {
             public Void run() throws Exception {
                 String url = joinUserAuthentication(BASE_URL, princ1, keytab1);
-                connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+                connections.add(ConnectionInfo.create(url,ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
                 return null;
             }
         };
@@ -261,7 +260,7 @@ public class SecureUserConnectionsIT {
         PrivilegedExceptionAction<Void> callable = new PrivilegedExceptionAction<Void>() {
             public Void run() throws Exception {
                 String url = joinUserAuthentication(BASE_URL, princ1, keytab1);
-                connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+                connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
                 return null;
             }
         };
@@ -293,7 +292,7 @@ public class SecureUserConnectionsIT {
         ugi1.doAs(new PrivilegedExceptionAction<Void>() {
             public Void run() throws Exception {
                 String url = joinUserAuthentication(BASE_URL, princ1, keytab1);
-                connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+                connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
                 return null;
             }
         });
@@ -304,7 +303,7 @@ public class SecureUserConnectionsIT {
         ugi2.doAs(new PrivilegedExceptionAction<Void>() {
             public Void run() throws Exception {
                 String url = joinUserAuthentication(BASE_URL, princ2, keytab2);
-                connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+                connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
                 return null;
             }
         });
@@ -314,7 +313,7 @@ public class SecureUserConnectionsIT {
         ugi1.doAs(new PrivilegedExceptionAction<Void>() {
             public Void run() throws Exception {
                 String url = joinUserAuthentication(BASE_URL, princ1, keytab1);
-                connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+                connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
                 return null;
             }
         });
@@ -334,19 +333,19 @@ public class SecureUserConnectionsIT {
 
         UserGroupInformation.loginUserFromKeytab(princ1, keytab1.getPath());
         // Using the same UGI should result in two equivalent ConnectionInfo objects
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
 
         UserGroupInformation.loginUserFromKeytab(princ2, keytab2.getPath());
-        connections.add(ConnectionInfo.create(url2).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url2, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(2, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Because the UGI instances are unique, so are the connections
         UserGroupInformation.loginUserFromKeytab(princ1, keytab1.getPath());
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(3, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
     }
@@ -360,13 +359,13 @@ public class SecureUserConnectionsIT {
 
         UserGroupInformation.loginUserFromKeytab(princ1, keytab1.getPath());
         // Using the same UGI should result in two equivalent ConnectionInfo objects
-        connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Because the UGI instances are unique, so are the connections
-        connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
     }
 
@@ -378,13 +377,13 @@ public class SecureUserConnectionsIT {
 
         // Using the same UGI should result in two equivalent ConnectionInfo objects
         final String url = joinUserAuthentication(BASE_URL, princ1, keytab1);
-        connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Because the UGI instances are unique, so are the connections
-        connections.add(ConnectionInfo.create(url).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
     }
 
@@ -399,18 +398,18 @@ public class SecureUserConnectionsIT {
         final String url2 = joinUserAuthentication(BASE_URL, princ2, keytab2);
 
         // Using the same UGI should result in two equivalent ConnectionInfo objects
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Because the UGI instances are unique, so are the connections
-        connections.add(ConnectionInfo.create(url2).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url2, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(2, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Using the same UGI should result in two equivalent ConnectionInfo objects
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(3, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
@@ -427,29 +426,29 @@ public class SecureUserConnectionsIT {
         final String url2 = joinUserAuthentication(BASE_URL, princ2, keytab2);
 
         // Using the same UGI should result in two equivalent ConnectionInfo objects
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Logging in as the same user again should not duplicate connections
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(1, connections.size());
         // Sanity check
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Add a second one.
-        connections.add(ConnectionInfo.create(url2).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url2, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(2, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Again, verify this user is not duplicated
-        connections.add(ConnectionInfo.create(url2).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url2, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(2, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
 
         // Because the UGI instances are unique, so are the connections
-        connections.add(ConnectionInfo.create(url1).normalize(ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
+        connections.add(ConnectionInfo.create(url1, ReadOnlyProps.EMPTY_PROPS, EMPTY_PROPERTIES));
         assertEquals(3, connections.size());
         verifyAllConnectionsAreKerberosBased(connections);
     }

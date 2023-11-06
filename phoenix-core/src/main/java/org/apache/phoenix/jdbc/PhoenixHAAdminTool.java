@@ -52,6 +52,7 @@ import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
@@ -329,7 +330,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
             Preconditions.checkNotNull(zkUrl);
             Preconditions.checkNotNull(conf);
             Preconditions.checkNotNull(highAvailibilityCuratorProvider);
-            this.zkUrl = zkUrl;
+            this.zkUrl = JDBCUtil.formatZookeeperUrl(zkUrl);
             this.conf = conf;
             conf.iterator().forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
             this.highAvailibilityCuratorProvider = highAvailibilityCuratorProvider;

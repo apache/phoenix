@@ -65,7 +65,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import javax.annotation.Nullable;
@@ -74,8 +76,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.function.ExternalSqlTypeIdFunction;
 import org.apache.phoenix.expression.function.IndexStateNameFunction;
 import org.apache.phoenix.expression.function.SQLIndexTypeFunction;
@@ -84,8 +84,8 @@ import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.TableName;
@@ -98,18 +98,17 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
 import org.apache.phoenix.schema.tool.SchemaProcessor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public final class QueryUtil {
 
@@ -299,6 +298,7 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum) {
         return getUrlInternal(zkQuorum, null, null, null);
     }
@@ -306,6 +306,7 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum, int clientPort) {
         return getUrlInternal(zkQuorum, clientPort, null, null);
     }
@@ -313,6 +314,7 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum, String znodeParent) {
         return getUrlInternal(zkQuorum, null, znodeParent, null);
     }
@@ -320,6 +322,7 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum, int port, String znodeParent, String principal) {
         return getUrlInternal(zkQuorum, port, znodeParent, principal);
     }
@@ -327,6 +330,7 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum, int port, String znodeParent) {
         return getUrlInternal(zkQuorum, port, znodeParent, null);
     }
@@ -334,6 +338,7 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum, Integer port, String znodeParent) {
         return getUrlInternal(zkQuorum, port, znodeParent, null);
     }
@@ -341,13 +346,15 @@ public final class QueryUtil {
     /**
      * Create the Phoenix JDBC connection URL from the provided cluster connection details.
      */
+    @Deprecated
     public static String getUrl(String zkQuorum, Integer port, String znodeParent, String principal) {
         return getUrlInternal(zkQuorum, port, znodeParent, principal);
     }
 
+    @Deprecated
     private static String getUrlInternal(String zkQuorum, Integer port, String znodeParent, String principal) {
-        return new PhoenixEmbeddedDriver.ConnectionInfo(zkQuorum, port, znodeParent, principal, null).toUrl()
-                + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+        return String.join(":", PhoenixRuntime.JDBC_PROTOCOL, zkQuorum, port == null ? "" : port.toString(), znodeParent == null ? "" : znodeParent, principal == null ? "" : principal)
+                + Character.toString(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR);
     }
 
     public static String getExplainPlan(ResultSet rs) throws SQLException {
@@ -435,12 +442,18 @@ public final class QueryUtil {
      */
     public static String getConnectionUrl(Properties props, Configuration conf, String principal)
             throws SQLException {
-        // read the hbase properties from the configuration
-        int port = getInt(HConstants.ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT, props, conf);
-        // Build the ZK quorum server string with "server:clientport" list, separated by ','
-        final String server = getString(HConstants.ZOOKEEPER_QUORUM, HConstants.LOCALHOST, props, conf);
-        String znodeParent = getString(HConstants.ZOOKEEPER_ZNODE_PARENT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT, props, conf);
-        String url = getUrl(server, port, znodeParent, principal);
+        ReadOnlyProps propsWithPrincipal;
+        if (principal != null) {
+            Map<String, String> principalProp = new HashMap<>();
+            principalProp.put(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+            propsWithPrincipal = new ReadOnlyProps(principalProp.entrySet().iterator());
+        } else {
+            propsWithPrincipal = ReadOnlyProps.EMPTY_PROPS;
+        }
+        ConnectionInfo info =
+                ConnectionInfo.createNoLogin(PhoenixRuntime.JDBC_PROTOCOL, conf, propsWithPrincipal,
+                    props);
+        String url = info.toUrl();
         if (url.endsWith(PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + "")) {
             url = url.substring(0, url.length() - 1);
         }
@@ -462,7 +475,7 @@ public final class QueryUtil {
         }
         return url;
     }
-    
+
     private static int getInt(String key, int defaultValue, Properties props, Configuration conf) {
         if (conf == null) {
             Preconditions.checkNotNull(props);

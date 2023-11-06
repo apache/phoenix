@@ -37,12 +37,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDate;
@@ -62,6 +65,10 @@ import org.junit.experimental.categories.Category;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
+
+    private static final ExecutorService EXECUTOR_SERVICE =
+            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true)
+                    .setNameFormat("server-paging-with-region-moves-%d").build());
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -197,6 +204,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
              PreparedStatement statement = conn.prepareStatement(query)) {
             statement.setString(1, tenantId);
             try (ResultSet rs = statement.executeQuery()) {
+                moveRegionsOfTable(tablename);
                 assertTrue(rs.next());
                 assertEquals(D3.getTime(), rs.getDate(1).getTime());
                 moveRegionsOfTable(tablename);
@@ -204,7 +212,6 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 moveRegionsOfTable(tablename);
                 assertEquals(D2.getTime(), rs.getDate(1).getTime());
                 assertFalse(rs.next());
-                moveRegionsOfTable(tablename);
                 assertServerPagingMetric(tablename, rs, true);
             }
         }
@@ -217,25 +224,37 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 new ArrayList<>(admin.getRegionServers());
         ServerName server1 = servers.get(0);
         ServerName server2 = servers.get(1);
-        List<RegionInfo> regionsOnServer1 = admin.getRegions(server1);
-        List<RegionInfo> regionsOnServer2 = admin.getRegions(server2);
-        regionsOnServer1.forEach(regionInfo -> {
-            if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
-                try {
-                    admin.move(regionInfo.getEncodedNameAsBytes(), server2);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+        EXECUTOR_SERVICE.execute(() -> {
+            List<RegionInfo> regionsOnServer1;
+            try {
+                regionsOnServer1 = admin.getRegions(server1);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
-        });
-        regionsOnServer2.forEach(regionInfo -> {
-            if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
-                try {
-                    admin.move(regionInfo.getEncodedNameAsBytes(), server1);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+            List<RegionInfo> regionsOnServer2;
+            try {
+                regionsOnServer2 = admin.getRegions(server2);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
+            regionsOnServer1.forEach(regionInfo -> {
+                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                    try {
+                        admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+            regionsOnServer2.forEach(regionInfo -> {
+                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                    try {
+                        admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
         });
     }
 
@@ -266,10 +285,10 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                             + limit + " offset " + offset);
             int i = 0;
             while (i < limit) {
-                assertTrue(rs.next());
                 if (i % 3 == 0) {
                     moveRegionsOfTable(tablename);
                 }
+                assertTrue(rs.next());
                 assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i],
                         rs.getString(1));
                 i++;
@@ -302,18 +321,18 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                     + tablename + " offset " + offset + " FETCH FIRST " + limit + " rows only");
             i = 0;
             while (i++ < STRINGS.length - offset) {
-                assertTrue(rs.next());
-                assertEquals(STRINGS[offset + i - 1], rs.getString(1));
                 if (i % 3 == 0) {
                     moveRegionsOfTable(tablename);
                 }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[offset + i - 1], rs.getString(1));
             }
             i = 0;
             while (i++ < limit - STRINGS.length - offset) {
-                assertTrue(rs.next());
                 if (i % 3 == 0) {
                     moveRegionsOfTable(tablename);
                 }
+                assertTrue(rs.next());
                 assertEquals(STRINGS[i - 1], rs.getString(1));
             }
             // no paging when serial offset
@@ -323,9 +342,9 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement()
                     .executeQuery("SELECT k2 from " + tablename + " order by k2 desc limit "
                             + limit + " offset " + offset);
+            moveRegionsOfTable(tablename);
             assertTrue(rs.next());
             assertEquals(25, rs.getInt(1));
-            moveRegionsOfTable(tablename);
             assertFalse(rs.next());
             // because of descending order the offset is implemented on client
             // so this generates a parallel scan and paging happens
@@ -357,6 +376,8 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
             ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tablename
                     + " where t_id = 'tenant1' AND (k2 IN (5,6) or k2 is null) group by k2=6");
             boolean moveRegions = true;
+            moveRegionsOfTable(tablename);
+            moveRegionsOfTable(indexName);
             while (rs.next()) {
                 if (moveRegions) {
                     moveRegionsOfTable(tablename);
@@ -388,11 +409,11 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
             assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
 
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
+            moveRegionsOfTable(dataTableName);
+            moveRegionsOfTable(indexTableName);
             assertTrue(rs.next());
             assertEquals("bcd", rs.getString(1));
             assertEquals("bcde", rs.getString(2));
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
             assertFalse(rs.next());
             assertServerPagingMetric(indexTableName, rs, true);
 
@@ -406,10 +427,10 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
             // Verify that we will read from the index table
             assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
             rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals(2, rs.getInt(1));
             moveRegionsOfTable(dataTableName);
             moveRegionsOfTable(indexTableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             moveRegionsOfTable(dataTableName);
