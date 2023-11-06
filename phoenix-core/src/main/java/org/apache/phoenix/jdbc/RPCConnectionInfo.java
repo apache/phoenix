@@ -59,7 +59,7 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
 
         if (getBoostrapServers() != null) {
             // This is already normalized to include ports
-            connectionProps.put(HConstants.MASTER_ADDRS_KEY, bootstrapServers);
+            connectionProps.put(BOOTSTRAP_NODES, bootstrapServers);
         }
 
         return connectionProps.isEmpty() ? ReadOnlyProps.EMPTY_PROPS
