@@ -60,7 +60,7 @@ public abstract class ConnectionInfo {
 
     static {
         String version = VersionInfo.getVersion();
-        if (VersionInfo.getMajorVersion(version) >= 3) {
+        if (getMajorVersion(version) >= 3) {
             HAS_MASTER_REGISTRY = true;
             HAS_RPC_REGISTRY = true;
         } else {
@@ -80,6 +80,11 @@ public abstract class ConnectionInfo {
     protected static SQLException getMalFormedUrlException(String url) {
         return new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
                 .setMessage(url).build().buildException();
+    }
+
+    // Copied from HBase VersionInfo. Older HBase versions don't have this method.
+    protected static int getMajorVersion(String version) {
+        return Integer.parseInt(version.split("\\.")[0]);
     }
 
     protected final boolean isConnectionless;
@@ -157,7 +162,7 @@ public abstract class ConnectionInfo {
                 builder = new ZKConnectionInfo.Builder(url, configuration, props, info);
             } else {
                 // No registry class set in config. Use version-dependent default
-                if (VersionInfo.getMajorVersion(VersionInfo.getVersion()) >= 3) {
+                if (getMajorVersion(VersionInfo.getVersion()) >= 3) {
                     builder = new RPCConnectionInfo.Builder(url, configuration, props, info);
                 } else {
                     builder = new ZKConnectionInfo.Builder(url, configuration, props, info);

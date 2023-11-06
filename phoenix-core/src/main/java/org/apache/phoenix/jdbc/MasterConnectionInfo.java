@@ -54,7 +54,7 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
 
         if (bootstrapServers != null) {
             // This is already normalized to include ports
-            connectionProps.put(HConstants.MASTER_ADDRS_KEY, bootstrapServers);
+            connectionProps.put(MASTER_ADDRS_KEY, bootstrapServers);
         }
 
         return connectionProps.isEmpty() ? ReadOnlyProps.EMPTY_PROPS

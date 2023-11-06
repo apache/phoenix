@@ -48,6 +48,8 @@ public class ConnectionIT {
     private static HBaseTestingUtility hbaseTestUtil;
     private static Configuration conf;
 
+    protected static final String MASTER_ADDRS_KEY = "hbase.masters";
+
     private static int tableCounter;
 
     @BeforeClass
@@ -125,7 +127,7 @@ public class ConnectionIT {
     public void testMasterConnections() throws SQLException {
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3.0") >= 0);
         int masterPortString = conf.getInt(HConstants.MASTER_PORT, HConstants.DEFAULT_MASTER_PORT);
-        String masterHosts = conf.get(HConstants.MASTER_ADDRS_KEY);
+        String masterHosts = conf.get(MASTER_ADDRS_KEY);
         try (PhoenixConnection conn1 =
                 (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+master");
                 PhoenixConnection conn2 =
@@ -140,7 +142,7 @@ public class ConnectionIT {
     @Test
     public void testRPCConnections() throws SQLException {
         assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0") >= 0);
-        String masterHosts = conf.get(HConstants.MASTER_ADDRS_KEY);
+        String masterHosts = conf.get(MASTER_ADDRS_KEY);
 
         try (PhoenixConnection conn1 =
                 (PhoenixConnection) DriverManager.getConnection("jdbc:phoenix+rpc");

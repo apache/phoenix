@@ -34,8 +34,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 public abstract class AbstractRPCConnectionInfo extends ConnectionInfo {
 
-    private static final String MASTER_ADDRS_KEY = "hbase.masters";
-    private static final String MASTER_HOSTNAME_KEY = "hbase.master.hostname";
+    protected static final String MASTER_ADDRS_KEY = "hbase.masters";
+    protected static final String MASTER_HOSTNAME_KEY = "hbase.master.hostname";
 
     protected String bootstrapServers;
 
