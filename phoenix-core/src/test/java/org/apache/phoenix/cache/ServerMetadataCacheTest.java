@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -38,6 +39,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -77,6 +79,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    @Before
+    public void resetMetrics() {
+        GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.getMetric().reset();
     }
 
     @After
@@ -564,16 +571,22 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             // select query from client-2 with old ddl timestamp works
             // there should be one update to the client cache
+            //verify client got a StaleMetadataCacheException
             query(conn2, tableName);
             expectedNumCacheUpdates = 1;
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
+            Assert.assertEquals("Client should have encountered a StaleMetadataCacheException",
+                    1, GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.getMetric().getValue());
 
             // select query from client-2 with latest ddl timestamp works
             // there should be no more updates to client cache
+            //verify client did not get another StaleMetadataCacheException
             query(conn2, tableName);
             Mockito.verify(spyCqs2, Mockito.times(expectedNumCacheUpdates))
                     .addTable(any(PTable.class), anyLong());
+            Assert.assertEquals("Client should have encountered a StaleMetadataCacheException",
+                    1, GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.getMetric().getValue());
         }
     }
 
@@ -939,7 +952,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             query(conn2, tableName2);
 
             //client-1 alters one of the tables
-            alterTableAddColumn(conn1, tableName2, "v3");
+            alterTableAddColumn(conn1, tableName2, "col3");
 
             //client-2 upserts multiple rows to both tables before calling commit
             //verify the table metadata was fetched for each table
@@ -977,12 +990,22 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
             //client-2 populates its cache, 1 getTable RPC each for table, view1, view2
             query(conn2, viewName2);
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName1)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
+                    anyLong(), anyLong());
 
             //client-1 alters first level view
-            alterViewAddColumn(conn1, viewName1, "v3");
+            alterViewAddColumn(conn1, viewName1, "col3");
 
             //client-2 upserts into second level view
             //verify there was a getTable RPC for the view and all its ancestors
+            //verify that the client got a StaleMetadataCacheException
             upsert(conn2, viewName2, true);
 
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
@@ -994,9 +1017,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
                     anyLong(), anyLong());
-
+            Assert.assertEquals("Client should have encountered a StaleMetadataCacheException",
+                    1, GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.getMetric().getValue());
             //client-2 upserts into first level view
             //verify no getTable RPCs
+            //verify that the client did not get a StaleMetadataCacheException
             upsert(conn2, viewName1, true);
 
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
@@ -1008,6 +1033,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(viewName2)),
                     anyLong(), anyLong());
+            Assert.assertEquals("Client should not have encountered another StaleMetadataCacheException",
+                    1, GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.getMetric().getValue());
         }
     }
 

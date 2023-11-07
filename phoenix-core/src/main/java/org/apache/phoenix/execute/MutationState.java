@@ -224,7 +224,8 @@ public class MutationState implements SQLCloseable {
         boolean isMetricsEnabled = connection.isRequestLevelMetricsEnabled();
         this.mutationMetricQueue = isMetricsEnabled ? new MutationMetricQueue()
                 : NoOpMutationMetricsQueue.NO_OP_MUTATION_METRICS_QUEUE;
-        this.validateLastDdlTimestamp = getValidateLastDdlTimestampEnabled();
+        this.validateLastDdlTimestamp = ValidateLastDDLTimestampUtil
+                                            .getValidateLastDdlTimestampEnabled(this.connection);
         if (subTask) {
             // this code path is only used while running child scans, we can't pass the txContext to child scans
             // as it is not thread safe, so we use the tx member variable
@@ -245,12 +246,6 @@ public class MutationState implements SQLCloseable {
         this.estimatedSize = PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
 
         throwIfTooBig();
-    }
-
-    private boolean getValidateLastDdlTimestampEnabled() {
-        return connection.getQueryServices().getProps()
-                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
 
     // add a new batch of row mutations
@@ -1219,6 +1214,7 @@ public class MutationState implements SQLCloseable {
                         connection, tableRefs, true, true);
             }
             catch (StaleMetadataCacheException e) {
+                GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.increment();
                 MetaDataClient mc = new MetaDataClient(connection);
                 PName tenantId = connection.getTenantId();
                 LOGGER.debug("Force updating client metadata cache for {}",

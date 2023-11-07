@@ -119,6 +119,7 @@ import org.apache.phoenix.log.QueryLogInfo;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
@@ -448,6 +449,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 throw e;
                             } catch (StaleMetadataCacheException e) {
+                                GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.increment();
                                 updateMetrics = false;
                                 PTable pTable = lastQueryPlan.getTableRef().getTable();
                                 String schemaN = pTable.getSchemaName().toString();

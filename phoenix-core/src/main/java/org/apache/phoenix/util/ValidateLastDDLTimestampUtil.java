@@ -9,6 +9,8 @@ import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -42,10 +44,23 @@ public class ValidateLastDDLTimestampUtil {
     }
 
     /**
+     * Returns true if last ddl timestamp validation is enabled on the connection, false otherwise.
+     * @param connection
+     * @return
+     */
+    public static boolean getValidateLastDdlTimestampEnabled(PhoenixConnection connection) {
+        return connection.getQueryServices().getProps()
+                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+    }
+
+    /**
      * Verifies that table metadata for given tables is up-to-date in client cache with server.
      * A random live region server is picked for invoking the RPC to validate LastDDLTimestamp.
      * Retry once if there was an error performing the RPC, otherwise throw the Exception.
      * @param tableRefs
+     * @param isWritePath
+     * @param doRetry
      * @throws SQLException
      */
     public static void validateLastDDLTimestamp(
@@ -93,7 +108,9 @@ public class ValidateLastDDLTimestampUtil {
      * 1. For a view, we need to add all its ancestors to the request in case something changed in the hierarchy.
      * 2. For an index, we need to add its parent table to the request in case the index was dropped.
      * 3. On the write path, we need to add all indexes of a table/view in case index state was changed.
+     * @param conn
      * @param tableRefs
+     * @param isWritePath
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private static RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
@@ -105,11 +122,11 @@ public class ValidateLastDDLTimestampUtil {
         RegionServerEndpointProtos.LastDDLTimestampRequest.Builder innerBuilder;
 
         for (TableRef tableRef : tableRefs) {
-             innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
 
             //when querying an index, we need to validate its parent table
             //in case the index was dropped
             if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
+                innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                 PTableKey key = new PTableKey(conn.getTenantId(),
                         tableRef.getTable().getParentName().getString());
                 PTable parentTable = conn.getTable(key);
