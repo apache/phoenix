@@ -296,7 +296,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
-        this.validateLastDdlTimestamp = getValidateLastDdlTimestampEnabled();
+        this.validateLastDdlTimestamp = ValidateLastDDLTimestampUtil
+                                            .getValidateLastDdlTimestampEnabled(this.connection);
     }
 
     /**
@@ -306,12 +307,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int getDefaultQueryTimeoutMillis() {
         return connection.getQueryServices().getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, 
             QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
-    }
-
-    private boolean getValidateLastDdlTimestampEnabled() {
-        return connection.getQueryServices().getProps()
-                .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
 
     protected List<PhoenixResultSet> getResultSets() {

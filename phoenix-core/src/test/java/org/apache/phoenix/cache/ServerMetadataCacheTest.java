@@ -1264,6 +1264,45 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Assert.assertEquals("All index mutations were not generated when index was created concurrently with upserts.", tableCount, indexCount);
         }
     }
+
+    /**
+     * Test that upserts into a view whose parent was dropped throws a TableNotFoundException.
+     */
+    @Test
+    public void testConcurrentUpsertDropView() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+
+            //client-1 creates tables and views
+            createTable(conn1, tableName, NEVER);
+            createView(conn1, tableName, viewName1);
+            createView(conn1, viewName1, viewName2);
+
+            //client-2 upserts into second level view
+            upsert(conn2, viewName2, false);
+
+            //client-1 drop first level view
+            dropView(conn1, viewName1, true);
+
+            //client-2 upserts into second level view and commits
+            upsert(conn2, viewName2, true);
+        }
+        catch (Exception e) {
+            Assert.assertTrue("TableNotFoundException was not thrown when parent view " +
+                            "was dropped (cascade) concurrently with upserts.",
+                    e instanceof TableNotFoundException);
+        }
+    }
+
     //Helper methods
 
     private long getLastDDLTimestamp(String tableName) throws SQLException {
@@ -1333,6 +1372,14 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     private void dropIndex(Connection conn, String tableName, String indexName) throws SQLException {
         conn.createStatement().execute("DROP INDEX " + indexName + " ON " + tableName);
+    }
+
+    private void dropView(Connection conn, String viewName, boolean cascade) throws SQLException {
+        String sql = "DROP VIEW " + viewName;
+        if (cascade) {
+            sql += " CASCADE";
+        }
+        conn.createStatement().execute(sql);
     }
 
     private void multiTableUpsert(Connection conn, String tableName1, String tableName2) throws SQLException {
