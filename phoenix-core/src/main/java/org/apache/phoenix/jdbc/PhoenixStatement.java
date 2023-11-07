@@ -1595,7 +1595,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 public MutationState execute() throws SQLException {
                     String indexName = ExecutableDropIndexStatement.this.getIndexName().getName();
                     if (CDCUtil.isACDCIndex(indexName)) {
-                        throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX).setTableName(indexName)
+                        throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX)
+                                .setTableName(indexName)
                                 .build().buildException();
                     }
                     MetaDataClient client = new MetaDataClient(getContext().getConnection());
