@@ -48,6 +48,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.util.PropertiesUtil;
 
 
 /**
@@ -197,7 +198,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             if (result == null) {
                 synchronized(this) {
                     result = services;
-                    if(result == null) {
+                    if (result == null) {
                         services = result = new QueryServicesImpl(getDefaultProps());
                     }
                 }
@@ -239,33 +240,34 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     }
     
     @Override
-    protected ConnectionQueryServices getConnectionQueryServices(String url, final Properties info) throws SQLException {
+    protected ConnectionQueryServices getConnectionQueryServices(String url, final Properties infoIn) throws SQLException {
         lockInterruptibly(LockMode.READ);
         try {
             checkClosed();
-            ConnectionInfo connInfo = ConnectionInfo.create(url);
             SQLException sqlE = null;
             boolean success = false;
             final QueryServices services = getQueryServices();
             ConnectionQueryServices connectionQueryServices = null;
             // Also performs the Kerberos login if the URL/properties request this
-            final ConnectionInfo normalizedConnInfo = connInfo.normalize(services.getProps(), info);
+            final Properties info = PropertiesUtil.deepCopy(infoIn);
+            final ConnectionInfo connInfo = ConnectionInfo.create(url, services.getProps(), info);
+            //Set connection parameters to normalized value from URL
+            info.putAll(connInfo.asProps().asMap());
             try {
                 connectionQueryServices =
-                    connectionQueryServicesCache.get(normalizedConnInfo, new Callable<ConnectionQueryServices>() {
+                    connectionQueryServicesCache.get(connInfo, new Callable<ConnectionQueryServices>() {
                         @Override
                         public ConnectionQueryServices call() throws Exception {
                             ConnectionQueryServices connectionQueryServices;
-                            if (normalizedConnInfo.isConnectionless()) {
-                                connectionQueryServices = new ConnectionlessQueryServicesImpl(services, normalizedConnInfo, info);
+                            if (connInfo.isConnectionless()) {
+                                connectionQueryServices = new ConnectionlessQueryServicesImpl(services, connInfo, info);
                             } else {
-                                connectionQueryServices = new ConnectionQueryServicesImpl(services, normalizedConnInfo, info);
+                                connectionQueryServices = new ConnectionQueryServicesImpl(services, connInfo, info);
                             }
 
                             return connectionQueryServices;
                         }
                     });
-
                 connectionQueryServices.init(url, info);
                 success = true;
             } catch (ExecutionException ee){
@@ -281,7 +283,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             finally {
                 if (!success) {
                     // Remove from map, as initialization failed
-                    connectionQueryServicesCache.invalidate(normalizedConnInfo);
+                    connectionQueryServicesCache.invalidate(connInfo);
                     if (sqlE != null) {
                         throw sqlE;
                     }
@@ -313,8 +315,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
      * @throws SQLException if fails to generate key for CQS to invalidate
      */
     void invalidateCache(String url, Properties properties) throws SQLException {
-        ConnectionInfo connInfo = ConnectionInfo.create(url)
-                .normalize(getQueryServices().getProps(), properties);
+        ConnectionInfo connInfo = ConnectionInfo.create(url, getQueryServices().getProps(), properties);
         LOGGER.info("Invalidating the CQS from cache for connInfo={}", connInfo);
         connectionQueryServicesCache.invalidate(connInfo);
         LOGGER.debug(connectionQueryServicesCache.asMap().keySet().stream().map(Objects::toString).collect(Collectors.joining(",")));

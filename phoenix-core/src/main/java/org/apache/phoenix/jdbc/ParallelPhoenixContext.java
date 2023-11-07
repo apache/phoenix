@@ -116,6 +116,7 @@ public class ParallelPhoenixContext {
     }
 
     public Properties getProperties() {
+        //FIXME should return immutable
         return properties;
     }
 
