@@ -20,6 +20,7 @@ package org.apache.phoenix.schema;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
@@ -1714,8 +1715,11 @@ public class MetaDataClient {
         if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
             return;
         }
+        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config) ?
+            SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
+            SYSTEM_CHILD_LINK_NAME_BYTES;
         try (Table childLinkTable =
-                     connection.getQueryServices().getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
+                     connection.getQueryServices().getTable(systemChildLinkTable)) {
             byte[] tenantId = connection.getTenantId() == null ? null
                     : connection.getTenantId().getBytes();
             byte[] schemaNameBytes = view.getSchemaName().getBytes();
@@ -1744,8 +1748,6 @@ public class MetaDataClient {
                     }
                 }
             }
-        } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-            LOGGER.error("Table not found or not accessible.", e);
         } catch (IOException e) {
             LOGGER.error("Error while retrieving descendent views", e);
             throw new SQLException(e);
