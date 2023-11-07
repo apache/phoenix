@@ -143,9 +143,6 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             if (uncovered) {
                 conn.createStatement().execute("CREATE UNCOVERED INDEX IDX_" + dataTableName
                         + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP())");
-                conn.createStatement()
-                        .execute("CREATE UNCOVERED LOCAL INDEX IDX_LOCAL_" + dataTableName
-                                + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP())");
             } else {
                 conn.createStatement().execute("CREATE INDEX IDX_" + dataTableName
                         + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP())");
