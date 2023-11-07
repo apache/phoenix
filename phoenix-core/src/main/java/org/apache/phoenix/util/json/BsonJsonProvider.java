@@ -112,12 +112,11 @@ public class BsonJsonProvider extends AbstractJsonProvider {
     public Object getMapValue(final Object obj, final String key) {
         BsonDocument bsonDocument = toBsonDocument(obj);
         Object o = bsonDocument.get(key);
-        /*if (!jsonObject.has(key)) {
+        if (!bsonDocument.containsKey(key)) {
             return UNDEFINED;
         } else {
             return unwrap(o);
-        }*/
-        return unwrap(o);
+        }
     }
 
     @Override
