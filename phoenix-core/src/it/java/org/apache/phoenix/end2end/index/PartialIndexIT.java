@@ -614,12 +614,12 @@ public class PartialIndexIT extends BaseTest {
         String tenantViewName =  generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + baseTableName +
-                    " (TENANT_ID CHAR(15) NOT NULL, PK2 DATE NOT NULL, PK3 INTEGER NOT NULL, " +
-                    "KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) " +
-                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, PK2, PK3)) MULTI_TENANT=true" +
+                    " (TENANT_ID CHAR(15) NOT NULL, KP CHAR(3) NOT NULL, PK2 DATE NOT NULL, "+
+                    "PK3 INTEGER NOT NULL, KV1 VARCHAR, KV2 VARCHAR, KV3 CHAR(15) " +
+                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, KP, PK2, PK3)) MULTI_TENANT=true" +
                     (salted ? ", SALT_BUCKETS=4" : ""));
             conn.createStatement().execute("CREATE VIEW " + globalViewName +
-                    " AS SELECT * FROM " + baseTableName);
+                    " AS SELECT * FROM " + baseTableName + " WHERE  KP = '001'");
             conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
                     (local ? "LOCAL " : " ") + "INDEX " + globalViewIndexName + " on " +
                     globalViewName + " (PK3 DESC, KV3) " +
@@ -696,8 +696,9 @@ public class PartialIndexIT extends BaseTest {
             try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
                 // Verify that the query uses the global view index
                 ResultSet rs = tenantConn.createStatement().executeQuery("SELECT KV1 FROM  " +
-                        tenantViewName + " WHERE PK3 = 1 AND KV3 = KV3");
-                assertPlan((PhoenixResultSet) rs,  "", globalViewIndexName);
+                        tenantViewName + " WHERE PK3 = 1 AND KV3 = 'KV3'");
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewName +
+                        "#" + globalViewIndexName);
                 assertTrue(rs.next());
                 assertEquals("KV1", rs.getString(1));
                 assertFalse(rs.next());
@@ -705,7 +706,7 @@ public class PartialIndexIT extends BaseTest {
 
             // Verify that the query uses the global view index
             ResultSet rs = conn.createStatement().executeQuery("SELECT KV1 FROM  " +
-                    globalViewName + " WHERE PK3 = 1 AND KV3 = KV3");
+                    globalViewName + " WHERE PK3 = 1 AND KV3 = 'KV3'");
             assertPlan((PhoenixResultSet) rs,  "", globalViewIndexName);
             assertTrue(rs.next());
             assertEquals("KV1", rs.getString(1));
