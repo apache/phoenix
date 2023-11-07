@@ -144,7 +144,7 @@ public class JDBCUtilTest {
 
     @Test
     public void formatZookeeperUrlSameOrderTest() {
-        String zk1 = "zk1.net,zk2.net,zk3.net:2181:/hbase";
+        String zk1 = "zk1.net\\:2181,zk2.net\\:2181,zk3.net\\:2181::/hbase";
         String result = JDBCUtil.formatZookeeperUrl(zk1);
         assertEquals(zk1,result);
     }
@@ -154,21 +154,21 @@ public class JDBCUtilTest {
     public void formatZookeeperUrlDifferentOrderTest() {
         String zk1 = "zk3.net,zk2.net,zk1.net:2181:/hbase";
         String result = JDBCUtil.formatZookeeperUrl(zk1);
-        assertEquals("zk1.net,zk2.net,zk3.net:2181:/hbase",result);
+        assertEquals("zk1.net\\:2181,zk2.net\\:2181,zk3.net\\:2181::/hbase",result);
     }
 
     @Test
     public void formatZookeeperUrlNoTrailersTest() {
         String zk1 = "zk1.net,zk2.net,zk3.net";
         String result = JDBCUtil.formatZookeeperUrl(zk1);
-        assertEquals(zk1,result);
+        assertEquals("zk1.net\\:2181,zk2.net\\:2181,zk3.net\\:2181::/hbase",result);
     }
 
     @Test
     public void formatZookeeperUrlToLowercaseTest() {
         String zk1 = "MYHOST1.NET,MYHOST2.NET";
         String result = JDBCUtil.formatZookeeperUrl(zk1);
-        assertEquals(zk1.toLowerCase(),result);
+        assertEquals("myhost1.net\\:2181,myhost2.net\\:2181::/hbase",result);
     }
 
 }

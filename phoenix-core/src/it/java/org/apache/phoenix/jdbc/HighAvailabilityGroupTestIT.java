@@ -80,8 +80,8 @@ public class HighAvailabilityGroupTestIT {
     // This test cannot be run in parallel since it registers/deregisters driver
 
     private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroupTestIT.class);
-    private static final String ZK1 = "zk1-1,zk1-2:2181:/hbase";
-    private static final String ZK2 = "zk2-1,zk2-2:2181:/hbase";
+    private static final String ZK1 = "zk1-1\\:2181,zk1-2\\:2181::/hbase";
+    private static final String ZK2 = "zk2-1\\:2181,zk2-2\\:2181::/hbase";
     private static final PhoenixEmbeddedDriver DRIVER = mock(PhoenixEmbeddedDriver.class);
 
     /** The client properties to create a JDBC connection. */
@@ -232,9 +232,9 @@ public class HighAvailabilityGroupTestIT {
     public void testConnectToOneClusterShouldNotFailWithDifferentHostOrderJdbcString() throws SQLException {
         // test with JDBC string
         final String hosts = "zk1-2,zk1-1:2181:/hbase";
-        final String jdbcString = String.format("jdbc:phoenix:%s", hosts);
+        final String jdbcString = String.format("jdbc:phoenix+zk:%s", hosts);
         haGroup.connectToOneCluster(jdbcString, clientProperties);
-        verify(DRIVER, times(1)).getConnectionQueryServices(eq(String.format("jdbc:phoenix:%s",ZK1)), eq(clientProperties));
+        verify(DRIVER, times(1)).getConnectionQueryServices(eq(String.format("jdbc:phoenix+zk:%s",ZK1)), eq(clientProperties));
     }
 
     /**
