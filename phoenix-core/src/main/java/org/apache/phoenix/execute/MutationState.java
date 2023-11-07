@@ -953,10 +953,11 @@ public class MutationState implements SQLCloseable {
             long timestamp = result.getMutationTime();
             serverTimeStamp = timestamp;
 
-            //we don't know if this table's cache result was force updated during metadata validation
-            //so always validate columns
+            //we don't know if this table's cache result was force updated during metadata
+            //validation, so always validate columns
             List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
-            for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : rowKeyToColumnMap.entrySet()) {
+            for (Map.Entry<ImmutableBytesPtr, RowMutationState>
+                    rowEntry : rowKeyToColumnMap.entrySet()) {
                 RowMutationState valueEntry = rowEntry.getValue();
                 if (valueEntry != null) {
                     Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
@@ -969,8 +970,8 @@ public class MutationState implements SQLCloseable {
             }
             for (PColumn column : columns) {
                 if (column != null) {
-                    resolvedTable.getColumnFamily(column.getFamilyName().getString()).getPColumnForColumnName(
-                            column.getName().getString());
+                    resolvedTable.getColumnFamily(column.getFamilyName().getString())
+                            .getPColumnForColumnName(column.getName().getString());
                 }
             }
         } catch(Throwable e) {
