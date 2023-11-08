@@ -392,12 +392,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                     " FROM " + tableName +
                     " WHERE JSON_EXISTS(jsoncol, '$.existsFail')";
             rs = conn.createStatement().executeQuery(query);
-
-            query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
-                    " FROM " + tableName +
-                    " WHERE JSON_EXISTS(jsoncol, '$.existsFail')";
-            rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
+
             query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
                     " FROM " + tableName +
                     " WHERE JSON_EXISTS(jsoncol, '$.existsFail[*]')";
