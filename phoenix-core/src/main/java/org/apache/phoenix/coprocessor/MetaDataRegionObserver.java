@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.query.QueryServices.STATS_COLLECTION_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_STATS_COLLECTION_ENABLED;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
@@ -35,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.annotation.concurrent.GuardedBy;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -109,6 +112,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
             QueryConstants.SYSTEM_SCHEMA_NAME_BYTES,
             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES);
     protected ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
+    private ScheduledThreadPoolExecutor truncateTaskExectuor = new ScheduledThreadPoolExecutor(1, new ThreadFactoryBuilder().setDaemon(true).setNameFormat("task-truncated%s").build());
     private boolean enableRebuildIndex = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD;
     private long rebuildIndexTimeInterval = QueryServicesOptions.DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL;
     private static Map<PName, Long> batchExecutedPerTableMap = new HashMap<PName, Long>();
@@ -116,6 +120,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
     private static Properties rebuildIndexConnectionProps;
     // Added for test purposes
     private long initialRebuildTaskDelay;
+    private long startTruncateTaskDelay;
 
     @Override
     public void preClose(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -156,6 +161,10 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                 config.getLong(
                     QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY,
                     QueryServicesOptions.DEFAULT_INDEX_REBUILD_TASK_INITIAL_DELAY);
+        startTruncateTaskDelay =
+                config.getLong(
+                        QueryServices.INDEX_START_TRUNCATE_TASK_DELAY,
+                        QueryServicesOptions.DEFAULT_INDEX_START_TRUNCATE_TASK_DELAY);
     }
     
     @Override
@@ -202,9 +211,10 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                 }
             }
         };
-        Thread t = new Thread(r);
-        t.setDaemon(true);
-        t.start();
+
+        if(env.getConfiguration().getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED )){
+            truncateTaskExectuor.schedule(r, startTruncateTaskDelay, TimeUnit.MILLISECONDS);
+        }
 
         if (!enableRebuildIndex) {
             LOGGER.info("Failure Index Rebuild is skipped by configuration.");
