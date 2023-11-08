@@ -127,8 +127,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB = "hbase.client.scanner.timeout.period";
     public static final String RPC_TIMEOUT_ATTRIB = "hbase.rpc.timeout";
     public static final String DYNAMIC_JARS_DIR_KEY = "hbase.dynamic.jars.dir";
+    @Deprecated // Use HConstants directly
     public static final String ZOOKEEPER_QUORUM_ATTRIB = "hbase.zookeeper.quorum";
+    @Deprecated // Use HConstants directly
     public static final String ZOOKEEPER_PORT_ATTRIB = "hbase.zookeeper.property.clientPort";
+    @Deprecated // Use HConstants directly
     public static final String ZOOKEEPER_ROOT_NODE_ATTRIB = "zookeeper.znode.parent";
     public static final String DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB = "phoenix.distinct.value.compress.threshold";
     public static final String SEQUENCE_CACHE_SIZE_ATTRIB = "phoenix.sequence.cacheSize";
