@@ -92,7 +92,8 @@ public class ServerBuildIndexCompiler {
 
     private static void addColumnsToScan(Set<ColumnReference> columns, Scan scan, PTable index) {
         for (ColumnReference columnRef : columns) {
-            if (index.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+            if (index.getImmutableStorageScheme() ==
+                    PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
                 scan.addFamily(columnRef.getFamily());
             } else {
                 scan.addColumn(columnRef.getFamily(), columnRef.getQualifier());

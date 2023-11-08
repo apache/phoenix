@@ -358,16 +358,18 @@ public class ComparisonExpression extends BaseCompoundExpression {
     }
 
     @Override
-    public boolean contains (Expression other) {
+    public boolean contains(Expression other) {
         if (!(other instanceof ComparisonExpression || other instanceof IsNullExpression)) {
-                return false;
+            return false;
         }
         if (other instanceof IsNullExpression) {
             return !((IsNullExpression) other).isNegate();
         }
 
-        BaseTerminalExpression lhsA = WhereCompiler.getBaseTerminalExpression(this.getChildren().get(0));
-        BaseTerminalExpression lhsB = WhereCompiler.getBaseTerminalExpression(other.getChildren().get(0));
+        BaseTerminalExpression lhsA =
+                WhereCompiler.getBaseTerminalExpression(this.getChildren().get(0));
+        BaseTerminalExpression lhsB =
+                WhereCompiler.getBaseTerminalExpression(other.getChildren().get(0));
         if (!lhsA.equals(lhsB)) {
             return false;
         }

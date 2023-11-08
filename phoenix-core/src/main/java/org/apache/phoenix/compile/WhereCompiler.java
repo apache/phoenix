@@ -436,7 +436,7 @@ public class WhereCompiler {
         private static AndExpression flattenAnd(List<Expression> l) {
             for (Expression e : l) {
                 if (e instanceof AndExpression) {
-                    List <Expression> flattenedList = new ArrayList<>(l.size()
+                    List<Expression> flattenedList = new ArrayList<>(l.size()
                             + e.getChildren().size());
                     for (Expression child : l) {
                         if (child instanceof AndExpression) {
@@ -462,7 +462,7 @@ public class WhereCompiler {
         private static OrExpression flattenOr(List<Expression> l) {
             for (Expression e : l) {
                 if (e instanceof OrExpression) {
-                    List <Expression> flattenedList = new ArrayList<>(l.size()
+                    List<Expression> flattenedList = new ArrayList<>(l.size()
                             + e.getChildren().size());
                     for (Expression child : l) {
                         if (child instanceof OrExpression) {
@@ -487,7 +487,7 @@ public class WhereCompiler {
             boolean foundOrChild = false;
             int i;
             Expression child = null;
-            List <Expression> andChildren = andExpression.getChildren();
+            List<Expression> andChildren = andExpression.getChildren();
             for (i = 0; i < andChildren.size(); i++) {
                 child = andChildren.get(i);
                 if (child instanceof OrExpression) {
@@ -497,15 +497,15 @@ public class WhereCompiler {
             }
 
             if (foundOrChild) {
-                List <Expression> flattenedList = new ArrayList<>(andChildren.size() - 1);
+                List<Expression> flattenedList = new ArrayList<>(andChildren.size() - 1);
                 for (int j = 0; j < andChildren.size(); j++) {
                     if (i != j) {
                         flattenedList.add(andChildren.get(j));
                     }
                 }
-                List <Expression> orList = new ArrayList<>(child.getChildren().size());
+                List<Expression> orList = new ArrayList<>(child.getChildren().size());
                 for (Expression grandChild : child.getChildren()) {
-                    List <Expression> andList = new ArrayList<>(l.size());
+                    List<Expression> andList = new ArrayList<>(l.size());
                     andList.addAll(flattenedList);
                     andList.add(grandChild);
                     orList.add(visitLeave(new AndExpression(andList), andList));
@@ -522,8 +522,9 @@ public class WhereCompiler {
             return node;
         }
 
-        private static ComparisonExpression createComparisonExpression(CompareOperator op, Expression lhs, Expression rhs) {
-            List <Expression> children = new ArrayList<>(2);
+        private static ComparisonExpression createComparisonExpression(CompareOperator op,
+                Expression lhs, Expression rhs) {
+            List<Expression> children = new ArrayList<>(2);
             children.add(lhs);
             children.add(rhs);
             return new ComparisonExpression(children, op);
@@ -535,8 +536,8 @@ public class WhereCompiler {
             }
             Expression lhs = l.get(0);
             Expression rhs = l.get(1);
-            if (!(lhs instanceof RowValueConstructorExpression) ||
-                    !(rhs instanceof RowValueConstructorExpression)) {
+            if (!(lhs instanceof RowValueConstructorExpression)
+                    || !(rhs instanceof RowValueConstructorExpression)) {
                 return new ComparisonExpression(l, node.getFilterOp());
             }
 
@@ -548,18 +549,19 @@ public class WhereCompiler {
             // (A == a and B == b and C op c) or (A == a and  B op b) or A op c
 
             int childCount = lhs.getChildren().size();
-            if (node.getFilterOp() == EQUAL ||
-                    node.getFilterOp() == NOT_EQUAL) {
-                List <Expression> andList = new ArrayList<>(childCount);
+            if (node.getFilterOp() == EQUAL
+                    || node.getFilterOp() == NOT_EQUAL) {
+                List<Expression> andList = new ArrayList<>(childCount);
                 for (int i = 0; i < childCount; i++) {
-                    andList.add(createComparisonExpression(node.getFilterOp(), lhs.getChildren().get(i),
+                    andList.add(createComparisonExpression(node.getFilterOp(),
+                            lhs.getChildren().get(i),
                             rhs.getChildren().get(i)));
                 }
                 return new AndExpression(andList);
             }
-            List <Expression> orList = new ArrayList<>(childCount);
+            List<Expression> orList = new ArrayList<>(childCount);
             for (int i = 0; i < childCount; i++) {
-                List <Expression> andList = new ArrayList<>(childCount);
+                List<Expression> andList = new ArrayList<>(childCount);
                 int j;
                 for (j = 0; j < childCount - i - 1; j++) {
                     andList.add(createComparisonExpression(EQUAL, lhs.getChildren().get(j),
@@ -588,7 +590,7 @@ public class WhereCompiler {
             CompareOperator op = node.getFilterOp();
             Expression lhs = node.getChildren().get(0);
             Expression rhs = node.getChildren().get(1);
-            switch (op){
+            switch (op) {
             case LESS:
                 return createComparisonExpression(GREATER_OR_EQUAL, lhs, rhs);
             case LESS_OR_EQUAL:
@@ -606,7 +608,7 @@ public class WhereCompiler {
             }
         }
         private static List<Expression> negateChildren(List<Expression> children) {
-            List <Expression> list = new ArrayList<>(children.size());
+            List<Expression> list = new ArrayList<>(children.size());
             for (Expression child : children) {
                 if (child instanceof ComparisonExpression) {
                     list.add(negate((ComparisonExpression) child));
@@ -649,7 +651,8 @@ public class WhereCompiler {
             }
         }
 
-        private Expression transformInList(InListExpression node, boolean negate, List<Expression> l) {
+        private Expression transformInList(InListExpression node, boolean negate,
+                List<Expression> l) {
             List<Expression> list = new ArrayList<>(node.getKeyExpressions().size());
             for (Expression element : node.getKeyExpressions()) {
                 if (negate) {
@@ -669,8 +672,8 @@ public class WhereCompiler {
             Expression inList = transformInList(node, false, l);
             Expression firstElement = inList.getChildren().get(0);
             // Check if inList includes RVC expressions. If so, rewrite them
-            if (firstElement instanceof ComparisonExpression &&
-                    firstElement.getChildren().get(0) instanceof RowValueConstructorExpression) {
+            if (firstElement instanceof ComparisonExpression
+                    && firstElement.getChildren().get(0) instanceof RowValueConstructorExpression) {
                 List<Expression> list = new ArrayList<>(node.getKeyExpressions().size());
                 for (Expression e : inList.getChildren()) {
                     list.add(visitLeave((ComparisonExpression) e, e.getChildren()));
@@ -860,7 +863,7 @@ public class WhereCompiler {
      *          simple terms
      * @return true if an element of the list contains node
      */
-    private static boolean contained (Expression node, List<Expression> l) {
+    private static boolean contained(Expression node, List<Expression> l) {
         for (Expression e : l) {
             if (contained(node, e)) {
                 return true;

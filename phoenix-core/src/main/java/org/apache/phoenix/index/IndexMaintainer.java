@@ -34,7 +34,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -444,8 +443,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.isDataTableSalted = isDataTableSalted;
     }
     
-    private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection)
-            throws SQLException {
+    private IndexMaintainer(final PTable dataTable, final PTable index,
+            PhoenixConnection connection) throws SQLException {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
         this.isMultiTenant = dataTable.isMultiTenant();
@@ -1514,8 +1513,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     public Set<ColumnReference> getAllColumnsForDataTable() {
         Set<ColumnReference> result = Sets.newLinkedHashSetWithExpectedSize(
-                indexedExpressions.size() + coveredColumnsMap.size() +
-                        (indexWhereColumns == null ? 0 : indexWhereColumns.size()));
+                indexedExpressions.size() + coveredColumnsMap.size()
+                        + (indexWhereColumns == null ? 0 : indexWhereColumns.size()));
         addColumnRefForScan(indexedColumns, result);
         addColumnRefForScan(coveredColumnsMap.keySet(), result);
         if (indexWhereColumns != null) {
@@ -1754,14 +1753,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             maintainer.isUncovered = false;
         }
         if (proto.hasIndexWhere()) {
-            try (ByteArrayInputStream stream = new ByteArrayInputStream(proto.getIndexWhere().toByteArray())) {
+            try (ByteArrayInputStream stream =
+                    new ByteArrayInputStream(proto.getIndexWhere().toByteArray())) {
                 DataInput input = new DataInputStream(stream);
                 int expressionOrdinal = WritableUtils.readVInt(input);
                 Expression expression = ExpressionType.values()[expressionOrdinal].newInstance();
                 expression.readFields(input);
                 maintainer.indexWhere = expression;
-                List<ServerCachingProtos.ColumnReference> indexWhereColumnsList = proto.getIndexWhereColumnsList();
-                maintainer.indexWhereColumns = new HashSet<ColumnReference>(indexWhereColumnsList.size());
+                List<ServerCachingProtos.ColumnReference> indexWhereColumnsList =
+                        proto.getIndexWhereColumnsList();
+                maintainer.indexWhereColumns = new HashSet<>(indexWhereColumnsList.size());
                 for (ServerCachingProtos.ColumnReference colRefFromProto : indexWhereColumnsList) {
                     maintainer.indexWhereColumns.add(new ColumnReference(
                             colRefFromProto.getFamily().toByteArray(),

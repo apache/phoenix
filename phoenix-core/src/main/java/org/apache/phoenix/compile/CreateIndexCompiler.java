@@ -40,7 +40,6 @@ import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -68,7 +67,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 
@@ -81,7 +79,9 @@ public class CreateIndexCompiler {
         this.operation = operation;
     }
 
-
+    /**
+     * This is to check if the index where clause has a subquery
+     */
     private static class IndexWhereParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
         private boolean  hasSubquery = false;
 
@@ -91,6 +91,7 @@ public class CreateIndexCompiler {
             return null;
         }
     }
+
     private String getValue(PDataType type) {
         if (type instanceof PNumericType) {
             return "0";
@@ -103,9 +104,9 @@ public class CreateIndexCompiler {
             return "TO_DATE('" + now + "','yyyy-MM-dd HH:mm:ss.SSS', 'PST')";
         } else if (type instanceof PBoolean) {
             return "TRUE";
-        } else if (type instanceof PDateArray || type instanceof PUnsignedDateArray ||
-                type instanceof PTimeArray || type instanceof PUnsignedTimeArray ||
-                type instanceof PTimestampArray || type instanceof PUnsignedTimestampArray) {
+        } else if (type instanceof PDateArray || type instanceof PUnsignedDateArray
+                || type instanceof PTimeArray || type instanceof PUnsignedTimeArray
+                || type instanceof PTimestampArray || type instanceof PUnsignedTimestampArray) {
             return "ARRAY[" + getValue(PDate.INSTANCE) + "]";
         } else if (type instanceof PArrayDataType) {
             return "ARRAY" + type.getSampleValue().toString();
@@ -211,10 +212,11 @@ public class CreateIndexCompiler {
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
             List<Cell> cols = dataTableNameAndMutation.getSecond();
-            Collections.sort( cols, CellComparator.getInstance());
+            Collections.sort(cols, CellComparator.getInstance());
             MultiKeyValueTuple tuple = new MultiKeyValueTuple(cols);
             if (!indexWhereExpression.evaluate(tuple, ptr)) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_EVALUATE_INDEX_WHERE).build().buildException();
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_EVALUATE_INDEX_WHERE).
+                        build().buildException();
             }
         } finally {
             connection.setAutoCommit(autoCommit);

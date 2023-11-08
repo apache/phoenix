@@ -2228,7 +2228,8 @@ public class PTableImpl implements PTable {
             builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
         }
         if (table.getIndexWhere() != null) {
-            builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getIndexWhere())));
+            builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
+                    table.getIndexWhere())));
         }
         return builder.build();
     }

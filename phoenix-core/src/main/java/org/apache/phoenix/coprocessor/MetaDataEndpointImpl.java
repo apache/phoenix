@@ -1430,12 +1430,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             oldTable != null ? oldTable.getStreamingTopicName() : null);
 
         Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];
-        String indexWhere = indexWhereKv != null ?
-                (String) PVarchar.INSTANCE.toObject(indexWhereKv.getValueArray(),
+        String indexWhere = indexWhereKv != null
+                ? (String) PVarchar.INSTANCE.toObject(indexWhereKv.getValueArray(),
                         indexWhereKv.getValueOffset(), indexWhereKv.getValueLength())
                 : null;
-        builder.setIndexWhere(indexWhere != null ? indexWhere :
-                oldTable != null ? oldTable.getIndexWhere() : null);
+        builder.setIndexWhere(indexWhere != null ? indexWhere
+                : oldTable != null ? oldTable.getIndexWhere() : null);
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :

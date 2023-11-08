@@ -37,7 +37,6 @@ import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -927,8 +926,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
                 IndexMaintainer indexMaintainer = pair.getFirst();
                 HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
-                if (nextDataRowState != null &&
-                        indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
+                if (nextDataRowState != null
+                        && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                             nextDataRowVG, rowKeyPtr, ts, null, null, false);
@@ -959,8 +958,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                     new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
                         }
                     }
-                } else if (currentDataRowState != null &&
-                        indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
+                } else if (currentDataRowState != null
+                        && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
                     ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
                     byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                             null, null, ts);

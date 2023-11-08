@@ -87,7 +87,7 @@ public class IsNullExpression extends BaseSingleExpression {
     }
 
     @Override
-    public boolean contains (Expression other) {
+    public boolean contains(Expression other) {
         if (!(other instanceof ComparisonExpression || other instanceof IsNullExpression)) {
             return false;
         }

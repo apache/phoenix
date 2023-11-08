@@ -19,7 +19,6 @@
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -69,10 +68,8 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.IndexUtil;
@@ -215,15 +212,15 @@ public class QueryOptimizer {
     private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
-        if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan && dataPlan.isApplicable()) {
+        if (dataPlan.getContext().getScanRanges().isPointLookup()
+                && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
-        if (dataPlan.isApplicable() &&
-                (indexes.isEmpty() ||
-                        dataPlan.isDegenerate() ||
-                        dataPlan.getTableRef().hasDynamicCols() ||
-                        select.getHint().hasHint(Hint.NO_INDEX))) {
+        if (dataPlan.isApplicable() && (indexes.isEmpty()
+                || dataPlan.isDegenerate()
+                || dataPlan.getTableRef().hasDynamicCols()
+                || select.getHint().hasHint(Hint.NO_INDEX))) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
         // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes place.
@@ -245,9 +242,8 @@ public class QueryOptimizer {
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {
             PTable index = hintedPlan.getTableRef().getTable();
-            if (stopAtBestPlan && hintedPlan.isApplicable() &&
-                    (index.getIndexWhere() == null ||
-                            isPartialIndexUsable(select, dataPlan, index))) {
+            if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
+                    || isPartialIndexUsable(select, dataPlan, index))) {
                 return Collections.singletonList(hintedPlan);
             }
             plans.add(0, hintedPlan);
@@ -256,8 +252,8 @@ public class QueryOptimizer {
         for (PTable index : indexes) {
             QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan, false);
             if (plan != null &&
-                    (index.getIndexWhere() == null ||
-                            isPartialIndexUsable(select, dataPlan, index))) {
+                    (index.getIndexWhere() == null
+                            || isPartialIndexUsable(select, dataPlan, index))) {
                 // Query can't possibly return anything so just return this plan.
                 if (plan.isDegenerate()) {
                     return Collections.singletonList(plan);
@@ -396,10 +392,11 @@ public class QueryOptimizer {
                                 QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
                         String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
                         PTable newIndexTable = PhoenixRuntime.getTable(connection, indexName);
-                        dataTable = PhoenixRuntime.getTable(connection,
-                                SchemaUtil.getTableName(newIndexTable.getParentSchemaName().getString(),
-                                        indexTable.getParentTableName().getString()));
-                        maintainer = newIndexTable.getIndexMaintainer(dataTable, statement.getConnection());
+                        dataTable = PhoenixRuntime.getTable(connection, SchemaUtil.getTableName(
+                                newIndexTable.getParentSchemaName().getString(),
+                                indexTable.getParentTableName().getString()));
+                        maintainer = newIndexTable.getIndexMaintainer(dataTable,
+                                statement.getConnection());
                     } else {
                         dataTable = PhoenixRuntime.getTable(connection,
                                 SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),

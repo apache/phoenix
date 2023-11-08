@@ -1663,8 +1663,13 @@ public class MetaDataClient {
             PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
-            CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, statement.getWhere(), statement.getBindCount(), null);
-            table = createTableInternal(tableStatement, splits, dataTable, null, null, getViewIndexDataType() ,null, null, allocateIndexId, statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
+            CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
+                    statement.getProps(), columnDefs, pk, statement.getSplitNodes(),
+                    PTableType.INDEX, statement.ifNotExists(), null,
+                    statement.getWhere(), statement.getBindCount(), null);
+            table = createTableInternal(tableStatement, splits, dataTable, null, null,
+                    getViewIndexDataType() ,null, null, allocateIndexId,
+                    statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
         }
         finally {
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
@@ -2816,8 +2821,8 @@ public class MetaDataClient {
                         .setColumns(columns.values())
                         .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED)
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
-                        .setIndexWhere(statement.getWhereClause() == null ? null :
-                                statement.getWhereClause().toString())
+                        .setIndexWhere(statement.getWhereClause() == null ? null
+                                : statement.getWhereClause().toString())
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
@@ -3223,8 +3228,8 @@ public class MetaDataClient {
                         .setExternalSchemaId(result.getTable() != null ?
                         result.getTable().getExternalSchemaId() : null)
                         .setStreamingTopicName(streamingTopicName)
-                        .setIndexWhere(statement.getWhereClause() == null ? null :
-                                statement.getWhereClause().toString())
+                        .setIndexWhere(statement.getWhereClause() == null ? null
+                                : statement.getWhereClause().toString())
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);

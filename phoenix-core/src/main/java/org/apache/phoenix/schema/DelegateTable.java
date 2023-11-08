@@ -207,7 +207,7 @@ public class DelegateTable implements PTable {
 
     @Override
     public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection)
-            throws SQLException{
+            throws SQLException {
         return delegate.getIndexMaintainer(dataTable, connection);
     }
 
@@ -407,8 +407,11 @@ public class DelegateTable implements PTable {
 
     @Override
     public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
+
     @Override
-    public String getIndexWhere() { return delegate.getIndexWhere(); }
+    public String getIndexWhere() {
+        return delegate.getIndexWhere();
+    }
 
     @Override
     public Expression getIndexWhereExpression(PhoenixConnection connection)

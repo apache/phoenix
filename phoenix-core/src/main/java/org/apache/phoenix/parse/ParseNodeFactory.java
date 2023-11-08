@@ -367,8 +367,8 @@ public class ParseNodeFactory {
 
     public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable,
             IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns,
-            List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props,
-            boolean ifNotExists, IndexType indexType,boolean async, int bindCount,
+            List<ParseNode> splits, ListMultimap<String, Pair<String, Object>> props,
+            boolean ifNotExists, IndexType indexType, boolean async, int bindCount,
             Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
         return new CreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits,
                 props, ifNotExists, indexType, async, bindCount, udfParseNodes, where);

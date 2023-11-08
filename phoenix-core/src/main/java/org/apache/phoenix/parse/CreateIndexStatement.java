@@ -42,7 +42,7 @@ public class CreateIndexStatement extends SingleTableStatement {
 
     public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable, 
             IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns,
-            List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props,
+            List<ParseNode> splits, ListMultimap<String, Pair<String, Object>> props,
             boolean ifNotExists, IndexType indexType, boolean async, int bindCount,
             Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
         super(dataTable, bindCount);
