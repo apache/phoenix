@@ -24,6 +24,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK;
+import static org.apache.phoenix.query.QueryServices.DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
@@ -1601,13 +1603,17 @@ public class MetaDataClient {
             }
 
             Configuration config = connection.getQueryServices().getConfiguration();
+            if (!connection.getQueryServices().getProps()
+                .getBoolean(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK,
+                    DEFAULT_DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK)) {
+                verifyIfDescendentViewsExtendPk(dataTable, config);
+            }
             // for view indexes
             if (dataTable.getType() == PTableType.VIEW) {
                 String physicalName = dataTable.getPhysicalName().getString();
                 physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
                 physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
                 List<ColumnName> requiredCols = Lists.newArrayList(indexedColumnNames);
-                verifyIfDescViewsExtendPk(dataTable, config);
                 requiredCols.addAll(includedColumns);
                 for (ColumnName colName : requiredCols) {
                     // acquire the mutex using the global physical table name to
@@ -1705,13 +1711,13 @@ public class MetaDataClient {
      * Go through all the descendent views from the child view hierarchy and find if any of the
      * descendent views extends the primary key, throw error.
      *
-     * @param view view table on which view index is being created.
+     * @param tableOrView view or table on which the index is being created.
      * @param config the configuration.
      * @throws SQLException if any of the descendent views extends pk or if something goes wrong
      * while querying descendent view hierarchy.
      */
-    private void verifyIfDescViewsExtendPk(PTable view,
-                                           Configuration config) throws SQLException {
+    private void verifyIfDescendentViewsExtendPk(PTable tableOrView, Configuration config)
+        throws SQLException {
         if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
             return;
         }
@@ -1722,19 +1728,19 @@ public class MetaDataClient {
                      connection.getQueryServices().getTable(systemChildLinkTable)) {
             byte[] tenantId = connection.getTenantId() == null ? null
                     : connection.getTenantId().getBytes();
-            byte[] schemaNameBytes = view.getSchemaName().getBytes();
-            byte[] viewName = view.getTableName().getBytes();
+            byte[] schemaNameBytes = tableOrView.getSchemaName().getBytes();
+            byte[] viewOrTableName = tableOrView.getTableName().getBytes();
             Pair<List<PTable>, List<TableInfo>> descViews =
                     ViewUtil.findAllDescendantViews(
                             childLinkTable,
                             config,
                             tenantId,
                             schemaNameBytes,
-                            viewName,
+                            viewOrTableName,
                             HConstants.LATEST_TIMESTAMP,
                             false);
             List<PTable> legitimateChildViews = descViews.getFirst();
-            int dataTableOrViewPkCols = view.getPKColumns().size();
+            int dataTableOrViewPkCols = tableOrView.getPKColumns().size();
             if (legitimateChildViews != null && legitimateChildViews.size() > 0) {
                 for (PTable childView : legitimateChildViews) {
                     if (childView.getPKColumns().size() > dataTableOrViewPkCols) {
@@ -1742,7 +1748,7 @@ public class MetaDataClient {
                                 + " extends pk", childView.getName());
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode
-                                        .CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK)
+                                        .CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK)
                                 .build()
                                 .buildException();
                     }

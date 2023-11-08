@@ -230,7 +230,7 @@ public class CreateTableCompiler {
                 if (table.getIndexes().size() > 0) {
                     throw new SQLExceptionInfo.Builder(
                             SQLExceptionCode
-                                    .VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES)
+                                    .VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES)
                             .build()
                             .buildException();
                 }

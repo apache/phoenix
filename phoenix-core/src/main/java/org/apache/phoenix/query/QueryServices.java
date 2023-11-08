@@ -424,6 +424,17 @@ public interface QueryServices extends SQLCloseable {
     String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
 
     /**
+     * Param to determine whether client can disable validation while creating index to figure out
+     * if any of the descendent views extend primary key of their parents. Since this is a bit of
+     * expensive call, we can opt in to disable it. By default, this check will always be performed
+     * while creating index on any table or view.
+     */
+    String DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK =
+        "phoenix.create.index.disable.validation.views.extend.pk";
+
+    boolean DEFAULT_DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK = false;
+
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();

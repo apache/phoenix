@@ -31,8 +31,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK;
-import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK;
+import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES;
+import static org.apache.phoenix.query.QueryServices.DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -53,6 +54,15 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
+    private Connection getTenantConnection(final String tenantId,
+        final boolean disableCreateIndexCheck) throws Exception {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        tenantProps.setProperty(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK,
+            Boolean.toString(disableCreateIndexCheck));
+        return DriverManager.getConnection(getUrl(), tenantProps);
+    }
+
     @Test
     public void testViewExtendsPkWithParentTableIndex1() {
         final String tableName = generateUniqueName();
@@ -64,21 +74,23 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
-            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE "
-                    + "(COL4)");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+            stmt.execute(
+                "CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE " + "(COL4)");
             allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
-                    + tableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
+                + tableName + " WHERE COL1 = 'col1'");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -101,21 +113,23 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (COL3) INCLUDE "
-                    + "(COL4)");
+                + "(COL4)");
             allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
-                    + fullTableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
+                + fullTableName + " WHERE COL1 = 'col1'");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -136,25 +150,25 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             final Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
             stmt.execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (COL3) INCLUDE "
-                    + "(COL4)");
+                + "(COL4)");
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
                 tenantStmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
-                        + fullTableName + " WHERE COL1 = 'col1'");
+                    + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
+                    + fullTableName + " WHERE COL1 = 'col1'");
                 fail();
             } catch (SQLException e) {
                 try {
-                    assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(),
-                            e.getErrorCode());
-                    assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(),
-                            e.getSQLState());
+                    assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                        e.getErrorCode());
+                    assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                        e.getSQLState());
                     assertTrue(e.getMessage()
-                            .contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                        .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
                 } catch (AssertionError ae) {
                     LOGGER.error("Exception: ", e);
                     throw ae;
@@ -174,21 +188,23 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
-            stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE "
-                    + "(COL4)");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+            stmt.execute(
+                "CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE " + "(COL4)");
             allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -209,17 +225,18 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
-            stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)"
-                    + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)" + " AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'vcol1'");
             stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
         }
     }
 
@@ -235,24 +252,25 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
-                    + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01
-                    + " WHERE VCOL1 = 'vcol1'");
+                + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -277,24 +295,25 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
-                    + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01
-                    + " WHERE VCOL1 = 'vcol1'");
+                + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -319,32 +338,34 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 tenantStmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
                 tenantStmt.execute(
-                        "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                                + "(COL1, COL2, COL3)");
+                    "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                        + "(COL1, COL2, COL3)");
                 allStmtExecuted = true;
                 tenantStmt.execute(
-                        "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
-                                + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01
-                                + " WHERE VCOL1 = 'vcol1'");
+                    "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
+                        + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01
+                        + " WHERE VCOL1 = 'vcol1'");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -367,29 +388,31 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
-            stmt.execute("CREATE VIEW " + view02
-                    + " (VCOL2 CHAR(8), COL6 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
-            stmt.execute("CREATE VIEW " + view03
-                    + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+            stmt.execute(
+                "CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col2'");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                    + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -418,36 +441,36 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 stmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
-                tenantStmt.execute("CREATE VIEW " + view02
-                        + " (VCOL2 CHAR(8), COL6 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
                 stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                        + "(COL1, COL2, COL3)");
+                    + "(COL1, COL2, COL3)");
                 allStmtExecuted = true;
-                tenantStmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), "
-                        + "COL6 VARCHAR PRIMARY KEY) AS "
+                tenantStmt.execute(
+                    "CREATE VIEW " + view04 + " (VCOL2 CHAR(10), " + "COL6 VARCHAR PRIMARY KEY) AS "
                         + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -478,39 +501,39 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 stmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
-                tenantStmt.execute("CREATE VIEW " + view02
-                        + " (VCOL2 CHAR(8), COL6 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
-                tenantStmt.execute("CREATE VIEW " + view04 + " (VCOL4 CHAR(10), "
-                        + "COL8 VARCHAR) AS "
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                    "CREATE VIEW " + view04 + " (VCOL4 CHAR(10), " + "COL8 VARCHAR) AS "
                         + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
                 stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                        + "(COL1, COL2, COL3)");
+                    + "(COL1, COL2, COL3)");
                 allStmtExecuted = true;
                 tenantStmt.execute("CREATE VIEW " + view05 + " (VCOL5 CHAR(10), "
-                        + "COL9 VARCHAR, COL10 INTEGER CONSTRAINT pk PRIMARY KEY(VCOL5)) AS "
-                        + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
+                    + "COL9 VARCHAR, COL10 INTEGER CONSTRAINT pk PRIMARY KEY(VCOL5)) AS "
+                    + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -540,30 +563,28 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 stmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
-                tenantStmt.execute("CREATE VIEW " + view02
-                        + " (VCOL2 CHAR(8), COL6 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
-                tenantStmt.execute("CREATE VIEW " + view04 + " (VCOL4 CHAR(10), "
-                        + "COL8 VARCHAR) AS "
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                    "CREATE VIEW " + view04 + " (VCOL4 CHAR(10), " + "COL8 VARCHAR) AS "
                         + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
                 stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                        + "(COL1, COL2, COL3)");
+                    + "(COL1, COL2, COL3)");
                 tenantStmt.execute("CREATE VIEW " + view05 + " (VCOL5 CHAR(10), "
-                        + "COL9 VARCHAR, COL10 INTEGER) AS "
-                        + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
+                    + "COL9 VARCHAR, COL10 INTEGER) AS " + "SELECT * FROM " + view04
+                    + " WHERE VCOL4 = 'vcol4'");
             }
         }
     }
@@ -590,40 +611,40 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 tenantStmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
-                tenantStmt.execute("CREATE VIEW " + view02
-                        + " (VCOL2 CHAR(8), COL6 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
-                tenantStmt.execute("CREATE VIEW " + view04 + " (VCOL4 CHAR(10), "
-                        + "COL8 VARCHAR) AS "
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                    "CREATE VIEW " + view04 + " (VCOL4 CHAR(10), " + "COL8 VARCHAR) AS "
                         + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
                 tenantStmt.execute(
-                        "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                                + "(COL1, COL2, COL3)");
+                    "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                        + "(COL1, COL2, COL3)");
                 allStmtExecuted = true;
                 tenantStmt.execute("CREATE VIEW " + view05 + " (VCOL5 CHAR(10), "
-                        + "COL9 VARCHAR, COL10 INTEGER CONSTRAINT pk PRIMARY KEY(VCOL5)) AS "
-                        + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
+                    + "COL9 VARCHAR, COL10 INTEGER CONSTRAINT pk PRIMARY KEY(VCOL5)) AS "
+                    + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -654,40 +675,40 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 tenantStmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
-                tenantStmt.execute("CREATE VIEW " + view02
-                        + " (VCOL2 CHAR(8), COL6 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
-                tenantStmt.execute("CREATE VIEW " + view04 + " (VCOL4 CHAR(10), "
-                        + "COL8 VARCHAR) AS "
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                    "CREATE VIEW " + view04 + " (VCOL4 CHAR(10), " + "COL8 VARCHAR) AS "
                         + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
-                stmt.execute(
-                        "CREATE INDEX " + index_table + " ON " + fullTableName + " (COL4) INCLUDE "
-                                + "(COL2)");
                 allStmtExecuted = true;
+                stmt.execute(
+                    "CREATE INDEX " + index_table + " ON " + fullTableName + " (COL4) INCLUDE "
+                        + "(COL2)");
                 tenantStmt.execute("CREATE VIEW " + view05 + " (VCOL5 CHAR(10), "
-                        + "COL9 VARCHAR, COL10 INTEGER CONSTRAINT pk PRIMARY KEY(VCOL5)) AS "
-                        + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
+                    + "COL9 VARCHAR, COL10 INTEGER CONSTRAINT pk PRIMARY KEY(VCOL5)) AS "
+                    + "SELECT * FROM " + view04 + " WHERE VCOL4 = 'vcol4'");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getErrorCode(), e.getErrorCode());
-                assertEquals(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getSQLState(), e.getSQLState());
-                assertTrue(
-                        e.getMessage().contains(VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES.getMessage()));
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
+                assertTrue(e.getMessage()
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -697,7 +718,89 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testViewIndexWithChildViewExtendedPk1() {
+    public void testTenantSchemaViewExtendsPkWithViewIndex8() throws Exception {
+        final String tableName = generateUniqueName();
+        final String schemaName1 = generateUniqueName();
+        final String schemaName2 = generateUniqueName();
+        final String schemaName3 = generateUniqueName();
+        final String schemaName4 = generateUniqueName();
+        final String schemaName5 = generateUniqueName();
+        final String fullTableName = SchemaUtil.getTableName(schemaName1, tableName);
+        final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(schemaName3, "v02_" + tableName);
+        final String view03 = SchemaUtil.getTableName(schemaName4, "v03_" + tableName);
+        final String view04 = SchemaUtil.getTableName(schemaName5, "v04_" + tableName);
+        final String index_table = "idx_" + tableName;
+
+        Properties props = new Properties();
+        props.setProperty(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK, "true");
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            final Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + fullTableName
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
+
+            try (Connection tenantConn = getTenantConnection(TENANT_ID, true)) {
+                final Statement tenantStmt = tenantConn.createStatement();
+
+                tenantStmt.execute("CREATE VIEW " + view01
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(8), COL6 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col2'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                tenantStmt.execute(
+                    "CREATE VIEW " + view04 + " (VCOL4 CHAR(10), " + "COL8 VARCHAR) AS "
+                        + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
+                stmt.execute(
+                    "CREATE INDEX " + index_table + " ON " + fullTableName + " (COL4) INCLUDE "
+                        + "(COL2)");
+            }
+        }
+    }
+
+    @Test
+    public void testViewIndexWithChildViewExtendedPk1() throws Exception {
+        final String tableName = generateUniqueName();
+        final String view01 = "v01_" + tableName;
+        final String view02 = "v02_" + tableName;
+        final String view03 = "v03_" + tableName;
+        final String view04 = "v04_" + tableName;
+        final String index_view01 = "idx_v01_" + tableName;
+        final String index_view02 = "idx_v02_" + tableName;
+
+        Properties props = new Properties();
+        props.setProperty(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK, "true");
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            final Statement stmt = conn.createStatement();
+
+            stmt.execute("CREATE TABLE " + tableName
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+            stmt.execute("CREATE VIEW " + view01
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+            stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10) PRIMARY KEY, COL6 VARCHAR)"
+                + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+            stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
+            stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
+                + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+            stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                + "(COL1, COL2, COL3)");
+        }
+    }
+
+    @Test
+    public void testViewIndexWithChildViewExtendedPk4() {
         final String tableName = generateUniqueName();
         final String view01 = "v01_" + tableName;
         final String view02 = "v02_" + tableName;
@@ -711,32 +814,32 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10) PRIMARY KEY, COL6 VARCHAR)"
-                    + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
             stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                    + "(COL1, COL2, COL3)");
-            stmt.execute("CREATE VIEW " + view03
-                    + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
             stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                    + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
             allStmtExecuted = true;
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
-                        e.getErrorCode());
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
-                        e.getSQLState());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -766,32 +869,32 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10) PRIMARY KEY, COL6 VARCHAR)"
-                    + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
             stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                    + "(COL1, COL2, COL3)");
-            stmt.execute("CREATE VIEW " + view03
-                    + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
             stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                    + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
             allStmtExecuted = true;
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
-                        e.getErrorCode());
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
-                        e.getSQLState());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -821,42 +924,41 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 tenantStmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
                 tenantStmt.execute(
-                        "CREATE VIEW " + view02 + " (VCOL2 CHAR(10) PRIMARY KEY, COL6 VARCHAR)"
-                                + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                    "CREATE VIEW " + view02 + " (VCOL2 CHAR(10) PRIMARY KEY, COL6 VARCHAR)"
+                        + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
                 tenantStmt.execute(
-                        "CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                                + "(COL1, COL2, COL3)");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                    "CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
+                        + "(COL1, COL2, COL3)");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
                 tenantStmt.execute(
-                        "CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                                + "SELECT * FROM " + view03 + " WHERE VCOL1 = 'vcol4'");
+                    "CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
+                        + "SELECT * FROM " + view03 + " WHERE VCOL1 = 'vcol4'");
                 allStmtExecuted = true;
                 tenantStmt.execute(
-                        "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                                + "(COL1, COL2, COL3)");
+                    "CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
+                        + "(COL1, COL2, COL3)");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
-                        e.getErrorCode());
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
-                        e.getSQLState());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -880,32 +982,32 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
-                    + "PRIMARY KEY(COL6)) AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                + "PRIMARY KEY(COL6)) AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
             stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                    + "(COL1, COL2, COL3)");
-            stmt.execute("CREATE VIEW " + view03
-                    + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
             stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                    + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
             allStmtExecuted = true;
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
-                        e.getErrorCode());
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
-                        e.getSQLState());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -935,32 +1037,32 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
             stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
-                    + "PRIMARY KEY(COL6)) AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                + "PRIMARY KEY(COL6)) AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
             stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                    + "(COL1, COL2, COL3)");
-            stmt.execute("CREATE VIEW " + view03
-                    + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
             stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                    + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
             allStmtExecuted = true;
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
             fail();
         } catch (SQLException e) {
             try {
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
-                        e.getErrorCode());
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
-                        e.getSQLState());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -989,39 +1091,38 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + fullTableName
-                    + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                    + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                    + "COL1, COL2)) MULTI_TENANT = true");
+                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
+                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
+                + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT_ID)) {
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 stmt.execute("CREATE VIEW " + view01
-                        + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
-                        + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
+                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+                    + " AS SELECT * FROM " + fullTableName + " WHERE COL1 = 'col1'");
                 tenantStmt.execute(
-                        "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
-                                + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01 +
-                                " WHERE VCOL1 = 'vcol1'");
-                tenantStmt.execute("CREATE VIEW " + view03
-                        + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                        + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
+                    "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR CONSTRAINT pk "
+                        + "PRIMARY KEY(VCOL2)) AS SELECT * FROM " + view01
+                        + " WHERE VCOL1 = 'vcol1'");
+                tenantStmt.execute("CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) "
+                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
                 tenantStmt.execute(
-                        "CREATE VIEW " + view04 + " (VCOL3 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
-                                + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
+                    "CREATE VIEW " + view04 + " (VCOL3 CHAR(10), COL6 VARCHAR PRIMARY KEY) AS "
+                        + "SELECT * FROM " + view02 + " WHERE VCOL1 = 'vcol4'");
                 allStmtExecuted = true;
                 stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                        + "(COL1, COL2, COL3)");
+                    + "(COL1, COL2, COL3)");
                 fail();
             }
         } catch (SQLException e) {
             try {
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
-                        e.getErrorCode());
-                assertEquals(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
-                        e.getSQLState());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getErrorCode(),
+                    e.getErrorCode());
+                assertEquals(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getSQLState(),
+                    e.getSQLState());
                 assertTrue(e.getMessage()
-                        .contains(CANNOT_CREATE_VIEW_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
+                    .contains(CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK.getMessage()));
             } catch (AssertionError ae) {
                 LOGGER.error("Exception: ", e);
                 throw ae;
@@ -1044,22 +1145,24 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
             final Statement stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE VIEW " + view01
-                    + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
-                    + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
-            stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
+                + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
+                + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+            stmt.execute(
+                "CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'vcol1'");
             stmt.execute("CREATE INDEX " + index_view02 + " ON " + view02 + " (COL6) INCLUDE "
-                    + "(COL1, COL2, COL3)");
-            stmt.execute("CREATE VIEW " + view03
-                    + " (VCOL3 CHAR(8), COL7 VARCHAR) "
-                    + "AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'col3'");
-            stmt.execute("CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR) AS "
-                    + "SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol4'");
+                + "(COL1, COL2, COL3)");
+            stmt.execute(
+                "CREATE VIEW " + view03 + " (VCOL3 CHAR(8), COL7 VARCHAR) " + "AS SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'col3'");
+            stmt.execute(
+                "CREATE VIEW " + view04 + " (VCOL2 CHAR(10), COL6 VARCHAR) AS " + "SELECT * FROM "
+                    + view01 + " WHERE VCOL1 = 'vcol4'");
             stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
-                    + "(COL1, COL2, COL3)");
+                + "(COL1, COL2, COL3)");
         }
     }
 
