@@ -1607,7 +1607,7 @@ public class MetaDataClient {
                 physicalSchemaName = SchemaUtil.getSchemaNameFromFullName(physicalName);
                 physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName);
                 List<ColumnName> requiredCols = Lists.newArrayList(indexedColumnNames);
-                verifyIfDescViewsExtendPk(dataTable, config);
+                verifyIfDescendentViewsExtendPk(dataTable, config);
                 requiredCols.addAll(includedColumns);
                 for (ColumnName colName : requiredCols) {
                     // acquire the mutex using the global physical table name to
@@ -1710,8 +1710,8 @@ public class MetaDataClient {
      * @throws SQLException if any of the descendent views extends pk or if something goes wrong
      * while querying descendent view hierarchy.
      */
-    private void verifyIfDescViewsExtendPk(PTable view,
-                                           Configuration config) throws SQLException {
+    private void verifyIfDescendentViewsExtendPk(final PTable view, final Configuration config)
+        throws SQLException {
         if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
             return;
         }

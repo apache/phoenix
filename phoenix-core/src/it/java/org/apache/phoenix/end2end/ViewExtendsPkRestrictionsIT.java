@@ -58,6 +58,8 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String indexName = "idx_" + tableName;
         final String view01 = "v01_" + tableName;
+        final String view02 = "v02_" + tableName;
+        final String view03 = "v03_" + tableName;
         boolean allStmtExecuted = false;
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -68,10 +70,16 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
                     + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE "
                     + "(COL4)");
-            allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view01
                     + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
                     + tableName + " WHERE COL1 = 'col1'");
+            stmt.execute("CREATE VIEW " + view02
+                + " (VCOL2 CHAR(8) NOT NULL PRIMARY KEY, COL6 VARCHAR) AS SELECT * FROM "
+                + tableName + " WHERE COL2 = 'col2'");
+            allStmtExecuted = true;
+            stmt.execute("CREATE VIEW " + view03
+                + " (VCOL3 CHAR(8) NOT NULL PRIMARY KEY, COL7 VARCHAR) AS SELECT * FROM "
+                + view01);
             fail();
         } catch (SQLException e) {
             try {
@@ -90,11 +98,11 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
     @Test
     public void testSchemaViewExtendsPkWithParentTableIndex1() {
         final String tableName = generateUniqueName();
-        final String schemaName1 = generateUniqueName();
-        final String schemaName2 = generateUniqueName();
-        final String fullTableName = SchemaUtil.getTableName(schemaName1, tableName);
+        final String fullTableName = SchemaUtil.getTableName(generateUniqueName(), tableName);
         final String indexName = "idx_" + tableName;
-        final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
+        final String view01 = SchemaUtil.getTableName(generateUniqueName(), "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(generateUniqueName(), "v02_" + tableName);
+        final String view03 = SchemaUtil.getTableName(generateUniqueName(), "v03_" + tableName);
         boolean allStmtExecuted = false;
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -105,10 +113,16 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
                     + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (COL3) INCLUDE "
                     + "(COL4)");
-            allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view01
                     + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
                     + fullTableName + " WHERE COL1 = 'col1'");
+            stmt.execute("CREATE VIEW " + view02
+                + " (VCOL2 CHAR(8) NOT NULL PRIMARY KEY, COL6 VARCHAR) AS SELECT * FROM "
+                + fullTableName);
+            allStmtExecuted = true;
+            stmt.execute("CREATE VIEW " + view03
+                + " (VCOL3 CHAR(8) NOT NULL PRIMARY KEY, COL7 VARCHAR) AS SELECT * FROM "
+                + view02);
             fail();
         } catch (SQLException e) {
             try {
@@ -132,6 +146,9 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String fullTableName = SchemaUtil.getTableName(schemaName1, tableName);
         final String indexName = "idx_" + tableName;
         final String view01 = SchemaUtil.getTableName(schemaName2, "v01_" + tableName);
+        final String view02 = SchemaUtil.getTableName(generateUniqueName(), "v02_" + tableName);
+        final String view03 = SchemaUtil.getTableName(generateUniqueName(), "v03_" + tableName);
+        boolean allStmtExecuted = false;
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             final Statement stmt = conn.createStatement();
@@ -146,6 +163,13 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
                 tenantStmt.execute("CREATE VIEW " + view01
                         + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
                         + fullTableName + " WHERE COL1 = 'col1'");
+                tenantStmt.execute("CREATE VIEW " + view02
+                    + " (VCOL1 CHAR(8) NOT NULL PRIMARY KEY, COL5 VARCHAR) AS SELECT * FROM "
+                    + fullTableName);
+                allStmtExecuted = true;
+                tenantStmt.execute("CREATE VIEW " + view03
+                    + " (VCOL3 CHAR(8) NOT NULL PRIMARY KEY, COL7 VARCHAR) AS SELECT * FROM "
+                    + view01);
                 fail();
             } catch (SQLException e) {
                 try {
@@ -161,6 +185,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
                 }
             }
         }
+        assertTrue("All statements could not be executed", allStmtExecuted);
     }
 
     @Test
@@ -168,6 +193,8 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String tableName = generateUniqueName();
         final String indexName = "idx_" + tableName;
         final String view01 = "v01_" + tableName;
+        final String view02 = "v02_" + tableName;
+        final String view03 = "v03_" + tableName;
         boolean allStmtExecuted = false;
 
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -178,10 +205,16 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
                     + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
             stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE "
                     + "(COL4)");
-            allStmtExecuted = true;
             stmt.execute("CREATE VIEW " + view01
                     + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1)) "
                     + "AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+            stmt.execute("CREATE VIEW " + view02
+                + " (VCOL2 CHAR(8) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2)) "
+                + "AS SELECT * FROM " + tableName);
+            allStmtExecuted = true;
+            stmt.execute("CREATE VIEW " + view03
+                + " (VCOL3 CHAR(8) NOT NULL, COL7 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL3)) "
+                + "AS SELECT * FROM " + view02);
             fail();
         } catch (SQLException e) {
             try {

@@ -226,16 +226,13 @@ public class CreateTableCompiler {
             throws SQLException {
         if (viewExtendsParentPk(columnDefs, pkConstraint)) {
             PTable table = parentToBe;
-            while (table != null) {
+            while (table != null && table.getType() == PTableType.VIEW) {
                 if (table.getIndexes().size() > 0) {
                     throw new SQLExceptionInfo.Builder(
                             SQLExceptionCode
                                     .VIEW_CANNOT_EXTEND_PK_VIEW_INDEXES)
                             .build()
                             .buildException();
-                }
-                if (table.getType() != PTableType.VIEW) {
-                    return;
                 }
                 String schemaName = table.getParentSchemaName().getString();
                 String tableName = table.getParentTableName().getString();
