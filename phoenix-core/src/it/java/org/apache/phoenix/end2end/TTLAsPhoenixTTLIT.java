@@ -43,6 +43,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.*;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -52,6 +53,7 @@ import static org.junit.Assert.fail;
 public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
 
     private static final long DEFAULT_TTL_FOR_TEST = 86400;
+    private static final long DEFAULT_TTL_FOR_CHILD = 10000;
 
     /**
      * test TTL is being set as PhoenixTTL when PhoenixTTL is enabled.
@@ -220,46 +222,6 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
     }
 
     @Test
-    public void testIndex() throws Exception {
-        try(Connection connection = DriverManager.getConnection(getUrl())) {
-            PhoenixConnection conn = connection.unwrap(PhoenixConnection.class);
-            String tableName = generateUniqueName();
-            conn.createStatement().execute("CREATE TABLE IF NOT EXISTS  " + tableName + "  ("
-                    + " ID INTEGER NOT NULL,"
-                    + " COL1 INTEGER NOT NULL,"
-                    + " COL2 bigint NOT NULL,"
-                    + " CREATED_DATE DATE,"
-                    + " CREATION_TIME BIGINT,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2))"
-                    + " TTL = " + DEFAULT_TTL_FOR_TEST + "," + UPDATE_CACHE_FREQUENCY + " = 100000000");
-            String viewName = createUpdatableViewOnTableWithTTL(connection,tableName, false);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, tableName);
-            PTable view = PhoenixRuntime.getTableNoCache(conn, viewName);
-            long ucf = table.getUpdateCacheFrequency();
-            long vucf = view.getUpdateCacheFrequency();
-            int ttl = table.getTTL();
-            int vttl = view.getTTL();
-            String dml = "ALTER TABLE " + tableName + " SET UPDATE_CACHE_FREQUENCY = 2000000, TTL = 10000";
-            conn.createStatement().execute(dml);
-            table = PhoenixRuntime.getTable(conn, tableName);
-            view = PhoenixRuntime.getTable(conn, viewName);
-            int ttl1 = table.getTTL();
-            int vttl1 = view.getTTL();
-            long ucf1 = table.getUpdateCacheFrequency();
-            long vucf1 = view.getUpdateCacheFrequency();
-            table = PhoenixRuntime.getTableNoCache(conn, tableName);
-            view = PhoenixRuntime.getTableNoCache(conn, viewName);
-            long ucf2 = table.getUpdateCacheFrequency();
-            long vucf2 = view.getUpdateCacheFrequency();
-            int ttl2 = table.getTTL();
-            int vttl2 = view.getTTL();
-            int t  =0 ;
-
-        }
-    }
-
-
-    @Test
     public void testSettingTTLForViewsOnTableWithTTL() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tenantID = generateUniqueName();
@@ -328,59 +290,56 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             for (PTable index : tIndexes) {
                 assertTTLValueOfIndex(DEFAULT_TTL_FOR_TEST, index);
             }
+
+        }
+    }
+
+    @Test
+    public void testAlteringTTLToNONEAndThenSettingAtAnotherLevel() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tenantID = generateUniqueName();
+
+            Properties props = new Properties();
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantID);
+            Connection tenantConn = DriverManager.getConnection(getUrl(), props);
+
+            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_TEST,
+                    tableName);
+
+            //Setting TTL on views is not allowed if Table already has TTL
             try {
-                String ddl = "ALTER TABLE  " + tableName + " SET TTL=1000";
-                conn.createStatement().execute(ddl);
-                assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-                        1000, tableName);
-
-                tIndexes = PhoenixRuntime.getTable(
-                        conn.unwrap(PhoenixConnection.class), tableName).getIndexes();
-
-                for (PTable index : tIndexes) {
-                    assertTTLValueOfIndex(1000, index);
-                }
-                /**
-                 * TODO Below tests are failing because we are getting PTable objects from cache.
-                 * Need to invalidate cache for child view when we are altering TTL property of
-                 * parent.
-                 */
-                assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-                        1000, viewName);
-                assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
-                        1000, childView);
-                assertTTLValueOfTableOrView(tenantConn1.unwrap(PhoenixConnection.class),
-                        1000, childView1);
-            } catch (SQLException sqe) {
-                fail();
-            }
-
-            try {
-                String ddl = "ALTER VIEW " + viewName + " SET TTL=1000";
-                conn.createStatement().execute(ddl);
+                createUpdatableViewOnTableWithTTL(conn, tableName, true);
                 fail();
             } catch (SQLException sqe) {
-                assertEquals("Should have failed with TTL_Already defined in hierarchy",
+                assertEquals("Should fail with TTL already defined in hierarchy",
                         TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
             }
 
+            String ddl = "ALTER TABLE " + tableName + " SET TTL=NONE";
+            conn.createStatement().execute(ddl);
+
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), TTL_NOT_DEFINED,
+                    tableName);
+
+            String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, true);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_CHILD, viewName);
+
             try {
-                String ddl = "ALTER VIEW " + childView + " SET TTL=1000";
-                tenantConn.createStatement().execute(ddl);
+                createViewOnViewWithTTL(tenantConn, viewName, true);
                 fail();
             } catch (SQLException sqe) {
-                assertEquals("Should have failed with TTL_Already defined in hierarchy",
+                assertEquals("Should fail with TTL already defined in hierarchy",
                         TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
             }
 
-            try {
-                String ddl = "ALTER VIEW " + childView1 + " SET TTL=1000";
-                tenantConn1.createStatement().execute(ddl);
-                fail();
-            } catch (SQLException sqe) {
-                assertEquals("Should have failed with TTL_Already defined in hierarchy",
-                        TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
-            }
+            ddl = "ALTER VIEW " + viewName + " SET TTL=NONE";
+            conn.createStatement().execute(ddl);
+
+            String childView = createViewOnViewWithTTL(tenantConn, viewName, true);
+            assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_CHILD, childView);
+
         }
     }
 
@@ -413,13 +372,13 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             case LOCAL:
                 String localIndexName = baseTableOrViewName + "_Local_" + generateUniqueName();
                 conn.createStatement().execute("CREATE LOCAL INDEX " + localIndexName + " ON " +
-                        baseTableOrViewName + " (COL1) " + (withTTL ? "TTL = 1000" : ""));
+                        baseTableOrViewName + " (COL1) " + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
                 return localIndexName;
 
             case GLOBAL:
                 String globalIndexName = baseTableOrViewName + "_Global_" + generateUniqueName();
                 conn.createStatement().execute("CREATE INDEX " + globalIndexName + " ON " +
-                        baseTableOrViewName + " (COL1) " + (withTTL ? "TTL = 1000" : ""));
+                        baseTableOrViewName + " (COL1) " + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
                 return globalIndexName;
 
             default:
@@ -433,7 +392,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         conn.createStatement().execute("CREATE VIEW " + viewName
                 + " (" + generateUniqueName() + " SMALLINT) as select * from "
                 + baseTableName + " where id > 1 "
-                + (withTTL ? "TTL = 1000" : "") );
+                + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD  : "") );
         return viewName;
     }
 
@@ -443,7 +402,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         conn.createStatement().execute("CREATE VIEW " + viewName
                 + " (" + generateUniqueName() + " SMALLINT) as select * from "
                 + baseTableName + " where id = 1 "
-                + (withTTL ? "TTL = 1000" : "") );
+                + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : "") );
         return viewName;
     }
 
@@ -451,66 +410,9 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                                            boolean withTTL) throws SQLException {
         String childView = parentViewName + "_" + generateUniqueName();
         conn.createStatement().execute("CREATE VIEW " + childView +
-                " (E BIGINT, F BIGINT) AS SELECT * FROM " + parentViewName);
+                " (E BIGINT, F BIGINT) AS SELECT * FROM " + parentViewName +
+                (withTTL ? " TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
         return childView;
-    }
-
-
-    private void testttt() {
-
-
-//            PTable view = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, viewName));
-//            PName t = view.getParentName();
-//            PName tt = view.getPhysicalName();
-//            PName ttt = view.getPhysicalNames().get(0);
-//            String childViewName = createViewOnViewWithTTL(tenantConn, viewName, false);
-//            PTable child = tenantConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantConn.unwrap(PhoenixConnection.class).getTenantId(), childViewName));
-//            PName t1 = child.getParentName();
-//            PName tt1 = child.getPhysicalName();
-//            PName ttt1 = child.getPhysicalNames().get(0);
-//            TableViewFinderResult tvfr = ViewUtil.findChildViews(conn.unwrap(PhoenixConnection.class), null, null, tableName);
-//            Pair<List<PTable>, List<TableInfo>> allDescendantViews = ViewUtil.findAllDescendantViews(conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(
-//                    SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES, config).toBytes()), config, null, "".getBytes(), tableName.getBytes(), EnvironmentEdgeManager.currentTimeMillis(), false,
-//                    new MutableBoolean(false));
-//        assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-//                DEFAULT_TTL_FOR_TEST, viewName);
-//
-//        //View gets TTL value from its hierarchy
-//        String viewName1 = createReadOnlyViewOnTableWithTTL(conn, tableName, false);
-//        assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-//                DEFAULT_TTL_FOR_TEST, viewName1);
-//
-//        String ddl = "ALTER TABLE  " + tableName
-//                + " SET TTL=1000";
-//        conn.createStatement().execute(ddl);
-//
-//
-//        //Index on Global View should get TTL from View.
-//        createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL,
-//                false);
-//        createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.LOCAL,
-//                false);
-//        List<PTable> indexes = conn.unwrap(PhoenixConnection.class).getTable(
-//                new PTableKey(null, viewName)).getIndexes();
-//        for (PTable index : indexes) {
-//            assertTTLValueOfIndex(DEFAULT_TTL_FOR_TEST, index);
-//        }
-//
-//        try {
-//            conn.createStatement().execute("ALTER VIEW " + viewName + " SET TTL = 1000");
-//            fail();
-//        } catch (SQLException sqe) {
-//            assertEquals("Cannot Set or Alter TTL on Views",
-//                    VIEW_WITH_PROPERTIES.getErrorCode(), sqe.getErrorCode());
-//        }
-//
-//        try {
-//            createIndexOnTableOrViewProvidedWithTTL(conn, viewName, PTable.IndexType.GLOBAL,true);
-//            fail();
-//        } catch (SQLException sqe) {
-//            assertEquals("Should fail with Cannot set or Alter property for index",
-//                    CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX.getErrorCode(), sqe.getErrorCode());
-//        }
     }
 
 }

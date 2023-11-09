@@ -63,6 +63,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME;
@@ -3143,8 +3144,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         //Handle FOREVER and NONE value for TTL at HBase level TTL.
         if (propValue instanceof String) {
             String strValue = (String) propValue;
-            if ("FOREVER".equalsIgnoreCase(strValue) || "NONE".equalsIgnoreCase(strValue)) {
+            if ("FOREVER".equalsIgnoreCase(strValue)) {
                 propValue = HConstants.FOREVER;
+            } else if ("NONE".equalsIgnoreCase(strValue)) {
+                propValue = TTL_NOT_DEFINED;
             }
         }
         return propValue;

@@ -864,10 +864,6 @@ public class ViewUtil {
                 view.hasViewModifiedUseStatsForParallelization()) ?
                 view.useStatsForParallelization() : parentTable.useStatsForParallelization();
 
-//        //Inherit TTL from parent if ttl is not defined already.
-//        int ttl = (view.getViewType() != PTable.ViewType.UPDATABLE) ? TTL_NOT_DEFINED
-//                : (view.getTTL() != TTL_NOT_DEFINED ? view.getTTL() : parentTable.getTTL());
-
         // When creating a PTable for views or view indexes, use the baseTable PTable for attributes
         // inherited from the physical base table.
         // if a TableProperty is not valid on a view we set it to the base table value
@@ -891,7 +887,6 @@ public class ViewUtil {
                 .setUpdateCacheFrequency(updateCacheFreq)
                 .setUseStatsForParallelization(useStatsForParallelization)
                 .setLastDDLTimestamp(maxDDLTimestamp)
-//                .setTTL(ttl)
                 .build();
         pTable = WhereConstantParser.addViewInfoToPColumnsIfNeeded(pTable);
 
@@ -1004,9 +999,6 @@ public class ViewUtil {
             PTable parent, ExtendedCellBuilder extendedCellBuilder) {
         byte[] parentUpdateCacheFreqBytes = null;
         byte[] parentUseStatsForParallelizationBytes = null;
-        //Commenting out phoenixTTL property to exclude.
-        //TODO:- re-enable after introducing TTL for views.
-//        byte[] parentTTLBytes = null;
         if (parent != null) {
             parentUpdateCacheFreqBytes = new byte[PLong.INSTANCE.getByteSize()];
             PLong.INSTANCE.getCodec().encodeLong(parent.getUpdateCacheFrequency(),
@@ -1015,9 +1007,6 @@ public class ViewUtil {
                 parentUseStatsForParallelizationBytes =
                         PBoolean.INSTANCE.toBytes(parent.useStatsForParallelization());
             }
-//            parentTTLBytes = new byte[PLong.INSTANCE.getByteSize()];
-//            PLong.INSTANCE.getCodec().encodeLong(parent.getTTL(),
-//                    parentTTLBytes, 0);
         }
         for (Mutation m: tableMetaData) {
             if (m instanceof Put) {
@@ -1033,12 +1022,6 @@ public class ViewUtil {
                         extendedCellBuilder,
                         parentUseStatsForParallelizationBytes,
                         MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
-//                MetaDataUtil.conditionallyAddTagsToPutCells((Put)m,
-//                        PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
-//                        PhoenixDatabaseMetaData.TTL_BYTES,
-//                        extendedCellBuilder,
-//                        parentTTLBytes,
-//                        MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 
         }
