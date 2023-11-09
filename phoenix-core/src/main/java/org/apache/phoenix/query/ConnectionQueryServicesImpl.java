@@ -2819,7 +2819,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .buildException();
                                 }
                                 //Handle FOREVER and NONE case
-                                propValue = convertForeverAndNoneTTLValue(propValue);
+                                propValue = convertForeverAndNoneTTLValue(propValue, isPhoenixTTLEnabled());
                                 //If Phoenix level TTL is enabled we are using TTL as phoenix
                                 //Table level property.
                                 if (!isPhoenixTTLEnabled()) {
@@ -3140,14 +3140,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
     }
 
-    public static Object convertForeverAndNoneTTLValue(Object propValue) {
+    public static Object convertForeverAndNoneTTLValue(Object propValue, boolean isPhoenixTTLEnabled) {
         //Handle FOREVER and NONE value for TTL at HBase level TTL.
         if (propValue instanceof String) {
             String strValue = (String) propValue;
             if ("FOREVER".equalsIgnoreCase(strValue)) {
                 propValue = HConstants.FOREVER;
             } else if ("NONE".equalsIgnoreCase(strValue)) {
-                propValue = TTL_NOT_DEFINED;
+                propValue = isPhoenixTTLEnabled ? TTL_NOT_DEFINED : HConstants.FOREVER;
             }
         }
         return propValue;

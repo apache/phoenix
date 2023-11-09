@@ -1067,7 +1067,7 @@ public class MetaDataClient {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     if (!isPhoenixTTLEnabled()) {
                         //Handling FOREVER and NONE case for TTL when phoenix.table.ttl.enable is false.
-                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond());
+                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond(), false);
                         commonFamilyProps.put(prop.getFirst(), value);
                     }
                     //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
