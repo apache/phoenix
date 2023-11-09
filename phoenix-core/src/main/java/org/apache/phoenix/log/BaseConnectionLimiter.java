@@ -21,6 +21,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -29,6 +30,8 @@ import javax.annotation.concurrent.GuardedBy;
 import java.sql.SQLException;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 
 /**
  * A base class for concrete implementation of ConnectionLimiter.
@@ -39,6 +42,7 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_C
 public abstract class BaseConnectionLimiter implements ConnectionLimiter {
     protected int connectionCount = 0;
     protected int internalConnectionCount = 0;
+    protected int connectionThrottledCounter = 0;
     protected String profileName;
     protected int maxConnectionsAllowed;
     protected int maxInternalConnectionsAllowed;
@@ -65,8 +69,15 @@ public abstract class BaseConnectionLimiter implements ConnectionLimiter {
             // if throttling threshold is reached, try reclaiming garbage collected phoenix connections.
             if ((allowedConnections != 0) && (futureConnections > allowedConnections) && (onSweep(connection.isInternalConnection()) == 0)) {
                 GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER.increment();
-
-                //TODO:- After PHOENIX-7038 per profile Phoenix Throttled Counter should be updated here.
+                connectionThrottledCounter++;
+                String connectionQueryServiceName = connection.getQueryServices()
+                        .getConfiguration().get(QUERY_SERVICES_NAME);
+                // Since this is ever-increasing counter and only gets reset at JVM restart
+                // Both global and connection query service level,
+                // we won't create histogram for this metric.
+                ConnectionQueryServicesMetricsManager.updateMetrics(
+                        connectionQueryServiceName,
+                        PHOENIX_CONNECTIONS_THROTTLED_COUNTER, connectionThrottledCounter);
 
                 // Let the concrete classes handle the onLimit.
                 // They can either throw the exception back or handle it.
