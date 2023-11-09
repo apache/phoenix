@@ -15,29 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.log;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-
-import java.sql.SQLException;
+package org.apache.phoenix.monitoring;
 
 /**
- * This interface defines the contract for storing information about Phoenix connections
- * for debugging client-side issues like
- * {@link org.apache.phoenix.exception.SQLExceptionCode#NEW_CONNECTION_THROTTLED}
+ * Class that exposes the various phoenix metrics collected at the Phoenix Query Service level.
+ * Because metrics are dynamic in nature, it is not guaranteed that the state exposed will always
+ * be in sync with each other. One should use these metrics primarily for monitoring and debugging
+ * purposes.
  */
-public interface ConnectionLimiter {
+public interface ConnectionQueryServicesMetric extends Metric {
 
-    void acquireConnection(PhoenixConnection connection) throws SQLException;
+    /**
+     * @return Number of samples collected since the last {@link #reset()} call.
+     */
+    long getNumberOfSamples();
 
-    void returnConnection(PhoenixConnection connection);
+    /**
+     * @return Sum of the values of the metric sampled since the last {@link #reset()} call.
+     */
+    long getTotalSum();
 
-    int onSweep(boolean internal) ;
-
-    boolean isLastConnection();
-
-    boolean isShouldThrottleNumConnections();
-
-    int getConnectionCount();
-
-    int getInternalConnectionCount();
 }

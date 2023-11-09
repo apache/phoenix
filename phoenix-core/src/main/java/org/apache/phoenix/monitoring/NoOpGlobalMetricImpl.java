@@ -64,4 +64,14 @@ public class NoOpGlobalMetricImpl implements GlobalMetric {
     public void reset() {
 
     }
+
+    /**
+     * Set the Metric value as current value
+     *
+     * @param value
+     */
+    @Override
+    public void set(long value) {
+
+    }
 }
