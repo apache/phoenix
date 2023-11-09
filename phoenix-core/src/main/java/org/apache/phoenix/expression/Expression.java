@@ -94,4 +94,14 @@ public interface Expression extends PDatum, Writable {
      * @return
      */
     boolean isCloneExpression();
+
+    /**
+     * Determines if this contains/implies other. For example A > 0 contains A >= 5.
+     * @param other is an expression with the lhs (left-hand side) column having the same type of
+     *              the lhs column of other;
+     * @return true if this contains other.
+     */
+    default boolean contains(Expression other) {
+        return this.equals(other);
+    }
 }
