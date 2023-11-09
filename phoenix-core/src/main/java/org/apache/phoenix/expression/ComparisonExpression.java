@@ -22,17 +22,15 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.expression.function.ArrayElemRefExpression;
-import org.apache.phoenix.expression.function.InvertFunction;
 import org.apache.phoenix.expression.rewrite.RowValueConstructorExpressionRewriter;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.SortOrder;
@@ -53,6 +51,12 @@ import org.apache.phoenix.util.StringUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
+import static org.apache.hadoop.hbase.CompareOperator.EQUAL;
+import static org.apache.hadoop.hbase.CompareOperator.GREATER;
+import static org.apache.hadoop.hbase.CompareOperator.GREATER_OR_EQUAL;
+import static org.apache.hadoop.hbase.CompareOperator.LESS;
+import static org.apache.hadoop.hbase.CompareOperator.LESS_OR_EQUAL;
+import static org.apache.hadoop.hbase.CompareOperator.NOT_EQUAL;
 
 /**
  * 
@@ -352,7 +356,133 @@ public class ComparisonExpression extends BaseCompoundExpression {
         ptr.set(ByteUtil.compare(op, comparisonResult) ? PDataType.TRUE_BYTES : PDataType.FALSE_BYTES);
         return true;
     }
-    
+
+    @Override
+    public boolean contains(Expression other) {
+        if (!(other instanceof ComparisonExpression || other instanceof IsNullExpression)) {
+            return false;
+        }
+        if (other instanceof IsNullExpression) {
+            return !((IsNullExpression) other).isNegate();
+        }
+
+        BaseTerminalExpression lhsA =
+                WhereCompiler.getBaseTerminalExpression(this.getChildren().get(0));
+        BaseTerminalExpression lhsB =
+                WhereCompiler.getBaseTerminalExpression(other.getChildren().get(0));
+        if (!lhsA.equals(lhsB)) {
+            return false;
+        }
+        CompareOperator opA = this.getFilterOp();
+        CompareOperator opB = ((ComparisonExpression) other).getFilterOp();
+        BaseTerminalExpression rhs = WhereCompiler.getBaseTerminalExpression(
+                this.getChildren().get(1));
+        if (rhs instanceof ColumnExpression) {
+            BaseTerminalExpression rhsB = WhereCompiler.getBaseTerminalExpression(
+                    other.getChildren().get(1));
+            if (!rhs.equals(rhsB)) {
+                return false;
+            }
+            switch (opA) {
+                case LESS_OR_EQUAL:
+                    if (opB == LESS || opB == LESS_OR_EQUAL || opB == EQUAL) {
+                        return true;
+                    }
+                    return false;
+                case LESS:
+                case EQUAL:
+                case NOT_EQUAL:
+                case GREATER:
+                    if (opA == opB) {
+                        return true;
+                    }
+                    return false;
+                case GREATER_OR_EQUAL:
+                    if (opB == GREATER || opB == GREATER_OR_EQUAL || opB == EQUAL) {
+                        return true;
+                    }
+                    return false;
+                default:
+                    throw new IllegalArgumentException("Unexpected CompareOp " + opA);
+            }
+        }
+        LiteralExpression rhsA = WhereCompiler.getLiteralExpression(this.getChildren().get(1));
+        LiteralExpression rhsB = WhereCompiler.getLiteralExpression(other.getChildren().get(1));
+        Object valA = rhsA.getValue();
+        Object valB = rhsB.getValue();
+
+        PDataType typeA = rhsA.getDataType();
+        PDataType typeB = rhsB.getDataType();
+        switch (opA){
+        case LESS:
+            if (opB == GREATER_OR_EQUAL || opB == GREATER || opB == NOT_EQUAL) {
+                return false;
+            }
+            if (opB == LESS) {
+                if (typeA.compareTo(valA, valB, typeB) >= 0) {
+                    return true;
+                }
+                return false;
+            }
+            if (opB == LESS_OR_EQUAL || opB == EQUAL) {
+                if (typeA.compareTo(valA, valB, typeB) > 0) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        case LESS_OR_EQUAL:
+            if (opB == GREATER_OR_EQUAL || opB == GREATER || opB ==NOT_EQUAL) {
+                return false;
+            }
+            if (opB == LESS_OR_EQUAL || opB == LESS || opB == EQUAL) {
+                if (typeA.compareTo(valA, valB, typeB) >= 0) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        case EQUAL:
+        case NOT_EQUAL:
+            if (opA != opB) {
+                return false;
+            }
+            if (typeA.compareTo(valA, valB, typeB) == 0) {
+                return true;
+            }
+            return false;
+        case GREATER_OR_EQUAL:
+            if (opB == LESS_OR_EQUAL || opB == LESS || opB ==NOT_EQUAL) {
+                return false;
+            }
+            if (opB == GREATER_OR_EQUAL || opB == GREATER || opB == EQUAL) {
+                if (typeA.compareTo(valA, valB, typeB) <= 0) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        case GREATER:
+            if (opB == LESS_OR_EQUAL || opB == LESS || opB ==NOT_EQUAL) {
+                return false;
+            }
+            if (opB == GREATER) {
+                if (typeA.compareTo(valA, valB, typeB) <= 0) {
+                    return true;
+                }
+                return false;
+            }
+            if (opB == GREATER_OR_EQUAL || opB == EQUAL) {
+                if (typeA.compareTo(valA, valB, typeB) < 0) {
+                    return true;
+                }
+                return false;
+            }
+            return false;
+        default:
+            throw new IllegalArgumentException("Unexpected CompareOp of " + opA);
+        }
+    }
     @Override
     public void readFields(DataInput input) throws IOException {
         op = CompareOperator.values()[WritableUtils.readVInt(input)];
