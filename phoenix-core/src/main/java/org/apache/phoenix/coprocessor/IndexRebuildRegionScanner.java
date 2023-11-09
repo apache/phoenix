@@ -35,7 +35,6 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -289,7 +288,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
                     region.getRegionInfo().getEndKey();
             final boolean isIncompatibleClient =
-                    ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             if (!isIncompatibleClient) {
                 rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
                 if (rowKey == null) {
@@ -404,7 +403,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
                     region.getRegionInfo().getEndKey();
             final boolean isIncompatibleClient =
-                    ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             if (!isIncompatibleClient) {
                 rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
                 if (rowKey == null) {

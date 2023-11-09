@@ -762,7 +762,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     + region.getRegionInfo().getRegionNameAsString());
         }
         final boolean isIncompatibleClient =
-                ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
         byte[] rowKey = getRowKeyForCollectStats(region, scan, isIncompatibleClient);
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(rowCount);
         final Cell aggKeyValue =

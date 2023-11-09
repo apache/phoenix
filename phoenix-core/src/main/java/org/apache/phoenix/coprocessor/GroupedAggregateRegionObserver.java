@@ -25,7 +25,6 @@ import static org.apache.phoenix.query.QueryServices.GROUPBY_ESTIMATED_DISTINCT_
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_SPILLABLE;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -478,7 +477,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             final boolean spillableEnabled = conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
             encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
             final boolean isIncompatibleClient =
-                    ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             groupByCache = GroupByCacheFactory.INSTANCE.newCache(
                     env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
                     aggregators, estDistVals, isIncompatibleClient);
@@ -611,7 +610,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                                             final ServerAggregators aggregators, final long limit, final long pageSizeMs) {
             super(scanner);
             this.scan = scan;
-            isIncompatibleClient = ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+            isIncompatibleClient = ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             this.aggregators = aggregators;
             this.limit = limit;
             this.pageSizeMs = pageSizeMs;
