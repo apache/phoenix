@@ -33,7 +33,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES;
-import static org.apache.phoenix.query.QueryServices.DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK;
+import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -58,7 +58,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final boolean disableCreateIndexCheck) throws Exception {
         Properties tenantProps = new Properties();
         tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-        tenantProps.setProperty(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK,
+        tenantProps.setProperty(DISABLE_VIEW_SUBTREE_VALIDATION,
             Boolean.toString(disableCreateIndexCheck));
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
@@ -733,7 +733,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_table = "idx_" + tableName;
 
         Properties props = new Properties();
-        props.setProperty(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK, "true");
+        props.setProperty(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             final Statement stmt = conn.createStatement();
@@ -774,7 +774,7 @@ public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
         final String index_view02 = "idx_v02_" + tableName;
 
         Properties props = new Properties();
-        props.setProperty(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK, "true");
+        props.setProperty(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
 
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             final Statement stmt = conn.createStatement();

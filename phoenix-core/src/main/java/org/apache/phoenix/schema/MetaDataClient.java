@@ -100,8 +100,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
-import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK;
-import static org.apache.phoenix.query.QueryServices.DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK;
+import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
@@ -1606,8 +1606,8 @@ public class MetaDataClient {
 
             Configuration config = connection.getQueryServices().getConfiguration();
             if (!connection.getQueryServices().getProps()
-                .getBoolean(DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK,
-                    DEFAULT_DISABLE_CREATE_INDEX_VALIDATION_FOR_VIEWS_WITH_EXTENDED_PK)) {
+                .getBoolean(DISABLE_VIEW_SUBTREE_VALIDATION,
+                    DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION)) {
                 verifyIfDescendentViewsExtendPk(dataTable, config);
             }
             // for view indexes
