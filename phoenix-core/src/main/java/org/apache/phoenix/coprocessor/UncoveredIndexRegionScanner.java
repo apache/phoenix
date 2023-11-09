@@ -272,19 +272,21 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         return scanIndexTableRows(result, startTime, null, 0);
     }
 
-    private boolean verifyIndexRowAndRepairIfNecessary(Result dataRow, byte[] indexRowKey, long ts) throws IOException {
+    private boolean verifyIndexRowAndRepairIfNecessary(Result dataRow, byte[] indexRowKey,
+            long indexTimestamp)
+            throws IOException {
         Put put = new Put(dataRow.getRow());
         for (Cell cell : dataRow.rawCells()) {
             put.add(cell);
         }
         if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
-            if (IndexUtil.getMaxTimestamp(put) != ts) {
+            if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
                 Mutation[] mutations;
                 Put indexPut = new Put(indexRowKey);
-                indexPut.addColumn(emptyCF, emptyCQ, ts, QueryConstants.VERIFIED_BYTES);
-                if ((EnvironmentEdgeManager.currentTimeMillis() - ts) > ageThreshold) {
+                indexPut.addColumn(emptyCF, emptyCQ, indexTimestamp, QueryConstants.VERIFIED_BYTES);
+                if ((EnvironmentEdgeManager.currentTimeMillis() - indexTimestamp) > ageThreshold) {
                     Delete indexDelete = indexMaintainer.buildRowDeleteMutation(indexRowKey,
-                            IndexMaintainer.DeleteType.SINGLE_VERSION, ts);
+                            IndexMaintainer.DeleteType.SINGLE_VERSION, indexTimestamp);
                     mutations = new Mutation[]{indexPut, indexDelete};
                 } else {
                     mutations = new Mutation[]{indexPut};
@@ -293,7 +295,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             }
             return true;
         }
-        indexMaintainer.deleteRowIfAgedEnough(indexRowKey, ts, ageThreshold, false, region);
+        indexMaintainer.deleteRowIfAgedEnough(indexRowKey, IndexUtil.getMaxTimestamp(put),
+                ageThreshold, false, region);
         return false;
     }
 

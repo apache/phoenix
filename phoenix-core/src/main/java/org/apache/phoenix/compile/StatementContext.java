@@ -88,7 +88,30 @@ public class StatementContext {
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }
-    
+    public StatementContext(StatementContext context) {
+        this.resolver = context.resolver;
+        this.connection = context.connection;
+        this.binds = context.binds;
+        this.scan = context.scan;
+        this.expressions = context.expressions;
+        this.aggregates = context.aggregates;
+        this.numberFormat = context.numberFormat;
+        this.tempPtr = context.tempPtr;
+        this.statement = context.statement;
+        this.dataColumns = context.dataColumns;
+        this.retryingPersistentCache = context.retryingPersistentCache;
+        this.currentTime = context.currentTime;
+        this.scanRanges = context.scanRanges;
+        this.sequences = context.sequences;
+        this.currentTable = context.currentTable;
+        this.whereConditionColumns = context.whereConditionColumns;
+        this.subqueryResults = context.subqueryResults;
+        this.readMetricsQueue = context.readMetricsQueue;
+        this.overAllQueryMetrics = context.overAllQueryMetrics;
+        this.queryLogger = context.queryLogger;
+        this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
+        this.isUncoveredIndex = context.isUncoveredIndex;
+    }
     /**
      *  Constructor that lets you override whether or not to collect request level metrics.
      */
