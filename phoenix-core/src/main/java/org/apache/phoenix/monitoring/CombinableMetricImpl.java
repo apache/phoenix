@@ -59,6 +59,16 @@ public class CombinableMetricImpl implements CombinableMetric, Cloneable {
         metric.reset();
     }
 
+    /**
+     * Set the Metric value as current value
+     *
+     * @param value
+     */
+    @Override
+    public void set(long value) {
+        metric.set(value);
+    }
+
     @Override
     public String getPublishString() {
         return getCurrentMetricState();
