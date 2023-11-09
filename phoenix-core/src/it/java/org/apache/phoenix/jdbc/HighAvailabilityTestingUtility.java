@@ -78,9 +78,9 @@ public class HighAvailabilityTestingUtility {
     public static class HBaseTestingUtilityPair implements Closeable {
         private final HBaseTestingUtility hbaseCluster1 = new HBaseTestingUtility();
         private final HBaseTestingUtility hbaseCluster2 = new HBaseTestingUtility();
-        /** The host:port:/hbase format of the JDBC string for HBase cluster 1. */
+        /** The host\:port::/hbase format of the JDBC string for HBase cluster 1. */
         private String url1;
-        /** The host:port:/hbase format of the JDBC string for HBase cluster 2. */
+        /** The host\:port::/hbase format of the JDBC string for HBase cluster 2. */
         private String url2;
         private PhoenixHAAdminHelper haAdmin1;
         private PhoenixHAAdminHelper haAdmin2;
@@ -114,8 +114,8 @@ public class HighAvailabilityTestingUtility {
             String confAddress1 = hbaseCluster1.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
             String confAddress2 = hbaseCluster2.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
 
-            url1 = String.format("%s:%d:/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
-            url2 = String.format("%s:%d:/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
+            url1 = String.format("%s\\:%d::/hbase", confAddress1, hbaseCluster1.getZkCluster().getClientPort());
+            url2 = String.format("%s\\:%d::/hbase", confAddress2, hbaseCluster2.getZkCluster().getClientPort());
 
             haAdmin1 = new PhoenixHAAdminHelper(getUrl1(), hbaseCluster1.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
             haAdmin2 = new PhoenixHAAdminHelper(getUrl2(), hbaseCluster2.getConfiguration(), PhoenixHAAdminTool.HighAvailibilityCuratorProvider.INSTANCE);
@@ -354,7 +354,7 @@ public class HighAvailabilityTestingUtility {
         }
 
         public String getJdbcUrl(String zkUrl) {
-            return String.format("jdbc:phoenix:%s:%s", zkUrl, PRINCIPAL);
+            return String.format("jdbc:phoenix+zk:%s:%s", zkUrl, PRINCIPAL);
         }
 
         public String getUrl1() {

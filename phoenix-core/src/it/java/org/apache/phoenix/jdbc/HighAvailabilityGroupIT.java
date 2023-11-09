@@ -327,7 +327,7 @@ public class HighAvailabilityGroupIT {
      */
     @Test
     public void testConnectToOneCluster() throws SQLException {
-        final String url = CLUSTERS.getUrl1();
+        final String url = CLUSTERS.getJdbcUrl1();
         PhoenixConnection connection = haGroup.connectToOneCluster(url, clientProperties);
         assertEquals(url, connection.getURL());
 

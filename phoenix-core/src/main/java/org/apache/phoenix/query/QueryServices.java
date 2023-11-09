@@ -56,6 +56,7 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.query.server.orderBy.spooling.enabled";
     public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
+    String QUERY_SERVICES_NAME = "phoenix.query.services.name";
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
     // consistency configuration setting
@@ -126,8 +127,11 @@ public interface QueryServices extends SQLCloseable {
     public static final String HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB = "hbase.client.scanner.timeout.period";
     public static final String RPC_TIMEOUT_ATTRIB = "hbase.rpc.timeout";
     public static final String DYNAMIC_JARS_DIR_KEY = "hbase.dynamic.jars.dir";
+    @Deprecated // Use HConstants directly
     public static final String ZOOKEEPER_QUORUM_ATTRIB = "hbase.zookeeper.quorum";
+    @Deprecated // Use HConstants directly
     public static final String ZOOKEEPER_PORT_ATTRIB = "hbase.zookeeper.property.clientPort";
+    @Deprecated // Use HConstants directly
     public static final String ZOOKEEPER_ROOT_NODE_ATTRIB = "zookeeper.znode.parent";
     public static final String DISTINCT_VALUE_COMPRESS_THRESHOLD_ATTRIB = "phoenix.distinct.value.compress.threshold";
     public static final String SEQUENCE_CACHE_SIZE_ATTRIB = "phoenix.sequence.cacheSize";
@@ -389,6 +393,17 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_HISTOGRAM_LATENCY_RANGES = "phoenix.histogram.latency.ranges";
     // The range of bins for size metrics for histogram.
     public static final String PHOENIX_HISTOGRAM_SIZE_RANGES = "phoenix.histogram.size.ranges";
+
+    // Connection Query Service Metrics Configs
+    String CONNECTION_QUERY_SERVICE_METRICS_ENABLED = "phoenix.conn.query.service.metrics.enabled";
+    String CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME =
+            "phoenix.monitoring.connection.query.service.metricProvider.className";
+    String CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED =
+            "phoenix.conn.query.service.metricsPublisher.enabled";
+    // The range of bins for Connection Query Service Metrics of histogram.
+    String CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES =
+            "phoenix.conn.query.service.histogram.size.ranges";
+
     // This config is used to move (copy and delete) the child links from the SYSTEM.CATALOG to SYSTEM.CHILD_LINK table.
     // As opposed to a copy and async (out of band) delete.
     public static final String MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = "phoenix.move.child_link.during.upgrade";
