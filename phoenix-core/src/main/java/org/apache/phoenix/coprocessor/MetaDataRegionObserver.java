@@ -214,7 +214,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
         };
 
         if (env.getConfiguration()
-                .getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED )) {
+                .getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)) {
             truncateTaskExectuor.schedule(r, startTruncateTaskDelay, TimeUnit.MILLISECONDS);
         }
 
