@@ -159,6 +159,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.DelegateQueryServices;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -1720,6 +1721,12 @@ public class MetaDataClient {
         throws SQLException {
         if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
             return;
+        }
+        if (connection.getQueryServices() instanceof DelegateQueryServices) {
+            DelegateQueryServices services = (DelegateQueryServices) connection.getQueryServices();
+            if (services.getDelegate() instanceof ConnectionlessQueryServicesImpl) {
+                return;
+            }
         }
         byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config) ?
             SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
