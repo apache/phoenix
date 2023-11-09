@@ -79,7 +79,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -95,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import javax.annotation.Nonnull;
 
 import static org.apache.phoenix.compile.WhereCompiler.transformDNF;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;

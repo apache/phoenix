@@ -142,13 +142,15 @@ public class CreateTableCompiler {
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             Expression where = null;
             if (whereNode == null) {
-                viewStatementToBe = parentToBe.getViewStatement();
                 if (parentToBe.getViewType() == ViewType.READ_ONLY) {
                     viewTypeToBe = ViewType.READ_ONLY;
                 }
-                SelectStatement select = new SQLParser(parentToBe.getViewStatement()).parseQuery();
-                whereNode = select.getWhere();
-                where = whereNode.accept(expressionCompiler);
+                viewStatementToBe = parentToBe.getViewStatement();
+                if (viewStatementToBe != null) {
+                    SelectStatement select = new SQLParser(viewStatementToBe).parseQuery();
+                    whereNode = select.getWhere();
+                    where = whereNode.accept(expressionCompiler);
+                }
             } else {
                 whereNode = StatementNormalizer.normalize(whereNode, resolver);
                 if (whereNode.isStateless()) {
@@ -183,7 +185,7 @@ public class CreateTableCompiler {
                     && parentToBe.getPKColumns().isEmpty()) {
                 validateCreateViewCompilation(connection, parentToBe,
                     columnDefs, pkConstraint);
-            } else {
+            } else if (where != null && viewTypeToBe == ViewType.UPDATABLE) {
                 rowKeyPrefix = WhereOptimizer.getRowKeyPrefix(context, create.getTableName(),
                         parentToBe, where);
             }

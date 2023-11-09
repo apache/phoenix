@@ -134,7 +134,7 @@ public class PhoenixResultSetMetadataTest extends BaseConnectionlessQueryTest {
         conn.createStatement().execute(
                 "CREATE TABLE IF NOT EXISTS S.T (A INTEGER PRIMARY KEY, B INTEGER, C VARCHAR, D INTEGER)");
         conn.createStatement().execute(
-                "CREATE VIEW IF NOT EXISTS S.V (VA INTEGER, VB INTEGER) AS SELECT * FROM S.T WHERE B=200");
+                "CREATE VIEW IF NOT EXISTS S.V (VA INTEGER, VB INTEGER) AS SELECT * FROM S.T WHERE A=2");
         conn.createStatement().execute(
                 "UPSERT INTO S.V (A, B, C, D, VA, VB) VALUES (2, 200, 'def', -20, 91, 101)");
         conn.createStatement().execute(

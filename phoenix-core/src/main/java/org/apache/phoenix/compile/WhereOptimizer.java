@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
+
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -75,6 +76,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
+
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -484,18 +486,18 @@ public class WhereOptimizer {
             final StatementContext context,
             final TableName tableNameNode,
             final PTable parentTable,
-            final Expression viewWhereClause
+            final Expression viewWhereExpression
     ) {
         RowKeySchema schema = parentTable.getRowKeySchema();
         List<List<KeyRange>> rowKeySlotRangesList = new ArrayList<>();
         PName tenantId = context.getConnection().getTenantId();
-        byte[] tenantIdBytes = tenantId == null ?
-                ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+        byte[] tenantIdBytes = tenantId == null
+                ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
         if (tenantIdBytes.length != 0) {
             rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
         }
         KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, parentTable);
-        KeyExpressionVisitor.KeySlots keySlots = viewWhereClause.accept(visitor);
+        KeyExpressionVisitor.KeySlots keySlots = viewWhereExpression.accept(visitor);
 
         for (KeyExpressionVisitor.KeySlot slot : keySlots.getSlots()) {
             if (slot != null) {
@@ -519,7 +521,7 @@ public class WhereOptimizer {
                             + "primary-keys = %d, key-ranges: size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
-                    (rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString())));
+                    rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
             LOGGER.info(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
                     rowKeyPrefixHex, rowKeyPrefixStr));
 
@@ -540,14 +542,14 @@ public class WhereOptimizer {
         RowKeySchema schema = parentTable.getRowKeySchema();
         List<List<KeyRange>> rowKeySlotRangesList = new ArrayList<>();
         PName tenantId = connection.getTenantId();
-        byte[] tenantIdBytes = tenantId == null ?
-                ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+        byte[] tenantIdBytes = tenantId == null
+                ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
         if (tenantIdBytes.length != 0) {
             rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
         }
 
         int pkPos = 0;
-        for (int i=0; viewColumnConstantsToBe != null && i < viewColumnConstantsToBe.length; i++) {
+        for (int i = 0; viewColumnConstantsToBe != null && i < viewColumnConstantsToBe.length; i++) {
             if  (isViewColumnReferencedToBe.get(i)) {
                 pkPos++;
                 ValueSchema.Field field = schema.getField(pkPos);
@@ -555,7 +557,7 @@ public class WhereOptimizer {
                 byte[] viewColumnConstants = Bytes.copy(
                         viewColumnConstantsToBe[i],
                         0,
-                        viewColumnConstantsToBe[i].length-1);
+                        viewColumnConstantsToBe[i].length - 1);
                 KeyRange keyRange = ByteUtil.getKeyRange(
                         viewColumnConstants,
                         fieldSortOrder,
@@ -585,11 +587,11 @@ public class WhereOptimizer {
             byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
             assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
 
-            LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, " +
-                            "primary-keys = %d, key-ranges:  size = %d, list = %s ",
+            LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
+                            + "primary-keys = %d, key-ranges:  size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
-                    (rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString())));
+                    rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
             LOGGER.info(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
                     rowKeyPrefixHex, rowKeyPrefixStr));
 

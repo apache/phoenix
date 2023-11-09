@@ -1034,7 +1034,22 @@ public class MetaDataClient {
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
-        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, rowKeyPrefix, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
+        table = createTableInternal(
+                statement,
+                splits,
+                parent,
+                viewStatement,
+                viewType,
+                viewIndexIdType,
+                rowKeyPrefix,
+                viewColumnConstants,
+                isViewColumnReferenced,
+                false,
+                null,
+                null,
+                tableProps,
+                commonFamilyProps
+        );
 
         if (table == null || table.getType() == PTableType.VIEW
                 || statement.isNoVerify() /*|| table.isTransactional()*/) {
@@ -1724,7 +1739,7 @@ public class MetaDataClient {
                     dataTable,
                     null,
                     null,
-                    getViewIndexDataType() ,
+                    getViewIndexDataType(),
                     null,
                     null,
                     null,
@@ -2105,7 +2120,8 @@ public class MetaDataClient {
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-            final byte[] rowKeyPrefix, final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced,
+            final byte[] rowKeyPrefix,
+            final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced,
             boolean allocateIndexId, IndexType indexType, Date asyncCreatedDate,
             Map<String,Object> tableProps,
             Map<String,Object> commonFamilyProps) throws SQLException {
