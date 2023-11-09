@@ -959,7 +959,17 @@ public class MetaDataClient {
         argUpsert.execute();
     }
 
-    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[] rowKeyPrefix, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
+    public MutationState createTable(
+            CreateTableStatement statement,
+            byte[][] splits,
+            PTable parent,
+            String viewStatement,
+            ViewType viewType,
+            PDataType viewIndexIdType,
+            byte[] rowKeyPrefix,
+            byte[][] viewColumnConstants,
+            BitSet isViewColumnReferenced
+    ) throws SQLException {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
@@ -1695,15 +1705,35 @@ public class MetaDataClient {
             PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
-            CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
-                    statement.getProps(), columnDefs, pk, statement.getSplitNodes(),
-                    PTableType.INDEX, statement.ifNotExists(), null,
-                    statement.getWhere(), statement.getBindCount(), null);
-            table = createTableInternal(tableStatement, splits, dataTable,
-                    null, null,
-                    getViewIndexDataType() ,null, null,
-                    null, allocateIndexId,
-                    statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
+            CreateTableStatement tableStatement = FACTORY.createTable(
+                    indexTableName,
+                    statement.getProps(),
+                    columnDefs,
+                    pk,
+                    statement.getSplitNodes(),
+                    PTableType.INDEX,
+                    statement.ifNotExists(),
+                    null,
+                    null,
+                    statement.getBindCount(),
+                    null
+            );
+            table = createTableInternal(
+                    tableStatement,
+                    splits,
+                    dataTable,
+                    null,
+                    null,
+                    getViewIndexDataType() ,
+                    null,
+                    null,
+                    null,
+                    allocateIndexId,
+                    statement.getIndexType(),
+                    asyncCreatedDate,
+                    tableProps,
+                    commonFamilyProps
+            );
         }
         finally {
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);

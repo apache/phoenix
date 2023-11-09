@@ -68,7 +68,6 @@ public class ScanRanges {
         return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), null, true, -1);
     }
     
-    // For testing
     public static ScanRanges createSingleSpan(RowKeySchema schema, List<List<KeyRange>> ranges, Integer nBuckets, boolean useSkipSan) {
         return create(schema, ranges, ScanUtil.getDefaultSlotSpans(ranges.size()), nBuckets, useSkipSan, -1);
     }

@@ -1,9 +1,25 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.prefix;
 
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Result;
@@ -24,6 +40,7 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.end2end.LocalHBaseIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -56,11 +73,13 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.InstanceResolver;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -155,7 +174,7 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             return RandomStringUtils.randomAlphanumeric(15);
         case Types.DECIMAL:
             //pkTypeStr = "DECIMAL(8,2)";
-            return rnd.nextDouble();
+            return Math.floor(rnd.nextInt(50000) * rnd.nextDouble());
         case Types.INTEGER:
             //pkTypeStr = "INTEGER";
             return rnd.nextInt(50000);
@@ -191,7 +210,7 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             }
             case "DECIMAL":
                 //pkTypeStr = "DECIMAL(8,2)";
-                return rnd.nextDouble();
+                return Math.floor(rnd.nextInt(50000) * rnd.nextDouble());
             case "INTEGER":
                 //pkTypeStr = "INTEGER";
                 return rnd.nextInt(50000);
@@ -309,6 +328,9 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
         String col1 = String.format(COL1_FMT, rowIndex, RANDOM_GEN.nextInt(MAX_ROWS));
         String col2 = String.format(COL2_FMT, rowIndex, RANDOM_GEN.nextInt(MAX_ROWS));
         String col3 = String.format(COL3_FMT, rowIndex, RANDOM_GEN.nextInt(MAX_ROWS));
+        Object pk1 = null;
+        Object pk2 = null;
+        Object pk3 = null;
 
         String partitionName = String.format(PARTITION_FMT, partition);
 
@@ -336,10 +358,13 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                     }
                 } else {
                     // Case: MultiTenant and Non ExtendedPK
+                    pk1 = getData(pkTypes[0]);
+                    pk2 = getData(pkTypes[1]);
+                    pk3 = getData(pkTypes[2]);
                     try (PreparedStatement pstmt = tenantConnection.prepareStatement(TENANT_VIEW_WO_PK)) {
-                        pstmt.setObject(1, getData(pkTypes[0]));
-                        pstmt.setObject(2, getData(pkTypes[1]));
-                        pstmt.setObject(3, getData(pkTypes[2]));
+                        pstmt.setObject(1, pk1);
+                        pstmt.setObject(2, pk2);
+                        pstmt.setObject(3, pk3);
                         pstmt.setObject(4, rid);
                         pstmt.setObject(5, col1);
                         pstmt.setObject(6, col2);
@@ -363,11 +388,14 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                     }
                 } else {
                     // Case: Non MultiTenant and Non ExtendedPK
+                    pk1 = getData(pkTypes[0]);
+                    pk2 = getData(pkTypes[1]);
+                    pk3 = getData(pkTypes[2]);
                     try (PreparedStatement pstmt = tenantConnection.prepareStatement(NON_MULTI_TENANT_VIEW_WO_PK)) {
                         pstmt.setObject(1, tenantId);
-                        pstmt.setObject(2, getData(pkTypes[0]));
-                        pstmt.setObject(3, getData(pkTypes[1]));
-                        pstmt.setObject(4, getData(pkTypes[2]));
+                        pstmt.setObject(2, pk1);
+                        pstmt.setObject(3, pk2);
+                        pstmt.setObject(4, pk3);
                         pstmt.setObject(5, rid);
                         pstmt.setObject(6, col1);
                         pstmt.setObject(7, col2);
@@ -379,6 +407,17 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             }
 
         }
+        finally {
+            LOGGER.debug(String.format("Upsert values " +
+                    "tenantId = %s, pk1 = %s, pk2 = %s, pk3 = %s, rid = %s, col1 = %s, col2 = %s",
+                    tenantId,
+                    pk1,
+                    pk2,
+                    pk3,
+                    rid,
+                    col1,
+                    col2));
+        }
     }
 
     // Helper to get rowKeyPrefix from Metadata.
@@ -386,7 +425,7 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             throws SQLException {
 
         PName tenantId = connection.getTenantId();
-        PTable view = connection.getTable(new PTableKey(tenantId, viewName));
+        PTable view = PhoenixRuntime.getTable(connection, viewName);
         String tenantViewKey = String.format("%s.%s", tenantId, viewName);
         byte[] rowkeyPrefix = view.getRowKeyPrefix();
         return new Pair(tenantViewKey, rowkeyPrefix);
@@ -645,30 +684,16 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             SortOrder[][] sortOrders = getSortOrders();
 
             String tableName = "";
-            tableName = createViewHierarchy(testCases, sortOrders, 100,1000,3,true, true, false);
+            tableName = createViewHierarchy(testCases, sortOrders, 500,5000,3,true, true, false);
             assertRowKeyPrefixesForTable(
                     getUrl(),
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 200,2000,3,false, true, false);
+            tableName = createViewHierarchy(testCases, sortOrders, 600,6000,3,false, true, false);
             assertRowKeyPrefixesForTable(
                     getUrl(),
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
-            // TODO : test failure
-            /*
-            tableName = createViewHierarchy(testCases, sortOrders, 300,3000,3,true, true, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            */
-            tableName = createViewHierarchy(testCases, sortOrders, 400,4000,3,false, true, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -692,15 +717,12 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                     getUrl(),
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
-            // TODO : test failure
-            /*
-            tableName = createViewHierarchy(testCases, sortOrders, 300,3000,1,true, false, true);
+            tableName = createViewHierarchy(testCases, sortOrders, 300,3000,3,true, false, true);
             assertRowKeyPrefixesForTable(
                     getUrl(),
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
 
-             */
             tableName = createViewHierarchy(testCases, sortOrders, 400,4000,3,false, false, true);
             assertRowKeyPrefixesForTable(
                     getUrl(),
@@ -716,8 +738,21 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
     }
 
     //TODO: remove
+    // PHOENIX-7067 will not allow extendedPK and viewIndexes
+    // FAILS: java.lang.AssertionError: isMultiTenant(false), extendPK(true), partition(401), tenant(1), rowId(4001), pkInfo(ID1,ID2,ID3), testInfo(INTEGER,INTEGER,INTEGER), sortInfo(ASC,ASC,ASC)
+
+    /**
+     * Caused by: java.lang.ArrayIndexOutOfBoundsException: 5
+     * 	at org.apache.phoenix.index.IndexMaintainer.buildRowKey(IndexMaintainer.java:730)
+     * 	at org.apache.phoenix.index.IndexMaintainer.buildUpdateMutation(IndexMaintainer.java:1107)
+     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.prepareIndexMutations(IndexRegionObserver.java:922)
+     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.preparePreIndexMutations(IndexRegionObserver.java:984)
+     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.preBatchMutateWithExceptions(IndexRegionObserver.java:1202)
+     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.preBatchMutate(IndexRegionObserver.java:467)
+     */
     @Test
-    public void testViewsWithViewIndexes() {
+    @Ignore
+    public void testViewsWithViewIndexesFail1() {
         try {
             List<PDataType[]> testCases = new ArrayList<>();
             // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
@@ -726,7 +761,12 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             SortOrder[][] sortOrders = new SortOrder[][] {
                     {SortOrder.ASC, SortOrder.ASC, SortOrder.ASC}
             };
-            createViewHierarchy(testCases, sortOrders, 300,300,1,false, true, true);
+            String tableName = "";
+            tableName = createViewHierarchy(testCases, sortOrders, 400,4000,3,false, true, true);
+            assertRowKeyPrefixesForTable(
+                    getUrl(),
+                    SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
         } catch (Exception e) {
             e.printStackTrace();
             LOGGER.error(e.getMessage());
@@ -735,7 +775,50 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
     }
 
     //TODO: remove
+    // PHOENIX-7067 will not allow extendedPK and viewIndexes
+    // FAILS: java.lang.AssertionError: isMultiTenant(true), extendPK(true), partition(301), tenant(1), rowId(3001), pkInfo(ID1,ID2,ID3), testInfo(INTEGER,INTEGER,INTEGER), sortInfo(ASC,ASC,ASC)
+
+    /**
+     * 2023-11-07T17:50:18,862 ERROR [Listener at localhost/58634] prefix.RowKeyPrefixTestIT(868): -1
+     * java.lang.ArrayIndexOutOfBoundsException: -1
+     * 	at java.util.ArrayList.elementData(ArrayList.java:422)
+     * 	at java.util.ArrayList.get(ArrayList.java:435)
+     * 	at org.apache.phoenix.index.IndexMaintainer.initCachedState(IndexMaintainer.java:1930)
+     * 	at org.apache.phoenix.index.IndexMaintainer.<init>(IndexMaintainer.java:665)
+     * 	at org.apache.phoenix.index.IndexMaintainer.create(IndexMaintainer.java:148)
+     * 	at org.apache.phoenix.schema.PTableImpl.getIndexMaintainer(PTableImpl.java:1730)
+     * 	at org.apache.phoenix.index.IndexMaintainer.serialize(IndexMaintainer.java:253)
+     */
     @Test
+    @Ignore
+    public void testViewsWithViewIndexesFail2() {
+        try {
+            List<PDataType[]> testCases = new ArrayList<>();
+            // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
+            testCases.add(new PDataType[] {PInteger.INSTANCE, PInteger.INSTANCE, PInteger.INSTANCE});
+
+            SortOrder[][] sortOrders = new SortOrder[][] {
+                    {SortOrder.ASC, SortOrder.ASC, SortOrder.ASC}
+            };
+            String tableName = "";
+            tableName = createViewHierarchy(testCases, sortOrders, 300,3000,3,true, true, true);
+            assertRowKeyPrefixesForTable(
+                    getUrl(),
+                    SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOGGER.error(e.getMessage());
+        }
+
+    }
+
+
+
+    //TODO: remove
+    // Only for local testing
+    @Test
+    @Ignore
     public void testVariousViews() {
         try {
             List<PDataType[]> testCases = new ArrayList<>();
@@ -873,7 +956,7 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                     try (PhoenixConnection tenantConnection = DriverManager.getConnection(tenantConnectionUrl).unwrap(PhoenixConnection.class)) {
                         assertHBaseRowKeyMatchesPrefix(tenantConnection, baseTableName.getBytes(StandardCharsets.UTF_8), rowId, actualViewToRowKeyMap.get(tenantViewKey));
                         if (hasGlobalViewIndexes) {
-                            PTable view = tenantConnection.getTable(new PTableKey(tenantConnection.getTenantId(), tenantViewName));
+                            PTable view = PhoenixRuntime.getTable(tenantConnection, tenantViewName);
                             assertIndexTableRowKeyMatchesPrefix(tenantConnection, view.getIndexes().get(0), indexTableName.getBytes(StandardCharsets.UTF_8), rowId);
                         }
                     }

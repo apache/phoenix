@@ -17,29 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
-import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Set;
-
+import edu.umd.cs.findbugs.annotations.NonNull;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.schema.ValueSchema;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -62,35 +41,54 @@ import org.apache.phoenix.expression.function.FunctionExpression.OrderPreserving
 import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.SchemaUtil;
-
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Set;
 
 /**
  *
@@ -491,31 +489,34 @@ public class WhereOptimizer {
         RowKeySchema schema = parentTable.getRowKeySchema();
         List<List<KeyRange>> rowKeySlotRangesList = new ArrayList<>();
         PName tenantId = context.getConnection().getTenantId();
-        if (tenantId != null) {
-            rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantId.getString().getBytes(StandardCharsets.UTF_8))));
+        byte[] tenantIdBytes = tenantId == null ?
+                ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+        if (tenantIdBytes.length != 0) {
+            rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
         }
         KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, parentTable);
         KeyExpressionVisitor.KeySlots keySlots = viewWhereClause.accept(visitor);
 
         for (KeyExpressionVisitor.KeySlot slot : keySlots.getSlots()) {
             if (slot != null) {
-                if (schema.getField(slot.getPKPosition() ).getSortOrder() == SortOrder.DESC) {
+                if (schema.getField(slot.getPKPosition()).getSortOrder() == SortOrder.DESC) {
                     rowKeySlotRangesList.add(invertKeyRanges(slot.getKeyRanges()));
                     continue;
                 }
                 rowKeySlotRangesList.add(slot.getKeyRanges());
             }
         }
-        ScanRanges scanRange = ScanRanges.createSingleSpan(schema, rowKeySlotRangesList, null, false);
+        ScanRanges scanRange = ScanRanges.createSingleSpan(
+                schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyPrefix = scanRange.getScanRange().getLowerRange();
         // TODO : make it a TRACE log before submission
         if (LOGGER.isInfoEnabled()) {
             String rowKeyPrefixStr = Bytes.toStringBinary(rowKeyPrefix);
             String rowKeyPrefixHex = Bytes.toHex(rowKeyPrefix);
             byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
-            assert(Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0);
-            LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, " +
-                            "primary-keys = %d, key-ranges: size = %d, list = %s ",
+            assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
+            LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
+                            + "primary-keys = %d, key-ranges: size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     (rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString())));
@@ -539,23 +540,33 @@ public class WhereOptimizer {
         RowKeySchema schema = parentTable.getRowKeySchema();
         List<List<KeyRange>> rowKeySlotRangesList = new ArrayList<>();
         PName tenantId = connection.getTenantId();
-        byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+        byte[] tenantIdBytes = tenantId == null ?
+                ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
         if (tenantIdBytes.length != 0) {
             rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
         }
 
         int pkPos = 0;
-        for (int i=0;viewColumnConstantsToBe != null && i<viewColumnConstantsToBe.length;i++) {
+        for (int i=0; viewColumnConstantsToBe != null && i < viewColumnConstantsToBe.length; i++) {
             if  (isViewColumnReferencedToBe.get(i)) {
                 pkPos++;
                 ValueSchema.Field field = schema.getField(pkPos);
                 SortOrder fieldSortOrder = schema.getField(pkPos).getSortOrder();
-                byte[] viewColumnConstants = Bytes.copy(viewColumnConstantsToBe[i], 0, viewColumnConstantsToBe[i].length-1);
-                KeyRange keyRange = ByteUtil.getKeyRange(viewColumnConstants, fieldSortOrder, CompareOperator.EQUAL, field.getDataType());
+                byte[] viewColumnConstants = Bytes.copy(
+                        viewColumnConstantsToBe[i],
+                        0,
+                        viewColumnConstantsToBe[i].length-1);
+                KeyRange keyRange = ByteUtil.getKeyRange(
+                        viewColumnConstants,
+                        fieldSortOrder,
+                        CompareOperator.EQUAL,
+                        field.getDataType());
                 // TODO : make it a TRACE log before submission
                 if (LOGGER.isInfoEnabled()) {
-                    LOGGER.info(String.format("Field: pos = %d, name = %s, schema = %s, referenced-column %d, %s ",
-                            pkPos, parentTable.getPKColumns().get(pkPos), schema.getField(pkPos).toString(),
+                    LOGGER.info(String.format("Field: pos = %d, name = %s, schema = %s, "
+                                            + "referenced-column %d, %s ",
+                            pkPos, parentTable.getPKColumns().get(pkPos),
+                            schema.getField(pkPos).toString(),
                             i, Bytes.toHex(viewColumnConstantsToBe[i])));
                 }
                 rowKeySlotRangesList.add(Arrays.asList(keyRange));
@@ -563,7 +574,8 @@ public class WhereOptimizer {
 
         }
 
-        ScanRanges scanRange = ScanRanges.createSingleSpan(schema, rowKeySlotRangesList, null, false);
+        ScanRanges scanRange = ScanRanges.createSingleSpan(
+                schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyPrefix = scanRange.getScanRange().getLowerRange();
 
         // TODO : make it a TRACE log before submission
@@ -571,7 +583,7 @@ public class WhereOptimizer {
             String rowKeyPrefixStr = Bytes.toStringBinary(rowKeyPrefix);
             String rowKeyPrefixHex = Bytes.toHex(rowKeyPrefix);
             byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
-            assert(Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0);
+            assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
 
             LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, " +
                             "primary-keys = %d, key-ranges:  size = %d, list = %s ",

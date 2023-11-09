@@ -18,22 +18,17 @@
 package org.apache.phoenix.compile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -48,7 +43,6 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.BindParseNode;
@@ -60,11 +54,9 @@ import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -73,8 +65,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
@@ -194,7 +184,8 @@ public class CreateTableCompiler {
                 validateCreateViewCompilation(connection, parentToBe,
                     columnDefs, pkConstraint);
             } else {
-                rowKeyPrefix = WhereOptimizer.getRowKeyPrefix(context, create.getTableName(), parentToBe, where);
+                rowKeyPrefix = WhereOptimizer.getRowKeyPrefix(context, create.getTableName(),
+                        parentToBe, where);
             }
             verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
         }
@@ -225,7 +216,8 @@ public class CreateTableCompiler {
         final PTable parent = parentToBe;
 
         return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
-            viewStatement, viewType, rowKeyPrefix, viewColumnConstants, isViewColumnReferenced, connection);
+                viewStatement, viewType, rowKeyPrefix,
+                viewColumnConstants, isViewColumnReferenced, connection);
     }
 
     /**
@@ -505,8 +497,8 @@ public class CreateTableCompiler {
         public MutationState execute() throws SQLException {
             try {
                 return client.createTable(finalCreate, splits, parent, viewStatement,
-                    viewType, MetaDataUtil.getViewIndexIdDataType(), rowKeyPrefix, viewColumnConstants,
-                    isViewColumnReferenced);
+                        viewType, MetaDataUtil.getViewIndexIdDataType(), rowKeyPrefix,
+                        viewColumnConstants, isViewColumnReferenced);
             } finally {
                 if (client.getConnection() != connection) {
                     client.getConnection().close();
