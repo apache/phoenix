@@ -63,7 +63,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
     
     @Override
-    protected ConnectionQueryServices getDelegate() {
+    public ConnectionQueryServices getDelegate() {
         return (ConnectionQueryServices)super.getDelegate();
     }
     

@@ -81,6 +81,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
@@ -98,6 +100,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
@@ -153,6 +157,10 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.DelegateQueryServices;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -1596,6 +1604,12 @@ public class MetaDataClient {
                 }
             }
 
+            Configuration config = connection.getQueryServices().getConfiguration();
+            if (!connection.getQueryServices().getProps()
+                .getBoolean(DISABLE_VIEW_SUBTREE_VALIDATION,
+                    DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION)) {
+                verifyIfDescendentViewsExtendPk(dataTable, config);
+            }
             // for view indexes
             if (dataTable.getType() == PTableType.VIEW) {
                 String physicalName = dataTable.getPhysicalName().getString();
@@ -1620,7 +1634,6 @@ public class MetaDataClient {
                 }
             }
 
-            Configuration config = connection.getQueryServices().getConfiguration();
             long threshold = Long.parseLong(config.get(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD));
 
             if (threshold > 0 && !statement.isAsync()) {
@@ -1699,6 +1712,65 @@ public class MetaDataClient {
         }
 
         return buildIndex(table, tableRef);
+    }
+
+    /**
+     * Go through all the descendent views from the child view hierarchy and find if any of the
+     * descendent views extends the primary key, throw error.
+     *
+     * @param tableOrView view or table on which the index is being created.
+     * @param config the configuration.
+     * @throws SQLException if any of the descendent views extends pk or if something goes wrong
+     * while querying descendent view hierarchy.
+     */
+    private void verifyIfDescendentViewsExtendPk(PTable tableOrView, Configuration config)
+        throws SQLException {
+        if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
+            return;
+        }
+        if (connection.getQueryServices() instanceof DelegateQueryServices) {
+            DelegateQueryServices services = (DelegateQueryServices) connection.getQueryServices();
+            if (services.getDelegate() instanceof ConnectionlessQueryServicesImpl) {
+                return;
+            }
+        }
+        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config) ?
+            SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
+            SYSTEM_CHILD_LINK_NAME_BYTES;
+        try (Table childLinkTable =
+                     connection.getQueryServices().getTable(systemChildLinkTable)) {
+            byte[] tenantId = connection.getTenantId() == null ? null
+                    : connection.getTenantId().getBytes();
+            byte[] schemaNameBytes = tableOrView.getSchemaName().getBytes();
+            byte[] viewOrTableName = tableOrView.getTableName().getBytes();
+            Pair<List<PTable>, List<TableInfo>> descViews =
+                    ViewUtil.findAllDescendantViews(
+                            childLinkTable,
+                            config,
+                            tenantId,
+                            schemaNameBytes,
+                            viewOrTableName,
+                            HConstants.LATEST_TIMESTAMP,
+                            false);
+            List<PTable> legitimateChildViews = descViews.getFirst();
+            int dataTableOrViewPkCols = tableOrView.getPKColumns().size();
+            if (legitimateChildViews != null && legitimateChildViews.size() > 0) {
+                for (PTable childView : legitimateChildViews) {
+                    if (childView.getPKColumns().size() > dataTableOrViewPkCols) {
+                        LOGGER.error("Creation of view index not allowed as child view {}"
+                                + " extends pk", childView.getName());
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode
+                                        .CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK)
+                                .build()
+                                .buildException();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error while retrieving descendent views", e);
+            throw new SQLException(e);
+        }
     }
 
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {

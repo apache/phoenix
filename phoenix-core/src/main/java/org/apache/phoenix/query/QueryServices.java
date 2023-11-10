@@ -436,6 +436,17 @@ public interface QueryServices extends SQLCloseable {
     String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
 
     /**
+     * Param to determine whether client can disable validation to figure out if any of the
+     * descendent views extend primary key of their parents. Since this is a bit of
+     * expensive call, we can opt in to disable it. By default, this check will always be performed
+     * while creating index (PHOENIX-7067) on any table or view. This config can be used for
+     * disabling other subtree validation purpose as well.
+     */
+    String DISABLE_VIEW_SUBTREE_VALIDATION = "phoenix.disable.view.subtree.validation";
+
+    boolean DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION = false;
+
+    /**
      * Only used by tests: parameter to determine num of regionservers to be created by
      * MiniHBaseCluster.
      */

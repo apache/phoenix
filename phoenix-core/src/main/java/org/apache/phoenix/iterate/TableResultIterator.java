@@ -158,6 +158,29 @@ public class TableResultIterator implements ResultIterator {
         ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
     }
 
+    // Constructors without maxQueryEndTime to maintain API compatibility for phoenix-connectors
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null, false, Long.MAX_VALUE);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, false, Long.MAX_VALUE);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper, boolean isMapReduceContext) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null, isMapReduceContext, Long.MAX_VALUE);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches,
+            boolean isMapReduceContext) throws SQLException {
+            this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, isMapReduceContext, Long.MAX_VALUE);
+    }
+    // End Constructors without maxQueryEndTime to maintain API compatibility for phoenix-connectors
+
     @Override
     public void close() throws SQLException {
         try {
