@@ -19,7 +19,6 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -32,6 +31,8 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -70,6 +71,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -161,10 +163,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     useNewValueColumnQualifier);
         }
         if (scanOffset != null) {
-            innerScanner = getOffsetScanner(innerScanner, new OffsetResultIterator(
-                            new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme),
-                            scanOffset, getPageSizeMsForRegionScanner(scan)),
-                    scan.getAttribute(QueryConstants.LAST_SCAN) != null);
+            final boolean isIncompatibleClient =
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+            innerScanner = getOffsetScanner(
+                    innerScanner,
+                    new OffsetResultIterator(
+                            new RegionScannerResultIterator(
+                                    innerScanner,
+                                    getMinMaxQualifiersFromScan(scan),
+                                    encodingScheme),
+                            scanOffset,
+                            getPageSizeMsForRegionScanner(scan),
+                            isIncompatibleClient),
+                    scan.getAttribute(QueryConstants.LAST_SCAN) != null,
+                    isIncompatibleClient,
+                    scan);
         }
         boolean spoolingEnabled =
                 env.getConfiguration().getBoolean(
@@ -268,18 +281,55 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
     }
 
-
     private RegionScanner getOffsetScanner(final RegionScanner s,
-                                           final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
+                                           final OffsetResultIterator iterator,
+                                           final boolean isLastScan,
+                                           final boolean incompatibleClient,
+                                           final Scan scan)
+            throws IOException {
         final Tuple firstTuple;
         final Region region = getRegion();
         region.startRegionOperation();
         try {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
-                List<Cell> kvList = new ArrayList<Cell>(1);
-                KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
-                        QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
+                List<Cell> kvList = new ArrayList<>(1);
+                KeyValue kv;
+                byte[] remainingOffset =
+                        PInteger.INSTANCE.toBytes(iterator.getRemainingOffset());
+                if (incompatibleClient) {
+                    kv = new KeyValue(
+                            QueryConstants.OFFSET_ROW_KEY_BYTES,
+                            QueryConstants.OFFSET_FAMILY,
+                            QueryConstants.OFFSET_COLUMN,
+                            remainingOffset);
+                } else {
+                    Tuple lastScannedTuple = iterator.getLastScannedTuple();
+                    if (lastScannedTuple != null) {
+                        kv = getOffsetKvWithLastScannedRowKey(remainingOffset, lastScannedTuple);
+                    } else {
+                        byte[] rowKey;
+                        byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                                region.getRegionInfo().getStartKey();
+                        byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                                region.getRegionInfo().getEndKey();
+                        rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                        if (rowKey == null) {
+                            if (scan.includeStartRow()) {
+                                rowKey = startKey;
+                            } else if (scan.includeStopRow()) {
+                                rowKey = endKey;
+                            } else {
+                                rowKey = HConstants.EMPTY_END_ROW;
+                            }
+                        }
+                        kv = new KeyValue(
+                                rowKey,
+                                QueryConstants.OFFSET_FAMILY,
+                                QueryConstants.OFFSET_COLUMN,
+                                remainingOffset);
+                    }
+                }
                 kvList.add(kv);
                 Result r = Result.create(kvList);
                 firstTuple = new ResultTuple(r);
@@ -292,6 +342,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         } finally {
             region.closeRegionOperation();
         }
+
         return new BaseRegionScanner(s) {
             private Tuple tuple = firstTuple;
 
@@ -303,14 +354,36 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             @Override
             public boolean next(List<Cell> results) throws IOException {
                 try {
-                    if (isFilterDone()) { return false; }
-                    for (int i = 0; i < tuple.size(); i++) {
-                        results.add(tuple.getValue(i));
+                    if (isFilterDone()) {
+                        return false;
                     }
-                    tuple = iterator.next();
+                    Tuple nextTuple = iterator.next();
+                    if (!isDummy(tuple)) {
+                        for (int i = 0; i < tuple.size(); i++) {
+                            results.add(tuple.getValue(i));
+                        }
+                    } else {
+                        if (nextTuple == null) {
+                            byte[] remainingOffset =
+                                    PInteger.INSTANCE.toBytes(iterator.getRemainingOffset());
+                            KeyValue kv;
+                            if (incompatibleClient) {
+                                kv = new KeyValue(
+                                        QueryConstants.OFFSET_ROW_KEY_BYTES,
+                                        QueryConstants.OFFSET_FAMILY,
+                                        QueryConstants.OFFSET_COLUMN,
+                                        remainingOffset);
+                            } else {
+                                kv = getOffsetKvWithLastScannedRowKey(remainingOffset, tuple);
+                            }
+                            results.add(kv);
+                        }
+                    }
+                    tuple = nextTuple;
                     return !isFilterDone();
                 } catch (Throwable t) {
-                    ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
+                    ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(),
+                            t);
                     return false;
                 }
             }
@@ -321,15 +394,26 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     s.close();
                 } finally {
                     try {
-                        if (iterator != null) {
-                            iterator.close();
-                        }
+                        iterator.close();
                     } catch (SQLException e) {
                         ServerUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), e);
                     }
                 }
             }
         };
+    }
+
+    private static KeyValue getOffsetKvWithLastScannedRowKey(byte[] value, Tuple tuple) {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        tuple.getKey(ptr);
+        byte[] rowKey = new byte[ptr.getLength()];
+        System.arraycopy(ptr.get(), ptr.getOffset(), rowKey, 0,
+                rowKey.length);
+        return new KeyValue(
+                rowKey,
+                QueryConstants.OFFSET_FAMILY,
+                QueryConstants.OFFSET_COLUMN,
+                value);
     }
 
     /**
@@ -375,7 +459,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         return false;
                     }
                     if (isDummy(tuple)) {
-                        getDummyResult(results);
+                        ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
                     } else {
                         for (int i = 0; i < tuple.size(); i++) {
                             results.add(tuple.getValue(i));

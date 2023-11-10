@@ -19,6 +19,7 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.LOCK_NOT_ACQUIRED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
@@ -46,6 +47,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.HashJoinCacheNotFoundException;
+import org.apache.phoenix.exception.ResultSetOutOfScanRangeException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -59,6 +61,7 @@ import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
+import org.apache.phoenix.util.TupleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -209,6 +212,24 @@ public class TableResultIterator implements ResultIterator {
                 if (lastTuple != null) {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
+                    try {
+                        ScanUtil.verifyKeyInScanRange(ptr, scan);
+                    } catch (ResultSetOutOfScanRangeException e) {
+                        LOGGER.error("Row key {} of table {} is out of scan range. Scan start "
+                                        + "key: {} , end key: {} , _ScanActualStartRow: {} , "
+                                        + "_ScanStartRowSuffix: {} , _ScanStopRowSuffix: {} , "
+                                        + "scan attributes: {}",
+                                Bytes.toStringBinary(ptr.get()),
+                                htable.getName(),
+                                Bytes.toStringBinary(scan.getStartRow()),
+                                Bytes.toStringBinary(scan.getStopRow()),
+                                Bytes.toStringBinary(scan.getAttribute(SCAN_ACTUAL_START_ROW)),
+                                Bytes.toStringBinary(scan.getAttribute(SCAN_START_ROW_SUFFIX)),
+                                Bytes.toStringBinary(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)),
+                                scan.getAttributesMap(),
+                                e);
+                        throw e;
+                    }
                 }
             } catch (SQLException e) {
                 try {
@@ -256,7 +277,7 @@ public class TableResultIterator implements ResultIterator {
                     }
                 }
             }
-            return lastTuple;
+            return TupleUtil.getAggregateGroupTuple(lastTuple);
         } finally {
             renewLeaseLock.unlock();
         }

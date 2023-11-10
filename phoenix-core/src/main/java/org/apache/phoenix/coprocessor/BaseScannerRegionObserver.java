@@ -150,7 +150,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
-    
+    public static final String SCAN_ANALYZE_ACTUAL_START_ROW = "_ScanAnalyzeActualStartRow";
+    public static final String SCAN_ANALYZE_ACTUAL_STOP_ROW = "_ScanAnalyzeActualStopRow";
+    public static final String SCAN_ANALYZE_INCLUDE_START_ROW = "_ScanAnalyzeIncludeStartRow";
+    public static final String SCAN_ANALYZE_INCLUDE_STOP_ROW = "_ScanAnalyzeIncludeStopRow";
+    public static final String SCAN_SERVER_RETURN_VALID_ROW_KEY = "_ScanServerValidRowKey";
+
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
     // In case of Index Write failure, we need to determine that Index mutation

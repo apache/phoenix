@@ -18,13 +18,13 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
+import static org.apache.phoenix.query.QueryConstants.GROUPED_AGGREGATOR_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_ESTIMATED_DISTINCT_VALUES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_SPILLABLE;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -36,18 +36,21 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -74,6 +77,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.PositionBasedMultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -259,10 +263,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final ServerAggregators aggregators;
         private final RegionCoprocessorEnvironment env;
         private final byte[] customAnnotations;
+        private final ConcurrentMap<ImmutableBytesWritable, ImmutableBytesWritable>
+                aggregateValueToLastScannedRowKeys;
+        private final boolean isIncompatibleClient;
 
         private int estDistVals;
 
-        InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
+        InMemoryGroupByCache(RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId,
+                             byte[] customAnnotations, ServerAggregators aggregators,
+                             int estDistVals,
+                             boolean isIncompatibleClient) {
+            this.isIncompatibleClient = isIncompatibleClient;
             int estValueSize = aggregators.getEstimatedByteSize();
             long estSize = sizeOfUnorderedGroupByMap(estDistVals, estValueSize);
             TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
@@ -272,6 +283,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             this.aggregateMap = Maps.newHashMapWithExpectedSize(estDistVals);
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
             this.customAnnotations = customAnnotations;
+            aggregateValueToLastScannedRowKeys = new ConcurrentHashMap<>();
         }
 
         @Override
@@ -313,26 +325,53 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
 
             final List<Cell> aggResults = new ArrayList<Cell>(aggregateMap.size());
 
-            final Iterator<Map.Entry<ImmutableBytesPtr, Aggregator[]>> cacheIter =
-                    aggregateMap.entrySet().iterator();
-            while (cacheIter.hasNext()) {
-                Map.Entry<ImmutableBytesPtr, Aggregator[]> entry = cacheIter.next();
-                ImmutableBytesPtr key = entry.getKey();
+            for (Map.Entry<ImmutableBytesPtr, Aggregator[]> entry : aggregateMap.entrySet()) {
+                ImmutableBytesWritable aggregateGroupValPtr = entry.getKey();
                 Aggregator[] rowAggregators = entry.getValue();
                 // Generate byte array of Aggregators and set as value of row
-                byte[] value = aggregators.toBytes(rowAggregators);
-
+                byte[] aggregateArrayBytes = aggregators.toBytes(rowAggregators);
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug(LogUtil.addCustomAnnotations("Adding new distinct group: "
-                            + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength())
-                            + " with aggregators " + Arrays.asList(rowAggregators).toString()
-                            + " value = " + Bytes.toStringBinary(value), customAnnotations));
+                            + Bytes.toStringBinary(aggregateGroupValPtr.get(),
+                            aggregateGroupValPtr.getOffset(), aggregateGroupValPtr.getLength())
+                            + " with aggregators " + Arrays.asList(rowAggregators) + " value = "
+                            + Bytes.toStringBinary(aggregateArrayBytes), customAnnotations));
                 }
-                Cell keyValue =
-                        PhoenixKeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(),
-                            SINGLE_COLUMN_FAMILY, SINGLE_COLUMN, AGG_TIMESTAMP, value, 0,
-                            value.length);
-                aggResults.add(keyValue);
+                if (!isIncompatibleClient) {
+                    ImmutableBytesWritable lastScannedRowKey =
+                            aggregateValueToLastScannedRowKeys.get(aggregateGroupValPtr);
+                    byte[] aggregateGroupValueBytes = new byte[aggregateGroupValPtr.getLength()];
+                    System.arraycopy(aggregateGroupValPtr.get(), aggregateGroupValPtr.getOffset(),
+                            aggregateGroupValueBytes, 0,
+                            aggregateGroupValueBytes.length);
+                    byte[] finalValue =
+                            ByteUtil.concat(
+                                    PInteger.INSTANCE.toBytes(aggregateGroupValueBytes.length),
+                                    aggregateGroupValueBytes, aggregateArrayBytes);
+                    aggResults.add(
+                            PhoenixKeyValueUtil.newKeyValue(
+                                    lastScannedRowKey.get(),
+                                    lastScannedRowKey.getOffset(),
+                                    lastScannedRowKey.getLength(),
+                                    GROUPED_AGGREGATOR_VALUE_BYTES,
+                                    GROUPED_AGGREGATOR_VALUE_BYTES,
+                                    AGG_TIMESTAMP,
+                                    finalValue,
+                                    0,
+                                    finalValue.length));
+                } else {
+                    aggResults.add(
+                            PhoenixKeyValueUtil.newKeyValue(
+                                    aggregateGroupValPtr.get(),
+                                    aggregateGroupValPtr.getOffset(),
+                                    aggregateGroupValPtr.getLength(),
+                                    SINGLE_COLUMN_FAMILY,
+                                    SINGLE_COLUMN,
+                                    AGG_TIMESTAMP,
+                                    aggregateArrayBytes,
+                                    0,
+                                    aggregateArrayBytes.length));
+                }
             }
             // scanner using the non spillable, memory-only implementation
             return new BaseRegionScanner(s) {
@@ -360,6 +399,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         @Override
+        public void cacheAggregateRowKey(ImmutableBytesPtr value, ImmutableBytesPtr rowKey) {
+            aggregateValueToLastScannedRowKeys.put(value, rowKey);
+        }
+
+        @Override
         public long size() {
             return aggregateMap.size();
         }
@@ -372,15 +416,21 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private GroupByCacheFactory() {
         }
 
-        GroupByCache newCache(RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId, byte[] customAnnotations, ServerAggregators aggregators, int estDistVals) {
+        GroupByCache newCache(RegionCoprocessorEnvironment env,
+                              ImmutableBytesPtr tenantId,
+                              byte[] customAnnotations,
+                              ServerAggregators aggregators,
+                              int estDistVals,
+                              boolean isIncompatibleClient) {
             Configuration conf = env.getConfiguration();
             boolean spillableEnabled =
                     conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
             if (spillableEnabled) {
-                return new SpillableGroupByCache(env, tenantId, aggregators, estDistVals);
+                return new SpillableGroupByCache(env, tenantId, aggregators, estDistVals,
+                        isIncompatibleClient);
             }
-
-            return new InMemoryGroupByCache(env, tenantId, customAnnotations, aggregators, estDistVals);
+            return new InMemoryGroupByCache(env, tenantId, customAnnotations, aggregators,
+                    estDistVals, isIncompatibleClient);
         }
     }
 
@@ -400,12 +450,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final long pageSizeMs;
         private RegionScanner regionScanner = null;
         private final GroupByCache groupByCache;
+        private final Scan scan;
 
         private UnorderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                               final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
                                               final ServerAggregators aggregators, final long limit, final long pageSizeMs) {
             super(scanner);
             this.region = c.getEnvironment().getRegion();
+            this.scan = scan;
             this.aggregators = aggregators;
             this.limit = limit;
             this.pageSizeMs = pageSizeMs;
@@ -424,9 +476,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan));
             final boolean spillableEnabled = conf.getBoolean(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE);
             encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-
+            final boolean isIncompatibleClient =
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             groupByCache = GroupByCacheFactory.INSTANCE.newCache(
-                    env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan), aggregators, estDistVals);
+                    env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
+                    aggregators, estDistVals, isIncompatibleClient);
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug(LogUtil.addCustomAnnotations(
                         "Grouped aggregation over unordered rows with scan " + scan
@@ -452,6 +506,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     if (regionScanner != null) {
                         return regionScanner.next(resultsToReturn);
                     }
+                    ImmutableBytesPtr currentRowKey = null;
                     do {
                         List<Cell> results = useQualifierAsIndex ?
                                 new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(),
@@ -465,13 +520,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         hasMore = delegate.nextRaw(results);
                         if (!results.isEmpty()) {
                             if (isDummy(results)) {
-                                getDummyResult(resultsToReturn);
+                                resultsToReturn.addAll(results);
                                 return true;
                             }
                             result.setKeyValues(results);
                             ImmutableBytesPtr key =
                                     TupleUtil.getConcatenatedValue(result, expressions);
+                            ImmutableBytesPtr originalRowKey = new ImmutableBytesPtr();
+                            result.getKey(originalRowKey);
+                            currentRowKey = originalRowKey;
                             Aggregator[] rowAggregators = groupByCache.cache(key);
+                            groupByCache.cacheAggregateRowKey(key, originalRowKey);
                             // Aggregate values here
                             aggregators.aggregate(rowAggregators, result);
                         }
@@ -480,7 +539,29 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     if (hasMore && groupByCache.size() < limit && (now - startTime) >= pageSizeMs) {
                         // Return a dummy result as we have processed a page worth of rows
                         // but we are not ready to aggregate
-                        getDummyResult(resultsToReturn);
+                        if (currentRowKey != null) {
+                            byte[] rowKey = new byte[currentRowKey.getLength()];
+                            System.arraycopy(currentRowKey.get(), currentRowKey.getOffset(),
+                                    rowKey, 0, rowKey.length);
+                            ScanUtil.getDummyResult(rowKey, resultsToReturn);
+                        } else {
+                            byte[] rowKey;
+                            byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                                    region.getRegionInfo().getStartKey();
+                            byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                                    region.getRegionInfo().getEndKey();
+                            rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                            if (rowKey == null) {
+                                if (scan.includeStartRow()) {
+                                    rowKey = startKey;
+                                } else if (scan.includeStopRow()) {
+                                    rowKey = endKey;
+                                } else {
+                                    rowKey = HConstants.EMPTY_END_ROW;
+                                }
+                            }
+                            ScanUtil.getDummyResult(rowKey, resultsToReturn);
+                        }
                         return true;
                     }
                     regionScanner = groupByCache.getScanner(delegate);
@@ -521,12 +602,15 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final long pageSizeMs;
         private long rowCount = 0;
         private ImmutableBytesPtr currentKey = null;
+        private final ImmutableBytesPtr currentKeyRowKey = new ImmutableBytesPtr();
+        private final boolean isIncompatibleClient;
 
         private OrderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                             final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
                                             final ServerAggregators aggregators, final long limit, final long pageSizeMs) {
             super(scanner);
             this.scan = scan;
+            isIncompatibleClient = ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             this.aggregators = aggregators;
             this.limit = limit;
             this.pageSizeMs = pageSizeMs;
@@ -542,6 +626,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         ScanUtil.getCustomAnnotations(scan)));
             }
         }
+
         @Override
         public boolean next(List<Cell> results) throws IOException {
             boolean hasMore;
@@ -573,7 +658,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         hasMore = delegate.nextRaw(kvs);
                         if (!kvs.isEmpty()) {
                             if (isDummy(kvs)) {
-                                getDummyResult(results);
+                                results.addAll(kvs);
                                 return true;
                             }
                             result.setKeyValues(kvs);
@@ -589,6 +674,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                                             ScanUtil.getCustomAnnotations(scan)));
                                 }
                                 currentKey = key;
+                                result.getKey(currentKeyRowKey);
                             }
                         }
                         atLimit = rowCount + countOffset >= limit;
@@ -603,16 +689,69 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             if (hasMore && !aggBoundary && !atLimit && (now - startTime) >= pageSizeMs) {
                 // Return a dummy result as we have processed a page worth of rows
                 // but we are not ready to aggregate
-                getDummyResult(results);
+                if (currentKeyRowKey.get().length > 0) {
+                    byte[] rowKey = new byte[currentKeyRowKey.getLength()];
+                    System.arraycopy(currentKeyRowKey.get(), currentKeyRowKey.getOffset(),
+                            rowKey, 0, rowKey.length);
+                    ScanUtil.getDummyResult(rowKey, results);
+                } else {
+                    byte[] rowKey;
+                    byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                            region.getRegionInfo().getStartKey();
+                    byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                            region.getRegionInfo().getEndKey();
+                    rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                    if (rowKey == null) {
+                        if (scan.includeStartRow()) {
+                            rowKey = startKey;
+                        } else if (scan.includeStopRow()) {
+                            rowKey = endKey;
+                        } else {
+                            rowKey = HConstants.EMPTY_END_ROW;
+                        }
+                    }
+                    ScanUtil.getDummyResult(rowKey, results);
+                }
                 return true;
             }
             if (currentKey != null) {
-                byte[] value = aggregators.toBytes(rowAggregators);
-                Cell keyValue =
-                        PhoenixKeyValueUtil.newKeyValue(currentKey.get(), currentKey.getOffset(),
-                                currentKey.getLength(), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
-                                AGG_TIMESTAMP, value, 0, value.length);
-                results.add(keyValue);
+                if (!isIncompatibleClient) {
+                    byte[] aggregateArrayBytes = aggregators.toBytes(rowAggregators);
+                    byte[] aggregateGroupValueBytes = new byte[currentKey.getLength()];
+                    System.arraycopy(currentKey.get(), currentKey.getOffset(),
+                            aggregateGroupValueBytes, 0,
+                            aggregateGroupValueBytes.length);
+                    byte[] finalValue =
+                            ByteUtil.concat(
+                                    PInteger.INSTANCE.toBytes(aggregateGroupValueBytes.length),
+                                    aggregateGroupValueBytes, aggregateArrayBytes);
+                    Cell keyValue =
+                            PhoenixKeyValueUtil.newKeyValue(
+                                    currentKeyRowKey.get(),
+                                    currentKeyRowKey.getOffset(),
+                                    currentKeyRowKey.getLength(),
+                                    GROUPED_AGGREGATOR_VALUE_BYTES,
+                                    GROUPED_AGGREGATOR_VALUE_BYTES,
+                                    AGG_TIMESTAMP,
+                                    finalValue,
+                                    0,
+                                    finalValue.length);
+                    results.add(keyValue);
+                } else {
+                    byte[] value = aggregators.toBytes(rowAggregators);
+                    Cell keyValue =
+                            PhoenixKeyValueUtil.newKeyValue(
+                                    currentKey.get(),
+                                    currentKey.getOffset(),
+                                    currentKey.getLength(),
+                                    SINGLE_COLUMN_FAMILY,
+                                    SINGLE_COLUMN,
+                                    AGG_TIMESTAMP,
+                                    value,
+                                    0,
+                                    value.length);
+                    results.add(keyValue);
+                }
                 // If we're at an aggregation boundary, reset the
                 // aggregators and
                 // aggregate with the current result (which is not a part of
@@ -621,6 +760,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     aggregators.reset(rowAggregators);
                     aggregators.aggregate(rowAggregators, result);
                     currentKey = key;
+                    if (key != null) {
+                        result.getKey(currentKeyRowKey);
+                    }
                     rowCount++;
                     atLimit |= rowCount >= limit;
                 }

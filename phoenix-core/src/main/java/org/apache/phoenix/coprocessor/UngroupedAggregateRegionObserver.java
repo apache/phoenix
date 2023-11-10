@@ -106,6 +106,7 @@ import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
 import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -335,6 +336,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         super.preScannerOpen(e, scan);
         if (ScanUtil.isAnalyzeTable(scan)) {
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_START_ROW,
+                    scan.getStartRow());
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_STOP_ROW,
+                    scan.getStopRow());
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_START_ROW,
+                    Bytes.toBytes(scan.includeStartRow()));
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_STOP_ROW,
+                    Bytes.toBytes(scan.includeStopRow()));
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
@@ -752,9 +761,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             LOGGER.info("UPDATE STATISTICS didn't run because another UPDATE STATISTICS command was already running on the region "
                     + region.getRegionInfo().getRegionNameAsString());
         }
-        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        final boolean isIncompatibleClient =
+                ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+        byte[] rowKey = getRowKeyForCollectStats(region, scan, isIncompatibleClient);
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes(rowCount);
         final Cell aggKeyValue =
-                PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY,
+                PhoenixKeyValueUtil.newKeyValue(rowKey, SINGLE_COLUMN_FAMILY,
                         SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         RegionScanner scanner = new BaseRegionScanner(innerScanner) {
             @Override
@@ -788,6 +800,40 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             }
         };
         return scanner;
+    }
+
+    private static byte[] getRowKeyForCollectStats(Region region, Scan scan,
+                                                   boolean isIncompatibleClient) {
+        byte[] rowKey;
+        if (!isIncompatibleClient) {
+            byte[] startKey = scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_START_ROW) == null ?
+                    region.getRegionInfo().getStartKey() : scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_START_ROW);
+            byte[] endKey = scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_STOP_ROW) == null ?
+                    region.getRegionInfo().getEndKey() : scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_STOP_ROW);
+            rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+            if (rowKey == null) {
+                if (scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_START_ROW) !=
+                        null && Bytes.toBoolean(scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_START_ROW))) {
+                    rowKey = startKey;
+                } else if (scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_STOP_ROW) !=
+                        null && Bytes.toBoolean(scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_STOP_ROW))) {
+                    rowKey = endKey;
+                } else {
+                    rowKey = HConstants.EMPTY_END_ROW;
+                }
+            }
+        } else {
+            rowKey = UNGROUPED_AGG_ROW_KEY;
+        }
+        return rowKey;
     }
 
     /**

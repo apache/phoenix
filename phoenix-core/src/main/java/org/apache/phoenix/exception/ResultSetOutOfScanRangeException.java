@@ -15,25 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.coprocessor;
 
-import java.io.Closeable;
+package org.apache.phoenix.exception;
 
-import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.phoenix.expression.aggregator.Aggregator;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import java.sql.SQLException;
 
 /**
- * 
- * Interface to abstract the way in which distinct group by
- * elements are cached
- *
- * 
- * @since 3.0.0
+ * The Exception is thrown when the returned row key by the given Scanner does not satisfy the
+ * Scan boundaries i.e. scan start and end keys.
  */
-public interface GroupByCache extends Closeable {
-    long size();
-    Aggregator[] cache(ImmutableBytesPtr key);
-    RegionScanner getScanner(RegionScanner s);
-    void cacheAggregateRowKey(ImmutableBytesPtr value, ImmutableBytesPtr rowKey);
+public class ResultSetOutOfScanRangeException extends SQLException {
+
+    private static final SQLExceptionCode EXCEPTION_CODE =
+            SQLExceptionCode.ROW_KEY_OUT_OF_SCAN_RANGE;
+
+    public ResultSetOutOfScanRangeException(String message) {
+        super(new SQLExceptionInfo
+                .Builder(EXCEPTION_CODE)
+                .setMessage(message)
+                .build()
+                .toString(),
+                EXCEPTION_CODE.getSQLState(),
+                EXCEPTION_CODE.getErrorCode());
+    }
 }

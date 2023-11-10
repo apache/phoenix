@@ -41,6 +41,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -51,6 +53,9 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
  * @since 0.1
  */
 public class ByteUtil {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ByteUtil.class);
+
     public static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
     public static final ImmutableBytesPtr EMPTY_BYTE_ARRAY_PTR = new ImmutableBytesPtr(
             EMPTY_BYTE_ARRAY);
@@ -467,6 +472,105 @@ public class ByteUtil {
             return null;
         }
         return previousKey;
+    }
+
+    public static byte[] getLargestPossibleRowKeyInRange(byte[] startKey, byte[] endKey) {
+        if (startKey.length == 0 && endKey.length == 0) {
+            return HConstants.EMPTY_END_ROW;
+        }
+        byte[] rowKey;
+        try {
+            if (startKey.length > 0 && endKey.length > 0) {
+                int commonBytesIdx = 0;
+                while (commonBytesIdx < startKey.length && commonBytesIdx < endKey.length) {
+                    if (startKey[commonBytesIdx] == endKey[commonBytesIdx]) {
+                        commonBytesIdx++;
+                    } else {
+                        break;
+                    }
+                }
+                if (commonBytesIdx == 0) {
+                    rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
+                                    new byte[startKey.length + 1]),
+                            Math.max(endKey.length, startKey.length) + 1);
+                } else {
+                    byte[] newStartKey;
+                    byte[] newEndKey;
+                    if (commonBytesIdx < startKey.length) {
+                        newStartKey = new byte[startKey.length - commonBytesIdx];
+                        System.arraycopy(startKey, commonBytesIdx, newStartKey, 0,
+                                newStartKey.length);
+                    } else {
+                        newStartKey = startKey;
+                    }
+                    if (commonBytesIdx < endKey.length) {
+                        newEndKey = new byte[endKey.length - commonBytesIdx];
+                        System.arraycopy(endKey, commonBytesIdx, newEndKey, 0, newEndKey.length);
+                    } else {
+                        newEndKey = endKey;
+                    }
+                    byte[] commonBytes = new byte[commonBytesIdx];
+                    System.arraycopy(startKey, 0, commonBytes, 0, commonBytesIdx);
+                    byte[] tmpRowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(newEndKey,
+                                    new byte[newStartKey.length + 1]),
+                            Math.max(newEndKey.length, newStartKey.length) + 1);
+                    // tmpRowKey can be null if newEndKey has only \x00 bytes
+                    if (tmpRowKey == null) {
+                        tmpRowKey = new byte[newEndKey.length - 1];
+                        System.arraycopy(newEndKey, 0, tmpRowKey, 0, tmpRowKey.length);
+                        rowKey = ByteUtil.concat(commonBytes, tmpRowKey);
+                    } else {
+                        rowKey = ByteUtil.concat(commonBytes, tmpRowKey);
+                    }
+                }
+            } else if (endKey.length > 0) {
+                rowKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(endKey,
+                        new byte[1]), endKey.length + 1);
+            } else {
+                rowKey = ByteUtil.nextKeyWithLength(ByteUtil.concat(startKey,
+                        new byte[1]), startKey.length + 1);
+            }
+            if (rowKey == null) {
+                LOGGER.error("Unexpected result while retrieving rowkey in range ({} , {})",
+                        Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey));
+                return null;
+            }
+            if (Bytes.compareTo(startKey, rowKey) >= 0 ||
+                    Bytes.compareTo(rowKey, endKey) >= 0) {
+                LOGGER.error("Unexpected result while comparing result rowkey in range "
+                                + "({} , {}) , rowKey: {}",
+                        Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey),
+                        Bytes.toStringBinary(rowKey));
+                return null;
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error while retrieving rowkey in range ({} , {})",
+                    Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey));
+            return null;
+        }
+        return rowKey;
+    }
+
+    public static byte[] previousKeyWithLength(byte[] key, int length) {
+        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
+                "less than least expected length " + length);
+        byte[] previousKey = new byte[length];
+        System.arraycopy(key, 0, previousKey, 0, length);
+        if (!previousKey(previousKey, length)) {
+            return null;
+        }
+        return previousKey;
+    }
+
+    public static byte[] nextKeyWithLength(byte[] key, int length) {
+        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
+                "less than least expected length " + length);
+        byte[] nextStartRow = new byte[length];
+        System.arraycopy(key, 0, nextStartRow, 0, length);
+        if (!nextKey(nextStartRow, length)) {
+            return null;
+        }
+        return nextStartRow;
     }
 
     public static boolean previousKey(byte[] key, int length) {

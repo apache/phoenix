@@ -447,6 +447,12 @@ public interface QueryServices extends SQLCloseable {
     boolean DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION = false;
 
     /**
+     * Only used by tests: parameter to determine num of regionservers to be created by
+     * MiniHBaseCluster.
+     */
+    String TESTS_MINI_CLUSTER_NUM_REGION_SERVERS = "phoenix.tests.minicluster.numregionservers";
+
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();
