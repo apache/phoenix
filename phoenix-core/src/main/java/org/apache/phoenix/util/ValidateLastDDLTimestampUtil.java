@@ -61,9 +61,9 @@ public class ValidateLastDDLTimestampUtil {
     }
 
     /**
-     * Returns true if last ddl timestamp validation is enabled on the connection, false otherwise.
+     * Get whether last ddl timestamp validation is enabled on the connection
      * @param connection
-     * @return
+     * @return true if it is enabled, false otherwise
      */
     public static boolean getValidateLastDdlTimestampEnabled(PhoenixConnection connection) {
         return connection.getQueryServices().getProps()
@@ -180,7 +180,6 @@ public class ValidateLastDDLTimestampUtil {
                 }
             }
         }
-
         return requestBuilder.build();
     }
 
