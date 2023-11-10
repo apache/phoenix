@@ -1605,12 +1605,10 @@ public class ScanUtil {
      *
      * @param ptr row key.
      * @param scan scan object used to retrieve the result set.
-     * @param tuple list of KVs returned for the result set.
      * @throws ResultSetOutOfScanRangeException if the row key is out of scan range.
      */
     public static void verifyKeyInScanRange(ImmutableBytesWritable ptr,
-                                            Scan scan,
-                                            Tuple tuple)
+                                            Scan scan)
             throws ResultSetOutOfScanRangeException {
         try {
             verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
@@ -1623,7 +1621,6 @@ public class ScanUtil {
             if (scan.getAttribute(SCAN_ACTUAL_START_ROW) == null) {
                 throw e;
             }
-            // required for Salt Buckets scan boundary changes
             verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_ACTUAL_START_ROW),
                     scan.getStopRow());
         }
