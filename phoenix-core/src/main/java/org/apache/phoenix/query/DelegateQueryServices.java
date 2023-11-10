@@ -40,8 +40,8 @@ public class DelegateQueryServices implements QueryServices {
     public DelegateQueryServices(QueryServices queryServices) {
         parent = queryServices;
     }
-    
-    protected QueryServices getDelegate() {
+
+    public QueryServices getDelegate() {
         return parent;
     }
     
