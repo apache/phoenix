@@ -171,7 +171,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             }
 
             if (localIndex) {
-                assertEquals(fullTableName, explainPlanAttributes.getTableName());
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
+                        explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -600,7 +601,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -635,7 +636,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullTableName, explainPlanAttributes.getTableName());
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
+                        explainPlanAttributes.getTableName());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
@@ -706,7 +708,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -750,7 +752,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
             if (localIndex) {
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
             } else {
                 assertEquals(fullIndexName,
@@ -826,7 +828,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             if(localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
@@ -1014,7 +1016,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
                     explainPlanAttributes.getIteratorTypeAndScanSize());
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(testTable, explainPlanAttributes.getTableName());
+                assertEquals(fullIndexName + "(" + testTable + ")",
+                        explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -1094,7 +1097,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
             if (localIndex) {
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,'1']", explainPlanAttributes.getKeyRanges());
             } else {
@@ -1135,7 +1138,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
@@ -1272,7 +1275,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullTableName,
+                assertEquals(fullIndexName + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
