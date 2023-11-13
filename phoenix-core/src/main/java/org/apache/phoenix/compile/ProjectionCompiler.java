@@ -600,9 +600,6 @@ public class ProjectionCompiler {
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {
-        if (table.getTableName().getString().equals("N000002") || table.getTableName().getString().equals("__CDC__N000002")) {
-            return; // "".isEmpty();
-        }
         // Will project all known/declared column families
         scan.getFamilyMap().clear();
         for (PColumnFamily family : table.getColumnFamilies()) {

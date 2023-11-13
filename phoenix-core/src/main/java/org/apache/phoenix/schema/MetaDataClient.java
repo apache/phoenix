@@ -1791,8 +1791,8 @@ public class MetaDataClient {
         ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ?
                 statement.getTimeIdxColumn() :
                 FACTORY.columnName(statement.getTimeIdxFunc().toString());
-        columnDefs.add(FACTORY.columnDef(timeIdxCol, PTimestamp.INSTANCE.getSqlTypeName(), false, null, false,
-                PTimestamp.INSTANCE.getMaxLength(null), PTimestamp.INSTANCE.getScale(null), false,
+        columnDefs.add(FACTORY.columnDef(timeIdxCol, PDate.INSTANCE.getSqlTypeName(), false, null, false,
+                PDate.INSTANCE.getMaxLength(null), PDate.INSTANCE.getScale(null), false,
                 SortOrder.getDefault(), "", null, false));
         pkColumnDefs.add(FACTORY.columnDefInPkConstraint(timeIdxCol, SortOrder.getDefault(), false));
         for (PColumn pcol : pkColumns) {
