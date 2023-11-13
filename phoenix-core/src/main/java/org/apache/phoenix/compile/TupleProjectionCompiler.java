@@ -71,7 +71,9 @@ public class TupleProjectionCompiler {
                 || select.isAggregate() 
                 || select.isDistinct()
                 || (context.getResolver().getTables().get(0).getTable().getType() != PTableType.TABLE
-                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX && context.getResolver().getTables().get(0).getTable().getType() != PTableType.VIEW))
+                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX
+                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.CDC
+                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.VIEW))
             return null;
         
         List<PColumn> projectedColumns = new ArrayList<PColumn>();

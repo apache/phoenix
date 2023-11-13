@@ -24,7 +24,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -84,7 +83,10 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
-    
+    private TableRef cdcDataTable;
+    private Set<PTable.CDCChangeScope> cdcIncludeScopes;
+    private QueryPlan cdcDataPlan;
+
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }
@@ -359,6 +361,30 @@ public class StatementContext {
 
     public void setUncoveredIndex(boolean isUncoveredIndex) {
         this.isUncoveredIndex = isUncoveredIndex;
+    }
+
+    public void setCDCDataTable(TableRef dataTable) {
+        this.cdcDataTable = dataTable;
+    }
+
+    public TableRef getCDCDataTable() {
+        return this.cdcDataTable;
+    }
+
+    public Set<PTable.CDCChangeScope> getCdcIncludeScopes() {
+        return cdcIncludeScopes;
+    }
+
+    public void setCDCIncludeScopes(Set<PTable.CDCChangeScope> cdcIncludeScopes) {
+        this.cdcIncludeScopes = cdcIncludeScopes;
+    }
+
+    public void setCDCDataPlan(QueryPlan cdcDataPlan) {
+        this.cdcDataPlan = cdcDataPlan;
+    }
+
+    public QueryPlan getCdcDataPlan() {
+        return cdcDataPlan;
     }
 
     /*

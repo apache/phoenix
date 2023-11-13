@@ -1776,7 +1776,8 @@ public class MetaDataClient {
         } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
                 throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
-                        statement.getCdcObjName().getName()).build().buildException();
+                        statement.getCdcObjName().getName()).setRootCause(
+                                e).build().buildException();
             }
             // TODO: What about translating other index creation failures? E.g., bad TS column.
             throw e;

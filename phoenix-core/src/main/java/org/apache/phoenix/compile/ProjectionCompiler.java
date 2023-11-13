@@ -186,7 +186,7 @@ public class ProjectionCompiler {
             projectedColumns.add(new ExpressionProjector(colName, colName, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
-    
+
     private static void projectAllIndexColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns, List<? extends PDatum> targetColumns) throws SQLException {
         ColumnResolver resolver = context.getResolver();
         PTable index = tableRef.getTable();
@@ -225,19 +225,18 @@ public class ProjectionCompiler {
         TableRef projectedTableRef =
                 new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
         for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
-            PColumn column = dataTable.getColumns().get(i);
+            PColumn dataTableColumn = dataTable.getColumns().get(i);
             // Skip tenant ID column (which may not be the first column, but is the first PK column)
-            if (SchemaUtil.isPKColumn(column) && j++ < minTablePKOffset) {
+            if (SchemaUtil.isPKColumn(dataTableColumn) && j++ < minTablePKOffset) {
                 tableOffset++;
                 continue;
             }
-            PColumn dataTableColumn = dataTable.getColumns().get(i);
             String indexColName = IndexUtil.getIndexColumnName(dataTableColumn);
             PColumn indexColumn = null;
             ColumnRef ref = null;
             try {
                 indexColumn = index.getColumnForColumnName(indexColName);
-                //TODO could should we do this more efficiently than catching the expcetion ?
+                //TODO could should we do this more efficiently than catching the exception ?
             } catch (ColumnNotFoundException e) {
                 if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     //Projected columns have the same name as in the data table
@@ -422,7 +421,16 @@ public class ProjectionCompiler {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
                 }
                 isWildcard = true;
-                if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
+                if (context.getCDCDataTable() != null) {
+                    projectAllColumnFamilies(table, scan);
+                    // FIXME: Hack
+                    //projectedColumns = (List<ExpressionProjector>)
+                    //        context.getCdcDataPlan().getProjector() .getColumnProjectors();
+                    // All projections of CDC are valid on index as well, except for the CDC JSON
+                    // column, which is virtual anyway.
+                    return context.getCdcDataPlan().getProjector();
+                }
+                else if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
                     projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
                     projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
@@ -592,6 +600,9 @@ public class ProjectionCompiler {
     }
 
     private static void projectAllColumnFamilies(PTable table, Scan scan) {
+        if (table.getTableName().getString().equals("N000002") || table.getTableName().getString().equals("__CDC__N000002")) {
+            return; // "".isEmpty();
+        }
         // Will project all known/declared column families
         scan.getFamilyMap().clear();
         for (PColumnFamily family : table.getColumnFamilies()) {

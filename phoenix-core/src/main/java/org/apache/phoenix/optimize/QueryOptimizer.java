@@ -19,6 +19,7 @@
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -72,6 +73,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
@@ -216,6 +218,23 @@ public class QueryOptimizer {
                 && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
+
+        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
+        PTable table = dataPlan.getTableRef().getTable();
+
+        if (table.getType() == PTableType.CDC) {
+            NamedTableNode indexTable = FACTORY.namedTable(null,
+                    FACTORY.table(table.getSchemaName().getString(),
+                            CDCUtil.getCDCIndexName(table.getTableName().getString())),
+                    select.getTableSamplingRate());
+            ColumnResolver resolver = FromCompiler.getResolver(indexTable,
+                    statement.getConnection());
+            PTable cdcIndex = resolver.getTables().get(0).getTable();
+            QueryPlan queryPlan = addPlan(statement, translatedIndexSelect, cdcIndex, targetColumns,
+                    parallelIteratorFactory, dataPlan, false);
+            return Arrays.asList(queryPlan);
+        }
+
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
         if (dataPlan.isApplicable() && (indexes.isEmpty()
                 || dataPlan.isDegenerate()
@@ -236,7 +255,6 @@ public class QueryOptimizer {
             targetColumns = targetDatums;
         }
         
-        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         List<QueryPlan> plans = Lists.newArrayListWithExpectedSize(1 + indexes.size());
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
@@ -373,7 +391,21 @@ public class QueryOptimizer {
                 SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
-                QueryPlan plan = compiler.compile();
+                QueryPlan plan;
+                if (dataPlan.getTableRef().getTable().getType() == PTableType.CDC) {
+                    PTable cdcTable = dataPlan.getTableRef().getTable();
+                    NamedTableNode cdcDataTable = FACTORY.namedTable(null,
+                            FACTORY.table(cdcTable.getSchemaName().getString(),
+                                    cdcTable.getParentTableName().getString()),
+                            select.getTableSamplingRate());
+                    ColumnResolver dataTableResolver = FromCompiler.getResolver(cdcDataTable,
+                            statement.getConnection());
+                    plan = compiler.compileCDCSelect(dataTableResolver.getTables().get(0),
+                            dataPlan);
+                }
+                else {
+                    plan = compiler.compile();
+                }
                 if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                     // Indexed columns should also be added to the data columns to join for
                     // uncovered global indexes. This is required to verify index rows against
@@ -783,3 +815,11 @@ public class QueryOptimizer {
         }
     }
 }
+
+/*
+plan after compile index:
+plan.context.scan: {"loadColumnFamiliesOnDemand":true,"startRow":"","stopRow":"","batch":-1,"cacheBlocks":true,"totalColumns":1,"maxResultSize":"-1","families":{"0":["ALL"]},"caching":2147483647,"maxVersions":1,"timeRange":["0","9223372036854775807"]}
+
+select * from cdc:
+plan.context.scan: {"loadColumnFamiliesOnDemand":true,"startRow":"","stopRow":"","batch":-1,"cacheBlocks":true,"totalColumns":0,"maxResultSize":"-1","families":{},"caching":2147483647,"maxVersions":1,"timeRange":["0","9223372036854775807"]}
+*/

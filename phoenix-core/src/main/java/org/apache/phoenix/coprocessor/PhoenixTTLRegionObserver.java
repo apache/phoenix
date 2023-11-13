@@ -102,6 +102,9 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
                 metricSource.getMaskExpiredRequestCount(),
                 metricSource.getDeleteExpiredRequestCount()
         ));
+        if (s.getRegionInfo().getTable().getNameAsString().equals("N000002") || s.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
+            "".isEmpty();
+        }
         return new PhoenixTTLRegionScanner(c.getEnvironment(), scan, s);
     }
 

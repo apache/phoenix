@@ -82,4 +82,8 @@ public class CDCUtil {
     public static boolean isACDCIndex(String indexName) {
         return indexName.startsWith(CDC_INDEX_PREFIX);
     }
+
+    public static boolean isACDCIndex(PTable indexTable) {
+        return isACDCIndex(indexTable.getTableName().getString());
+    }
 }

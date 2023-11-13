@@ -321,6 +321,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 ScanUtil.setUncoveredGlobalIndex(scan);
             }
 
+            // TODO: We don't need data columns for CDC
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes
             // 1. data columns to be projected and their key value schema.

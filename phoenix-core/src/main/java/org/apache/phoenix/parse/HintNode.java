@@ -56,62 +56,62 @@ public class HintNode {
          */
         NO_CHILD_PARENT_JOIN_OPTIMIZATION,
         /**
-        * Prevents the usage of indexes, forcing usage
-        * of the data table for a query.
-        */
-       NO_INDEX,
-       /**
-       * Hint of the form {@code INDEX(<table_name> <index_name>...) }
-       * to suggest usage of the index if possible. The first
-       * usable index in the list of indexes will be choosen.
-       * Table and index names may be surrounded by double quotes
-       * if they are case sensitive.
-       */
-       INDEX,
-       /**
-        * All things being equal, use the data table instead of
-        * the index table when optimizing.
-        */
-       USE_DATA_OVER_INDEX_TABLE,
-       /**
-        * All things being equal, use the index table instead of
-        * the data table when optimizing.
-        */
-       USE_INDEX_OVER_DATA_TABLE,
-       /**
-        * Avoid caching any HBase blocks loaded by this query.
-        */
-       NO_CACHE,
-       /**
-        * Use sort-merge join algorithm instead of broadcast join (hash join) algorithm.
-        */
-       USE_SORT_MERGE_JOIN,
-       /**
-        * Persist the RHS results of a hash join.
-        */
-       USE_PERSISTENT_CACHE,
-       /**
-        * Avoid using star-join optimization. Used for broadcast join (hash join) only.
-        */
-       NO_STAR_JOIN,
-       /**
-        * Avoid using the no seek optimization. When there are many columns which are not selected coming in between 2
-        * selected columns and/or versions of columns, this should be used.
-        */
-      SEEK_TO_COLUMN,
-       /**
-        * Avoid seeks to select specified columns. When there are very less number of columns which are not selected in
-        * between 2 selected columns this will be give better performance.
-        */
-      NO_SEEK_TO_COLUMN,
-      /**
-       * Saves an RPC call on the scan. See Scan.setSmall(true) in HBase documentation.
-       */
-     SMALL,
-     /**
-      * Enforces a serial scan.
-      */
-     SERIAL,
+         * Prevents the usage of indexes, forcing usage
+         * of the data table for a query.
+         */
+        NO_INDEX,
+        /**
+         * Hint of the form {@code INDEX(<table_name> <index_name>...) }
+         * to suggest usage of the index if possible. The first
+         * usable index in the list of indexes will be choosen.
+         * Table and index names may be surrounded by double quotes
+         * if they are case sensitive.
+         */
+        INDEX,
+        /**
+         * All things being equal, use the data table instead of
+         * the index table when optimizing.
+         */
+        USE_DATA_OVER_INDEX_TABLE,
+        /**
+         * All things being equal, use the index table instead of
+         * the data table when optimizing.
+         */
+        USE_INDEX_OVER_DATA_TABLE,
+        /**
+         * Avoid caching any HBase blocks loaded by this query.
+         */
+        NO_CACHE,
+        /**
+         * Use sort-merge join algorithm instead of broadcast join (hash join) algorithm.
+         */
+        USE_SORT_MERGE_JOIN,
+        /**
+         * Persist the RHS results of a hash join.
+         */
+        USE_PERSISTENT_CACHE,
+        /**
+         * Avoid using star-join optimization. Used for broadcast join (hash join) only.
+         */
+        NO_STAR_JOIN,
+        /**
+         * Avoid using the no seek optimization. When there are many columns which are not selected coming in between 2
+         * selected columns and/or versions of columns, this should be used.
+         */
+        SEEK_TO_COLUMN,
+        /**
+         * Avoid seeks to select specified columns. When there are very less number of columns which are not selected in
+         * between 2 selected columns this will be give better performance.
+         */
+        NO_SEEK_TO_COLUMN,
+        /**
+         * Saves an RPC call on the scan. See Scan.setSmall(true) in HBase documentation.
+         */
+        SMALL,
+        /**
+         * Enforces a serial scan.
+         */
+        SERIAL,
         /**
          * Enforces a forward scan.
          */
@@ -124,7 +124,13 @@ public class HintNode {
         /**
          * Do not use server merge for hinted uncovered indexes
          */
-        NO_INDEX_SERVER_MERGE
+        NO_INDEX_SERVER_MERGE,
+
+        /**
+         * Override the default CDC include scopes.
+         */
+        INCLUDE,
+        ;
     };
 
     private final Map<Hint,String> hints;

@@ -18,6 +18,8 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
@@ -69,6 +71,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
         assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(table));
         assertNull(table.getIndexState()); // Index state should be null for CDC.
+        assertNull(table.getIndexType()); // This is not an index.
         assertEquals(datatableName, table.getParentName().getString());
     }
 
@@ -155,6 +158,9 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
                 Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName);
+        PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
+        assertEquals(1, indexTable.getColumnFamilies().size());
+        assertEquals("0", indexTable.getColumnFamilies().get(0).getName().toString());
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
@@ -209,5 +215,72 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(" PHOENIX_ROW_TIMESTAMP()", cdcPkColumns.get(0).getName().getString());
         assertEquals("TENANTID", cdcPkColumns.get(1).getName().getString());
         assertEquals("K", cdcPkColumns.get(2).getName().getString());
+    }
+
+    @Test
+    public void testSelect() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.put("hbase.client.scanner.timeout.period", "6000000");
+        props.put("phoenix.query.timeoutMs", "6000000");
+        props.put("zookeeper.session.timeout", "6000000");
+        props.put("hbase.rpc.timeout", "6000000");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
+                " (1, 100)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
+                " (2, 200)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+        conn.createStatement().execute(cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        assertEquals(true, rs.next());
+        assertEquals(2, rs.getInt(2));
+        assertEquals(false, rs.next());
+    }
+
+    @Test
+    public void testSelectCoveredIndex() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.put("hbase.client.scanner.timeout.period", "6000000");
+        props.put("phoenix.query.timeoutMs", "6000000");
+        props.put("zookeeper.session.timeout", "6000000");
+        props.put("hbase.rpc.timeout", "6000000");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
+                " (1, 100)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
+                " (2, 200)");
+        conn.commit();
+        String indexName = generateUniqueName();
+        String index_sql = "CREATE INDEX " + indexName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) INCLUDE (v1)";
+        conn.createStatement().execute(index_sql);
+        //ResultSet rs =
+        //        conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName +
+        //                " " + indexName + ") */ * FROM " + tableName);
+        //assertEquals(true, rs.next());
+        //assertEquals(1, rs.getInt(1));
+        //assertEquals(true, rs.next());
+        //assertEquals(2, rs.getInt(1));
+        //assertEquals(false, rs.next());
+        ResultSet rs =
+                conn.createStatement().executeQuery("SELECT * FROM " + indexName);
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        assertEquals(true, rs.next());
+        assertEquals(2, rs.getInt(2));
+        assertEquals(false, rs.next());
     }
 }
