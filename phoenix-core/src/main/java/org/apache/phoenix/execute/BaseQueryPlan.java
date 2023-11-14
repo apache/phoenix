@@ -321,34 +321,36 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 ScanUtil.setUncoveredGlobalIndex(scan);
             }
 
-            // TODO: We don't need data columns for CDC
-            Set<PColumn> dataColumns = context.getDataColumns();
-            // If any data columns to join back from data table are present then we set following attributes
-            // 1. data columns to be projected and their key value schema.
-            // 2. index maintainer and view constants if exists to build data row key from index row key. 
-            // TODO: can have an hint to skip joining back to data table, in that case if any column to
-            // project is not present in the index then we need to skip this plan.
-            if (!dataColumns.isEmpty()) {
-                // Set data columns to be join back from data table.
-                PTable parentTable = context.getCurrentTable().getTable();
-                String parentSchemaName = parentTable.getParentSchemaName().getString();
-                String parentTableName = parentTable.getParentTableName().getString();
-                final ParseNodeFactory FACTORY = new ParseNodeFactory();
-                TableRef dataTableRef =
-                        FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
-                            context.getConnection()).resolveTable(parentSchemaName, parentTableName);
-                PTable dataTable = dataTableRef.getTable();
-                // Set data columns to be join back from data table.
-                serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
-                KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
-                // Set key value schema of the data columns.
-                serializeSchemaIntoScan(scan, schema);
-                if (table.getIndexType() == IndexType.LOCAL) {
-                    // Set index maintainer of the local index.
-                    serializeIndexMaintainerIntoScan(scan, dataTable);
-                    // Set view constants if exists.
-                    serializeViewConstantsIntoScan(scan, dataTable);
+            // We don't need data columns for CDC
+            if (context.getCDCDataTable() != null) {
+                Set<PColumn> dataColumns = context.getDataColumns();
+                // If any data columns to join back from data table are present then we set following attributes
+                // 1. data columns to be projected and their key value schema.
+                // 2. index maintainer and view constants if exists to build data row key from index row key.
+                // TODO: can have an hint to skip joining back to data table, in that case if any column to
+                // project is not present in the index then we need to skip this plan.
+                if (!dataColumns.isEmpty()) {
+                    // Set data columns to be join back from data table.
+                    PTable parentTable = context.getCurrentTable().getTable();
+                    String parentSchemaName = parentTable.getParentSchemaName().getString();
+                    String parentTableName = parentTable.getParentTableName().getString();
+                    final ParseNodeFactory FACTORY = new ParseNodeFactory();
+                    TableRef dataTableRef =
+                            FromCompiler.getResolver(
+                                FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
+                                context.getConnection()).resolveTable(parentSchemaName, parentTableName);
+                    PTable dataTable = dataTableRef.getTable();
+                    // Set data columns to be join back from data table.
+                    serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
+                    KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
+                    // Set key value schema of the data columns.
+                    serializeSchemaIntoScan(scan, schema);
+                    if (table.getIndexType() == IndexType.LOCAL) {
+                        // Set index maintainer of the local index.
+                        serializeIndexMaintainerIntoScan(scan, dataTable);
+                        // Set view constants if exists.
+                        serializeViewConstantsIntoScan(scan, dataTable);
+                    }
                 }
             }
         }
