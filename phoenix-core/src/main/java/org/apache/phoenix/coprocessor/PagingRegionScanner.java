@@ -64,9 +64,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
             if (pagingFilter != null) {
                 pagingFilter.init();
             }
-            if (delegate.getRegionInfo().getTable().getNameAsString().equals("N000002") || delegate.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
-                "".isEmpty();
-            }
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
             if (pagingFilter == null) {
                 return hasMore;

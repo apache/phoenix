@@ -815,11 +815,3 @@ public class QueryOptimizer {
         }
     }
 }
-
-/*
-plan after compile index:
-plan.context.scan: {"loadColumnFamiliesOnDemand":true,"startRow":"","stopRow":"","batch":-1,"cacheBlocks":true,"totalColumns":1,"maxResultSize":"-1","families":{"0":["ALL"]},"caching":2147483647,"maxVersions":1,"timeRange":["0","9223372036854775807"]}
-
-select * from cdc:
-plan.context.scan: {"loadColumnFamiliesOnDemand":true,"startRow":"","stopRow":"","batch":-1,"cacheBlocks":true,"totalColumns":0,"maxResultSize":"-1","families":{},"caching":2147483647,"maxVersions":1,"timeRange":["0","9223372036854775807"]}
-*/

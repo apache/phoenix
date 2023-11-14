@@ -84,9 +84,6 @@ public class ScanningResultIterator implements ResultIterator {
     private long dummyRowCounter = 0;
 
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext, long maxQueryEndTime) {
-        if (context.getCurrentTable().getTable().getTableName().getString().equals("N000002") || context.getCurrentTable().getTable().getTableName().getString().equals("__CDC__N000002")) {
-            "".isEmpty();
-        }
         this.scanner = scanner;
         this.scanMetricsHolder = scanMetricsHolder;
         this.context = context;

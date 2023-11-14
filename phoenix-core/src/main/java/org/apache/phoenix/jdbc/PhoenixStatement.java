@@ -387,10 +387,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                                 .optimize(PhoenixStatement.this, plan);
                                 // this will create its own trace internally, so we don't wrap this
                                 // whole thing in tracing
-                                if (plan.getTableRef().getTable().getTableName().getString().equals(
-                                        "N000002") || plan.getTableRef().getTable().getTableName().getString().equals("__CDC__N000002")) {
-                                    "".isEmpty();
-                                }
                                 ResultIterator resultIterator = plan.iterator();
                                 if (LOGGER.isDebugEnabled()) {
                                     String explainPlan = QueryUtil.getExplainPlan(resultIterator);

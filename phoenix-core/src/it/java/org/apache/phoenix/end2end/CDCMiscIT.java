@@ -158,9 +158,6 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
                 Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName);
-        PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
-        assertEquals(1, indexTable.getColumnFamilies().size());
-        assertEquals("0", indexTable.getColumnFamilies().get(0).getName().toString());
 
         cdcName = generateUniqueName();
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
@@ -239,6 +236,11 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
         conn.createStatement().execute(cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
+        // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
+        //      if (<table>.getTableName().getString().equals("N000002") ||
+        //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
+        //          "".isEmpty();
+        //      }
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));

@@ -422,12 +422,6 @@ public class ProjectionCompiler {
                 }
                 isWildcard = true;
                 if (context.getCDCDataTable() != null) {
-                    projectAllColumnFamilies(table, scan);
-                    // FIXME: Hack
-                    //projectedColumns = (List<ExpressionProjector>)
-                    //        context.getCdcDataPlan().getProjector() .getColumnProjectors();
-                    // All projections of CDC are valid on index as well, except for the CDC JSON
-                    // column, which is virtual anyway.
                     return context.getCdcDataPlan().getProjector();
                 }
                 else if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {

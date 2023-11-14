@@ -304,9 +304,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 final Span child = Trace.startSpan(SCANNER_OPENED_TRACE_INFO, savedSpan).getSpan();
                 try {
                     RegionScanner scanner = doPostScannerOpen(c, scan, delegate);
-                    if (scanner.getRegionInfo().getTable().getNameAsString().equals("N000002") || scanner.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
-                        "".isEmpty();
-                    }
                     scanner = new DelegateRegionScanner(scanner) {
                         // This isn't very obvious but close() could be called in a thread
                         // that is different from the thread that created the scanner.
@@ -385,9 +382,6 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             final ObserverContext<RegionCoprocessorEnvironment> c, final Scan scan,
             final RegionScanner s) throws IOException {
         try {
-            if (s.getRegionInfo().getTable().getNameAsString().equals("N000002") || s.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
-                "".isEmpty();
-            }
             if (!isRegionObserverFor(scan)) {
                 return s;
             }

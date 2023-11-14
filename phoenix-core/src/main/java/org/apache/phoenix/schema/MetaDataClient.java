@@ -1769,9 +1769,11 @@ public class MetaDataClient {
                         new HashMap<>(), null);
         // TODO: Currently index can be dropped, leaving the CDC dangling, DROP INDEX needs to
         //  protect based on CDCUtil.isACDCIndex().
-        // TODO: Should we also allow PTimestamp here?
         MutationState indexMutationState;
         try {
+            // TODO: Should we also allow PTimestamp here, in fact PTimestamp is the right type,
+            // but we are forced to support PDate because of incorrect type for
+            // PHOENIX_ROW_TIMESTAMP (see PHOENIX-6807)?
             indexMutationState = createIndex(indexStatement, null, PDate.INSTANCE);
         } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
