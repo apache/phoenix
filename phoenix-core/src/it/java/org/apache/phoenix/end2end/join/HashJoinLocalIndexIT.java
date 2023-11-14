@@ -50,16 +50,6 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     private static final Map<String,String> virtualNameToRealNameMap = Maps.newHashMap();
     private static final String schemaName = "S_" + generateUniqueName();
 
-    private static final String JOIN_CUSTOMER_INDEX = "IDX_CUSTOMER";
-    private static final String JOIN_ITEM_INDEX = "IDX_ITEM";
-    private static final String JOIN_SUPPLIER_INDEX = "IDX_SUPPLIER";
-    private static final String JOIN_CUSTOMER_INDEX_FULL_NAME =
-            SchemaUtil.getTableName(JOIN_SCHEMA, JOIN_CUSTOMER_INDEX);
-    private static final String JOIN_ITEM_INDEX_FULL_NAME =
-            SchemaUtil.getTableName(JOIN_SCHEMA, JOIN_ITEM_INDEX);
-    private static final String JOIN_SUPPLIER_INDEX_FULL_NAME =
-            SchemaUtil.getTableName(JOIN_SCHEMA, JOIN_SUPPLIER_INDEX);
-
     @Override
     protected String getSchemaName() {
         // run all tests in a single schema

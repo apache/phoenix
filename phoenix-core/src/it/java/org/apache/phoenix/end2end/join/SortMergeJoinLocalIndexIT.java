@@ -54,18 +54,21 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
         List<Object> testCases = Lists.newArrayList();
         testCases.add(new String[][] {
                 {
-                "CREATE LOCAL INDEX \"idx_customer\" ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
-                "CREATE LOCAL INDEX \"idx_item\" ON " + JOIN_ITEM_TABLE_FULL_NAME + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-                "CREATE LOCAL INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
+                "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + "(name)",
+                "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + "(name) " +
+                        "INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+                "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
                 }, {
                 "SORT-MERGE-JOIN (LEFT) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +JOIN_SUPPLIER_TABLE_FULL_NAME + " [1]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_INDEX_FULL_NAME +
+                        "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + ") [1]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"S.:supplier_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
                 "    SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
                 "            SERVER SORTED BY [\"I.:item_id\"]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    AND (SKIP MERGE)\n" +
@@ -76,7 +79,8 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
                 
                 "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"I.:item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
@@ -87,12 +91,14 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
                 "CLIENT 4 ROW LIMIT",
                 
                 "SORT-MERGE-JOIN (INNER) TABLES\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"I1.:item_id\"]\n" +
                 "    CLIENT MERGE SORT\n" +
                 "AND\n" +
-                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
+                "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
                 "        SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        SERVER SORTED BY [\"I2.:item_id\"]\n" +
                 "    CLIENT MERGE SORT"

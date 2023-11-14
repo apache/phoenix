@@ -938,7 +938,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             String explainPlan = QueryUtil.getExplainPlan(rs);
             if (localIndex) {
-            	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +
                         indexName + "(" + tableName + ") [1,'1David']\n" +
                         "    SERVER FILTER BY FIRST KEY ONLY\n" +
                         "CLIENT MERGE SORT\n" +
