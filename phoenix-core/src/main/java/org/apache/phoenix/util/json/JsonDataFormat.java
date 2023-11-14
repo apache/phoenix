@@ -75,4 +75,12 @@ public interface JsonDataFormat {
      * @return
      */
     ByteBuffer updateValue(Object top, String jsonPathExprStr, String newVal);
+
+    /**
+     * Checks if the path is valid in a JSON document.
+     * @param top
+     * @param path
+     * @return
+     */
+    boolean isPathValid(Object top, String path);
 }

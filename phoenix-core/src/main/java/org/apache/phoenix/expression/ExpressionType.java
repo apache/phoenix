@@ -195,7 +195,8 @@ public enum ExpressionType {
     PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class),
     JsonValueFunction(JsonValueFunction.class),
     JsonModifyFunction(JsonModifyFunction.class),
-    JsonQueryFunction(JsonQueryFunction.class)
+    JsonQueryFunction(JsonQueryFunction.class),
+    JsonExistsFunction(JsonExistsFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

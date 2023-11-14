@@ -135,7 +135,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals("Manchester", rs.getString(2));
             assertEquals("alto1", rs.getString(3));
             assertEquals("[\"Sport\", \"alto1\", \"UpsertSelectVal\"]", rs.getString(4));
-            assertEquals("{\"type\": 1, \"address\": {\"town\": \"Manchester\", \"county\": \"Avon\", \"country\": \"England\"}, \"tags\": [\"Sport\", \"alto1\", \"UpsertSelectVal\"]}", rs.getString(5));
+            assertEquals("{\"type\": 1, \"address\": {\"town\": \"Manchester\", \"county\": \"Avon\", \"country\": \"England\", \"exists\": true}, \"tags\": [\"Sport\", \"alto1\", \"UpsertSelectVal\"]}", rs.getString(5));
             assertEquals("UpsertSelectVal", rs.getString(6));
 
             // Now check for empty match
@@ -342,6 +342,72 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                 " (JSON_QUERY(JSONCOL,'$.info.address')) include (col)");
         checkInvalidJsonIndexExpression(props, tableName, indexName,
                 " (JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"newValue\"')) include (col)");
+    }
+
+    @Test
+    public void testJsonExists() throws SQLException, IOException {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, basicJson);
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setInt(2, 3);
+            stmt.setString(3, getJsonString(BASIC_JSON, "$[1]"));
+            stmt.execute();
+            conn.commit();
+
+            String query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_EXISTS(jsoncol, '$.info.address.town')";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Basic", rs.getString(1));
+            assertEquals("Bristol", rs.getString(2));
+            assertTrue(rs.next());
+            assertEquals("Normal", rs.getString(1));
+            assertEquals("Bristol2", rs.getString(2));
+            assertFalse(rs.next());
+
+            query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_EXISTS(jsoncol, '$.info.address.exists')";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Bristol", rs.getString(2));
+            assertFalse(rs.next());
+
+            query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
+                    " FROM " + tableName +
+                    " WHERE NOT JSON_EXISTS(jsoncol, '$.info.address.exists')";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Bristol2", rs.getString(2));
+            assertFalse(rs.next());
+
+            query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_EXISTS(jsoncol, '$.info.address.name')";
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_EXISTS(jsoncol, '$.existsFail')";
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+
+            query ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_EXISTS(jsoncol, '$.existsFail[*]')";
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
     }
 
     private void checkInvalidJsonIndexExpression(Properties props, String tableName,

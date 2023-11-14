@@ -5,7 +5,8 @@
     "address": {
       "town": "Bristol",
       "county": "Avon",
-      "country": "England"
+      "country": "England",
+      "exists": true
     },
     "tags": [
       "Sport",

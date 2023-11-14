@@ -20,6 +20,7 @@ package org.apache.phoenix.util.json;
 import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.Option;
+import com.jayway.jsonpath.PathNotFoundException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.bson.BsonBinaryReader;
 import org.bson.BsonDocument;
@@ -112,6 +113,20 @@ public class BsonDataFormat implements JsonDataFormat {
                 new RawBsonDocumentCodec().decode(new BsonDocumentReader(root),
                         DecoderContext.builder().build());
         return updated.getByteBuffer().asNIO();
+    }
+
+    // Ref: https://github.com/json-path/JsonPath/pull/828
+    @Override
+    public boolean isPathValid(Object top, String path) {
+        try{
+            Configuration conf = Configuration.builder().jsonProvider(new BsonJsonProvider()).build();
+            BsonDocument root = fromRaw((RawBsonDocument) top);
+            JsonPath.using(conf).parse(root).read(path);
+            return true;
+        }
+        catch (PathNotFoundException e){
+            return false;
+        }
     }
 
     private BsonValue getBsonValue(String jsonPathExprStr, RawBsonDocument top) {
