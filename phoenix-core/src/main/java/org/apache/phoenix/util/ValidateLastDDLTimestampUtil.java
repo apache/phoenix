@@ -1,6 +1,6 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
@@ -45,6 +45,8 @@ import java.util.concurrent.ThreadLocalRandom;
  * Utility class for last ddl timestamp validation from the client.
  */
 public class ValidateLastDDLTimestampUtil {
+
+    private ValidateLastDDLTimestampUtil() {}
 
     private static final Logger LOGGER = LoggerFactory
             .getLogger(ValidateLastDDLTimestampUtil.class);
@@ -122,9 +124,12 @@ public class ValidateLastDDLTimestampUtil {
 
     /**
      * Build a request for the validateLastDDLTimestamp RPC for the given tables.
-     * 1. For a view, we need to add all its ancestors to the request in case something changed in the hierarchy.
-     * 2. For an index, we need to add its parent table to the request in case the index was dropped.
-     * 3. On the write path, we need to add all indexes of a table/view in case index state was changed.
+     * 1. For a view, we need to add all its ancestors to the request
+     *    in case something changed in the hierarchy.
+     * 2. For an index, we need to add its parent table to the request
+     *    in case the index was dropped.
+     * 3. On the write path, we need to add all indexes of a table/view
+     *    in case index state was changed.
      * @param conn
      * @param tableRefs
      * @param isWritePath
@@ -153,7 +158,8 @@ public class ValidateLastDDLTimestampUtil {
 
             // add the tableRef to the request
             innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-            setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), tableRef.getTable());
+            setLastDDLTimestampRequestParameters(
+                    innerBuilder, conn.getTenantId(), tableRef.getTable());
             requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
             //when querying a view, we need to validate last ddl timestamps for all its ancestors
@@ -164,7 +170,8 @@ public class ValidateLastDDLTimestampUtil {
                             pTable.getParentName().getString());
                     PTable parentTable = conn.getTable(key);
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                    setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), parentTable);
+                    setLastDDLTimestampRequestParameters(
+                            innerBuilder, conn.getTenantId(), parentTable);
                     requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                     pTable = parentTable;
                 }
@@ -175,7 +182,8 @@ public class ValidateLastDDLTimestampUtil {
             if (isWritePath) {
                 for (PTable idxPTable : tableRef.getTable().getIndexes()) {
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                    setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), idxPTable);
+                    setLastDDLTimestampRequestParameters(
+                            innerBuilder, conn.getTenantId(), idxPTable);
                     requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                 }
             }
