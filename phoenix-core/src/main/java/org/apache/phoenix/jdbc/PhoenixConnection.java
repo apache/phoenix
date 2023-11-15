@@ -723,10 +723,10 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             // ignore any exceptions while rolling back
         } finally {
             try {
-                // create new list to prevent close of statements from modifying this collection.
+                // create new set to prevent close of statements from modifying this collection.
                 // TODO This could be optimized out by decoupling closing the stmt and removing it
                 // from the connection.
-                List<? extends PhoenixStatement> statementsCopy = new ArrayList<>(this.statements);
+                HashSet<? extends PhoenixStatement> statementsCopy = new HashSet<>(this.statements);
                 SQLCloseables.closeAll(statementsCopy);
             } finally {
                 statements.clear();
@@ -763,6 +763,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     // A connection can be closed by calling thread, or by the high availability (HA) framework.
     // Making this logic synchronized will enforce a connection is closed only once.
+    //Does this need to be synchronized?
     @Override
     synchronized public void close() throws SQLException {
         if (isClosed || isClosing) {
