@@ -322,7 +322,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
 
             // We don't need data columns for CDC
-            if (context.getCDCDataTable() != null) {
+            if (context.getCDCDataTable() == null) {
                 Set<PColumn> dataColumns = context.getDataColumns();
                 // If any data columns to join back from data table are present then we set following attributes
                 // 1. data columns to be projected and their key value schema.
