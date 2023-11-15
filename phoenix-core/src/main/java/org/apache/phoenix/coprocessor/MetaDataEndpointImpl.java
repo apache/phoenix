@@ -1467,7 +1467,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         List<PTable> indexes = Lists.newArrayList();
         List<PName> physicalTables = Lists.newArrayList();
         PName parentTableName = tableType == INDEX || tableType == CDC ? dataTableName : null;
-        PName parentSchemaName = tableType == INDEX || tableType == CDC  ? schemaName : null;
+        PName parentSchemaName = tableType == INDEX || tableType == CDC ? schemaName : null;
         PName parentLogicalName = null;
         EncodedCQCounter cqCounter = null;
         if (oldTable != null) {

@@ -17,7 +17,10 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -39,8 +42,10 @@ public class HintNode {
     public static final String PREFIX = "(";
     public static final String SUFFIX = ")";
     // Each hint is of the generic syntax hintWord(hintArgs) where hintArgs in parent are optional.
+    private static final String SPLIT_REGEXP = "\\s+|((?<=\\" + PREFIX + ")|(?=\\" + PREFIX + "))|((?<=\\" + SUFFIX + ")|(?=\\" + SUFFIX + "))";
     private static final Pattern HINT_PATTERN = Pattern.compile(
-            "(?<hintWord>\\w+)\\s*(?<hintArgs>\\([^)]+\\))?");
+            "(?<hintWord>\\w+)\\s*(?:\\s*\\(\\s*(?<hintArgs>[^)]+)\\s*\\))?");
+    private static final Pattern HINT_ARG_PATTERN = Pattern.compile("(?<hintArg>\"[^\"]+\"|\\S+)");
 
     public enum Hint {
         /**
@@ -169,18 +174,33 @@ public class HintNode {
 
     public HintNode(String hint) {
         Map<Hint,String> hints = new HashMap<Hint,String>();
-        Matcher m = HINT_PATTERN.matcher(hint);
-        while (m.find()) {
+        Matcher hintMatcher = HINT_PATTERN.matcher(hint);
+        while (hintMatcher.find()) {
             try {
-                Hint hintWord = Hint.valueOf(m.group("hintWord"));
-                String hintArgs = m.group("hintArgs");
-                hints.put(hintWord, hintArgs != null ? hintArgs.toUpperCase() : "");
+                Hint hintWord = Hint.valueOf(hintMatcher.group("hintWord").toUpperCase());
+                String hintArgsStr = hintMatcher.group("hintArgs");
+                List<String> hintArgs = new ArrayList<>();
+                if (hintArgsStr != null) {
+                    Matcher hintArgMatcher = HINT_ARG_PATTERN.matcher(hintArgsStr);
+                    while (hintArgMatcher.find()) {
+                        hintArgs.add(SchemaUtil.normalizeIdentifier(hintArgMatcher.group()));
+                    }
+                }
+                hintArgsStr = String.join(" ", hintArgs);
+                hintArgsStr = hintArgsStr.equals("") ? "" : "(" + hintArgsStr + ")";
+                if (hints.containsKey(hintWord)) {
+                    // Concatenate together any old value with the new value
+                    hints.put(hintWord, hints.get(hintWord) + hintArgsStr);
+                }
+                else {
+                    hints.put(hintWord, hintArgsStr);
+                }
             } catch (IllegalArgumentException e) { // Ignore unknown/invalid hints
             }
         }
         this.hints = ImmutableMap.copyOf(hints);
     }
-    
+
     public boolean isEmpty() {
         return hints.isEmpty();
     }
