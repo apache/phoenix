@@ -317,14 +317,21 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         String index_sql = "CREATE UNCOVERED INDEX " + indexName
                 + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
         conn.createStatement().execute(index_sql);
+        //ResultSet rs =
+        //        conn.createStatement().executeQuery("SELECT * FROM " + indexName);
+        //assertEquals(1, rs.getInt(2));
+        //assertEquals(true, rs.next());
+        //assertEquals(2, rs.getInt(2));
+        //assertEquals(false, rs.next());
         ResultSet rs =
-                conn.createStatement().executeQuery("SELECT * FROM " + indexName);
+                conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName +
+                        " " + indexName + ") */ * FROM " + tableName);
         assertEquals(true, rs.next());
-        System.out.println("1: " + rs.getObject(1));
-        System.out.println("2: " + rs.getObject(2));
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1));
+        assertEquals(100, rs.getInt(2));
         assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
+        assertEquals(2, rs.getInt(1));
+        assertEquals(200, rs.getInt(2));
         assertEquals(false, rs.next());
     }
 }
