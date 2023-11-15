@@ -42,7 +42,6 @@ public class HintNode {
     public static final String PREFIX = "(";
     public static final String SUFFIX = ")";
     // Each hint is of the generic syntax hintWord(hintArgs) where hintArgs in parent are optional.
-    private static final String SPLIT_REGEXP = "\\s+|((?<=\\" + PREFIX + ")|(?=\\" + PREFIX + "))|((?<=\\" + SUFFIX + ")|(?=\\" + SUFFIX + "))";
     private static final Pattern HINT_PATTERN = Pattern.compile(
             "(?<hintWord>\\w+)\\s*(?:\\s*\\(\\s*(?<hintArgs>[^)]+)\\s*\\))?");
     private static final Pattern HINT_ARG_PATTERN = Pattern.compile("(?<hintArg>\"[^\"]+\"|\\S+)");

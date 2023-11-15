@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COU
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,20 +62,21 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class TupleProjectionCompiler {
     public static final PName PROJECTED_TABLE_SCHEMA = PNameFactory.newName(".");
+    public static final EnumSet<PTableType> PROJECTED_TABLE_TYPES = EnumSet.of(PTableType.TABLE,
+            PTableType.INDEX, PTableType.VIEW, PTableType.CDC);
     private static final ParseNodeFactory NODE_FACTORY = new ParseNodeFactory();
     
     public static PTable createProjectedTable(SelectStatement select, StatementContext context) throws SQLException {
         Preconditions.checkArgument(!select.isJoin());
         // Non-group-by or group-by aggregations will create its own projected result.
-        if (select.getInnerSelectStatement() != null 
+        if (select.getInnerSelectStatement() != null
                 || select.getFrom() == null
                 || select.isAggregate() 
                 || select.isDistinct()
-                || (context.getResolver().getTables().get(0).getTable().getType() != PTableType.TABLE
-                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.INDEX
-                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.CDC
-                && context.getResolver().getTables().get(0).getTable().getType() != PTableType.VIEW))
+                || ! PROJECTED_TABLE_TYPES.contains(
+                        context.getResolver().getTables().get(0).getTable().getType())) {
             return null;
+        }
         
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         boolean isWildcard = false;
