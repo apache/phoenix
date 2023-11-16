@@ -244,16 +244,11 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
-        try {
-            rs.getObject(3);
-            fail("Exception expected as CDC JSON is not yet implemented");
-        }
-        catch (IndexOutOfBoundsException e) {
-            // Expected exception.
-        }
+        assertEquals(null, rs.getObject(3));
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
         assertEquals(false, rs.next());
+        assertEquals(null, rs.getObject(3));
     }
 
     // Temporary test case used as a reference for debugging and comparing against the CDC query.
