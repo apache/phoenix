@@ -23,7 +23,6 @@ import com.jayway.jsonpath.Configuration;
 import com.jayway.jsonpath.JsonPath;
 import com.jayway.jsonpath.spi.json.GsonJsonProvider;
 import org.apache.commons.io.FileUtils;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
@@ -34,7 +33,6 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -86,13 +84,12 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             stmt.setString(4, basicJson);
             stmt.execute();
             conn.commit();
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
 
             String queryTemplate ="SELECT pk, randomVal, JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[0]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
+                    "JSON_VALUE(jsoncol, '$.info.tags[0]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
                     "JSON_VALUE(jsoncol, '$.info.tags[1]') " +
-                " FROM " + tableName +
-                " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
             String query = String.format(queryTemplate, "AndersenFamily");
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -140,10 +137,10 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT pk, col, JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from " + tableName);
 
             String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
-                "JSON_VALUE(jsoncol, '$.info.tags[2]') " +
-                " FROM " + tableName +
-                " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
+                    "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
+                    "JSON_VALUE(jsoncol, '$.info.tags[2]') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
             String query = String.format(queryTemplate, "AndersenFamily");
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
@@ -302,8 +299,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             String
                     selectSql =
                     "SELECT JSON_VALUE(JSONCOL,'$.type'), " +
-                    "JSON_VALUE(JSONCOL,'$.info.address.town') FROM " + tableName +
-                    " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Basic'";
+                            "JSON_VALUE(JSONCOL,'$.info.address.town') FROM " + tableName +
+                            " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Basic'";
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             String actualExplainPlan = QueryUtil.getExplainPlan(rs);
             IndexToolIT.assertExplainPlan(false, actualExplainPlan, tableName, indexName);
@@ -475,8 +472,6 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             stmt.setString(3, basicJson);
             stmt.execute();
             conn.commit();
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-
             String queryTemplate ="SELECT jsoncol, JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
                     "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info') " +
                     " FROM " + tableName +
@@ -503,8 +498,6 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             stmt.setArray(4, array);
             stmt.execute();
             conn.commit();
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-
             String query ="SELECT arr, arr[1], jsoncol, JSON_VALUE(jsoncol, '$.type')" +
                     " FROM " + tableName +
                     " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
@@ -513,6 +506,11 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             String explainPlan = QueryUtil.getExplainPlan(rs);
             assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
             assertFalse(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(conn.createArrayOf("INTEGER", new Integer[]{1, 2}), rs.getArray(1));
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getString(4), "Basic");
 
             // since we are using Array Index and Json function without full column, optimization
             // should happen
@@ -541,6 +539,99 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             explainPlan = QueryUtil.getExplainPlan(rs);
             assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
             assertFalse(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+        }
+    }
+
+    @Test
+    public void testServerFunctionsInDifferentOrders() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String
+                    ddl =
+                    "create table " + tableName + " (pk integer primary key, col integer, jsoncol json, arr INTEGER ARRAY, arr2 INTEGER ARRAY)";
+            conn.createStatement().execute(ddl);
+            PreparedStatement
+                    stmt =
+                    conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, basicJson);
+            Array array = conn.createArrayOf("INTEGER", new Integer[] { 1, 2 });
+            stmt.setArray(4, array);
+            Array array2 = conn.createArrayOf("INTEGER", new Integer[] { 3, 4 });
+            stmt.setArray(5, array2);
+            stmt.execute();
+            conn.commit();
+
+            // Firt Array elements, JSON_VALUE and then JSON_QUERY
+            String
+                    query =
+                    "SELECT arr, arr[1], arr2, arr2[1], jsoncol, " +
+                            "JSON_VALUE(jsoncol, '$.type'), " +
+                            "JSON_QUERY(jsoncol, '$.info') " +
+                            " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(rs.getArray(1), conn.createArrayOf("INTEGER", new Integer[] { 1, 2 }));
+            assertEquals(rs.getInt(2), 1);
+            assertEquals(rs.getArray(3), conn.createArrayOf("INTEGER", new Integer[] { 3, 4 }));
+            assertEquals(rs.getInt(4), 3);
+            compareJson(rs.getString(5), basicJson, "$");
+            assertEquals(rs.getString(6), "Basic");
+            compareJson(rs.getString(7), basicJson, "$.info");
+
+            // First JSON_VALUE, JSON_QUERY, ARRAY
+            query =
+                    "SELECT jsoncol, JSON_VALUE(jsoncol, '$.type'), " +
+                            "JSON_QUERY(jsoncol, '$.info'), arr, arr[1], arr2, arr2[1] " +
+                            " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            compareJson(rs.getString(1), basicJson, "$");
+            assertEquals(rs.getString(2), "Basic");
+            compareJson(rs.getString(3), basicJson, "$.info");
+            assertEquals(rs.getArray(4), conn.createArrayOf("INTEGER", new Integer[] { 1, 2 }));
+            assertEquals(rs.getInt(5), 1);
+            assertEquals(rs.getArray(6), conn.createArrayOf("INTEGER", new Integer[] { 3, 4 }));
+            assertEquals(rs.getInt(7), 3);
+
+            // First JSON_QUERY, ARRAY, JSON_VALUE
+            query =
+                    "SELECT JSON_QUERY(jsoncol, '$.info'), arr, arr[1], arr2, arr2[1], jsoncol, " +
+                            "JSON_VALUE(jsoncol, '$.type') " +
+                            " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            compareJson(rs.getString(1), basicJson, "$.info");
+            assertEquals(rs.getArray(2), conn.createArrayOf("INTEGER", new Integer[] { 1, 2 }));
+            assertEquals(rs.getInt(3), 1);
+            assertEquals(rs.getArray(4), conn.createArrayOf("INTEGER", new Integer[] { 3, 4 }));
+            assertEquals(rs.getInt(5), 3);
+            compareJson(rs.getString(6), basicJson, "$");
+            assertEquals(rs.getString(7), "Basic");
+
+            //JUMBLED FUNCTIONS
+            query =
+                    "SELECT JSON_QUERY(jsoncol, '$.info.tags'), " +
+                            "JSON_VALUE(jsoncol, '$.info.address.town'), arr,  arr[1], " +
+                            "JSON_QUERY(jsoncol, '$.info'), arr2, " +
+                            "JSON_VALUE(jsoncol, '$.info.tags[0]'), arr2[1], jsoncol, " +
+                            "JSON_VALUE(jsoncol, '$.type') " +
+                            " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            compareJson(rs.getString(1), basicJson, "$.info.tags");
+            assertEquals(rs.getString(2),"Bristol");
+            assertEquals(rs.getArray(3), conn.createArrayOf("INTEGER", new Integer[] { 1, 2 }));
+            assertEquals(rs.getInt(4), 1);
+            compareJson(rs.getString(5), basicJson, "$.info");
+            assertEquals(rs.getArray(6), conn.createArrayOf("INTEGER", new Integer[] { 3, 4 }));
+            assertEquals(rs.getString(7), "Sport");
+            assertEquals(rs.getInt(8), 3);
+            compareJson(rs.getString(9), basicJson, "$");
+            assertEquals(rs.getString(10), "Basic");
+
         }
     }
 }
