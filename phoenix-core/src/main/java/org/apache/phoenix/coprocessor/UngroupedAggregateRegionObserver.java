@@ -445,8 +445,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (((localIndexScan || uncoveredGlobalIndexScan) && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
+            viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,

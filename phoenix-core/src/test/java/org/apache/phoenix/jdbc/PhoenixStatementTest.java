@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -213,4 +214,41 @@ public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
         assertNull(ex.getUpdateCounts());
     }
 
+    @Test
+    public void testRecursiveClose() throws SQLException {
+        Connection connection = DriverManager.getConnection(getUrl());
+        Statement stmt1 = connection.createStatement();
+        ResultSet rs11 = stmt1.executeQuery("select * from atable");
+        rs11.close();
+        assertTrue(rs11.isClosed());
+        ResultSet rs12 = stmt1.executeQuery("select * from atable");
+        stmt1.close();
+        assertTrue(stmt1.isClosed());
+        assertTrue(rs12.isClosed());
+
+        Statement stmt2 = connection.createStatement();
+        stmt2.closeOnCompletion();
+        ResultSet rs21 = stmt2.executeQuery("select * from atable");
+        rs21.close();
+        assertTrue(stmt2.isClosed());
+
+        Statement stmt3 = connection.createStatement();
+        ResultSet rs31 = stmt3.executeQuery("select * from atable");
+        stmt3.executeUpdate("upsert into ATABLE VALUES ('1', '2', '3')");
+        assertTrue(rs31.isClosed());
+        ResultSet rs32 = stmt3.executeQuery("select * from atable");
+        ResultSet rs33 = stmt3.executeQuery("select * from atable");
+        assertTrue(rs32.isClosed());
+
+        Statement stmt4 = connection.createStatement();
+        Statement stmt5 = connection.createStatement();
+        ResultSet rs41 = stmt3.executeQuery("select * from atable");
+        ResultSet rs51 = stmt3.executeQuery("select * from atable");
+        connection.close();
+        assertTrue(connection.isClosed());
+        assertTrue(stmt4.isClosed());
+        assertTrue(stmt5.isClosed());
+        assertTrue(rs41.isClosed());
+        assertTrue(rs51.isClosed());
+    }
 }

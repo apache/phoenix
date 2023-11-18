@@ -17,38 +17,70 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;
-import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
-import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_MULTI_TENANT;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SALT_BUCKETS;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTIONAL;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
-import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.SingleCellConstructorExpression;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSortedMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SizedUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
+
+import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -63,67 +95,41 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
-import javax.annotation.Nonnull;
-
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
-import org.apache.hadoop.hbase.util.ByteStringer;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ExpressionCompiler;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.SingleCellConstructorExpression;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.protobuf.ProtobufUtil;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.schema.transform.TransformMaintainer;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
-
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSortedMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import static org.apache.phoenix.compile.WhereCompiler.transformDNF;
+import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;
+import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
+import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_ENCODED_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_MULTI_TENANT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SALT_BUCKETS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTIONAL;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTION_PROVIDER;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  *
@@ -209,6 +215,9 @@ public class PTableImpl implements PTable {
     private String externalSchemaId;
     private String streamingTopicName;
     private byte[] rowKeyPrefix;
+    private String indexWhere;
+    private Expression indexWhereExpression;
+    private Set<ColumnReference> indexWhereColumns;
 
     public static class Builder {
         private PTableKey key;
@@ -274,6 +283,7 @@ public class PTableImpl implements PTable {
         private String streamingTopicName;
         private int ttl;
         private byte[] rowKeyPrefix;
+        private String indexWhere;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -691,6 +701,13 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setIndexWhere(String indexWhere) {
+            if (indexWhere != null) {
+                this.indexWhere = indexWhere;
+            }
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -981,6 +998,7 @@ public class PTableImpl implements PTable {
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
         this.rowKeyPrefix = builder.rowKeyPrefix;
+        this.indexWhere = builder.indexWhere;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1059,7 +1077,8 @@ public class PTableImpl implements PTable {
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
                 .setTTL(table.getTTL())
-                .setRowKeyPrefix(table.getRowKeyPrefix());
+                .setRowKeyPrefix(table.getRowKeyPrefix())
+                .setIndexWhere(table.getIndexWhere());
     }
 
     @Override
@@ -1725,7 +1744,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable,
+            PhoenixConnection connection) throws SQLException {
         if (indexMaintainer == null) {
             indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
         }
@@ -1733,7 +1753,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+    public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr,
+            PhoenixConnection connection) throws SQLException {
         if (indexMaintainersPtr == null || indexMaintainersPtr.getLength()==0) {
             indexMaintainersPtr = new ImmutableBytesWritable();
             if (indexes.isEmpty() && transformingNewTable == null) {
@@ -1997,6 +2018,11 @@ public class PTableImpl implements PTable {
             rowKeyPrefix = PVarbinary.INSTANCE.toBytes(table.getRowKeyPrefix());
         }
 
+        String indexWhere = null;
+        if (table.hasIndexWhere()) {
+            indexWhere =
+                    (String) PVarchar.INSTANCE.toObject(table.getIndexWhere().toByteArray());
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2053,6 +2079,7 @@ public class PTableImpl implements PTable {
                     .setStreamingTopicName(streamingTopicName)
                     .setTTL(ttl)
                     .setRowKeyPrefix(rowKeyPrefix)
+                    .setIndexWhere(indexWhere)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2193,6 +2220,10 @@ public class PTableImpl implements PTable {
         if (table.getRowKeyPrefix() != null) {
             builder.setRowKeyPrefix(ByteStringer.wrap(table.getRowKeyPrefix()));
         }
+        if (table.getIndexWhere() != null) {
+            builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
+                    table.getIndexWhere())));
+        }
         return builder.build();
     }
 
@@ -2331,6 +2362,41 @@ public class PTableImpl implements PTable {
         return rowKeyPrefix;
     }
 
+    public String getIndexWhere() {
+        return indexWhere;
+    }
+
+    private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {
+        PhoenixPreparedStatement
+                pstmt =
+                new PhoenixPreparedStatement(connection,
+                        "select * from " + SchemaUtil.getTableName(parentSchemaName, parentTableName).getString() + " where " + indexWhere);
+        QueryPlan plan = pstmt.compileQuery();
+        ParseNode where = plan.getStatement().getWhere();
+        plan.getContext().setResolver(FromCompiler.getResolver(plan.getTableRef()));
+        indexWhereExpression = transformDNF(where, plan.getContext());
+        indexWhereColumns =
+                Sets.newHashSetWithExpectedSize(plan.getContext().getWhereConditionColumns().size());
+        for (Pair<byte[], byte[]> column : plan.getContext().getWhereConditionColumns()) {
+            indexWhereColumns.add(new ColumnReference(column.getFirst(), column.getSecond()));
+        }
+    }
+    @Override
+    public Expression getIndexWhereExpression(PhoenixConnection connection) throws SQLException {
+        if (indexWhereExpression == null && indexWhere != null) {
+            buildIndexWhereExpression(connection);
+        }
+        return indexWhereExpression;
+    }
+
+    @Override
+    public Set<ColumnReference> getIndexWhereColumns(PhoenixConnection connection)
+            throws SQLException {
+        if (indexWhereColumns == null && indexWhere != null) {
+            buildIndexWhereExpression(connection);
+        }
+        return indexWhereColumns;
+    }
     private static final class KVColumnFamilyQualifier {
         @Nonnull
         private final String colFamilyName;

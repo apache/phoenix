@@ -57,9 +57,9 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -116,7 +116,7 @@ public class SystemTablesCreationOnConnectionIT {
     private static class PhoenixSysCatCreationServices extends ConnectionQueryServicesImpl {
 
         PhoenixSysCatCreationServices(QueryServices services,
-                                      PhoenixEmbeddedDriver.ConnectionInfo connectionInfo, Properties info) {
+                                      ConnectionInfo connectionInfo, Properties info) {
             super(services, connectionInfo, info);
         }
 
@@ -160,9 +160,9 @@ public class SystemTablesCreationOnConnectionIT {
         @Override // public for testing
         public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
                                                                                Properties info) throws SQLException {
+            QueryServicesTestImpl qsti = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
             if (cqs == null) {
-                cqs = new PhoenixSysCatCreationServices(new QueryServicesTestImpl(getDefaultProps(),
-                        overrideProps), ConnectionInfo.create(url), info);
+                cqs = new PhoenixSysCatCreationServices(qsti, ConnectionInfo.create(url, qsti.getProps(), info), info);
                 cqs.init(url, info);
             }
             return cqs;

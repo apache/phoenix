@@ -217,8 +217,9 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     private SchemaBuilder createLevel2TenantViewWithGlobalLevelTTL(
-            TenantViewOptions tenantViewOptions, TenantViewIndexOptions tenantViewIndexOptions)
-            throws Exception {
+            TenantViewOptions tenantViewOptions,
+            TenantViewIndexOptions tenantViewIndexOptions,
+            boolean allowIndex) throws Exception {
         // Define the test schema.
         // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
         // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
@@ -244,10 +245,20 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         if (tenantViewIndexOptions != null) {
             tenantViewIndexOverrideOptions = tenantViewIndexOptions;
         }
-        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
-                .withGlobalViewIndexOptions(globalViewIndexOptions)
-                .withTenantViewOptions(tenantViewWithOverrideOptions)
-                .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildWithNewTenant();
+        if (allowIndex) {
+            schemaBuilder.withTableOptions(tableOptions)
+                    .withGlobalViewOptions(globalViewOptions)
+                    .withGlobalViewIndexOptions(globalViewIndexOptions)
+                    .withTenantViewOptions(tenantViewWithOverrideOptions)
+                    .withTenantViewIndexOptions(tenantViewIndexOverrideOptions)
+                    .buildWithNewTenant();
+        } else {
+            schemaBuilder.withTableOptions(tableOptions)
+                    .withGlobalViewOptions(globalViewOptions)
+                    .withTenantViewOptions(tenantViewWithOverrideOptions)
+                    .withTenantViewIndexOptions(tenantViewIndexOverrideOptions)
+                    .buildWithNewTenant();
+        }
         return schemaBuilder;
     }
 
@@ -265,10 +276,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
 
-        SchemaBuilder.GlobalViewIndexOptions globalViewIndexOptions
-                = SchemaBuilder.GlobalViewIndexOptions.withDefaults();
-        globalViewIndexOptions.setLocal(false);
-
         TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
         // Phoenix TTL is set to 300s => 300000 ms
         tenantViewWithOverrideOptions.setTableProps("TTL=300");
@@ -280,7 +287,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             tenantViewIndexOverrideOptions = tenantViewIndexOptions;
         }
         schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
-                .withGlobalViewIndexOptions(globalViewIndexOptions)
                 .withTenantViewOptions(tenantViewWithOverrideOptions)
                 .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildWithNewTenant();
         return schemaBuilder;
@@ -406,7 +412,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     public void testPhoenixTTLForLevelTwoView() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
-        final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
+        final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null,
+                false);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
         String schemaName = stripQuotes(
@@ -415,25 +422,18 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
         String tenantViewName = stripQuotes(
                 SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String indexOnTenantViewName = String
-                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
-        // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
-        // Since the TTL property values are being set,
+        // Expected 3 rows - one for GlobalView, one for TenantView and one for tenant view index.
+        // Since the PHOENIX_TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
-                schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 4);
+                schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 3);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, globalViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
-        assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, indexOnGlobalViewName,
-                PTableType.INDEX.getSerializedValue(), 300000);
-        // Since the TTL property values are not being overridden,
+        // Since the PHOENIX_TTL property values are not being overridden,
         // we expect the TTL value to be same as the global view.
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, tenantViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
-        assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, indexOnTenantViewName,
-                PTableType.INDEX.getSerializedValue(), 300000);
     }
 
     @Test
@@ -521,7 +521,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             // Phoenix TTL is set to 120s => 120000 ms
             tenantViewWithOverrideOptions.setTableProps("TTL=120");
             final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(
-                    tenantViewWithOverrideOptions, null);
+                    tenantViewWithOverrideOptions, null, false);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CANNOT_SET_OR_ALTER_TTL.getErrorCode(),
@@ -534,7 +534,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
         // Phoenix TTL is set to 300s
-        final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
+        final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null,
+                false);
 
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
         String schemaName = stripQuotes(
@@ -543,25 +544,18 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityGlobalViewName()));
         String tenantViewName = stripQuotes(
                 SchemaUtil.getTableNameFromFullName(schemaBuilder.getEntityTenantViewName()));
-        String indexOnGlobalViewName = String.format("IDX_%s", globalViewName);
-        String indexOnTenantViewName = String
-                .format("IDX_%s", stripQuotes(schemaBuilder.getEntityKeyPrefix()));
 
-        // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
-        // Since the TTL property values are being set,
+        // Expected 3 rows - one for GlobalView, one for TenantView and tenant view index.
+        // Since the PHOENIX_TTL property values are being set,
         // we expect the view header columns to show up in regular scans too.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
-                schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 4);
+                schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 3);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, globalViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
-        assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, indexOnGlobalViewName,
-                PTableType.INDEX.getSerializedValue(), 300000);
-        // Since the TTL property values are not being overridden,
+        // Since the PHOENIX_TTL property values are not being overridden,
         // we expect the TTL value to be same as the global view.
         assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, tenantViewName,
                 PTableType.VIEW.getSerializedValue(), 300000);
-        assertSyscatHavePhoenixTTLRelatedColumns(tenantId, schemaName, indexOnTenantViewName,
-                PTableType.INDEX.getSerializedValue(), 300000);
 
         String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
         try (Connection connection = DriverManager.getConnection(tenantURL)) {
@@ -673,7 +667,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     public void testResetPhoenixTTL() throws Exception {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
 
-        final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null);
+        final SchemaBuilder schemaBuilder = createLevel2TenantViewWithGlobalLevelTTL(null, null,
+                false);
         String tenantId = schemaBuilder.getDataOptions().getTenantId();
         String schemaName = stripQuotes(
                 SchemaUtil.getSchemaNameFromFullName(schemaBuilder.getEntityTenantViewName()));
@@ -694,11 +689,11 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             }
         }
 
-        // Expected 4 rows - one for GlobalView, one for TenantView and ViewIndex each.
-        // Since the TTL property values for global view are being reset,
+        // Expected 3 rows - one for GlobalView, one for TenantView and tenant view index.
+        // Since the PHOENIX_TTL property values for global view are being reset,
         // we expect the view header columns value to be set to zero.
         assertViewHeaderRowsHavePhoenixTTLRelatedCells(
-                schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 4);
+                schemaBuilder.getTableOptions().getSchemaName(), startTime, false, 3);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, globalViewName,
                 PTableType.VIEW.getSerializedValue(), 0);
         assertSyscatHavePhoenixTTLRelatedColumns("", schemaName, indexOnGlobalViewName,

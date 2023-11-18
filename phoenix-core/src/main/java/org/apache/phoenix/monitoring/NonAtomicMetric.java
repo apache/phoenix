@@ -63,6 +63,16 @@ class NonAtomicMetric implements Metric {
         value = 0;
     }
 
+    /**
+     * Set the Metric value as current value
+     *
+     * @param value
+     */
+    @Override
+    public void set(long value) {
+        this.value = value;
+    }
+
     @Override
     public void decrement() {
         value--;

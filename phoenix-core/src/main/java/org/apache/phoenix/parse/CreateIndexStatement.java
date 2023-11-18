@@ -38,10 +38,13 @@ public class CreateIndexStatement extends SingleTableStatement {
     private final IndexType indexType;
     private final boolean async;
     private final Map<String, UDFParseNode> udfParseNodes;
+    private final ParseNode where;
 
     public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable, 
-            IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-            ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
+            IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns,
+            List<ParseNode> splits, ListMultimap<String, Pair<String, Object>> props,
+            boolean ifNotExists, IndexType indexType, boolean async, int bindCount,
+            Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
         super(dataTable, bindCount);
         this.indexTableName =TableName.create(dataTable.getName().getSchemaName(),indexTableName.getName());
         this.indexKeyConstraint = indexKeyConstraint == null ? IndexKeyConstraint.EMPTY : indexKeyConstraint;
@@ -52,6 +55,7 @@ public class CreateIndexStatement extends SingleTableStatement {
         this.indexType = indexType;
         this.async = async;
         this.udfParseNodes = udfParseNodes;
+        this.where = where;
     }
 
     public CreateIndexStatement(CreateIndexStatement createStmt, ListMultimap<String, Pair<String, Object>> finalProps) {
@@ -65,6 +69,7 @@ public class CreateIndexStatement extends SingleTableStatement {
         this.indexType = createStmt.getIndexType();
         this.async = createStmt.isAsync();
         this.udfParseNodes = createStmt.getUdfParseNodes();
+        this.where = createStmt.where;
     }
 
     public IndexKeyConstraint getIndexConstraint() {
@@ -102,5 +107,8 @@ public class CreateIndexStatement extends SingleTableStatement {
 
     public Map<String, UDFParseNode> getUdfParseNodes() {
         return udfParseNodes;
+    }
+    public ParseNode getWhere() {
+        return where;
     }
 }

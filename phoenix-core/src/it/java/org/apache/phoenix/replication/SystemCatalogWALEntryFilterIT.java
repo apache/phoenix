@@ -18,6 +18,7 @@
 package org.apache.phoenix.replication;
 
 import java.io.IOException;
+import java.sql.DriverManager;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
@@ -392,17 +393,14 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   private static void dropTenantView() throws Exception {
     Properties tenantProperties = new Properties();
     tenantProperties.setProperty("TenantId", TENANT_ID);
-    try (java.sql.Connection connection =
-        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
+    try (java.sql.Connection connection = DriverManager.getConnection(getUrl(), tenantProperties)) {
       connection.createStatement().execute(DROP_TENANT_VIEW_SQL);
       connection.commit();
     }
   }
 
   private static void dropNonTenantView() throws Exception {
-    try (java.sql.Connection connection =
-        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), new Properties())) {
-
+    try (java.sql.Connection connection = DriverManager.getConnection(getUrl())) {
       connection.createStatement().execute(DROP_NONTENANT_VIEW_SQL);
     }
   }
@@ -410,16 +408,14 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
   private static void createTenantView() throws Exception {
     Properties tenantProperties = new Properties();
     tenantProperties.setProperty("TenantId", TENANT_ID);
-    try (java.sql.Connection connection =
-        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
+    try (java.sql.Connection connection = DriverManager.getConnection(getUrl(), tenantProperties)) {
       connection.createStatement().execute(CREATE_TENANT_VIEW_SQL);
       connection.commit();
     }
   }
 
   private static void createNonTenantView() throws Exception {
-    try (java.sql.Connection connection =
-        ConnectionUtil.getInputConnection(getUtility().getConfiguration(), new Properties())) {
+    try (java.sql.Connection connection = DriverManager.getConnection(getUrl())) {
       connection.createStatement().execute(CREATE_NONTENANT_VIEW_SQL);
       connection.commit();
     }

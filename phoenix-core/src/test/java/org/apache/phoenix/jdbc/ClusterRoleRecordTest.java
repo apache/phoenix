@@ -42,8 +42,8 @@ import org.slf4j.LoggerFactory;
  */
 public class ClusterRoleRecordTest {
     private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordTest.class);
-    private static final String ZK1 = "zk1-1,zk1-2:2181:/hbase";
-    private static final String ZK2 = "zk2-1,zk2-2:2181:/hbase";
+    private static final String ZK1 = "zk1-1\\:2181,zk1-2\\:2181::/hbase";
+    private static final String ZK2 = "zk2-1\\:2181,zk2-2\\:2181::/hbase";
 
     @Rule
     public final TestName testName = new TestName();
