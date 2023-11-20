@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.prefix;
+package org.apache.phoenix.end2end.prefix;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -63,6 +63,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -95,6 +96,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.stream.Collectors;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_TABLE_NAME;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -102,9 +104,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
+public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(RowKeyPrefixTestIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseRowKeyPrefixTestIT.class);
 
     public static final String TENANT_URL_FMT = "%s;%s=%s";
     public static final String ORG_ID_PREFIX = "00D0x0000";
@@ -621,7 +623,13 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                         viewIndexIdColExpr = new RowKeyColumnExpression(viewIndexIdPKColumn, new RowKeyValueAccessor(viewIndex.getPKColumns(), 0));
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 viewIndexIdColExpr.evaluate(new ResultTuple(result), ptr);
-                long actualViewIndexID = PLong.INSTANCE.getCodec().decodeLong(ptr, SortOrder.ASC);
+                long actualViewIndexID;
+                if (hasLongViewIndexEnabled()) {
+                    actualViewIndexID = PLong.INSTANCE.getCodec().decodeLong(ptr, SortOrder.ASC);
+                } else {
+                    actualViewIndexID = PSmallint.INSTANCE.getCodec().decodeShort(ptr, SortOrder.ASC);
+                }
+
                 assertTrue("ViewIndexId's not match", viewIndex.getViewIndexId() == actualViewIndexID);
                 rowkey = result.getRow();
                 numMatchingRows++;
@@ -632,6 +640,8 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
 
         }
     }
+
+    protected abstract boolean hasLongViewIndexEnabled();
 
     private SortOrder[][] getSortOrders() {
         SortOrder[][] sortOrders = new SortOrder[][] {
@@ -730,22 +740,8 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
 
     }
 
-    //TODO: remove
-    // PHOENIX-7067 will not allow extendedPK and viewIndexes
-    // FAILS: java.lang.AssertionError: isMultiTenant(false), extendPK(true), partition(401), tenant(1), rowId(4001), pkInfo(ID1,ID2,ID3), testInfo(INTEGER,INTEGER,INTEGER), sortInfo(ASC,ASC,ASC)
-
-    /**
-     * Caused by: java.lang.ArrayIndexOutOfBoundsException: 5
-     * 	at org.apache.phoenix.index.IndexMaintainer.buildRowKey(IndexMaintainer.java:730)
-     * 	at org.apache.phoenix.index.IndexMaintainer.buildUpdateMutation(IndexMaintainer.java:1107)
-     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.prepareIndexMutations(IndexRegionObserver.java:922)
-     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.preparePreIndexMutations(IndexRegionObserver.java:984)
-     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.preBatchMutateWithExceptions(IndexRegionObserver.java:1202)
-     * 	at org.apache.phoenix.hbase.index.IndexRegionObserver.preBatchMutate(IndexRegionObserver.java:467)
-     */
     @Test
-    @Ignore
-    public void testViewsWithViewIndexesFail1() {
+    public void testNonMultiTenantExtendedViewsWithViewIndexesFail() {
         try {
             List<PDataType[]> testCases = new ArrayList<>();
             // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
@@ -754,37 +750,19 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
             SortOrder[][] sortOrders = new SortOrder[][] {
                     {SortOrder.ASC, SortOrder.ASC, SortOrder.ASC}
             };
-            String tableName = "";
-            tableName = createViewHierarchy(testCases, sortOrders, 400,4000,3,false, true, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
+            createViewHierarchy(testCases, sortOrders, 900,9000,3,false, true, true);
+            fail();
+        } catch (SQLException sqle) {
+            assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    sqle.getErrorCode());
         } catch (Exception e) {
-            e.printStackTrace();
-            LOGGER.error(e.getMessage());
+            fail("SQLException expected: " + VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES);
         }
 
     }
 
-    //TODO: remove
-    // PHOENIX-7067 will not allow extendedPK and viewIndexes
-    // FAILS: java.lang.AssertionError: isMultiTenant(true), extendPK(true), partition(301), tenant(1), rowId(3001), pkInfo(ID1,ID2,ID3), testInfo(INTEGER,INTEGER,INTEGER), sortInfo(ASC,ASC,ASC)
-
-    /**
-     * 2023-11-07T17:50:18,862 ERROR [Listener at localhost/58634] prefix.RowKeyPrefixTestIT(868): -1
-     * java.lang.ArrayIndexOutOfBoundsException: -1
-     * 	at java.util.ArrayList.elementData(ArrayList.java:422)
-     * 	at java.util.ArrayList.get(ArrayList.java:435)
-     * 	at org.apache.phoenix.index.IndexMaintainer.initCachedState(IndexMaintainer.java:1930)
-     * 	at org.apache.phoenix.index.IndexMaintainer.<init>(IndexMaintainer.java:665)
-     * 	at org.apache.phoenix.index.IndexMaintainer.create(IndexMaintainer.java:148)
-     * 	at org.apache.phoenix.schema.PTableImpl.getIndexMaintainer(PTableImpl.java:1730)
-     * 	at org.apache.phoenix.index.IndexMaintainer.serialize(IndexMaintainer.java:253)
-     */
     @Test
-    @Ignore
-    public void testViewsWithViewIndexesFail2() {
+    public void testMultiTenantExtendedViewsWithViewIndexesFail() {
         try {
             List<PDataType[]> testCases = new ArrayList<>();
             // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
@@ -794,14 +772,17 @@ public class RowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                     {SortOrder.ASC, SortOrder.ASC, SortOrder.ASC}
             };
             String tableName = "";
-            tableName = createViewHierarchy(testCases, sortOrders, 300,3000,3,true, true, true);
+            tableName = createViewHierarchy(testCases, sortOrders, 910,9100,3,true, true, true);
             assertRowKeyPrefixesForTable(
                     getUrl(),
                     SchemaUtil.getSchemaNameFromFullName(tableName),
                     SchemaUtil.getTableNameFromFullName(tableName));
+            fail();
+        } catch (SQLException sqle) {
+            assertEquals(VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES.getErrorCode(),
+                    sqle.getErrorCode());
         } catch (Exception e) {
-            e.printStackTrace();
-            LOGGER.error(e.getMessage());
+            fail("SQLException expected: " + VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES);
         }
 
     }

@@ -512,17 +512,17 @@ public class WhereOptimizer {
                 schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyPrefix = scanRange.getScanRange().getLowerRange();
         // TODO : make it a TRACE log before submission
-        if (LOGGER.isInfoEnabled()) {
+        if (LOGGER.isTraceEnabled()) {
             String rowKeyPrefixStr = Bytes.toStringBinary(rowKeyPrefix);
             String rowKeyPrefixHex = Bytes.toHex(rowKeyPrefix);
             byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
             assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
-            LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
+            LOGGER.trace(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
                             + "primary-keys = %d, key-ranges: size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
-            LOGGER.info(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
+            LOGGER.trace(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
                     rowKeyPrefixHex, rowKeyPrefixStr));
 
         }
@@ -564,8 +564,8 @@ public class WhereOptimizer {
                         CompareOperator.EQUAL,
                         field.getDataType());
                 // TODO : make it a TRACE log before submission
-                if (LOGGER.isInfoEnabled()) {
-                    LOGGER.info(String.format("Field: pos = %d, name = %s, schema = %s, "
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace(String.format("Field: pos = %d, name = %s, schema = %s, "
                                             + "referenced-column %d, %s ",
                             pkPos, parentTable.getPKColumns().get(pkPos),
                             schema.getField(pkPos).toString(),
@@ -581,18 +581,18 @@ public class WhereOptimizer {
         byte[] rowKeyPrefix = scanRange.getScanRange().getLowerRange();
 
         // TODO : make it a TRACE log before submission
-        if (LOGGER.isInfoEnabled()) {
+        if (LOGGER.isTraceEnabled()) {
             String rowKeyPrefixStr = Bytes.toStringBinary(rowKeyPrefix);
             String rowKeyPrefixHex = Bytes.toHex(rowKeyPrefix);
             byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
             assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
 
-            LOGGER.info(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
+            LOGGER.trace(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
                             + "primary-keys = %d, key-ranges:  size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
-            LOGGER.info(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
+            LOGGER.trace(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
                     rowKeyPrefixHex, rowKeyPrefixStr));
 
         }
