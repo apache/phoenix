@@ -44,7 +44,6 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.trace.TraceUtil;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.QueryUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;

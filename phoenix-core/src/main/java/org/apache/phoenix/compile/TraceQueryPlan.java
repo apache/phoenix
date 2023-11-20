@@ -60,14 +60,10 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SizedUtil;
-
-import io.opentelemetry.api.trace.Span;
 
 public class TraceQueryPlan implements QueryPlan {
 

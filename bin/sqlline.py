@@ -124,7 +124,9 @@ if os.uname()[4].startswith('ppc'):
 else:
     disable_jna = ""
 
-java_cmd = java + ' -javaagent:' + phoenix_utils.opentelemetry_agent_jar + ' $PHOENIX_OPTS ' + \
+x = ( 'a' 'b')
+
+java_cmd = java + ' $PHOENIX_OPTS ' + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
@@ -132,15 +134,15 @@ java_cmd = java + ' -javaagent:' + phoenix_utils.opentelemetry_agent_jar + ' $PH
     phoenix_utils.logging_jar + os.pathsep + \
     phoenix_utils.phoenix_client_embedded_jar + \
     '" -Dlog4j2.configurationFile=file:' + os.path.join(phoenix_utils.current_dir, "log4j2.properties") + \
-    ' ' + phoenix_utils.phoenix_trace_opts + ' -Dotel.service.name="phoenix-sqlline" ' + \
     disable_jna + \
-    " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver" + \
-    (not args.noconnect and " -u " + phoenix_utils.shell_quote([jdbc_url]) or "") + \
-    " -n none -p none --color=" + \
-        (args.color and "true" or "false") + \
-        " --fastConnect=" + (args.fastconnect and "true" or "false") + \
-    " --verbose=" + (args.verbose and "true" or "false") + \
-        " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
+    ((phoenix_utils.phoenix_trace_opts + ' -Dotel.service.name="phoenix-sqlline" ') if args.trace else "" ) + \
+    ("" if args.traceratio is None else "-Dotel.traces.sampler.arg=" + args.traceratio) + \
+    " sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver " + \
+    ("" if args.noconnect else (" -u " + phoenix_utils.shell_quote([jdbc_url]))) + \
+    " -n none -p none --color=" + ("true" if args.color else "false") + \
+    " --fastConnect=" + ("true" if args.fastconnect else "false") + \
+    " --verbose=" + ( "true" if args.verbose else "false") + \
+    " --incremental=false --isolation=TRANSACTION_READ_COMMITTED " + sqlfile
 
 if args.verbose_command:
     print("Executing java command: " + java_cmd)

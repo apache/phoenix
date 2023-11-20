@@ -771,7 +771,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             String columnNamePattern) throws SQLException {
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
         Span span = TraceUtil.createSpan(connection, "PhoenixDataBaseMetaData.getColumns() collecting data");
-        try (Scope ignored = span.makeCurrent()){
+        try (Scope ignored = span.makeCurrent()) {
             boolean isTenantSpecificConnection = connection.getTenantId() != null;
             // Allow a "." in columnNamePattern for column family match
             String colPattern = null;
@@ -800,18 +800,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                     int startOffset = isSalted ? 1 : 0;
                     columns = Lists.newArrayList(columns.subList(startOffset, columns.size()));
                     for (PColumn column : columns) {
-                        if (isTenantSpecificConnection
-                                && column.equals(table.getPKColumns().get(startOffset))) {
+                    if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(startOffset))) {
                             // skip the tenant column
                             tenantColSkipped = true;
                             continue;
                         }
-                        String columnFamily =
-                                column.getFamilyName() != null ? column.getFamilyName().getString()
-                                        : null;
+                    String columnFamily = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
                         String columnName = column.getName().getString();
-                        if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will
-                                                                           // pick up all columns
+                    if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
                             if (columnFamily == null || !match(columnFamily, cfPattern)) {
                                 continue;
                             }
@@ -955,6 +951,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 }
             }
             span.setStatus(StatusCode.OK);
+        } catch (Exception e) {
+            TraceUtil.setError(span, e);
+            throw e;
         } finally {
             if (connection.getAutoCommit()) {
                 try (Scope ignored = span.makeCurrent()) {
@@ -1270,7 +1269,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 }
             }
             span.setStatus(StatusCode.OK);
-        } finally {
+        } catch (Exception e) {
+            TraceUtil.setError(span, e);
+            throw e;
+        }finally {
             if (connection.getAutoCommit()) {
                 try (Scope ignored = span.makeCurrent()) {
                     connection.commit();

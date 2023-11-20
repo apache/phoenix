@@ -13,10 +13,8 @@ package org.apache.phoenix.trace;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.List;
-import java.util.Map.Entry;
 
 import io.opentelemetry.api.common.AttributeKey;
-import io.opentelemetry.api.common.AttributeType;
 import io.opentelemetry.api.common.Attributes;
 import io.opentelemetry.api.internal.OtelEncodingUtils;
 import io.opentelemetry.api.trace.Span;
@@ -73,7 +71,6 @@ public class PhoenixHintableSampler implements Sampler {
     }
 
     PhoenixHintableSampler(double ratio, long idUpperBound) {
-        System.err.println("XXXX PhoenixHintableSampler.create idUpperBound:" + idUpperBound);
         this.idUpperBound = idUpperBound;
         description = "PhoenixHintableSampler{" + decimalFormat(ratio) + "}";
     }
@@ -81,24 +78,17 @@ public class PhoenixHintableSampler implements Sampler {
     @Override
     public SamplingResult shouldSample(Context parentContext, String traceId, String name,
             SpanKind spanKind, Attributes attributes, List<LinkData> parentLinks) {
-        System.err.println("XXXX PhoenixHintableSampler.shouldSample");
 
         SpanContext parentSpanContext = Span.fromContext(parentContext).getSpanContext();
         if (parentSpanContext.isValid()) {
-            System.err.println("XXXX PhoenixHintableSampler.shouldSample parentSpanContext.isValid:" + parentSpanContext.isValid() );
-            if(parentSpanContext.isSampled()) {
+            if (parentSpanContext.isSampled()) {
                 return POSITIVE_SAMPLING_RESULT;
             } else {
                 return NEGATIVE_SAMPLING_RESULT;
             }
         }
-        for ( Entry<AttributeKey<?>, Object> entry :attributes.asMap().entrySet()) {
-            System.err.println("XXXX PhoenixHintableSampler.shouldSample attribute key:" + entry.getKey() + " value:" + entry.getValue() );
-        }
-        
-        Long hint = attributes.get(SAMPLING_PRIORITY_ATTRIBUTE_KEY);
-        System.err.println("XXXX PhoenixHintableSampler.shouldSample hint:" + hint );
 
+        Long hint = attributes.get(SAMPLING_PRIORITY_ATTRIBUTE_KEY);
         if (hint != null) {
             if (hint <= 0) {
                 return NEGATIVE_SAMPLING_RESULT;
@@ -106,7 +96,7 @@ public class PhoenixHintableSampler implements Sampler {
                 return POSITIVE_SAMPLING_RESULT;
             }
         }
-        System.err.println("XXXX PhoenixHintableSampler.shouldSample Math.abs(getTraceIdRandomPart(traceId)):" + Math.abs(getTraceIdRandomPart(traceId)) );
+
         // Always sample if we are within probability range. This is true even for child spans (that
         // may have had a different sampling samplingResult made) to allow for different sampling
         // policies,

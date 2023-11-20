@@ -97,8 +97,7 @@ public class LockManager {
             InterruptedIOException iie = new InterruptedIOException();
             iie.initCause(ie);
             span.addEvent("Interrupted exception getting row lock");
-            span.setStatus(StatusCode.ERROR);
-            span.recordException(ie);
+            TraceUtil.setError(span, ie);
             Thread.currentThread().interrupt();
             throw iie;
         } finally {

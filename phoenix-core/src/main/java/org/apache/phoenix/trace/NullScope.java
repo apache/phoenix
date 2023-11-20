@@ -17,21 +17,17 @@
  */
 package org.apache.phoenix.trace;
 
-import io.opentelemetry.sdk.autoconfigure.spi.ConfigProperties;
-import io.opentelemetry.sdk.autoconfigure.spi.traces.ConfigurableSamplerProvider;
-import io.opentelemetry.sdk.trace.samplers.Sampler;
+import io.opentelemetry.context.Scope;
 
-public class PhoenixHintableSamplerProvider implements ConfigurableSamplerProvider {
+/**
+ * Facade class that implements AutoCloseable, but does not interact with tracing in any way
+ */
+public class NullScope implements Scope {
 
-    @Override
-    public Sampler createSampler(ConfigProperties config) {
-        double ratio = config.getDouble("otel.traces.sampler.arg", 1.0d);
-        return PhoenixHintableSampler.create(ratio);
-    }
+    public static final NullScope INSTANCE = new NullScope();
 
     @Override
-    public String getName() {
-        return "phoenix_hintable_sampler";
+    public void close() {
     }
 
 }

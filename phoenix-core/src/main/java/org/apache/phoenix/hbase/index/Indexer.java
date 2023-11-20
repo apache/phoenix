@@ -626,8 +626,7 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           metricSource.updateIndexWriteTime(dataTableName, duration);
           span.end();
       } catch (Throwable t) {
-          span.setStatus(StatusCode.ERROR);
-          span.recordException(t);
+          TraceUtil.setError(span, t);
           throw t;
       } finally {
           span.end();

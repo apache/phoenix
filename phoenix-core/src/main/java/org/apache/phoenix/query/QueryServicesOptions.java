@@ -125,7 +125,6 @@ import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableRefFactory;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -250,9 +249,6 @@ public class QueryServicesOptions {
     /**
      * Configuration key to overwrite the tablename that should be used as the target table
      */
-    // These are external parameters for OpenTelemetry 
-    //public static final String DEFAULT_TRACING_FREQ = Tracing.Frequency.NEVER.getKey();
-    //public static final double DEFAULT_TRACING_PROBABILITY_THRESHOLD = 0.05;
 
     public static final int DEFAULT_STATS_UPDATE_FREQ_MS = 15 * 60000; // 15min
     public static final int DEFAULT_STATS_GUIDEPOST_PER_REGION = 0; // Uses guidepost width by default

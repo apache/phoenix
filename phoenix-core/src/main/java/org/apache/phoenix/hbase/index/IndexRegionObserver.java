@@ -1374,8 +1374,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           }
           span.setStatus(StatusCode.OK);
       } catch (IOException e) {
-          span.setStatus(StatusCode.ERROR);
-          span.recordException(e);
+          TraceUtil.setError(span, e);
           throw e;
       } finally {
           span.end();

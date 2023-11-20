@@ -31,7 +31,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.DelegateConnection;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;

@@ -75,7 +75,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -84,9 +83,6 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.context.Scope;
 
 
 /**

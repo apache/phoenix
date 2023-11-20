@@ -46,7 +46,7 @@ public class TracingIterator extends DelegateResultIterator {
         //FIXME this is not sever side, we just can't access the PhoenixConnection from here 
         span = TraceUtil.createServerSideSpan("Creating Iterator for scan: " + iterator);
         span.setAttribute("plan", String.join("\n", getPlanSteps(iterator)));
-        //FIXME where to set the root span attributes ?
+        //FIXME where to set the span attributes ?
     }
 
     private List<String> getPlanSteps(ResultIterator iterator) {
@@ -62,6 +62,7 @@ public class TracingIterator extends DelegateResultIterator {
             super.close();
         } catch (Exception e) {
             TraceUtil.setError(span, e);
+            throw e;
         } finally {
             span.end();
         }
@@ -80,8 +81,7 @@ public class TracingIterator extends DelegateResultIterator {
             try {
                 return super.next();
             } catch (SQLException e) {
-                span.recordException(e);
-                span.setStatus(StatusCode.ERROR);
+                TraceUtil.setError(span, e);
                 throw e;
             }
         }

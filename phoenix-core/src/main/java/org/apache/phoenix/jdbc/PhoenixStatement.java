@@ -197,7 +197,6 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PNameFactory;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
@@ -402,7 +401,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     } finally {
                                         compileSpan.end();
                                     }
-    
                                     // Send mutations to hbase, so they are visible to subsequent reads.
                                     // Use original plan for data table so that data and immutable indexes will be sent
                                     // TODO: for joins, we need to iterate through all tables, but we need the original table,
@@ -419,14 +417,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                             plan.getTableRef().getTable().getSchemaName().getString(),
                                             plan.getTableRef().getTable().getTableName().getString()));
                                     }
-    
-    
                                     if (plan.getContext().getScanRanges().isPointLookup()) {
                                         pointLookup = true;
                                     }
                                     Iterator<TableRef> tableRefs = plan.getSourceRefs().iterator();
                                     connection.getMutationState().sendUncommitted(tableRefs);
-    
                                     // this will create its own trace internally, so we don't wrap this
                                     // whole thing in tracing
                                     ResultIterator resultIterator = plan.iterator();

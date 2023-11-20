@@ -173,8 +173,6 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     private long queryTime;
     private final Calendar localCalendar;
     
-//    private final Span span;
-
     public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector,
             StatementContext ctx) throws SQLException {
         this.rowProjector = rowProjector;
@@ -198,7 +196,6 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         }
         this.isApplyTimeZoneDisplacement = statement.getConnection().isApplyTimeZoneDisplacement();
         this.localCalendar = statement.getLocalCalendar();
-//        this.span = TraceUtil.createSpan("ResultSet for " + ctx.getScan());
     }
     
     @Override
@@ -890,10 +887,13 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     @Override
     public boolean next() throws SQLException {
         checkOpen();
-        try /*(Scope ignored = span.makeCurrent())*/{
+        Span span = statement.getLastQuerySpan();
+        //TODO can we have null lastQuerySpan when calling next() ?
+        try (Scope ignored = (span == null) ? Scope.noop() : span.makeCurrent()) {
             if (!firstRecordRead) {
                 firstRecordRead = true;
                 overAllQueryMetrics.startResultSetWatch();
+                span.addEvent("first record read");
             }
             currentRow = scanner.next();
             if (currentRow != null) {
@@ -916,6 +916,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
                 queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
             }
             this.exception = e;
+            TraceUtil.setError(span, e);
             if (e.getCause() instanceof SQLException) {
                 throw (SQLException) e.getCause();
             }

@@ -488,7 +488,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
      * @param connection
      */
     public void removeChildConnection(PhoenixConnection connection) {
-       //TODO handle trace pan
+       //TODO handle trace span
         childConnections.remove(connection);
     }
 
@@ -772,12 +772,13 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 clearMetrics();
             }
             try {
-                if (manualTraceSpan != null) {
-                    manualTraceSpan.end();
-                }
+
                 closeStatements();
                 if (childConnections != null) {
                     SQLCloseables.closeAllQuietly(childConnections);
+                }
+                if (manualTraceSpan != null) {
+                    manualTraceSpan.end();
                 }
             } finally {
                 services.removeConnection(this);
@@ -1115,6 +1116,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 span.setStatus(StatusCode.OK);
             } catch (Exception e) {
                 TraceUtil.setError(span, e);
+                throw e;
             } finally {
                 span.end();
             }

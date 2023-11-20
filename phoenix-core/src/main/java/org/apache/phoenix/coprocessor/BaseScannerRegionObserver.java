@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
+
 import java.io.IOException;
 import java.util.List;
 
@@ -61,10 +63,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Scope;
-
-import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 abstract public class BaseScannerRegionObserver implements RegionObserver {
 

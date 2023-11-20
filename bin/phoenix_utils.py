@@ -89,7 +89,6 @@ def setPath():
     OPENTELEMETRY_AGENT_PATTERN = "opentelemetry-javaagent*.jar"
     OPENTELEMETRY_AGENT_EXTENSION_PATTERN = "phoenix-opentelemetry-trace-sampler-*[!s].jar"
 
-
     OVERRIDE_SLF4J_BACKEND = "OVERRIDE_SLF4J_BACKEND_JAR_LOCATION"
     OVERRIDE_LOGGING = "OVERRIDE_LOGGING_JAR_LOCATION"
     OVERRIDE_SQLLINE = "OVERRIDE_SQLLINE_JAR_LOCATION"
@@ -163,14 +162,14 @@ def setPath():
         testjar = find(PHOENIX_TESTS_JAR_PATTERN, phoenix_class_path)
 
     global phoenix_traceserver_jar
-    phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target"))
+    phoenix_traceserver_jar = find(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-tracing-webapp", "target", "*"))
     if phoenix_traceserver_jar == "":
         phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
     if phoenix_traceserver_jar == "":
         phoenix_traceserver_jar = findFileInPathWithoutRecursion(PHOENIX_TRACESERVER_JAR_PATTERN, os.path.join(current_dir, ".."))
 
     global phoenix_pherf_jar
-    phoenix_pherf_jar = find(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-pherf", "target"))
+    phoenix_pherf_jar = find(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "phoenix-pherf", "target", "*"))
     if phoenix_pherf_jar == "":
         phoenix_pherf_jar = findFileInPathWithoutRecursion(PHOENIX_PHERF_JAR_PATTERN, os.path.join(current_dir, "..", "lib"))
     if phoenix_pherf_jar == "":
@@ -206,28 +205,16 @@ def setPath():
         opentelemetry_agent_extension_jar = findFileInPathWithoutRecursion(OPENTELEMETRY_AGENT_EXTENSION_PATTERN, os.path.join(current_dir, "..", "phoenix-opentelemetry-trace-sampler", "target"))
     return ""
 
+
 def set_tracing():
     global phoenix_trace_opts
     phoenix_trace_opts = os.environ.get("PHOENIX_TRACE_OPTS")
-    #FIXME detect the OTEL Agent extension Jar 
     if phoenix_trace_opts is None or phoenix_trace_opts == "":
-        phoenix_trace_opts = "  -Dotel.metrics.exporter=none -Dotel.instrumentation.jdbc.enabled=false -Dotel.javaagent.extensions="+opentelemetry_agent_extension_jar+" -Dotel.traces.sampler=phoenix_hintable_sampler -Dotel.traces.sampler.arg=0.0 "
-        # -Dotel.traces.exporter=phoenix_hintable_sampler
-        # -Dotel.javaagent.extensions=build/libs/opentelemetry-java-instrumentation-extension-demo-1.0-all.jar
-        # -Dotel.traces.exporter=logging
-        # -Dotel.instrumentation.jdbc.enabled=false
-        # -Dotel.javaagent.debug=true
-        print("TRACE_OPTS="+phoenix_trace_opts)
+        phoenix_trace_opts = " -javaagent:" + opentelemetry_agent_jar + \
+        " -Dotel.javaagent.extensions=" + opentelemetry_agent_extension_jar + \
+        " -Dotel.metrics.exporter=none -Dotel.instrumentation.jdbc.enabled=false -Dotel.traces.sampler=phoenix_hintable_sampler "
     return ""
 
-def set_sandbox_tracing():
-    global phoenix_trace_opts
-    phoenix_trace_opts = os.environ.get("PHOENIX_TRACE_OPTS")
-    if phoenix_trace_opts is None or phoenix_trace_opts == "":
-        phoenix_trace_opts = " -Dotel.metrics.exporter=none -Dotel.instrumentation.jdbc.enabled=false"
-        #-Dotel.traces.exporter=logging
-        # -Dotel.instrumentation.jdbc.enabled=false
-    return ""
 
 def shell_quote(args):
     """
@@ -250,6 +237,9 @@ def common_sqlline_args(parser):
     parser.add_argument('-fc', '--fastconnect',
                         help='Fetch all schemas on initial connection',
                         action="store_true")
+    parser.add_argument('--trace', help='Load and set up Opentelemetry agent',
+                    action="store_true")
+    parser.add_argument('--traceratio', help='Default trace ratio')
 
 if __name__ == "__main__":
     setPath()
@@ -265,3 +255,5 @@ if __name__ == "__main__":
     print("slf4j_backend_jar:", slf4j_backend_jar)
     print("logging_jar:", logging_jar)
     print("opentelemetry_agent_jar:", opentelemetry_agent_jar)
+    print("opentelemetry_agent_extension_jar:", opentelemetry_agent_extension_jar)
+

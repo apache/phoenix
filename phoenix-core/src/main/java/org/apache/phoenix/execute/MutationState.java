@@ -106,7 +106,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.trace.TraceUtil;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -1211,10 +1210,6 @@ public class MutationState implements SQLCloseable {
     }
 
     private void sendBatch(Map<TableRef, MultiRowMutationState> commitBatch, long[] serverTimeStamps, boolean sendAll) throws SQLException {
-        if (commitBatch.isEmpty()) {
-            return;
-        }
-
         int i = 0;
         Map<TableInfo, List<Mutation>> physicalTableMutationMap = Maps.newLinkedHashMap();
 
@@ -1300,6 +1295,7 @@ public class MutationState implements SQLCloseable {
             span.setStatus(StatusCode.OK);
         } catch (SQLException e) {
             TraceUtil.setError(span, e);
+            throw e;
         } finally {
             span.end();
         }
@@ -1427,8 +1423,8 @@ public class MutationState implements SQLCloseable {
                             // applied batches from entire list, also we can set
                             // REPLAY_ONLY_INDEX_WRITES for first batch
                             // only in case of 1121 SQLException
-                            itrListMutation.remove();
-    
+                        itrListMutation.remove();
+
                             batchCount++;
                             if (LOGGER.isDebugEnabled())
                                 LOGGER.debug("Sent batch of " + mutationBatch.size() + " for "
@@ -1436,7 +1432,7 @@ public class MutationState implements SQLCloseable {
                         }
                         shouldRetry = false;
                         numFailedMutations = 0;
-    
+
                         // Remove batches as we process them
                         removeMutations(this.mutationsMap, origTableRef);
                         if (tableInfo.isDataTable()) {
@@ -1457,13 +1453,13 @@ public class MutationState implements SQLCloseable {
                                 // Swallow this exception once, as it's possible that we split after sending the index
                                 // metadata
                                 // and one of the region servers doesn't have it. This will cause it to have it the next
-                                // go around.
+                            // go around.
                                 // If it fails again, we don't retry.
                                 String msg = "Swallowing exception and retrying after clearing meta cache on connection. "
                                         + inferredE;
                                 LOGGER.warn(LogUtil.addCustomAnnotations(msg, connection));
                                 connection.getQueryServices().clearTableRegionCache(TableName.valueOf(htableName));
-    
+
                                 // The HTRace implementation started a new child span here.
                                 // Now we're just adding an event to the same span.
                                 span.addEvent(msg);
@@ -1496,7 +1492,7 @@ public class MutationState implements SQLCloseable {
                         int[] uncommittedStatementIndexes = getUncommittedStatementIndexes();
                         sqlE = new CommitException(e, uncommittedStatementIndexes, serverTimestamp);
                         numFailedMutations = uncommittedStatementIndexes.length;
-                        GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(numFailedMutations);
+
                         if (isVerifiedPhase) {
                             numFailedPhase3Mutations = numFailedMutations;
                             GLOBAL_MUTATION_INDEX_COMMIT_FAILURE_COUNT.update(numFailedPhase3Mutations);
@@ -1511,7 +1507,7 @@ public class MutationState implements SQLCloseable {
                                             htableNameStr, numFailedMutations,
                                             table.isTransactional());
                         }
-    
+
                         MutationMetric committedMutationsMetric =
                                 getCommittedMutationsMetric(
                                         totalMutationBytesObject,
@@ -1523,7 +1519,7 @@ public class MutationState implements SQLCloseable {
                         // Combine failure mutation metrics with committed ones for the final picture
                         committedMutationsMetric.combineMetric(failureMutationMetrics);
                         mutationMetricQueue.addMetricsForTable(htableNameStr, committedMutationsMetric);
-    
+
                         if (allUpsertsMutations ^ allDeletesMutations) {
                             //success cases are updated for both cases autoCommit=true and conn.commit explicit
                             if (areAllBatchesSuccessful){
@@ -1548,7 +1544,7 @@ public class MutationState implements SQLCloseable {
                                     latency, allUpsertsMutations);
                         }
                         resetAllMutationState();
-    
+
                         try {
                             if (cache != null) cache.close();
                         } finally {
@@ -1566,7 +1562,6 @@ public class MutationState implements SQLCloseable {
                     }
                 } finally {
                     span.end();
-
                 }
             } while (shouldRetry && retryCount++ < 1);
         }
@@ -1584,10 +1579,12 @@ public class MutationState implements SQLCloseable {
             String tableName,
             long numFailedMutations,
             boolean isTransactional) {
+
         if (failedMutationBatch == null || failedMutationBatch.isEmpty() ||
                 Strings.isNullOrEmpty(tableName)) {
             return MutationMetricQueue.MutationMetric.EMPTY_METRIC;
         }
+
         long numUpsertMutationsInBatch = 0L;
         long numDeleteMutationsInBatch = 0L;
 
@@ -1598,12 +1595,25 @@ public class MutationState implements SQLCloseable {
                 numDeleteMutationsInBatch++;
             }
         }
+
+        long totalFailedMutation = numUpsertMutationsInBatch + numDeleteMutationsInBatch;
+        //this case should not happen but the if condition makes sense if this ever happens
+        if (totalFailedMutation < numFailedMutations) {
+            LOGGER.warn(
+                    "total failed mutation less than num of failed mutation.  This is not expected.");
+            totalFailedMutation = numFailedMutations;
+        }
+
+        long totalNumFailedMutations = allDeletesMutations && !isTransactional
+                ? numDeleteMutationsInBatch : totalFailedMutation;
+        GLOBAL_MUTATION_BATCH_FAILED_COUNT.update(totalNumFailedMutations);
+
         // Update the MUTATION_BATCH_FAILED_SIZE counter with the number of failed delete mutations
         // in case we are dealing with all deletes for a non-transactional table, since there is a
         // bug in sendMutations where we don't get the correct value for numFailedMutations when
         // we don't use transactions
         return new MutationMetricQueue.MutationMetric(0, 0, 0, 0, 0, 0,
-                allDeletesMutations && !isTransactional ? numDeleteMutationsInBatch : numFailedMutations,
+                totalNumFailedMutations,
                 0, 0, 0, 0,
                 numUpsertMutationsInBatch,
                 allUpsertsMutations ? 1 : 0,
