@@ -216,7 +216,10 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
         if (env.getConfiguration()
                 .getBoolean(STATS_COLLECTION_ENABLED, DEFAULT_STATS_COLLECTION_ENABLED)) {
             truncateTaskExectuor.schedule(r, statsTruncateTaskDelay, TimeUnit.MILLISECONDS);
+        } else {
+            LOGGER.info("Stats collection is disabled");
         }
+
 
         if (!enableRebuildIndex) {
             LOGGER.info("Failure Index Rebuild is skipped by configuration.");
