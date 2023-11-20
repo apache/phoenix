@@ -199,7 +199,10 @@ public class OrphanViewTool extends Configured implements Tool {
 
         final Options options = getOptions();
 
-        CommandLineParser parser = new DefaultParser(false, false);
+        CommandLineParser parser = DefaultParser.builder().
+                setAllowPartialMatching(false).
+                setStripLeadingAndTrailingQuotes(false).
+                build();
         CommandLine cmdLine = null;
         try {
             cmdLine = parser.parse(options, args);
