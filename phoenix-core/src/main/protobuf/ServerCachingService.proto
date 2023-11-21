@@ -69,6 +69,8 @@ message IndexMaintainer {
   optional int32 dataEncodingScheme = 26;
   optional int32 dataImmutableStorageScheme = 27;
   optional bool isUncovered = 28;
+  optional bytes indexWhere = 29;
+  repeated ColumnReference indexWhereColumns = 30;
 }
 
 message TransformMaintainer {

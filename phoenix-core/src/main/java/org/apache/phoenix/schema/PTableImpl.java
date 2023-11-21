@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.compile.WhereCompiler.transformDNF;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.addQuietly;
 import static org.apache.phoenix.hbase.index.util.KeyValueBuilder.deleteQuietly;
@@ -68,7 +69,6 @@ import java.util.Set;
 
 import javax.annotation.Nonnull;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -82,6 +82,8 @@ import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -89,11 +91,13 @@ import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.SingleCellConstructorExpression;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -106,16 +110,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.CDCUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -126,6 +122,16 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSortedMa
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SizedUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
  *
@@ -213,6 +219,9 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
+    private String indexWhere;
+    private Expression indexWhereExpression;
+    private Set<ColumnReference> indexWhereColumns;
     private Set<CDCChangeScope> cdcIncludeScopes;
 
     public static class Builder {
@@ -280,6 +289,7 @@ public class PTableImpl implements PTable {
         private String externalSchemaId;
         private String streamingTopicName;
         private Set<CDCChangeScope> cdcIncludeScopes;
+        private String indexWhere;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -700,6 +710,13 @@ public class PTableImpl implements PTable {
             return this;
          }
 
+        public Builder setIndexWhere(String indexWhere) {
+            if (indexWhere != null) {
+                this.indexWhere = indexWhere;
+            }
+            return this;
+        }
+
         public Builder setCDCIncludeScopes(Set<CDCChangeScope> cdcIncludeScopes) {
             if (cdcIncludeScopes != null) {
                 this.cdcIncludeScopes = cdcIncludeScopes;
@@ -998,6 +1015,7 @@ public class PTableImpl implements PTable {
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
         this.cdcIncludeScopes = builder.cdcIncludeScopes;
+        this.indexWhere = builder.indexWhere;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1077,7 +1095,8 @@ public class PTableImpl implements PTable {
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setSchemaVersion(table.getSchemaVersion())
                 .setExternalSchemaId(table.getExternalSchemaId())
-                .setStreamingTopicName(table.getStreamingTopicName());
+                .setStreamingTopicName(table.getStreamingTopicName())
+                .setIndexWhere(table.getIndexWhere());
     }
 
     @Override
@@ -1743,7 +1762,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable,
+            PhoenixConnection connection) throws SQLException {
         if (indexMaintainer == null) {
             indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
         }
@@ -1751,7 +1771,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+    public synchronized boolean getIndexMaintainers(ImmutableBytesWritable ptr,
+            PhoenixConnection connection) throws SQLException {
         if (indexMaintainersPtr == null || indexMaintainersPtr.getLength()==0) {
             indexMaintainersPtr = new ImmutableBytesWritable();
             if (indexes.isEmpty() && transformingNewTable == null) {
@@ -2016,6 +2037,11 @@ public class PTableImpl implements PTable {
             streamingTopicName =
                 (String) PVarchar.INSTANCE.toObject(table.getStreamingTopicName().toByteArray());
         }
+        String indexWhere = null;
+        if (table.hasIndexWhere()) {
+            indexWhere =
+                    (String) PVarchar.INSTANCE.toObject(table.getIndexWhere().toByteArray());
+        }
         String cdcIncludeScopesStr = null;
         if (table.hasCDCIncludeScopes()) {
             cdcIncludeScopesStr = table.getCDCIncludeScopes();
@@ -2079,6 +2105,7 @@ public class PTableImpl implements PTable {
                     .setStreamingTopicName(streamingTopicName)
                     .setCDCIncludeScopes(
                             CDCUtil.makeChangeScopeEnumsFromString(cdcIncludeScopesStr))
+                    .setIndexWhere(indexWhere)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2217,6 +2244,10 @@ public class PTableImpl implements PTable {
         }
         if (table.getStreamingTopicName() != null) {
             builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
+        }
+        if (table.getIndexWhere() != null) {
+            builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
+                    table.getIndexWhere())));
         }
         return builder.build();
     }
@@ -2363,6 +2394,43 @@ public class PTableImpl implements PTable {
     @Override
     public Set<CDCChangeScope> getCDCIncludeScopes() {
         return cdcIncludeScopes;
+    }
+
+    @Override
+    public String getIndexWhere() {
+        return indexWhere;
+    }
+
+    private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {
+        PhoenixPreparedStatement
+                pstmt =
+                new PhoenixPreparedStatement(connection,
+                        "select * from " + SchemaUtil.getTableName(parentSchemaName, parentTableName).getString() + " where " + indexWhere);
+        QueryPlan plan = pstmt.compileQuery();
+        ParseNode where = plan.getStatement().getWhere();
+        plan.getContext().setResolver(FromCompiler.getResolver(plan.getTableRef()));
+        indexWhereExpression = transformDNF(where, plan.getContext());
+        indexWhereColumns =
+                Sets.newHashSetWithExpectedSize(plan.getContext().getWhereConditionColumns().size());
+        for (Pair<byte[], byte[]> column : plan.getContext().getWhereConditionColumns()) {
+            indexWhereColumns.add(new ColumnReference(column.getFirst(), column.getSecond()));
+        }
+    }
+    @Override
+    public Expression getIndexWhereExpression(PhoenixConnection connection) throws SQLException {
+        if (indexWhereExpression == null && indexWhere != null) {
+            buildIndexWhereExpression(connection);
+        }
+        return indexWhereExpression;
+    }
+
+    @Override
+    public Set<ColumnReference> getIndexWhereColumns(PhoenixConnection connection)
+            throws SQLException {
+        if (indexWhereColumns == null && indexWhere != null) {
+            buildIndexWhereExpression(connection);
+        }
+        return indexWhereColumns;
     }
 
     private static final class KVColumnFamilyQualifier {

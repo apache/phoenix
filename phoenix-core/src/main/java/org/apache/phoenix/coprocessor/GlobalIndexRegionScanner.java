@@ -1173,9 +1173,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return mutationList;
     }
 
-    private static Put prepareIndexPutForRebuid(IndexMaintainer indexMaintainer, ImmutableBytesPtr rowKeyPtr,
-                                                ValueGetter mergedRowVG, long ts)
-            throws IOException {
+    private static Put prepareIndexPutForRebuild(IndexMaintainer indexMaintainer,
+            ImmutableBytesPtr rowKeyPtr, ValueGetter mergedRowVG, long ts) throws IOException {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                 mergedRowVG, rowKeyPtr, ts, null, null, false);
         if (indexPut == null) {
@@ -1247,11 +1246,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     }
 
     /**
-     * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
-     * state with the pending row mutation for index rebuild. This method is called only for global indexes.
-     * pendingMutations is a sorted list of data table mutations that are used to replay index table mutations.
-     * This list is sorted in ascending order by the tuple of row key, timestamp and mutation type where delete comes
-     * after put.
+     * Generate the index update for a data row from the mutation that are obtained by merging
+     * the previous data row state with the pending row mutation for index rebuild. This method is
+     * called only for global indexes including covered full, covered partial, uncovered full, and
+     * uncovered partial indexes.
+     * pendingMutations is a sorted list of data table mutations that are used to replay index
+     * table mutations. This list is sorted in ascending order by the tuple of row key, timestamp
+     * and mutation type where delete comes after put.
      */
     public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
                                                                  Put dataPut, Delete dataDel) throws IOException {
@@ -1300,14 +1301,28 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
 
                 if (mutation.getFamilyCellMap().size() != 0) {
                     // Add this put on top of the current data row state to get the next data row state
-                    Put nextDataRow = (currentDataRowState == null) ? new Put((Put)mutation) : applyNew((Put)mutation, currentDataRowState);
+                    Put nextDataRow = (currentDataRowState == null) ? new Put((Put) mutation) :
+                            applyNew((Put) mutation, currentDataRowState);
+                    if (!indexMaintainer.shouldPrepareIndexMutations(nextDataRow)) {
+                        currentDataRowState = nextDataRow;
+                        if (indexRowKeyForCurrentDataRow != null) {
+                            Mutation del = indexMaintainer.buildRowDeleteMutation(
+                                    indexRowKeyForCurrentDataRow,
+                                    IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+                            indexMutations.add(del);
+                        }
+                        indexRowKeyForCurrentDataRow = null;
+                        continue;
+                    }
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRow);
-                    Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
+                    Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
+                            nextDataRowVG, ts);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
-                    if (currentDataRowState != null) {
+                    if (indexRowKeyForCurrentDataRow != null) {
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
-                            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                            Mutation del = indexMaintainer.buildRowDeleteMutation(
+                                    indexRowKeyForCurrentDataRow,
                                     IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                             indexMutations.add(del);
                         }
@@ -1330,24 +1345,42 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                 applyDeleteOnPut(deleteToApply, currentDataRowState);
                 Put nextDataRowState = currentDataRowState;
                 if (nextDataRowState.getFamilyCellMap().size() == 0) {
-                    Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-                            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-                    indexMutations.add(del);
+                    if (indexRowKeyForCurrentDataRow != null) {
+                        Mutation
+                                del =
+                                indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                                        IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+                        indexMutations.add(del);
+                    }
                     currentDataRowState = null;
                     indexRowKeyForCurrentDataRow = null;
-                } else {
+                } else if (indexRowKeyForCurrentDataRow != null) {
+                    if (!indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
+                        currentDataRowState = nextDataRowState;
+                        Mutation del = indexMaintainer.buildRowDeleteMutation(
+                                indexRowKeyForCurrentDataRow,
+                                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+                        indexMutations.add(del);
+                        indexRowKeyForCurrentDataRow = null;
+                        continue;
+                    }
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
-                    Put indexPut = prepareIndexPutForRebuid(indexMaintainer, rowKeyPtr, nextDataRowVG, ts);
+                    Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
+                            nextDataRowVG, ts);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
                     if (indexRowKeyForCurrentDataRow != null) {
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
-                            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                            Mutation del = indexMaintainer.buildRowDeleteMutation(
+                                    indexRowKeyForCurrentDataRow,
                                     IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                             indexMutations.add(del);
                         }
                     }
                     indexRowKeyForCurrentDataRow = indexPut.getRow();
+                } else {
+                    currentDataRowState = nextDataRowState;
+                    indexRowKeyForCurrentDataRow = null;
                 }
             }
         }

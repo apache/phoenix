@@ -85,7 +85,21 @@ public class IsNullExpression extends BaseSingleExpression {
     public boolean isNegate() {
         return isNegate;
     }
-    
+
+    @Override
+    public boolean contains(Expression other) {
+        if (!(other instanceof ComparisonExpression || other instanceof IsNullExpression)) {
+            return false;
+        }
+        if (!this.getChildren().get(0).equals(other.getChildren().get(0))) {
+            return false;
+        }
+        if (other instanceof ComparisonExpression) {
+            return isNegate;
+        }
+        return isNegate == ((IsNullExpression) other).isNegate;
+    }
+
     @Override
     public void readFields(DataInput input) throws IOException {
         super.readFields(input);

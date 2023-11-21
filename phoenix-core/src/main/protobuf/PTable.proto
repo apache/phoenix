@@ -118,7 +118,8 @@ message PTable {
   optional bytes externalSchemaId=50;
   optional PTable transformingNewTable=51;
   optional bytes streamingTopicName=52;
-  optional string CDCIncludeScopes=55;
+  optional bytes indexWhere=53;
+  optional string CDCIncludeScopes=54;
 }
 
 message EncodedCQCounter {

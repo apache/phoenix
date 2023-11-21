@@ -17,11 +17,14 @@
  */
 package org.apache.phoenix.schema;
 
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -197,12 +200,14 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection) {
+    public boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection)
+            throws SQLException {
         return delegate.getIndexMaintainers(ptr, connection);
     }
 
     @Override
-    public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection) {
+    public IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection)
+            throws SQLException {
         return delegate.getIndexMaintainer(dataTable, connection);
     }
 
@@ -406,6 +411,22 @@ public class DelegateTable implements PTable {
     @Override
     public Set<CDCChangeScope> getCDCIncludeScopes() {
         return delegate.getCDCIncludeScopes();
+    }
+
+    public String getIndexWhere() {
+        return delegate.getIndexWhere();
+    }
+
+    @Override
+    public Expression getIndexWhereExpression(PhoenixConnection connection)
+            throws SQLException {
+        return delegate.getIndexWhereExpression(connection);
+    }
+
+    @Override
+    public Set<ColumnReference> getIndexWhereColumns(PhoenixConnection connection)
+            throws SQLException {
+        return delegate.getIndexWhereColumns(connection);
     }
 
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
