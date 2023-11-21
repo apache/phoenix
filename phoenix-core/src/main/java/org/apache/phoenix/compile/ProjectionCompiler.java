@@ -575,9 +575,17 @@ public class ProjectionCompiler {
             Map<Expression, Expression> replacementMap = new HashMap<>();
             for (int i = 0; i < serverParsedOldFuncs.size(); i++) {
                 Expression function = serverParsedKVFuncs.get(i);
-                replacementMap.put(serverParsedOldFuncs.get(i),
-                        new ArrayIndexExpression(initialToShuffledPositionMap.get(i),
-                                function.getDataType(), arrayIndexesBitSet, arrayIndexesSchema));
+                if (isJsonFunction(function)) {
+                    replacementMap.put(serverParsedOldFuncs.get(i),
+                            new JsonPathExpression(initialToShuffledPositionMap.get(i),
+                                    function.getDataType(), arrayIndexesBitSet,
+                                    arrayIndexesSchema));
+                } else {
+                    replacementMap.put(serverParsedOldFuncs.get(i),
+                            new ArrayIndexExpression(initialToShuffledPositionMap.get(i),
+                                    function.getDataType(), arrayIndexesBitSet,
+                                    arrayIndexesSchema));
+                }
             }
 
             ReplaceArrayFunctionExpressionVisitor
@@ -703,6 +711,14 @@ public class ProjectionCompiler {
         }
     }
 
+    static class JsonPathExpression extends ArrayIndexExpression {
+
+        public JsonPathExpression(int position, PDataType type, ValueBitSet arrayIndexesBitSet,
+                KeyValueSchema arrayIndexesSchema) {
+            super(position, type, arrayIndexesBitSet, arrayIndexesSchema);
+        }
+    }
+
     private static void serializeServerParsedExpressionInformationAndSetInScan(
             StatementContext context, String serverParsedExpressionAttribute,
             List<Expression> serverParsedKVFuncs,
@@ -710,13 +726,14 @@ public class ProjectionCompiler {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
-            // Write the arrayKVRef size followed by the keyvalues that needs to be of
-            // type arrayindex+json function
+            // Write the KVRef size followed by the keyvalues that needs to be of
+            // type arrayindex or json function based on serverParsedExpressionAttribute
             WritableUtils.writeVInt(output, serverParsedKVRefs.size());
             for (Expression expression : serverParsedKVRefs) {
                     expression.write(output);
             }
-            // then write the number of arrayindex+json functions followed by the expression itself
+            // then write the number of arrayindex or json functions followed
+            // by the expression itself
             WritableUtils.writeVInt(output, serverParsedKVFuncs.size());
             for (Expression expression : serverParsedKVFuncs) {
                     expression.write(output);
@@ -742,6 +759,8 @@ public class ProjectionCompiler {
          */
         private boolean isCaseSensitive;
         private int elementCount;
+        // Looks at PHOENIX-2160 for the context and use of the below variables.
+        // These are used for reference counting and converting to KeyValueColumnExpressions
         private List<KeyValueColumnExpression> serverParsedKVRefs;
         private List<Expression> serverParsedKVFuncs;
         private List<Expression> serverParsedOldFuncs;
@@ -782,14 +801,18 @@ public class ProjectionCompiler {
         @Override
         public Expression visit(ColumnParseNode node) throws SQLException {
             Expression expression = super.visit(node);
-            if (expression.getDataType().isArrayType() || expression.getDataType()
-                    .equals(PJson.INSTANCE)) {
+            if (parseOnServer(expression)) {
                 Integer count = serverParsedExpressionCounts.get(expression);
                 serverParsedExpressionCounts.put(expression, count != null ? (count + 1) : 1);
             }
             return expression;
         }
-        
+
+        private static boolean parseOnServer(Expression expression) {
+            return expression.getDataType().isArrayType() || expression.getDataType()
+                    .equals(PJson.INSTANCE);
+        }
+
         @Override
         public void addElement(List<Expression> l, Expression element) {
             elementCount++;
@@ -810,14 +833,14 @@ public class ProjectionCompiler {
         @Override
         public Expression visitLeave(FunctionParseNode node, final List<Expression> children) throws SQLException {
 
-            // this need not be done for group by clause with array. Hence the below check
+            // this need not be done for group by clause with array or json. Hence, the below check
             if (!statement.isAggregate() && (ArrayIndexFunction.NAME.equals(
                     node.getName()) || isJsonFunction(node)) &&
                     children.get(0) instanceof ProjectedColumnExpression) {
                 final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
                 final List<ProjectedColumnExpression> indexProjectedColumns = Lists.newArrayList();
                 final List<Expression> copyOfChildren = new ArrayList<>(children);
-                // Create anon visitor to find reference to array in a generic way
+                // Create anon visitor to find reference to array or json in a generic way
                 children.get(0).accept(new ProjectedColumnExpressionVisitor() {
                     @Override
                     public Void visit(ProjectedColumnExpression expression) {
@@ -851,12 +874,12 @@ public class ProjectionCompiler {
                 });
 
                 Expression func = super.visitLeave(node, children);
-                // Add the keyvalues which is of type array
+                // Add the keyvalues which is of type array or json
                 if (!indexKVs.isEmpty()) {
                     serverParsedKVRefs.addAll(indexKVs);
                     serverParsedProjectedColumnRefs.addAll(indexProjectedColumns);
                     Expression funcModified = super.visitLeave(node, copyOfChildren);
-                    // Track the array index function also
+                    // Track the array index or json function also
                     serverParsedKVFuncs.add(funcModified);
                     serverParsedOldFuncs.add(func);
                 }
@@ -865,10 +888,15 @@ public class ProjectionCompiler {
                 return super.visitLeave(node, children);
             }
         }
+    }
 
-        private boolean isJsonFunction(FunctionParseNode node) {
-            return JsonValueFunction.NAME.equals(node.getName())
-                    || JsonQueryFunction.NAME.equals(node.getName());
-        }
+    private static boolean isJsonFunction(FunctionParseNode node) {
+        return JsonValueFunction.NAME.equals(node.getName()) || JsonQueryFunction.NAME.equals(
+                node.getName());
+    }
+
+    private static boolean isJsonFunction(Expression function) {
+        return JsonValueFunction.class.isInstance(function) || JsonQueryFunction.class.isInstance(
+                function);
     }
 }

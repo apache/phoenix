@@ -285,13 +285,11 @@ public abstract class RegionScannerFactory {
                 }
             }
           }
-          Cell arrayElementCell = null;
+          Cell serverParsedResultCell = null;
           if (serverParsedFuncRefs != null && serverParsedFuncRefs.length > 0 && serverParsedKVRefs.size() > 0) {
-            int
-                    arrayElementCellPosition =
-                    replaceServerParsedExpressionElement(serverParsedKVRefs, serverParsedFuncRefs,
-                            result);
-            arrayElementCell = result.get(arrayElementCellPosition);
+            int resultPosition = replaceServerParsedExpressionElement(serverParsedKVRefs,
+                    serverParsedFuncRefs, result);
+            serverParsedResultCell = result.get(resultPosition);
           }
           if (projector != null) {
             Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
@@ -305,8 +303,8 @@ public abstract class RegionScannerFactory {
             result.clear();
             result.add(tupleWithDynColsIfReqd.mergeWithDynColsListBytesAndGetValue(0,
                     serializedDynColsList));
-            if (arrayElementCell != null) {
-              result.add(arrayElementCell);
+            if (serverParsedResultCell != null) {
+              result.add(serverParsedResultCell);
             }
           }
           if (extraLimit >= 0 && --extraLimit == 0) {

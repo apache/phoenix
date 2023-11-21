@@ -116,18 +116,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         Set<KeyValueColumnExpression> serverParsedKVRefs = Sets.newHashSet();
         KeyValueSchema kvSchema = null;
         ValueBitSet kvSchemaBitSet = null;
-        Expression[]
-                serverParsedArrayFuncRefs = null;
-        if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
-            serverParsedArrayFuncRefs =
-                    deserializeServerParsedPositionalExpressionInfoFromScan(scan,
-                            BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, serverParsedKVRefs);
-        }
-        List<Expression> resultList = new ArrayList<>();
-        if (serverParsedArrayFuncRefs != null) {
-            Collections.addAll(resultList, serverParsedArrayFuncRefs);
-        }
-        extractJsonSpecificFuncRefs(scan, serverParsedKVRefs, resultList);
+        List<Expression> resultList = getServerParsedExpressions(scan, serverParsedKVRefs);
         Expression[] serverParsedFuncRefs = resultList.toArray(new Expression[0]);
         if (serverParsedFuncRefs != null && serverParsedFuncRefs.length > 0) {
             KeyValueSchema.KeyValueSchemaBuilder
@@ -206,8 +195,18 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         return getTopNScanner(env, innerScanner, iterator, tenantId);
     }
 
-    private void extractJsonSpecificFuncRefs(Scan scan,
-            Set<KeyValueColumnExpression> serverParsedKVRefs, List<Expression> resultList) {
+    private List<Expression> getServerParsedExpressions(Scan scan,
+            Set<KeyValueColumnExpression> serverParsedKVRefs) {
+        Expression[] serverParsedArrayFuncRefs = null;
+        if (scan.getAttribute(BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX) != null) {
+            serverParsedArrayFuncRefs =
+                    deserializeServerParsedPositionalExpressionInfoFromScan(scan,
+                            BaseScannerRegionObserver.SPECIFIC_ARRAY_INDEX, serverParsedKVRefs);
+        }
+        List<Expression> resultList = new ArrayList<>();
+        if (serverParsedArrayFuncRefs != null) {
+            Collections.addAll(resultList, serverParsedArrayFuncRefs);
+        }
         Expression[] serverParsedJsonValueFuncRefs = null;
         if (scan.getAttribute(BaseScannerRegionObserver.JSON_VALUE_FUNCTION) != null) {
             serverParsedJsonValueFuncRefs =
@@ -226,6 +225,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         if (serverParsedJsonQueryFuncRefs != null) {
             Collections.addAll(resultList, serverParsedJsonQueryFuncRefs);
         }
+        return resultList;
     }
 
     @VisibleForTesting
