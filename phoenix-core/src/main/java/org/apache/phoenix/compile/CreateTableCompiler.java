@@ -354,7 +354,8 @@ public class CreateTableCompiler {
         }
         return true;
     }
-  
+
+    /**
      * If any of the parent table/view has indexes in the parent hierarchy, and the current
      * view under creation extends the primary key of the parent, throw error.
      *
