@@ -79,7 +79,6 @@ import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
-import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
@@ -811,15 +810,25 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
     }
 
-    private boolean isPartialUncoveredIndexUpdate(PhoenixIndexMetaData indexMetaData,
-            MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    /**
+     * Determines if any of the data table mutations in the given batch does not include all
+     * the indexed columns or the where clause columns for partial uncovered indexes.
+     */
+    private boolean isPartialUncoveredIndexMutation(PhoenixIndexMetaData indexMetaData,
+            MiniBatchOperationInProgress<Mutation> miniBatchOp) {
         int indexedColumnCount = 0;
         for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
             indexedColumnCount += indexMaintainer.getIndexedColumns().size();
+            if (indexMaintainer.getIndexWhereColumns() != null) {
+                indexedColumnCount += indexMaintainer.getIndexWhereColumns().size();
+            }
         }
-        Set<ColumnReference> indexedColumns = new HashSet<ColumnReference>(indexedColumnCount);
+        Set<ColumnReference> columns = new HashSet<ColumnReference>(indexedColumnCount);
         for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
-            indexedColumns.addAll(indexMaintainer.getIndexedColumns());
+            columns.addAll(indexMaintainer.getIndexedColumns());
+            if (indexMaintainer.getIndexWhereColumns() != null) {
+                columns.addAll(indexMaintainer.getIndexWhereColumns());
+            }
         }
         for (int i = 0; i < miniBatchOp.size(); i++) {
             if (miniBatchOp.getOperationStatus(i) == IGNORE) {
@@ -829,8 +838,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             if (!this.builder.isEnabled(m)) {
                 continue;
             }
-            for (ColumnReference indexedColumn : indexedColumns) {
-                if (m.get(indexedColumn.getFamily(), indexedColumn.getQualifier()).isEmpty()) {
+            for (ColumnReference column : columns) {
+                if (m.get(column.getFamily(), column.getQualifier()).isEmpty()) {
                     // The returned list is empty, which means the indexed column is not
                     // included. This mutation would result in partial index update (and thus
                     // index column values should be retrieved from the existing data table row)
@@ -917,7 +926,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
                 IndexMaintainer indexMaintainer = pair.getFirst();
                 HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
-                if (nextDataRowState != null) {
+                if (nextDataRowState != null
+                        && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
                             nextDataRowVG, rowKeyPtr, ts, null, null, false);
@@ -948,7 +958,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                     new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
                         }
                     }
-                } else if (currentDataRowState != null) {
+                } else if (currentDataRowState != null
+                        && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
                     ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
                     byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                             null, null, ts);
@@ -1162,7 +1173,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
             if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic ||
                     context.hasDelete ||  (context.hasUncoveredIndex &&
-                    isPartialUncoveredIndexUpdate(indexMetaData, miniBatchOp))) {
+                    isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))) {
                 getCurrentRowStates(c, context);
             }
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
@@ -1509,7 +1520,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // stores the intermediate values as we apply conditional update expressions
       List<Cell> flattenedCells;
       // read the column values requested in the get from the current data row
-      List<Cell> cells = readColumnsFromRow(currentDataRowState, colsReadInExpr);
+      List<Cell> cells = IndexUtil.readColumnsFromRow(currentDataRowState, colsReadInExpr);
 
       if (currentDataRowState == null) { // row doesn't exist
           if (skipFirstOp) {
@@ -1601,34 +1612,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return mutations;
   }
 
-    private List<Cell> readColumnsFromRow(Put currentDataRow, Set<ColumnReference> cols) {
-        if (currentDataRow == null) {
-            return Collections.EMPTY_LIST;
-        }
 
-        List<Cell> columnValues = Lists.newArrayList();
-
-        // just return any cell FirstKeyOnlyFilter
-        if (cols.isEmpty()) {
-            for (List<Cell> cells : currentDataRow.getFamilyCellMap().values()) {
-                if (cells == null || cells.isEmpty()) {
-                    continue;
-                }
-                columnValues.add(cells.get(0));
-                break;
-            }
-            return columnValues;
-        }
-
-        IndexUtil.SimpleValueGetter valueGetter = new IndexUtil.SimpleValueGetter(currentDataRow);
-        for (ColumnReference colRef : cols) {
-            Cell cell = valueGetter.getLatestCell(colRef, HConstants.LATEST_TIMESTAMP);
-            if (cell != null) {
-                columnValues.add(cell);
-            }
-        }
-        return columnValues;
-    }
 
     private static List<Cell> flattenCells(Mutation m) {
         List<Cell> flattenedCells = new ArrayList<>();

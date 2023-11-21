@@ -27,7 +27,6 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -41,6 +40,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.KeyRange;
@@ -115,7 +115,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexTableName
                             + " on " + dataTableName + " (val1) INCLUDE (val2)");
                     Assert.fail();
-                } catch (SQLException e) {
+                } catch (PhoenixParserException e) {
                     // Expected
                 }
                 // The LOCAL keyword should not be allowed with UNCOVERED
@@ -123,13 +123,31 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
                     conn.createStatement().execute("CREATE UNCOVERED LOCAL INDEX " + indexTableName
                             + " on " + dataTableName);
                     Assert.fail();
-                } catch (SQLException e) {
+                } catch (PhoenixParserException e) {
                     // Expected
                 }
             } else {
                 // The INCLUDE clause should be allowed
                 conn.createStatement().execute("CREATE INDEX " + indexTableName
                         + " on " + dataTableName + " (val1) INCLUDE (val2)");
+            }
+        }
+    }
+
+    @Test
+    public void testDDLWithPhoenixRowTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (id varchar(10) not null primary key)" + (salted ? " SALT_BUCKETS=4" : ""));
+            if (uncovered) {
+                conn.createStatement().execute("CREATE UNCOVERED INDEX IDX_" + dataTableName
+                        + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP())");
+            } else {
+                conn.createStatement().execute("CREATE INDEX IDX_" + dataTableName
+                        + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP())");
+                conn.createStatement().execute("CREATE LOCAL INDEX IDX_LOCAL_" + dataTableName
+                        + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP())");
             }
         }
     }
@@ -278,6 +296,193 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             // Sleep 1ms to get a different row timestamps
             Thread.sleep(1);
             conn.createStatement().execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals("bc", rs.getString(2));
+            assertEquals("bcd", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertEquals("bc", rs.getString(2));
+            assertEquals("ccc", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("d", rs.getString(1));
+            assertEquals("de", rs.getString(2));
+            assertEquals("def", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("e", rs.getString(1));
+            assertEquals("ae", rs.getString(2));
+            assertEquals("efg", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("ab", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testUncoveredQueryWithPhoenixRowTimestampAndAllPkCols() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexTableName = generateUniqueName();
+            Timestamp initial = new Timestamp(EnvironmentEdgeManager.currentTimeMillis() - 1);
+            conn.createStatement().execute("create table " + dataTableName +
+                    " (id varchar(10), val1 varchar(10), val2 varchar(10), " +
+                    " val3 varchar(10) constraint pk primary key(id, val1, val2, val3))" +
+                    (salted ? " SALT_BUCKETS=4" : ""));
+            conn.createStatement().execute("upsert into " + dataTableName
+                    + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+            // Sleep 1ms to get a different row timestamps
+            Thread.sleep(1);
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('b', 'bc', 'bcd', 'bcde')");
+            conn.commit();
+            Timestamp after = new Timestamp(EnvironmentEdgeManager.currentTimeMillis() + 1);
+            conn.createStatement().execute(
+                    "CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexTableName
+                            + " on " + dataTableName + " (val1, PHOENIX_ROW_TIMESTAMP()) ");
+
+            String timeZoneID = Calendar.getInstance().getTimeZone().getID();
+            // Write a query to get the val2 = 'bc' with a time range query
+            String query = "SELECT" +
+                    (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
+                    + "val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName
+                    + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
+                    + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '"
+                    + timeZoneID + "') AND " + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after
+                    + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, query, dataTableName, indexTableName);
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("bcd", rs.getString(2));
+            assertTrue(rs.getTimestamp(3).after(before));
+            assertTrue(rs.getTimestamp(3).before(after));
+            assertFalse(rs.next());
+            // Count the number of index rows
+            rs = conn.createStatement().executeQuery("SELECT COUNT(*) from " + indexTableName);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            // Add one more row with val2 ='bc' and check this does not change the result of the previous
+            // query
+            // Sleep 1ms to get a different row timestamps
+            Thread.sleep(1);
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
+            conn.commit();
+            assertExplainPlan(conn, query, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("bcd", rs.getString(2));
+            assertTrue(rs.getTimestamp(3).after(before));
+            assertTrue(rs.getTimestamp(3).before(after));
+            assertFalse(rs.next());
+            // Write a time range query to get the last row with val2 ='bc'
+            query = "SELECT" +
+                    (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
+                    + "val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName +
+                    " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
+                    + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, query, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("ccc", rs.getString(2));
+            assertTrue(rs.getTimestamp(3).after(after));
+            assertFalse(rs.next());
+            // Verify that we can execute the same query without using the index
+            String noIndexQuery =
+                    "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from " +
+                            dataTableName + " WHERE val1 = 'bc' AND " +
+                            "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after +
+                            "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            // Verify that we will read from the data table
+            rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
+            String explainPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(explainPlan.contains(salted ? "RANGE" :
+                    "FULL" + " SCAN OVER " + dataTableName));
+            rs = conn.createStatement().executeQuery(noIndexQuery);
+            assertTrue(rs.next());
+            assertEquals("bc", rs.getString(1));
+            assertEquals("ccc", rs.getString(2));
+            assertTrue(rs.getTimestamp(3).after(after));
+            after = rs.getTimestamp(3);
+            assertFalse(rs.next());
+            // Sleep 1ms to get a different row timestamps
+            Thread.sleep(1);
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('d', 'de', 'def', 'defg')");
+            conn.commit();
+
+            query = "SELECT" +
+                    (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
+                    + " val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName
+                    + " WHERE val1 = 'de'";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, query, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("de", rs.getString(1));
+            assertEquals("def", rs.getString(2));
+            assertTrue(rs.getTimestamp(3).after(after));
+            assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX " + indexTableName + " on " +
+                    dataTableName);
+            conn.commit();
+            // Add a new index where the index row key starts with PHOENIX_ROW_TIMESTAMP()
+            indexTableName = generateUniqueName();
+            conn.createStatement().execute(
+                    "CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexTableName
+                            + " on " + dataTableName + " (PHOENIX_ROW_TIMESTAMP()) ");
+            conn.commit();
+            // Add one more row
+            // Sleep 1ms to get a different row timestamps
+            Thread.sleep(1);
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('e', 'ae', 'efg', 'efgh')");
+            conn.commit();
+            // Write a query to get all the rows in the order of their timestamps
+            query = "SELECT" +
+                    (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
+                    + " id, val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE "
+                    + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial
+                    + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
+            // Verify that we will read from the index table
+            assertExplainPlan(conn, query, dataTableName, indexTableName);
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            assertEquals("ab", rs.getString(2));
+            assertEquals("abc", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals("bc", rs.getString(2));
+            assertEquals("bcd", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("c", rs.getString(1));
+            assertEquals("bc", rs.getString(2));
+            assertEquals("ccc", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("d", rs.getString(1));
+            assertEquals("de", rs.getString(2));
+            assertEquals("def", rs.getString(3));
+            assertTrue(rs.next());
+            assertEquals("e", rs.getString(1));
+            assertEquals("ae", rs.getString(2));
+            assertEquals("efg", rs.getString(3));
+            assertFalse(rs.next());
+
+            // Sleep 1ms to get a different row timestamps
+            Thread.sleep(1);
+            conn.createStatement()
+                    .execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
             conn.commit();
             rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());

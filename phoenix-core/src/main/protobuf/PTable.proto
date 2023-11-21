@@ -119,6 +119,7 @@ message PTable {
   optional bytes streamingTopicName=52;
   optional int32 ttl = 53;
   optional bytes rowKeyPrefix = 54;
+  optional bytes indexWhere=55;
 }
 
 message EncodedCQCounter {

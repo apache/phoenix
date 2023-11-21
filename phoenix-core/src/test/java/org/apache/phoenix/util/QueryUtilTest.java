@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Types;
+import java.util.Arrays;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
@@ -141,18 +142,25 @@ public class QueryUtilTest {
 
     private void validateUrl(String url) {
         String prefix = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
-        assertTrue("JDBC URL missing jdbc protocol prefix", url.startsWith(prefix));
+        String zkPrefix = PhoenixRuntime.JDBC_PROTOCOL_ZK+ PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+        String masterPrefix = PhoenixRuntime.JDBC_PROTOCOL_MASTER + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+        String rpcPrefix = PhoenixRuntime.JDBC_PROTOCOL_RPC + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+
+        assertTrue("JDBC URL missing jdbc protocol prefix",
+            url.startsWith(prefix) || url.startsWith(zkPrefix) || url.startsWith(masterPrefix)
+                    || url.startsWith(rpcPrefix));
         assertTrue("JDBC URL missing jdbc terminator suffix", url.endsWith(";"));
+        url = url.replaceAll("\\\\:", "=");
         // remove the prefix, should only be left with server[,server...]:port:/znode
-        url = url.substring(prefix.length());
         String[] splits = url.split(":");
+        splits = Arrays.copyOfRange(splits, 2, splits.length);
         assertTrue("zk details should contain at least server component", splits.length >= 1);
         // make sure that each server is comma separated
-        String[] servers = splits[0].split(",");
+        String[] servers = splits[0].replaceAll("=", "\\\\:").split(",");
         for(String server: servers){
             assertFalse("Found whitespace in server names for url: " + url, server.contains(" "));
         }
-        if (splits.length >= 2) {
+        if (splits.length >= 2 && !splits[1].isEmpty()) {
             // second bit is a port number, should not through
             try {
                 Integer.parseInt(splits[1]);

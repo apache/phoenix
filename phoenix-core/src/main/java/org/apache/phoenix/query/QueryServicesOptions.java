@@ -28,6 +28,12 @@ import static org.apache.phoenix.query.QueryServices.CLIENT_METRICS_TAG;
 import static org.apache.phoenix.query.QueryServices.CLIENT_SPOOL_THRESHOLD_BYTES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
 import static org.apache.phoenix.query.QueryServices.COMMIT_STATS_ASYNC;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_ACTIVITY_LOGGING_INTERVAL;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED;
+import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME;
 import static org.apache.phoenix.query.QueryServices.COST_BASED_OPTIMIZER_ENABLED;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_TIMEZONE_ATTRIB;
@@ -69,6 +75,7 @@ import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_AT
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
+import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
@@ -320,6 +327,14 @@ public class QueryServicesOptions {
 
     public static final long DEFAULT_INDEX_POPULATION_SLEEP_TIME = 5000;
 
+    // Phoenix Connection Query Service configuration Defaults
+    public static final String DEFAULT_QUERY_SERVICES_NAME = "DEFAULT_CQSN";
+    public static final String DEFAULT_CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES =
+            "1, 10, 100, 500, 1000";
+    public static final boolean DEFAULT_IS_CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED =
+            false;
+    public static final boolean DEFAULT_IS_CONNECTION_QUERY_SERVICE_METRICS_ENABLED = false;
+
     public static final boolean DEFAULT_RENEW_LEASE_ENABLED = true;
     public static final int DEFAULT_RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS =
             DEFAULT_HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD / 2;
@@ -343,6 +358,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
     //by default, max internal connections from one client to one cluster is unlimited
     public static final int DEFAULT_INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS = 0;
+
+    public static final boolean DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED = false;
+    public static final int DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS = 15;
     public static final boolean DEFAULT_STATS_COLLECTION_ENABLED = true;
     public static final boolean DEFAULT_USE_STATS_FOR_PARALLELIZATION = true;
     
@@ -490,14 +508,24 @@ public class QueryServicesOptions {
             .setIfUnset(CLIENT_METRICS_TAG, DEFAULT_CLIENT_METRICS_TAG)
             .setIfUnset(CLIENT_INDEX_ASYNC_THRESHOLD, DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD)
             .setIfUnset(PHOENIX_TTL_SERVER_SIDE_MASKING_ENABLED, DEFAULT_SERVER_SIDE_MASKING_ENABLED)
+            .setIfUnset(QUERY_SERVICES_NAME, DEFAULT_QUERY_SERVICES_NAME)
             .setIfUnset(INDEX_CREATE_DEFAULT_STATE, DEFAULT_CREATE_INDEX_STATE)
+            .setIfUnset(CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES,
+                    DEFAULT_CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES)
+            .setIfUnset(CONNECTION_QUERY_SERVICE_METRICS_ENABLED,
+                    DEFAULT_IS_CONNECTION_QUERY_SERVICE_METRICS_ENABLED)
+            .setIfUnset(CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED,
+                    DEFAULT_IS_CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED)
             .setIfUnset(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK,
                 DEFAULT_SKIP_SYSTEM_TABLES_EXISTENCE_CHECK)
             .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
             .setIfUnset(MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
                     DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN)
             .setIfUnset(SERVER_MERGE_FOR_UNCOVERED_INDEX,
-                DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
+                DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX)
+            .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
+            .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
+            .setIfUnset(CONNECTION_ACTIVITY_LOGGING_INTERVAL, DEFAULT_CONNECTION_ACTIVITY_LOGGING_INTERVAL_IN_MINS);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set
@@ -744,6 +772,29 @@ public class QueryServicesOptions {
 
     public boolean isMetricPublisherEnabled() {
         return config.getBoolean(METRIC_PUBLISHER_ENABLED, DEFAULT_IS_METRIC_PUBLISHER_ENABLED);
+    }
+
+    public boolean isConnectionQueryServiceMetricsEnabled() {
+        return config.getBoolean(CONNECTION_QUERY_SERVICE_METRICS_ENABLED,
+                DEFAULT_IS_CONNECTION_QUERY_SERVICE_METRICS_ENABLED);
+    }
+
+    public boolean isConnectionQueryServiceMetricsPublisherEnabled() {
+        return config.getBoolean(CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED,
+                DEFAULT_IS_CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED);
+    }
+
+    public String getQueryServicesName() {
+        return config.get(QUERY_SERVICES_NAME, DEFAULT_QUERY_SERVICES_NAME);
+    }
+
+    public void setConnectionQueryServiceMetricsEnabled() {
+        set(CONNECTION_QUERY_SERVICE_METRICS_ENABLED, true);
+    }
+
+    public String getConnectionQueryServiceMetricsPublisherClass() {
+        return config.get(CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME,
+                DEFAULT_METRIC_PUBLISHER_CLASS_NAME);
     }
 
     @VisibleForTesting

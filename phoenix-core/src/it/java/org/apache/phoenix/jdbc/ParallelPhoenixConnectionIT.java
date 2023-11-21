@@ -151,12 +151,14 @@ public class ParallelPhoenixConnectionIT {
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
             PhoenixConnection pConn = pr.getFutureConnection1().get();
             ConnectionQueryServices cqsiFromConn = pConn.getQueryServices();
+            Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
             Assert.assertTrue(cqsi == cqsiFromConn);
             // verify connection#2
             cqsi = PhoenixDriver.INSTANCE.getConnectionQueryServices(group.getJDBCUrl2(), clientProperties);
             Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsi.getUserName());
             pConn = pr.getFutureConnection2().get();
             cqsiFromConn = pConn.getQueryServices();
+            Assert.assertEquals(HBaseTestingUtilityPair.PRINCIPAL, cqsiFromConn.getUserName());
             Assert.assertTrue(cqsi == cqsiFromConn);
         }
     }

@@ -1182,50 +1182,93 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testDeclaringColumnAsRowTimestamp() throws Exception {
+    public void testIndexColumnAsRowTimestamp() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName + " (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) " + tableDDLOptions);
-            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class); 
-            PTable table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR "
+                    + "CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) " + tableDDLOptions);
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PTable table =
+                    phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
             // Assert that the column shows up as row time stamp in the cache.
             assertTrue(table.getColumnForColumnName("PK1").isRowTimestamp());
             assertFalse(table.getColumnForColumnName("PK2").isRowTimestamp());
             assertIsRowTimestampSet(schemaName, dataTableName, "PK1");
-            
+
             String dataTableName2 = BaseTest.generateUniqueName();
             String dataTableFullName2 = SchemaUtil.getTableName(schemaName, dataTableName2);
-            conn.createStatement().execute("CREATE IMMUTABLE TABLE " + dataTableFullName2 + " (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
+            conn.createStatement().execute("CREATE IMMUTABLE TABLE " + dataTableFullName2 +
+                    " (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
             table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName2));
             // Assert that the column shows up as row time stamp in the cache.
             assertFalse(table.getColumnForColumnName("PK1").isRowTimestamp());
             assertTrue(table.getColumnForColumnName("PK2").isRowTimestamp());
             assertIsRowTimestampSet(schemaName, dataTableName2, "PK2");
-            
+
             // Create an index on a table has a row time stamp pk column. The column should show up as a row time stamp column for the index too. 
-            conn.createStatement().execute("CREATE INDEX " + indexTableName + "  ON " + dataTableFullName2 + " (KV1) include (KV2)");
-            PTable indexTable = phxConn.getTable(new PTableKey(phxConn.getTenantId(), indexTableFullName));
+            conn.createStatement().execute(
+                    "CREATE INDEX " + indexTableName + "  ON " + dataTableFullName2 +
+                            " (KV1) include (KV2)");
+            PTable indexTable =
+                    phxConn.getTable(new PTableKey(phxConn.getTenantId(), indexTableFullName));
             String indexColName = IndexUtil.getIndexColumnName(table.getColumnForColumnName("PK2"));
             // Assert that the column shows up as row time stamp in the cache.
             assertTrue(indexTable.getColumnForColumnName(indexColName).isRowTimestamp());
             assertIsRowTimestampSet(schemaName, indexTableName, indexColName);
+        }
+    }
+
+    @Test
+    public void testDeclaringColumnAsRowTimestamp() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (PK1 DATE NOT NULL, PK2 VARCHAR NOT NULL, KV1 VARCHAR "
+                    + "CONSTRAINT PK PRIMARY KEY(PK1 ROW_TIMESTAMP, PK2)) " + tableDDLOptions);
+            PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
+            PTable table =
+                    phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName));
+            // Assert that the column shows up as row time stamp in the cache.
+            assertTrue(table.getColumnForColumnName("PK1").isRowTimestamp());
+            assertFalse(table.getColumnForColumnName("PK2").isRowTimestamp());
+            assertIsRowTimestampSet(schemaName, dataTableName, "PK1");
+
+            String dataTableName2 = BaseTest.generateUniqueName();
+            String dataTableFullName2 = SchemaUtil.getTableName(schemaName, dataTableName2);
+            conn.createStatement().execute("CREATE IMMUTABLE TABLE " + dataTableFullName2 +
+                    " (PK1 VARCHAR, PK2 DATE PRIMARY KEY ROW_TIMESTAMP, KV1 VARCHAR, KV2 INTEGER)");
+            table = phxConn.getTable(new PTableKey(phxConn.getTenantId(), dataTableFullName2));
+            // Assert that the column shows up as row time stamp in the cache.
+            assertFalse(table.getColumnForColumnName("PK1").isRowTimestamp());
+            assertTrue(table.getColumnForColumnName("PK2").isRowTimestamp());
+            assertIsRowTimestampSet(schemaName, dataTableName2, "PK2");
+
             String viewTableName2 = dataTableName2 + "_VIEW";
             String viewTableFullName2 = SchemaUtil.getTableName(schemaName, viewTableName2);
             // Creating a view with a row_timestamp column in its pk constraint is not allowed
             try {
-                conn.createStatement().execute("CREATE VIEW " + viewTableFullName2 + " (KV3 VARCHAR, KV4 DATE, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4 ROW_TIMESTAMP) ) AS SELECT * FROM " + dataTableFullName2);
-                fail("Creating a view with a row_timestamp column in its pk constraint is not allowed");
+                conn.createStatement().execute("CREATE VIEW " + viewTableFullName2
+                        + " (KV3 VARCHAR, KV4 DATE, KV5 INTEGER, "
+                        + "CONSTRAINT PK PRIMARY KEY (KV3, KV4 ROW_TIMESTAMP) ) AS SELECT * FROM "
+                        + dataTableFullName2);
+                fail("Creating a view with a row_timestamp column in its pk constraint is not "
+                        + "allowed");
             } catch (SQLException e) {
-                assertEquals(SQLExceptionCode.ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW.getErrorCode(), e.getErrorCode());
+                assertEquals(SQLExceptionCode.ROWTIMESTAMP_NOT_ALLOWED_ON_VIEW.getErrorCode(),
+                        e.getErrorCode());
             }
-            
+
             // Make sure that the base table column declared as row_timestamp is also row_timestamp for view
-            conn.createStatement().execute("CREATE VIEW " + viewTableFullName2 + " (KV3 VARCHAR, KV4 VARCHAR, KV5 INTEGER, CONSTRAINT PK PRIMARY KEY (KV3, KV4) ) AS SELECT * FROM " + dataTableFullName2);
-            PTable view = phxConn.getTable(new PTableKey(phxConn.getTenantId(), viewTableFullName2));
+            conn.createStatement().execute("CREATE VIEW " + viewTableFullName2
+                    + " (KV3 VARCHAR, KV4 VARCHAR, KV5 INTEGER, "
+                    + "CONSTRAINT PK PRIMARY KEY (KV3, KV4)) AS SELECT * FROM "
+                    + dataTableFullName2);
+            PTable view =
+                    phxConn.getTable(new PTableKey(phxConn.getTenantId(), viewTableFullName2));
             assertNotNull(view.getPKColumn("PK2"));
             assertTrue(view.getPKColumn("PK2").isRowTimestamp());
         }
     }
-    
+
     private void assertIsRowTimestampSet(String schemaName, String tableName, String columnName) throws SQLException {
         String sql = "SELECT IS_ROW_TIMESTAMP FROM \"SYSTEM\".\"CATALOG\" WHERE "
                 + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ tableName + "') AND\n"

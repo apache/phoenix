@@ -26,7 +26,6 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.cache.NodeCache;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.ZKPaths;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -357,14 +356,13 @@ public class HighAvailabilityGroup {
             jdbcUrl = jdbcUrl.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1);
         }
         Preconditions.checkArgument(!StringUtils.isEmpty(jdbcUrl), "JDBC url is empty!");
-        String[] urls = jdbcUrl.split(":");
-        if (urls.length == 1) {
-            zkUrl = String.format("%s:%s", urls[0], HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT);
-        } else if (urls.length == 2 || urls.length == 3) {
-            zkUrl = String.format("%s:%s", urls[0], urls[1]);
-        } else {
+        jdbcUrl = jdbcUrl.replaceAll("\\\\:", "=");
+        String[] parts = jdbcUrl.split(":");
+        if (parts.length == 0 || parts.length > 3) {
             throw new IllegalArgumentException("Invalid JDBC url!" + jdbcUrl);
         }
+        // The URL is already normalised
+        zkUrl = parts[0].replaceAll("=", ":");
 
         // Get timeout and retry counts
         String connectionTimeoutMsProp = properties.getProperty(
@@ -568,7 +566,8 @@ public class HighAvailabilityGroup {
         if (state != State.READY || connection == null) {
             return false;
         }
-        return roleRecord.getActiveUrl().equals(Optional.of(connection.getURL()));
+        return roleRecord.getActiveUrl()
+                .equals(Optional.of(JDBCUtil.formatZookeeperUrl(connection.getURL())));
     }
 
     /**
@@ -583,8 +582,8 @@ public class HighAvailabilityGroup {
         if (url.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             Preconditions.checkArgument(url.length() > PhoenixRuntime.JDBC_PROTOCOL.length(),
                     "The URL '" + url + "' is not a valid Phoenix connection string");
-            url = JDBCUtil.formatZookeeperUrl(url.substring(PhoenixRuntime.JDBC_PROTOCOL.length() + 1));
         }
+        url = JDBCUtil.formatZookeeperUrl(url);
         Preconditions.checkArgument(url.equals(info.getUrl1()) || url.equals(info.getUrl2()),
                 "The URL '" + url + "' does not belong to this HA group " + info);
 
@@ -603,7 +602,7 @@ public class HighAvailabilityGroup {
         Preconditions.checkArgument(driver instanceof PhoenixEmbeddedDriver,
                 "No JDBC driver is registered for Phoenix high availability (HA) framework");
         return ((PhoenixEmbeddedDriver) driver).getConnectionQueryServices(jdbcString, properties)
-                .connect(url, properties);
+                .connect(jdbcString, properties);
     }
 
     @VisibleForTesting
@@ -790,7 +789,7 @@ public class HighAvailabilityGroup {
             Preconditions.checkArgument(zkUrl.equals(getUrl1()) || zkUrl.equals(getUrl2()),
                     "The URL '" + zkUrl + "' does not belong to this HA group " + this);
             StringBuilder sb = new StringBuilder();
-            sb.append(PhoenixRuntime.JDBC_PROTOCOL);
+            sb.append(PhoenixRuntime.JDBC_PROTOCOL_ZK);
             sb.append(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR);
             sb.append(zkUrl);
             if (!Strings.isNullOrEmpty(additionalJDBCParams)) {

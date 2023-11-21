@@ -93,6 +93,7 @@ public class ClusterRoleRecord {
             @JsonProperty("version") long version) {
         this.haGroupName = haGroupName;
         this.policy = policy;
+        //Do we really need to normalize here ?
         zk1 = JDBCUtil.formatZookeeperUrl(zk1);
         zk2 = JDBCUtil.formatZookeeperUrl(zk2);
         // Ignore the given order of url1 and url2

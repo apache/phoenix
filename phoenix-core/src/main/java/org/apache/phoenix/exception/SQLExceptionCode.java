@@ -107,7 +107,10 @@ public enum SQLExceptionCode {
         }
     }),
     CANNOT_INDEX_COLUMN_ON_TYPE(302, "23100", "The column cannot be index due to its type."),
-
+    INVALID_INDEX_WHERE_WITH_SUBQUERY(303, "23101",
+            " Index where clause cannot include a subquery."),
+    CANNOT_EVALUATE_INDEX_WHERE(304, "23102",
+            "Invalid index where clause. It cannot be evaluated on a data table row."),
     /**
      * Invalid Cursor State (errorcode 04, sqlstate 24)
      */
@@ -355,11 +358,16 @@ public enum SQLExceptionCode {
             + "view has TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
+
     TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10955, "44A37", TTL
             + "property can only be set for tables and updatable views only"),
 
     TTL_ALREADY_DEFINED_IN_HIERARCHY(10956, "44A37", TTL
             + " property is already defined in hierarchy for this entity"),
+    CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK(10956, "44A38", "Index can be created "
+            + "only if none of the child views extends primary key"),
+    VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES(10957, "44A39", "View can extend parent primary key"
+            + " only if none of the parents have indexes in the parent hierarchy"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

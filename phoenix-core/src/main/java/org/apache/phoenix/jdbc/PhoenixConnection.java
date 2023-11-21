@@ -17,13 +17,13 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
+import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_FAILED_PHOENIX_CONNECTIONS;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -53,9 +53,11 @@ import java.text.Format;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -80,9 +82,12 @@ import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.TableResultIterator;
 import org.apache.phoenix.iterate.TableResultIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixStatement.PhoenixStatementParser;
+import org.apache.phoenix.log.ActivityLogInfo;
+import org.apache.phoenix.log.ConnectionActivityLogger;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -114,6 +119,11 @@ import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
@@ -127,13 +137,6 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.VarBinaryFormatter;
-
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 
@@ -156,7 +159,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     private final Long scn;
     private final boolean buildingIndex;
     private MutationState mutationState;
-    private List<PhoenixStatement> statements = new ArrayList<>();
+    private HashSet<PhoenixStatement> statements = new HashSet<>();
     private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private final PName tenantId;
@@ -192,6 +195,8 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     //public interfaces.
     private final boolean isInternalConnection;
     private boolean isApplyTimeZoneDisplacement;
+    private final UUID uniqueID;
+    private ConnectionActivityLogger connectionActivityLogger = ConnectionActivityLogger.NO_OP_LOGGER;
 
     static {
         Tracing.addTraceMetricsSource();
@@ -379,7 +384,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                     this.services.getProps());
             this.mutationState = mutationState == null ? newMutationState(maxSize,
                     maxSizeBytes) : new MutationState(mutationState, this);
-
+            this.uniqueID = UUID.randomUUID();
             this.services.addConnection(this);
 
             // setup tracing, if its enabled
@@ -391,13 +396,29 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
             this.logSamplingRate = Double.parseDouble(this.services.getProps().get(QueryServices.LOG_SAMPLE_RATE,
                     QueryServicesOptions.DEFAULT_LOG_SAMPLE_RATE));
-            if (isInternalConnection) {
-                GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.increment();
-            } else {
-                GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
+        String connectionQueryServiceName =
+                this.services.getConfiguration().get(QUERY_SERVICES_NAME);
+        if (isInternalConnection) {
+            GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.increment();
+            long currentInternalConnectionCount =
+                    this.getQueryServices().getConnectionCount(isInternalConnection);
+            ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceName,
+                    OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, currentInternalConnectionCount);
+            ConnectionQueryServicesMetricsManager
+                .updateConnectionQueryServiceOpenInternalConnectionHistogram(
+                        currentInternalConnectionCount, connectionQueryServiceName);
+        } else {
+            GLOBAL_OPEN_PHOENIX_CONNECTIONS.increment();
+            long currentConnectionCount =
+                    this.getQueryServices().getConnectionCount(isInternalConnection);
+            ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceName,
+                    OPEN_PHOENIX_CONNECTIONS_COUNTER, currentConnectionCount);
+            ConnectionQueryServicesMetricsManager
+                .updateConnectionQueryServiceOpenConnectionHistogram(currentConnectionCount,
+                        connectionQueryServiceName);
             }
-            this.sourceOfOperation =
-                    this.services.getProps().get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
+        this.sourceOfOperation = this.services.getProps()
+            .get(QueryServices.SOURCE_OPERATION_ATTRIB, null);
     }
 
     private static void checkScn(Long scnParam) throws SQLException {
@@ -696,17 +717,17 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     }
 
     private void closeStatements() throws SQLException {
-        List<? extends PhoenixStatement> statements = this.statements;
-        // create new list to prevent close of statements
-        // from modifying this list.
-        this.statements = Lists.newArrayList();
         try {
             mutationState.rollback();
         } catch (SQLException e) {
             // ignore any exceptions while rolling back
         } finally {
             try {
-                SQLCloseables.closeAll(statements);
+                // create new set to prevent close of statements from modifying this collection.
+                // TODO This could be optimized out by decoupling closing the stmt and removing it
+                // from the connection.
+                HashSet<? extends PhoenixStatement> statementsCopy = new HashSet<>(this.statements);
+                SQLCloseables.closeAll(statementsCopy);
             } finally {
                 statements.clear();
             }
@@ -749,6 +770,8 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             return;
         }
 
+        String connectionQueryServiceName =
+                this.services.getConfiguration().get(QUERY_SERVICES_NAME);
         try {
             isClosing = true;
             TableMetricsManager.pushMetricsFromConnInstanceMethod(getMutationMetrics());
@@ -758,15 +781,13 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 clearMetrics();
             }
             try {
-                if (traceScope != null) {
-                    traceScope.close();
-                }
                 closeStatements();
                 if (childConnections != null) {
                     SQLCloseables.closeAllQuietly(childConnections);
                 }
-
-
+                if (traceScope != null) {
+                    traceScope.close();
+                }
             } finally {
                 services.removeConnection(this);
             }
@@ -774,10 +795,24 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         } finally {
             isClosing = false;
             isClosed = true;
-            if(isInternalConnection()){
+            if (isInternalConnection()){
                 GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.decrement();
+                long currentInternalConnectionCount =
+                        this.getQueryServices().getConnectionCount(isInternalConnection());
+                ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceName,
+                        OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, currentInternalConnectionCount);
+                ConnectionQueryServicesMetricsManager
+                        .updateConnectionQueryServiceOpenInternalConnectionHistogram(
+                                currentInternalConnectionCount, connectionQueryServiceName);
             } else {
                 GLOBAL_OPEN_PHOENIX_CONNECTIONS.decrement();
+                long currentConnectionCount =
+                        this.getQueryServices().getConnectionCount(isInternalConnection());
+                ConnectionQueryServicesMetricsManager.updateMetrics(connectionQueryServiceName,
+                                OPEN_PHOENIX_CONNECTIONS_COUNTER, currentConnectionCount);
+                ConnectionQueryServicesMetricsManager
+                        .updateConnectionQueryServiceOpenConnectionHistogram(
+                                currentConnectionCount, connectionQueryServiceName);
             }
         }
     }
@@ -826,10 +861,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     @Override
     public SQLXML createSQLXML() throws SQLException {
         throw new SQLFeatureNotSupportedException();
-    }
-
-    public List<PhoenixStatement> getStatements() {
-        return statements;
     }
 
     @Override
@@ -955,6 +986,10 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     public DatabaseMetaData getMetaData() throws SQLException {
         checkOpen();
         return new PhoenixDatabaseMetaData(this);
+    }
+
+    public UUID getUniqueID() {
+        return this.uniqueID;
     }
 
     @Override
@@ -1303,6 +1338,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public void incrementStatementExecutionCounter() {
         statementExecutionCounter++;
+        if (connectionActivityLogger.isLevelEnabled(ActivityLogInfo.OP_STMTS.getLogLevel())) {
+            connectionActivityLogger.log(ActivityLogInfo.OP_STMTS, String.valueOf(statementExecutionCounter));
+        }
     }
 
     public TraceScope getTraceScope() {
@@ -1313,20 +1351,24 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         this.traceScope = traceScope;
     }
 
+    @Override
     public Map<String, Map<MetricType, Long>> getMutationMetrics() {
         return mutationState.getMutationMetricQueue().aggregate();
     }
 
+    @Override
     public Map<String, Map<MetricType, Long>> getReadMetrics() {
         return mutationState.getReadMetricQueue() != null ? mutationState
                 .getReadMetricQueue().aggregate() : Collections
                 .<String, Map<MetricType, Long>> emptyMap();
     }
 
+    @Override
     public boolean isRequestLevelMetricsEnabled() {
         return isRequestLevelMetricsEnabled;
     }
 
+    @Override
     public void clearMetrics() {
         mutationState.getMutationMetricQueue().clearMetrics();
         if (mutationState.getReadMetricQueue() != null) {
@@ -1430,5 +1472,17 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public boolean isApplyTimeZoneDisplacement() {
         return isApplyTimeZoneDisplacement;
+    }
+
+    public String getActivityLog() {
+        return getActivityLogger().getActivityLog();
+    }
+
+    public ConnectionActivityLogger getActivityLogger() {
+        return this.connectionActivityLogger;
+    }
+
+    public void setActivityLogger(ConnectionActivityLogger connectionActivityLogger) {
+        this.connectionActivityLogger = connectionActivityLogger;
     }
 }

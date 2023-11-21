@@ -41,6 +41,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_WHERE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
@@ -375,6 +376,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_FAMILY_BYTES, TTL_BYTES);
     private static final Cell ROW_KEY_PREFIX_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, ROW_KEY_PREFIX_BYTES);
+    private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
+
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
             TABLE_TYPE_KV,
@@ -413,7 +417,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             EXTERNAL_SCHEMA_ID_KV,
             STREAMING_TOPIC_NAME_KV,
             TTL_KV,
-            ROW_KEY_PREFIX_KV
+            ROW_KEY_PREFIX_KV,
+            INDEX_WHERE_KV
     );
 
     static {
@@ -461,6 +466,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
     private static final int ROW_KEY_PREFIX_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_PREFIX_KV);
+    private static final int INDEX_WHERE_INDEX =
+            TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1434,6 +1441,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 : oldTable != null ? oldTable.getRowKeyPrefix() : null);
 
 
+        Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];
+        String indexWhere = indexWhereKv != null
+                ? (String) PVarchar.INSTANCE.toObject(indexWhereKv.getValueArray(),
+                        indexWhereKv.getValueOffset(), indexWhereKv.getValueLength())
+                : null;
+        builder.setIndexWhere(indexWhere != null ? indexWhere
+                : oldTable != null ? oldTable.getIndexWhere() : null);
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :
@@ -4173,7 +4187,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         byte[] count;
                         try (RegionScanner countScanner = region.getScanner(new Scan(get))) {
                             List<Cell> countCells = new ArrayList<>();
-                            scanner.next(countCells);
+                            countScanner.next(countCells);
                             count = Result.create(countCells)
                                     .getValue(TABLE_FAMILY_BYTES,
                                         PhoenixDatabaseMetaData.PENDING_DISABLE_COUNT_BYTES);
