@@ -22,17 +22,21 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL
 import static org.apache.phoenix.util.EncodedColumnsUtil.isReservedColumnQualifier;
 
 import java.io.DataOutputStream;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -867,8 +871,10 @@ public interface PTable extends PMetaDataEntity {
 
     boolean isImmutableRows();
 
-    boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection);
-    IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection);
+    boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection)
+            throws SQLException;
+    IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection)
+            throws SQLException;
     TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
@@ -969,6 +975,28 @@ public interface PTable extends PMetaDataEntity {
      */
     String getStreamingTopicName();
 
+    /**
+     *
+     * @return the optional where clause in string used for partial indexes
+     */
+    String getIndexWhere();
+
+
+    /**
+     *
+     * @param connection PhoenixConnection
+     * @return the optional where clause in DNF expression used for partial indexes
+     * @throws SQLException
+     */
+    Expression getIndexWhereExpression(PhoenixConnection connection) throws SQLException;
+
+    /**
+     *
+     * @param connection
+     * @return the set of column references for the columns included in the index where clause
+     * @throws SQLException
+     */
+    Set<ColumnReference> getIndexWhereColumns(PhoenixConnection connection) throws SQLException;
     /**
      * Class to help track encoded column qualifier counters per column family.
      */

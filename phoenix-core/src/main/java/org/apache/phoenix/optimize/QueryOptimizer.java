@@ -37,6 +37,8 @@ import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereCompiler;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -57,6 +59,7 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -65,7 +68,6 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
@@ -75,6 +77,7 @@ import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class QueryOptimizer {
@@ -197,18 +200,29 @@ public class QueryOptimizer {
         return Collections.singletonList(compiler.compile());
     }
 
+    private static boolean isPartialIndexUsable(SelectStatement select, QueryPlan dataPlan,
+            PTable index) throws SQLException {
+        StatementContext context = new StatementContext(dataPlan.getContext());
+        context.setResolver(FromCompiler.getResolver(dataPlan.getTableRef()));
+        return WhereCompiler.contains(
+                index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
+                WhereCompiler.transformDNF(select.getWhere(), context));
+    }
+
     private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
         // Exit early if we have a point lookup as we can't get better than that
-        if (dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan && dataPlan.isApplicable()) {
+        if (dataPlan.getContext().getScanRanges().isPointLookup()
+                && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
-
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
-        if (dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate() || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))) {
+        if (dataPlan.isApplicable() && (indexes.isEmpty()
+                || dataPlan.isDegenerate()
+                || dataPlan.getTableRef().hasDynamicCols()
+                || select.getHint().hasHint(Hint.NO_INDEX))) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
-        
         // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes place.
         // For a SELECT, it is empty. In this case, we want to set the targetColumns to match the projection
         // from the dataPlan to ensure that the metadata for when an index is used matches the metadata for
@@ -227,7 +241,9 @@ public class QueryOptimizer {
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {
-            if (stopAtBestPlan && hintedPlan.isApplicable()) {
+            PTable index = hintedPlan.getTableRef().getTable();
+            if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
+                    || isPartialIndexUsable(select, dataPlan, index))) {
                 return Collections.singletonList(hintedPlan);
             }
             plans.add(0, hintedPlan);
@@ -235,7 +251,9 @@ public class QueryOptimizer {
         
         for (PTable index : indexes) {
             QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan, false);
-            if (plan != null) {
+            if (plan != null &&
+                    (index.getIndexWhere() == null
+                            || isPartialIndexUsable(select, dataPlan, index))) {
                 // Query can't possibly return anything so just return this plan.
                 if (plan.isDegenerate()) {
                     return Collections.singletonList(plan);
@@ -357,15 +375,36 @@ public class QueryOptimizer {
 
                 QueryPlan plan = compiler.compile();
                 if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
-                    // Indexed columns should also be added to the data columns to join for uncovered global indexes.
-                    // This is required to verify index rows against data table rows
+                    // Indexed columns should also be added to the data columns to join for
+                    // uncovered global indexes. This is required to verify index rows against
+                    // data table rows
                     plan.getContext().setUncoveredIndex(true);
                     PhoenixConnection connection = statement.getConnection();
-                    PTable dataTable = connection.getTable(new PTableKey(connection.getTenantId(),
-                            SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
-                                    indexTable.getParentTableName().getString())));
+                    IndexMaintainer maintainer;
+                    PTable dataTable;
+                    if (indexTable.getViewIndexId() != null
+                            && indexTable.getName().getString().contains(
+                                    QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                        // MetaDataClient modifies the index table name for view indexes if the
+                        // parent view of an index has a child view. We need to recreate a PTable
+                        // object with the correct table name to get the index maintainer
+                        int lastIndexOf = indexTable.getName().getString().lastIndexOf(
+                                QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                        String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
+                        PTable newIndexTable = PhoenixRuntime.getTable(connection, indexName);
+                        dataTable = PhoenixRuntime.getTable(connection, SchemaUtil.getTableName(
+                                newIndexTable.getParentSchemaName().getString(),
+                                indexTable.getParentTableName().getString()));
+                        maintainer = newIndexTable.getIndexMaintainer(dataTable,
+                                statement.getConnection());
+                    } else {
+                        dataTable = PhoenixRuntime.getTable(connection,
+                                SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
+                                        indexTable.getParentTableName().getString()));
+                        maintainer = indexTable.getIndexMaintainer(dataTable, connection);
+                    }
                     Set<org.apache.hadoop.hbase.util.Pair<String, String>> indexedColumns =
-                            indexTable.getIndexMaintainer(dataTable, statement.getConnection()).getIndexedColumnInfo();
+                            maintainer.getIndexedColumnInfo();
                     for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
                         // The first member of the pair is the column family. For the data table PK columns, the column
                         // family is set to null. The data PK columns should not be added to the set of data columns
@@ -580,6 +619,13 @@ public class QueryOptimizer {
                     }
                 }
 
+                // Partial secondary index is preferred
+                if (table1.getIndexWhere() != null && table2.getIndexWhere() == null) {
+                    return -1;
+                }
+                if (table1.getIndexWhere() == null && table2.getIndexWhere() != null) {
+                    return 1;
+                }
                 // Use the plan that has fewer "dataColumns" (columns that need to be merged in)
                 c = plan1.getContext().getDataColumns().size() - plan2.getContext().getDataColumns().size();
                 if (c != 0) return c;

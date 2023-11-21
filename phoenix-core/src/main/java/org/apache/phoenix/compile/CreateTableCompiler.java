@@ -69,12 +69,14 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
@@ -151,6 +153,9 @@ public class CreateTableCompiler {
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
             if (whereNode == null) {
                 viewStatementToBe = parentToBe.getViewStatement();
+                if (parentToBe.getViewType() == ViewType.READ_ONLY) {
+                    viewTypeToBe = ViewType.READ_ONLY;
+                }
             } else {
                 whereNode = StatementNormalizer.normalize(whereNode, resolver);
                 if (whereNode.isStateless()) {
@@ -203,6 +208,7 @@ public class CreateTableCompiler {
                 validateCreateViewCompilation(connection, parentToBe,
                     columnDefs, pkConstraint);
             }
+            verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
         }
         final ViewType viewType = viewTypeToBe;
         final String viewStatement = viewStatementToBe;
@@ -348,6 +354,45 @@ public class CreateTableCompiler {
         }
         return true;
     }
+  
+     * If any of the parent table/view has indexes in the parent hierarchy, and the current
+     * view under creation extends the primary key of the parent, throw error.
+     *
+     * @param parentToBe parent table/view of the current view under creation.
+     * @param columnDefs list of column definitions.
+     * @param pkConstraint primary key constraint.
+     * @throws SQLException if the view extends primary key and one of the parent view/table has
+     * indexes in the parent hierarchy.
+     */
+    private void verifyIfAnyParentHasIndexesAndViewExtendsPk(PTable parentToBe,
+                                                             List<ColumnDef> columnDefs,
+                                                             PrimaryKeyConstraint pkConstraint)
+            throws SQLException {
+        if (viewExtendsParentPk(columnDefs, pkConstraint)) {
+            PTable table = parentToBe;
+            while (table != null) {
+                if (table.getIndexes().size() > 0) {
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode
+                                    .VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES)
+                            .build()
+                            .buildException();
+                }
+                if (table.getType() != PTableType.VIEW) {
+                    return;
+                }
+                String schemaName = table.getParentSchemaName().getString();
+                String tableName = table.getParentTableName().getString();
+                try {
+                    table = PhoenixRuntime.getTable(
+                            statement.getConnection(),
+                            SchemaUtil.getTableName(schemaName, tableName));
+                } catch (TableNotFoundException e) {
+                    table = null;
+                }
+            }
+        }
+    }
 
     /**
      * Validate View creation compilation.
@@ -392,6 +437,24 @@ public class CreateTableCompiler {
             throw new SQLExceptionInfo
                 .Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
                 .build().buildException();
+        }
+    }
+
+    /**
+     * Returns true if the view extends the primary key of the parent table/view, returns false
+     * otherwise.
+     *
+     * @param columnDefs column def list.
+     * @param pkConstraint primary key constraint.
+     * @return true if the view extends the primary key of the parent table/view, false otherwise.
+     */
+    private boolean viewExtendsParentPk(
+            final List<ColumnDef> columnDefs,
+            final PrimaryKeyConstraint pkConstraint) {
+        if (pkConstraint.getColumnNames().size() > 0) {
+            return true;
+        } else {
+            return columnDefs.stream().anyMatch(ColumnDef::isPK);
         }
     }
 

@@ -18,7 +18,9 @@
 package org.apache.phoenix.mapreduce;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapred.JobContext;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -40,6 +42,7 @@ public class PhoenixMultiViewInputFormatTest {
 
         Configuration config = new Configuration();
         config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
+        config.set(HConstants.ZOOKEEPER_QUORUM, PhoenixRuntime.CONNECTIONLESS);
         JobContext mockContext = Mockito.mock(JobContext.class);
         when(mockContext.getConfiguration()).thenReturn(config);
 
@@ -55,6 +58,7 @@ public class PhoenixMultiViewInputFormatTest {
         Configuration config = new Configuration();
         config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
         config.set(MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ, "dummy.path");
+        config.set(HConstants.ZOOKEEPER_QUORUM, PhoenixRuntime.CONNECTIONLESS);
         JobContext mockContext = Mockito.mock(JobContext.class);
         when(mockContext.getConfiguration()).thenReturn(config);
 
@@ -73,6 +77,7 @@ public class PhoenixMultiViewInputFormatTest {
         Configuration config = new Configuration();
         config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
         config.set(MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ, "dummy.path");
+        config.set(HConstants.ZOOKEEPER_QUORUM, PhoenixRuntime.CONNECTIONLESS);
         JobContext mockContext = Mockito.mock(JobContext.class);
         when(mockContext.getConfiguration()).thenReturn(config);
 

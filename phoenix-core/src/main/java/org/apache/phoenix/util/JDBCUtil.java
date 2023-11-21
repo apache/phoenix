@@ -21,14 +21,14 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Maps.newHa
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -207,24 +207,33 @@ public class JDBCUtil {
     }
 
     /**
-     * Formats a zkUrl which includes the zkQuroum of the jdbc url and the rest to sort the zk quorum hosts.
-     * Example input zkUrl "zk1.net,zk2.net,zk3.net:2181:/hbase"
-     * Example input zkUrl "zk1.net,zk2.net,zk3.net:2181:/hbase:user_foo"
-     * Returns: zk1.net,zk2.net,zk3.net:2181:/hbase
+     * Get the ZK quorom and root and node part of the URL, which is used by the HA code internally
+     * to identify the clusters.
+     * As we interpret a missing protocol as ZK, this is mostly idempotent for zk quorum strings.
+     *
+     * @param jdbcUrl JDBC URL
+     * @return part of the URL determining the ZK quorum and node
+     * @throws RuntimeException if the URL is invalid, or does not resolve to a ZK Registry
+     * connection
      */
-    //TODO: Adjust for non-zkurl
-    public static String formatZookeeperUrl(String zkUrl){
-        String lowerZkUrl = zkUrl.toLowerCase();
-        String[] components = lowerZkUrl.split(String.valueOf(PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR));
-        Preconditions.checkArgument(components.length > 0, "Unexpected zk url format.");
-        String[] hosts = components[0].split(",");
-        Preconditions.checkArgument(hosts.length > 0,"Unexpected zk url format no hosts found.");
-        String hostsStrings = Arrays.stream(hosts).sorted().collect(Collectors.joining(","));
-        components[0] = hostsStrings;
-        // host:port:path:principal
-        // additional arguments passed in url, strip them out
-        int endIdx = Integer.min(components.length, 3);
-        return Arrays.stream(components, 0, endIdx).collect(Collectors.joining(":"));
+    public static String formatZookeeperUrl(String jdbcUrl) {
+        ConnectionInfo connInfo;
+        try {
+            connInfo = ConnectionInfo.create(jdbcUrl, null, null);
+            // TODO in theory we could support non-ZK registries for HA.
+            // However, as HA already relies on ZK, this wouldn't be particularly useful,
+            // and would require significant changes.
+            if (!(connInfo instanceof ZKConnectionInfo)) {
+                throw new SQLException("HA connections must use ZooKeeper registry. " + jdbcUrl
+                        + " is not a Zookeeper HBase connection");
+            }
+            ZKConnectionInfo zkInfo = (ZKConnectionInfo) connInfo;
+            StringBuilder sb = new StringBuilder();
+            sb.append(zkInfo.getZkHosts().replaceAll(":", "\\\\:")).append("::")
+                    .append(zkInfo.getZkRootNode());
+            return sb.toString();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
-
 }
