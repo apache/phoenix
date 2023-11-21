@@ -893,7 +893,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             if (!firstRecordRead) {
                 firstRecordRead = true;
                 overAllQueryMetrics.startResultSetWatch();
-                span.addEvent("first record read");
+                span.addEvent("first Result of ResultSet read");
             }
             currentRow = scanner.next();
             if (currentRow != null) {

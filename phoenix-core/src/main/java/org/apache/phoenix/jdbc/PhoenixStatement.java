@@ -481,8 +481,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         } else {
                                             lastQuerySpan.addEvent("Reloading table data was not successful");
                                             TraceUtil.setError(lastQuerySpan, e);
+                                            lastQuerySpan.end();
                                         }
-                                        lastQuerySpan.end();
                                     }
                                     if (wasUpdated) {
                                         // TODO we can log retry count and error for debugging in LOG table
@@ -2175,7 +2175,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     // From the ResultSet javadoc:
     // A ResultSet object is automatically closed when the Statement object that generated it is
     // closed, re-executed, or used to retrieve the next result from a sequence of multiple results.
-    private void clearResultSet() throws SQLException {
+    void clearResultSet() throws SQLException {
         if (lastResultSet != null) {
             try {
                 lastResultSet.close();
@@ -2584,11 +2584,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return lastResultSet;
     }
 
-    void setLastResultSet(PhoenixResultSet lastResultSet) {
+    void setLastResultSet(PhoenixResultSet lastResultSet) throws SQLException {
+        this.clearResultSet();
         this.lastResultSet = lastResultSet;
+        if (lastQuerySpan == null) {
+            lastQuerySpan = TraceUtil.createSpan(connection, "Query Span for synthetic ResultSet");
+        }
     }
 
-    
     private int getLastUpdateCount() {
         return lastUpdateCount;
     }
