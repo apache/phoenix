@@ -106,6 +106,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String INDEX_LIMIT = "_IndexLimit";
     public static final String INDEX_FILTER_STR = "_IndexFilterStr";
 
+    public static final String JSON_VALUE_FUNCTION = "_JsonValueFunction";
+    public static final String JSON_QUERY_FUNCTION = "_JsonQueryFunction";
     /* 
     * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
     * Needed for backward compatibility purposes. TODO: get rid of this in next major release.
@@ -232,7 +234,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
-        if(isLocalIndex) {
+        if (isLocalIndex) {
             ScanUtil.setupLocalIndexScan(scan);
         }
     }
