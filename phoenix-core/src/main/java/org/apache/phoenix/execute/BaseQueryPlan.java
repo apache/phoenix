@@ -22,6 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +80,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -322,8 +324,15 @@ public abstract class BaseQueryPlan implements QueryPlan {
             }
 
             // We don't need data columns for CDC
-            if (context.getCDCDataTable() == null) {
-                Set<PColumn> dataColumns = context.getDataColumns();
+            PTable dataTable = null;
+            Set<PColumn> dataColumns;
+            if (context.getCDCTableRef() != null) {
+                dataTable = context.getCDCTableRef().getTable();
+                List<PColumn> cdcColumns = dataTable.getColumns();
+                dataColumns = Sets.newHashSet(cdcColumns.get(cdcColumns.size() - 1));
+            }
+            else {
+                dataColumns = context.getDataColumns();
                 // If any data columns to join back from data table are present then we set following attributes
                 // 1. data columns to be projected and their key value schema.
                 // 2. index maintainer and view constants if exists to build data row key from index row key.
@@ -337,29 +346,31 @@ public abstract class BaseQueryPlan implements QueryPlan {
                     final ParseNodeFactory FACTORY = new ParseNodeFactory();
                     TableRef dataTableRef =
                             FromCompiler.getResolver(
-                                FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
-                                context.getConnection()).resolveTable(parentSchemaName, parentTableName);
-                    PTable dataTable = dataTableRef.getTable();
-                    // Set data columns to be join back from data table.
-                    serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
-                    KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
-                    // Set key value schema of the data columns.
-                    serializeSchemaIntoScan(scan, schema);
-                    if (table.getIndexType() == IndexType.LOCAL) {
-                        // Set index maintainer of the local index.
-                        serializeIndexMaintainerIntoScan(scan, dataTable);
-                        // Set view constants if exists.
-                        serializeViewConstantsIntoScan(scan, dataTable);
-                    }
+                                    FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
+                                    context.getConnection()).resolveTable(parentSchemaName, parentTableName);
+                    dataTable = dataTableRef.getTable();
+                }
+            }
+            if (! dataColumns.isEmpty()) {
+                // Set data columns to be join back from data table.
+                serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
+                KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
+                // Set key value schema of the data columns.
+                serializeSchemaIntoScan(scan, schema);
+                if (table.getIndexType() == IndexType.LOCAL) {
+                    // Set index maintainer of the local index.
+                    serializeIndexMaintainerIntoScan(scan, dataTable);
+                    // Set view constants if exists.
+                    serializeViewConstantsIntoScan(scan, dataTable);
                 }
             }
         }
-        
+
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Scan on table " + context.getCurrentTable().getTable().getName() + " ready for iteration: " + scan, connection));
         }
-        
+
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
@@ -488,7 +499,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException;
-    
+
     @Override
     public long getEstimatedSize() {
         return DEFAULT_ESTIMATED_SIZE;
@@ -543,7 +554,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return groupBy.isEmpty() ? orderBy.getOrderByExpressions().isEmpty() : groupBy.isOrderPreserving();
     }
-    
+
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
         if (!getEstimatesCalled) {

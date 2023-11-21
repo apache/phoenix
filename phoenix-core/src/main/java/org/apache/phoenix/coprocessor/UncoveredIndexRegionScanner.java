@@ -19,7 +19,11 @@ package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilder;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -33,6 +37,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -51,7 +57,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -308,6 +316,19 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
                 Result dataRow = dataRows.get(new ImmutableBytesPtr(
                         indexToDataRowKeyMap.get(indexRowKey)));
+                if (true) {
+                    CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
+                    KeyValueColumnExpression expression = (KeyValueColumnExpression) tupleProjector.getExpressions()[0];
+                    dataRow = Result.create(Arrays.asList(builder.
+                            setRow(indexToDataRowKeyMap.get(indexRowKey)).
+                            setFamily(expression.getColumnFamily()).
+                            setQualifier(expression.getColumnQualifier()).
+                            setTimestamp(indexRow.get(0).getTimestamp()).
+                            setValue("\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8)).
+                            setType(Cell.Type.Put).
+                            build()));
+                }
+
                 if (dataRow != null) {
                     long ts = indexRow.get(0).getTimestamp();
                     if (!indexMaintainer.isUncovered()

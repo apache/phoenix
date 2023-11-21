@@ -301,12 +301,13 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         props.put("hbase.rpc.timeout", "6000000");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
+        String mockCdcJson = "\"This is a mock CDC JSON data\"";
         conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER)");
+                "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 VARCHAR)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (1, 100)");
+                " (1, '" + mockCdcJson + "')");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (2, 200)");
+                " (2, '" + mockCdcJson + "')");
         conn.commit();
         String indexName = generateUniqueName();
         String index_sql = "CREATE UNCOVERED INDEX " + indexName
@@ -315,7 +316,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //ResultSet rs =
         //        conn.createStatement().executeQuery("SELECT * FROM " + indexName);
         //assertEquals(1, rs.getInt(2));
-        //assertEquals(true, rs.next());
+        //assertEquals(true, rs.next())
         //assertEquals(2, rs.getInt(2));
         //assertEquals(false, rs.next());
         ResultSet rs =
@@ -323,10 +324,10 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                         " " + indexName + ") */ * FROM " + tableName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(100, rs.getInt(2));
+        assertEquals(mockCdcJson, rs.getString(2));
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(1));
-        assertEquals(200, rs.getInt(2));
+        assertEquals(mockCdcJson, rs.getString(2));
         assertEquals(false, rs.next());
     }
 }

@@ -193,17 +193,21 @@ public class ProjectionCompiler {
         int projectedOffset = projectedExpressions.size();
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
-        String dataTableName = index.getParentName().getString();
         PTable dataTable = null;
-        try {
-            dataTable = conn.getTable(new PTableKey(tenantId, dataTableName));
-        } catch (TableNotFoundException e) {
-            if (tenantId != null) {
-                // Check with null tenantId
-                dataTable = conn.getTable(new PTableKey(null, dataTableName));
-            }
-            else {
-                throw e;
+        if (context.getCDCTableRef() != null) {
+            dataTable = context.getCDCTableRef().getTable();
+        }
+        else {
+            String dataTableName = index.getParentName().getString();
+            try {
+                dataTable = conn.getTable(new PTableKey(tenantId, dataTableName));
+            } catch (TableNotFoundException e) {
+                if (tenantId != null) {
+                    // Check with null tenantId
+                    dataTable = conn.getTable(new PTableKey(null, dataTableName));
+                } else {
+                    throw e;
+                }
             }
         }
         int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
@@ -421,10 +425,17 @@ public class ProjectionCompiler {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
                 }
                 isWildcard = true;
-                if (context.getCDCDataTable() != null) {
-                    return context.getCdcDataPlan().getProjector();
+                if (context.getCDCTableRef() != null) {
+                    return context.getCDCDataPlan().getProjector();
                 }
-                else if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
+                else
+                if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
+                    if (tableRef.getTable().getTableName().getString().equals("N000002")) {
+                        "".isEmpty();
+                    }
+                    if (context.getCDCTableRef() != null) {
+                        "".isEmpty();
+                    }
                     projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
                     projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);

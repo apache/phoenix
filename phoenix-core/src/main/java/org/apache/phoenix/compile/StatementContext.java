@@ -83,9 +83,10 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
-    private TableRef cdcDataTable;
+    private TableRef cdcDataTableRef;
     private Set<PTable.CDCChangeScope> cdcIncludeScopes;
     private QueryPlan cdcDataPlan;
+    private TableRef cdcTableRef;
 
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -363,15 +364,23 @@ public class StatementContext {
         this.isUncoveredIndex = isUncoveredIndex;
     }
 
-    public void setCDCDataTable(TableRef dataTable) {
-        this.cdcDataTable = dataTable;
+    public void setCDCDataTableRef(TableRef dataTable) {
+        this.cdcDataTableRef = dataTable;
     }
 
-    public TableRef getCDCDataTable() {
-        return this.cdcDataTable;
+    public TableRef getCDCDataTableRef() {
+        return this.cdcDataTableRef;
     }
 
-    public Set<PTable.CDCChangeScope> getCdcIncludeScopes() {
+    public TableRef getCDCTableRef() {
+        return cdcTableRef;
+    }
+
+    public void setCDCTableRef(TableRef cdcTableRef) {
+        this.cdcTableRef = cdcTableRef;
+    }
+
+    public Set<PTable.CDCChangeScope> getCDCIncludeScopes() {
         return cdcIncludeScopes;
     }
 
@@ -383,7 +392,7 @@ public class StatementContext {
         this.cdcDataPlan = cdcDataPlan;
     }
 
-    public QueryPlan getCdcDataPlan() {
+    public QueryPlan getCDCDataPlan() {
         return cdcDataPlan;
     }
 

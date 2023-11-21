@@ -29,8 +29,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -263,8 +261,9 @@ public class QueryCompiler {
 
         StatementContext context = new StatementContext(statement, resolver, bindManager, scan,
                 sequenceManager);
-        context.setCDCDataTable(dataTableRef);
+        context.setCDCDataTableRef(dataTableRef);
         context.setCDCDataPlan(cdcDataPlan);
+        context.setCDCTableRef(cdcTableRef);
         context.setCDCIncludeScopes(cdcIncludeScopes);
         return compileSingleQuery(context, select, false, true);
     }
@@ -717,6 +716,9 @@ public class QueryCompiler {
         boolean isApplicable = true;
         PTable projectedTable = null;
         if (this.projectTuples) {
+            if (context.getCurrentTable().getTable().getTableName().getString().equals("N000002") || context.getCurrentTable().getTable().getTableName().getString().equals("__CDC__N000002")) {
+                "".isEmpty();
+            }
             projectedTable = TupleProjectionCompiler.createProjectedTable(select, context);
             if (projectedTable != null) {
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), select.getUdfParseNodes()));
