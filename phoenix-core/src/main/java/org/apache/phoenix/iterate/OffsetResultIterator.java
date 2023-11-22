@@ -49,7 +49,7 @@ public class OffsetResultIterator extends DelegateResultIterator {
         while (rowCount < offset) {
             Tuple tuple = super.next();
             if (tuple == null) { return null; }
-            if (isDummy(tuple)) {
+            if (isDummy(tuple) || tuple.size() == 0) {
                 // while rowCount < offset absorb the dummy and call next on the underlying scanner
                 continue;
             }
