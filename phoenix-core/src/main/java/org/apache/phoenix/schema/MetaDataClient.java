@@ -3886,7 +3886,7 @@ public class MetaDataClient {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
         }
         if (ttl != null) {
-            mutateIntegerProperty(connection, tenantId, schemaName, tableName, TTL, ttl);
+            mutateIntegerProperty(connection, tenantId, schemaName, tableName, TTL, ttl == TTL_NOT_DEFINED ? null : ttl);
         }
         if (isChangeDetectionEnabled != null) {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, CHANGE_DETECTION_ENABLED, isChangeDetectionEnabled);

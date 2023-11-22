@@ -30,18 +30,21 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.*;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
@@ -333,12 +336,30 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                         TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
             }
 
+            try {
+                ddl = "ALTER TABLE " + tableName + " SET TTL=" + DEFAULT_TTL_FOR_TEST;
+                conn.createStatement().execute(ddl);
+            } catch (SQLException sqe) {
+                assertEquals("Should fail with TTL already defined in hierarchy",
+                        TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(), sqe.getErrorCode());
+            }
+
             ddl = "ALTER VIEW " + viewName + " SET TTL=NONE";
             conn.createStatement().execute(ddl);
 
             String childView = createViewOnViewWithTTL(tenantConn, viewName, true);
             assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
                     DEFAULT_TTL_FOR_CHILD, childView);
+
+            ddl = "ALTER VIEW " + childView + " SET TTL=NONE";
+            tenantConn.createStatement().execute(ddl);
+
+            assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
+                    TTL_NOT_DEFINED, childView);
+
+            ddl = "ALTER VIEW " + viewName + " SET TTL=" + DEFAULT_TTL_FOR_CHILD;
+            conn.createStatement().execute(ddl);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_CHILD, viewName);
 
         }
     }
