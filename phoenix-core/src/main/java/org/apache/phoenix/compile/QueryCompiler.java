@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -246,26 +248,6 @@ public class QueryCompiler {
         } else {
             return compileSingleQuery(context, select, false, true);
         }
-    }
-
-    public QueryPlan compileCDCSelect(TableRef dataTableRef,
-                                      QueryPlan cdcDataPlan) throws SQLException {
-        TableRef cdcTableRef = cdcDataPlan.getTableRef();
-        PTable cdcTable = cdcTableRef.getTable();
-        Set<PTable.CDCChangeScope> cdcIncludeScopes = cdcTable.getCDCIncludeScopes();
-        String cdcHint = select.getHint().getHint(Hint.INCLUDE);
-        if (cdcHint != null && cdcHint.startsWith(HintNode.PREFIX)) {
-            cdcIncludeScopes = CDCUtil.makeChangeScopeEnumsFromString(cdcHint.substring(1,
-                    cdcHint.length() - 1));
-        }
-
-        StatementContext context = new StatementContext(statement, resolver, bindManager, scan,
-                sequenceManager);
-        context.setCDCDataTableRef(dataTableRef);
-        context.setCDCDataPlan(cdcDataPlan);
-        context.setCDCTableRef(cdcTableRef);
-        context.setCDCIncludeScopes(cdcIncludeScopes);
-        return compileSingleQuery(context, select, false, true);
     }
 
     /**
@@ -723,8 +705,16 @@ public class QueryCompiler {
             if (projectedTable != null) {
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), select.getUdfParseNodes()));
             }
+
+            if (context.getCurrentTable().getTable().getType() == PTableType.CDC) {
+                // This will get the data column added to the context so that projection can get
+                // serialized..
+                context.getDataColumnPosition(
+                        context.getCurrentTable().getTable().getColumnForColumnName(
+                                QueryConstants.CDC_JSON_COL_NAME));
+            }
         }
-        
+
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();

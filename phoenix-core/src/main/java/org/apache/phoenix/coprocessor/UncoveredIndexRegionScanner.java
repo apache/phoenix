@@ -52,6 +52,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,8 +66,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
 import static org.apache.phoenix.query.QueryServices.INDEX_PAGE_SIZE_IN_ROWS;
 import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
@@ -142,6 +146,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         this.region = region;
         this.env = env;
         this.ptr = ptr;
+        if (innerScanner.getRegionInfo().getTable().getNameAsString().equals("N000002") ||
+                innerScanner.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
+            "".isEmpty();
+        }
         this.tupleProjector = tupleProjector;
         this.pageSizeMs = pageSizeMs;
     }
@@ -316,13 +324,20 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
                 Result dataRow = dataRows.get(new ImmutableBytesPtr(
                         indexToDataRowKeyMap.get(indexRowKey)));
-                if (true) {
+                if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
+                    Cell firstCell = result.get(0);
+                    byte[] value =
+                            "\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8);
+                    //dataRow = Result.create(Arrays.asList(PhoenixKeyValueUtil.newKeyValue(
+                    //        firstCell.getRowArray(), firstCell.getRowOffset(),
+                    //        firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
+                    //        VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0,
+                    //        value.length)));
                     CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
-                    KeyValueColumnExpression expression = (KeyValueColumnExpression) tupleProjector.getExpressions()[0];
                     dataRow = Result.create(Arrays.asList(builder.
                             setRow(indexToDataRowKeyMap.get(indexRowKey)).
-                            setFamily(expression.getColumnFamily()).
-                            setQualifier(expression.getColumnQualifier()).
+                            setFamily(VALUE_COLUMN_FAMILY).
+                            setQualifier(VALUE_COLUMN_QUALIFIER).
                             setTimestamp(indexRow.get(0).getTimestamp()).
                             setValue("\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8)).
                             setType(Cell.Type.Put).

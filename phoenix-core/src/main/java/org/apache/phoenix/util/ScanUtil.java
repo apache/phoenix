@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_AN
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -1124,6 +1125,9 @@ public class ScanUtil {
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
+        if (table.getTableName().getString().equals("N000002") || table.getTableName().getString().equals("__CDC__N000002")) {
+            "".isEmpty();
+        }
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
@@ -1167,7 +1171,8 @@ public class ScanUtil {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
             scan.setAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE, TRUE_BYTES);
         } else {
-            if (table.getType() != PTableType.INDEX || !IndexUtil.isGlobalIndex(indexTable)) {
+            if (table.getType() != PTableType.CDC && (table.getType() != PTableType.INDEX ||
+                    !IndexUtil.isGlobalIndex(indexTable))) {
                 return;
             }
             if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
@@ -1180,7 +1185,13 @@ public class ScanUtil {
             }
             // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
             // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
-            if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            if (table.getType() == PTableType.CDC) {
+                indexTable = PhoenixRuntime.getTable(phoenixConnection,
+                        CDCUtil.getCDCIndexName(table.getName().getString()));
+            }
+            else if (indexTable.getViewIndexId() != null &&
+                    indexTable.getName().getString().contains(
+                            QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
                 String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
                 indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
@@ -1298,6 +1309,11 @@ public class ScanUtil {
         }
 
         setScanAttributeForPaging(scan, phoenixConnection);
+
+        if (table.getType() == PTableType.CDC) {
+            scan.setAttribute(BaseScannerRegionObserver.CDC_DATA_TABLE_NAME,
+                    table.getParentName().getBytes());
+        }
     }
 
     public static void setScanAttributeForPaging(Scan scan, PhoenixConnection phoenixConnection) {

@@ -73,6 +73,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertNull(table.getIndexState()); // Index state should be null for CDC.
         assertNull(table.getIndexType()); // This is not an index.
         assertEquals(datatableName, table.getParentName().getString());
+        assertEquals(CDCUtil.getCDCIndexName(cdcName), table.getPhysicalName().getString());
     }
 
     private void assertSaltBuckets(String cdcName, Integer nbuckets) throws SQLException {
@@ -215,7 +216,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testSelect() throws Exception {
+    public void testSelectCDC() throws Exception {
         Properties props = new Properties();
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         props.put("hbase.client.scanner.timeout.period", "6000000");
@@ -225,11 +226,9 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (1, 100)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (2, 200)");
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 VARCHAR)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k) VALUES (1)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k) VALUES (2)");
         conn.commit();
         String cdcName = generateUniqueName();
         String cdc_sql = "CREATE CDC " + cdcName
@@ -241,52 +240,14 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
         //          "".isEmpty();
         //      }
+        String mockCdcJson = "\"This is a mock CDC JSON data\"";
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
-        assertEquals(null, rs.getObject(3));
+        assertEquals(mockCdcJson, rs.getObject(3));
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
-        assertEquals(false, rs.next());
-        assertEquals(null, rs.getObject(3));
-    }
-
-    // Temporary test case used as a reference for debugging and comparing against the CDC query.
-    @Test
-    public void testSelectCoveredIndex() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        props.put("hbase.client.scanner.timeout.period", "6000000");
-        props.put("phoenix.query.timeoutMs", "6000000");
-        props.put("zookeeper.session.timeout", "6000000");
-        props.put("hbase.rpc.timeout", "6000000");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        String tableName = generateUniqueName();
-        conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (1, 100)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (2, 200)");
-        conn.commit();
-        String indexName = generateUniqueName();
-        String index_sql = "CREATE INDEX " + indexName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) INCLUDE (v1)";
-        conn.createStatement().execute(index_sql);
-        //ResultSet rs =
-        //        conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName +
-        //                " " + indexName + ") */ * FROM " + tableName);
-        //assertEquals(true, rs.next());
-        //assertEquals(1, rs.getInt(1));
-        //assertEquals(true, rs.next());
-        //assertEquals(2, rs.getInt(1));
-        //assertEquals(false, rs.next());
-        ResultSet rs =
-                conn.createStatement().executeQuery("SELECT * FROM " + indexName);
-        assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
-        assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
+        assertEquals(mockCdcJson, rs.getObject(3));
         assertEquals(false, rs.next());
     }
 
@@ -324,10 +285,10 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                         " " + indexName + ") */ * FROM " + tableName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(mockCdcJson, rs.getString(2));
+        assertEquals(mockCdcJson, rs.getObject(2));
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(1));
-        assertEquals(mockCdcJson, rs.getString(2));
+        assertEquals(mockCdcJson, rs.getObject(2));
         assertEquals(false, rs.next());
     }
 }

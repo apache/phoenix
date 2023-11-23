@@ -316,7 +316,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ScanUtil.setCustomAnnotations(scan,
                 customAnnotations == null ? null : customAnnotations.getBytes());
         // Set index related scan attributes.
-        if (table.getType() == PTableType.INDEX) {
+        if (table.getType() == PTableType.INDEX || table.getType() == PTableType.CDC) {
             if (table.getIndexType() == IndexType.LOCAL) {
                 ScanUtil.setLocalIndex(scan);
             } else if (context.isUncoveredIndex()) {
@@ -325,23 +325,23 @@ public abstract class BaseQueryPlan implements QueryPlan {
 
             // We don't need data columns for CDC
             PTable dataTable = null;
-            Set<PColumn> dataColumns;
-            if (context.getCDCTableRef() != null) {
-                dataTable = context.getCDCTableRef().getTable();
-                List<PColumn> cdcColumns = dataTable.getColumns();
-                dataColumns = Sets.newHashSet(cdcColumns.get(cdcColumns.size() - 1));
+            if (context.getCurrentTable().getTable().getTableName().getString().equals("N000002") || context.getCurrentTable().getTable().getTableName().getString().equals("__CDC__N000002")) {
+                "".isEmpty();
             }
-            else {
-                dataColumns = context.getDataColumns();
-                // If any data columns to join back from data table are present then we set following attributes
-                // 1. data columns to be projected and their key value schema.
-                // 2. index maintainer and view constants if exists to build data row key from index row key.
-                // TODO: can have an hint to skip joining back to data table, in that case if any column to
-                // project is not present in the index then we need to skip this plan.
-                if (!dataColumns.isEmpty()) {
-                    // Set data columns to be join back from data table.
-                    PTable parentTable = context.getCurrentTable().getTable();
-                    String parentSchemaName = parentTable.getParentSchemaName().getString();
+            Set<PColumn> dataColumns = context.getDataColumns();
+            // If any data columns to join back from data table are present then we set following attributes
+            // 1. data columns to be projected and their key value schema.
+            // 2. index maintainer and view constants if exists to build data row key from index row key.
+            // TODO: can have an hint to skip joining back to data table, in that case if any column to
+            // project is not present in the index then we need to skip this plan.
+            if (!dataColumns.isEmpty()) {
+                // Set data columns to be join back from data table.
+                PTable parentTable = context.getCurrentTable().getTable();
+                String parentSchemaName = parentTable.getParentSchemaName().getString();
+                if (parentTable.getType() == PTableType.CDC) {
+                    dataTable = parentTable;
+                }
+                else {
                     String parentTableName = parentTable.getParentTableName().getString();
                     final ParseNodeFactory FACTORY = new ParseNodeFactory();
                     TableRef dataTableRef =

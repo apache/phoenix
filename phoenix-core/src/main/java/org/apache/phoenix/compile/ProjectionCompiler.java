@@ -193,21 +193,17 @@ public class ProjectionCompiler {
         int projectedOffset = projectedExpressions.size();
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
+        String dataTableName = index.getParentName().getString();
         PTable dataTable = null;
-        if (context.getCDCTableRef() != null) {
-            dataTable = context.getCDCTableRef().getTable();
-        }
-        else {
-            String dataTableName = index.getParentName().getString();
-            try {
-                dataTable = conn.getTable(new PTableKey(tenantId, dataTableName));
-            } catch (TableNotFoundException e) {
-                if (tenantId != null) {
-                    // Check with null tenantId
-                    dataTable = conn.getTable(new PTableKey(null, dataTableName));
-                } else {
-                    throw e;
-                }
+        try {
+            dataTable = conn.getTable(new PTableKey(tenantId, dataTableName));
+        } catch (TableNotFoundException e) {
+            if (tenantId != null) {
+                // Check with null tenantId
+                dataTable = conn.getTable(new PTableKey(null, dataTableName));
+            }
+            else {
+                throw e;
             }
         }
         int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
@@ -229,12 +225,13 @@ public class ProjectionCompiler {
         TableRef projectedTableRef =
                 new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
         for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
-            PColumn dataTableColumn = dataTable.getColumns().get(i);
+            PColumn column = dataTable.getColumns().get(i);
             // Skip tenant ID column (which may not be the first column, but is the first PK column)
-            if (SchemaUtil.isPKColumn(dataTableColumn) && j++ < minTablePKOffset) {
+            if (SchemaUtil.isPKColumn(column) && j++ < minTablePKOffset) {
                 tableOffset++;
                 continue;
             }
+            PColumn dataTableColumn = dataTable.getColumns().get(i);
             String indexColName = IndexUtil.getIndexColumnName(dataTableColumn);
             PColumn indexColumn = null;
             ColumnRef ref = null;
@@ -425,15 +422,8 @@ public class ProjectionCompiler {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_TABLE_SPECIFIED_FOR_WILDCARD_SELECT).build().buildException();
                 }
                 isWildcard = true;
-                if (context.getCDCTableRef() != null) {
-                    return context.getCDCDataPlan().getProjector();
-                }
-                else
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
                     if (tableRef.getTable().getTableName().getString().equals("N000002")) {
-                        "".isEmpty();
-                    }
-                    if (context.getCDCTableRef() != null) {
                         "".isEmpty();
                     }
                     projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);

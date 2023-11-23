@@ -222,7 +222,11 @@ public class QueryOptimizer {
         SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         PTable table = dataPlan.getTableRef().getTable();
 
+        // TODO: Need to handle CDC hints.
         if (table.getType() == PTableType.CDC) {
+            if (true) {
+                return Arrays.asList(dataPlan);
+            }
             NamedTableNode indexTable = FACTORY.namedTable(null,
                     FACTORY.table(table.getSchemaName().getString(),
                             CDCUtil.getCDCIndexName(table.getTableName().getString())),
@@ -391,21 +395,7 @@ public class QueryOptimizer {
                 SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
-                QueryPlan plan;
-                if (dataPlan.getTableRef().getTable().getType() == PTableType.CDC) {
-                    PTable cdcTable = dataPlan.getTableRef().getTable();
-                    NamedTableNode cdcDataTable = FACTORY.namedTable(null,
-                            FACTORY.table(cdcTable.getSchemaName().getString(),
-                                    cdcTable.getParentTableName().getString()),
-                            select.getTableSamplingRate());
-                    ColumnResolver dataTableResolver = FromCompiler.getResolver(cdcDataTable,
-                            statement.getConnection());
-                    plan = compiler.compileCDCSelect(dataTableResolver.getTables().get(0),
-                            dataPlan);
-                }
-                else {
-                    plan = compiler.compile();
-                }
+                QueryPlan plan = compiler.compile();
                 if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                     // Indexed columns should also be added to the data columns to join for
                     // uncovered global indexes. This is required to verify index rows against
