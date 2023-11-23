@@ -54,6 +54,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -150,7 +151,7 @@ public abstract class ExplainTable {
         buf.append(scanTypeDetails);
 
         String tableName = tableRef.getTable().getPhysicalName().getString();
-        if (ScanUtil.isLocalIndex(scan)) {
+        if (tableRef.getTable().getIndexType() == PTable.IndexType.LOCAL) {
             String indexName = tableRef.getTable().getName().getString();
             if (tableRef.getTable().getViewIndexId() != null
                     && indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
