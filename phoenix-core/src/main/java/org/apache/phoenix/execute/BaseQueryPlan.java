@@ -365,12 +365,12 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 }
             }
         }
-
+        
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
                     "Scan on table " + context.getCurrentTable().getTable().getName() + " ready for iteration: " + scan, connection));
         }
-
+        
         ResultIterator iterator =  newIterator(scanGrouper, scan, caches);
         if (LOGGER.isDebugEnabled()) {
             LOGGER.debug(LogUtil.addCustomAnnotations(
@@ -499,7 +499,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     abstract protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException;
-
+    
     @Override
     public long getEstimatedSize() {
         return DEFAULT_ESTIMATED_SIZE;
@@ -554,7 +554,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     public boolean isRowKeyOrdered() {
         return groupBy.isEmpty() ? orderBy.getOrderByExpressions().isEmpty() : groupBy.isOrderPreserving();
     }
-
+    
     @Override
     public Long getEstimatedRowsToScan() throws SQLException {
         if (!getEstimatesCalled) {

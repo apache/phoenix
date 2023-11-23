@@ -84,7 +84,7 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
-
+    
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }

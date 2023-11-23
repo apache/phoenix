@@ -186,7 +186,7 @@ public class ProjectionCompiler {
             projectedColumns.add(new ExpressionProjector(colName, colName, tableRef.getTableAlias() == null ? table.getName().getString() : tableRef.getTableAlias(), expression, isCaseSensitive));
         }
     }
-
+    
     private static void projectAllIndexColumns(StatementContext context, TableRef tableRef, boolean resolveColumn, List<Expression> projectedExpressions, List<ExpressionProjector> projectedColumns, List<? extends PDatum> targetColumns) throws SQLException {
         ColumnResolver resolver = context.getResolver();
         PTable index = tableRef.getTable();

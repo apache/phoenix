@@ -714,7 +714,7 @@ public class QueryCompiler {
                                 QueryConstants.CDC_JSON_COL_NAME));
             }
         }
-
+        
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();

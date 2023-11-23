@@ -224,19 +224,7 @@ public class QueryOptimizer {
 
         // TODO: Need to handle CDC hints.
         if (table.getType() == PTableType.CDC) {
-            if (true) {
-                return Arrays.asList(dataPlan);
-            }
-            NamedTableNode indexTable = FACTORY.namedTable(null,
-                    FACTORY.table(table.getSchemaName().getString(),
-                            CDCUtil.getCDCIndexName(table.getTableName().getString())),
-                    select.getTableSamplingRate());
-            ColumnResolver resolver = FromCompiler.getResolver(indexTable,
-                    statement.getConnection());
-            PTable cdcIndex = resolver.getTables().get(0).getTable();
-            QueryPlan queryPlan = addPlan(statement, translatedIndexSelect, cdcIndex, targetColumns,
-                    parallelIteratorFactory, dataPlan, false);
-            return Arrays.asList(queryPlan);
+            return Arrays.asList(dataPlan);
         }
 
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
