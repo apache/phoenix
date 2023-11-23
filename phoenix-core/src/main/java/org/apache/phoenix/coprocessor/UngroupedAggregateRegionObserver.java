@@ -42,7 +42,6 @@ import javax.annotation.concurrent.GuardedBy;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
@@ -337,6 +336,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             throws IOException {
         super.preScannerOpen(e, scan);
         if (ScanUtil.isAnalyzeTable(scan)) {
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_START_ROW,
+                    scan.getStartRow());
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_STOP_ROW,
+                    scan.getStopRow());
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_START_ROW,
+                    Bytes.toBytes(scan.includeStartRow()));
+            scan.setAttribute(BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_STOP_ROW,
+                    Bytes.toBytes(scan.includeStopRow()));
             // We are setting the start row and stop row such that it covers the entire region. As part
             // of Phonenix-1263 we are storing the guideposts against the physical table rather than
             // individual tenant specific tables.
@@ -445,8 +452,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         if (((localIndexScan || uncoveredGlobalIndexScan) && !isDelete && !isDescRowKeyOrderUpgrade) || (j == null && p != null)) {
             if (dataColumns != null) {
                 tupleProjector = IndexUtil.getTupleProjector(scan, dataColumns);
-                viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             }
+            viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
             ImmutableBytesWritable tempPtr = new ImmutableBytesWritable();
             theScanner =
                     getWrappedScanner(c, theScanner, offset, scan, dataColumns, tupleProjector,
@@ -755,8 +762,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     + region.getRegionInfo().getRegionNameAsString());
         }
         final boolean isIncompatibleClient =
-                ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
-        byte[] rowKey = getRowKey(region, scan, callable, isIncompatibleClient);
+                ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+        byte[] rowKey = getRowKeyForCollectStats(region, scan, isIncompatibleClient);
         byte[] rowCountBytes = PLong.INSTANCE.toBytes(rowCount);
         final Cell aggKeyValue =
                 PhoenixKeyValueUtil.newKeyValue(rowKey, SINGLE_COLUMN_FAMILY,
@@ -795,28 +802,33 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         return scanner;
     }
 
-    private static byte[] getRowKey(Region region, Scan scan, StatsCollectionCallable callable,
-                                   boolean isIncompatibleClient) {
-        Cell lastScannedRowCell = callable.getLastScannedRowCell();
+    private static byte[] getRowKeyForCollectStats(Region region, Scan scan,
+                                                   boolean isIncompatibleClient) {
         byte[] rowKey;
         if (!isIncompatibleClient) {
-            if (lastScannedRowCell == null) {
-                byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
-                        region.getRegionInfo().getStartKey();
-                byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
-                        region.getRegionInfo().getEndKey();
-                rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
-                if (rowKey == null) {
-                    if (scan.includeStartRow()) {
-                        rowKey = startKey;
-                    } else if (scan.includeStopRow()) {
-                        rowKey = endKey;
-                    } else {
-                        rowKey = HConstants.EMPTY_END_ROW;
-                    }
+            byte[] startKey = scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_START_ROW) == null ?
+                    region.getRegionInfo().getStartKey() : scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_START_ROW);
+            byte[] endKey = scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_STOP_ROW) == null ?
+                    region.getRegionInfo().getEndKey() : scan.getAttribute(
+                    BaseScannerRegionObserver.SCAN_ANALYZE_ACTUAL_STOP_ROW);
+            rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+            if (rowKey == null) {
+                if (scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_START_ROW) !=
+                        null && Bytes.toBoolean(scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_START_ROW))) {
+                    rowKey = startKey;
+                } else if (scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_STOP_ROW) !=
+                        null && Bytes.toBoolean(scan.getAttribute(
+                        BaseScannerRegionObserver.SCAN_ANALYZE_INCLUDE_STOP_ROW))) {
+                    rowKey = endKey;
+                } else {
+                    rowKey = HConstants.EMPTY_END_ROW;
                 }
-            } else {
-                rowKey = CellUtil.cloneRow(lastScannedRowCell);
             }
         } else {
             rowKey = UNGROUPED_AGG_ROW_KEY;
@@ -837,7 +849,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         private final RegionScanner innerScanner;
         private final Configuration config;
         private final Scan scan;
-        private Cell lastScannedRowCell = null;
 
         StatsCollectionCallable(StatisticsCollector s, Region r, RegionScanner rs,
                                 Configuration config, Scan scan) {
@@ -851,10 +862,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         @Override
         public Long call() throws IOException {
             return collectStatsInternal();
-        }
-
-        public Cell getLastScannedRowCell() {
-            return lastScannedRowCell;
         }
 
         private boolean areStatsBeingCollectedViaCompaction() {
@@ -876,9 +883,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         do {
                             List<Cell> results = new ArrayList<>();
                             hasMore = innerScanner.nextRaw(results);
-                            results.stream()
-                                    .filter(cell -> !ScanUtil.isDummy(cell))
-                                    .forEach(cell -> lastScannedRowCell = cell);
                             statsCollector.collectStatistics(results);
                             rowCount++;
                             compactionRunning = areStatsBeingCollectedViaCompaction();

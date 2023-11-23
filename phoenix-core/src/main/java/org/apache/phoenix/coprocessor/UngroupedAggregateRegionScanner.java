@@ -661,7 +661,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                 if (pageSizeMs == Long.MAX_VALUE) {
                     byte[] rowKey;
                     final boolean isIncompatibleClient =
-                            ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                            ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
                     if (!isIncompatibleClient) {
                         rowKey = CellUtil.cloneRow(lastCell);
                     } else {

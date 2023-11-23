@@ -19,7 +19,6 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -165,7 +164,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
         if (scanOffset != null) {
             final boolean isIncompatibleClient =
-                    ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             innerScanner = getOffsetScanner(
                     innerScanner,
                     new OffsetResultIterator(

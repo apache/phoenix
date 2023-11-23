@@ -1306,6 +1306,8 @@ public class ScanUtil {
         }
 
         setScanAttributeForPaging(scan, phoenixConnection);
+        scan.setAttribute(BaseScannerRegionObserver.SCAN_SERVER_RETURN_VALID_ROW_KEY,
+                Bytes.toBytes(true));
     }
 
     public static void setScanAttributeForPaging(Scan scan, PhoenixConnection phoenixConnection) {
@@ -1554,18 +1556,17 @@ public class ScanUtil {
         return null;
     }
 
-    public static boolean isIncompatibleClient(int clientVersion) {
-        boolean incompatibleClient = false;
-        if (clientVersion != UNKNOWN_CLIENT_VERSION) {
-            int majorV = VersionUtil.decodeMajorVersion(clientVersion);
-            int minorV = VersionUtil.decodeMinorVersion(clientVersion);
-            if (majorV < 5) {
-                incompatibleClient = true;
-            } else if (majorV == 5 && minorV < 2) {
-                incompatibleClient = true;
-            }
-        }
-        return incompatibleClient;
+    /**
+     * Determine if the client is incompatible and therefore will not be able to parse the
+     * valid rowkey that server returns.
+     *
+     * @param scan Scan object.
+     * @return true if the client is incompatible and therefore will not be able to parse the
+     * valid rowkey that server returns.
+     */
+    public static boolean isIncompatibleClientForServerReturnValidRowKey(Scan scan) {
+        return scan.getAttribute(BaseScannerRegionObserver.SCAN_SERVER_RETURN_VALID_ROW_KEY) ==
+                null;
     }
 
     // This method assumes that there is at most one instance of PageFilter in a scan
@@ -1604,12 +1605,10 @@ public class ScanUtil {
      *
      * @param ptr row key.
      * @param scan scan object used to retrieve the result set.
-     * @param tuple list of KVs returned for the result set.
      * @throws ResultSetOutOfScanRangeException if the row key is out of scan range.
      */
     public static void verifyKeyInScanRange(ImmutableBytesWritable ptr,
-                                            Scan scan,
-                                            Tuple tuple)
+                                            Scan scan)
             throws ResultSetOutOfScanRangeException {
         try {
             verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());

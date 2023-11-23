@@ -444,7 +444,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
             byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
                     region.getRegionInfo().getEndKey();
             final boolean isIncompatibleClient =
-                    ScanUtil.isIncompatibleClient(ScanUtil.getClientVersion(scan));
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
             if (!isIncompatibleClient) {
                 rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
                 if (rowKey == null) {

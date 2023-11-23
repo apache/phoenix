@@ -117,6 +117,7 @@ message PTable {
   optional bytes externalSchemaId=50;
   optional PTable transformingNewTable=51;
   optional bytes streamingTopicName=52;
+  optional bytes indexWhere=53;
 }
 
 message EncodedCQCounter {

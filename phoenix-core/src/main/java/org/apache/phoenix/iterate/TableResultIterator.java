@@ -158,6 +158,29 @@ public class TableResultIterator implements ResultIterator {
         ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
     }
 
+    // Constructors without maxQueryEndTime to maintain API compatibility for phoenix-connectors
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null, false, Long.MAX_VALUE);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, false, Long.MAX_VALUE);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper, boolean isMapReduceContext) throws SQLException {
+        this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, null, isMapReduceContext, Long.MAX_VALUE);
+    }
+
+    public TableResultIterator(MutationState mutationState, Scan scan, ScanMetricsHolder scanMetricsHolder,
+            long renewLeaseThreshold, QueryPlan plan, ParallelScanGrouper scanGrouper,Map<ImmutableBytesPtr,ServerCache> caches,
+            boolean isMapReduceContext) throws SQLException {
+            this(mutationState, scan, scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, isMapReduceContext, Long.MAX_VALUE);
+    }
+    // End Constructors without maxQueryEndTime to maintain API compatibility for phoenix-connectors
+
     @Override
     public void close() throws SQLException {
         try {
@@ -190,9 +213,7 @@ public class TableResultIterator implements ResultIterator {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
                     try {
-                        if (!ScanUtil.isAnalyzeTable(scan)) {
-                            ScanUtil.verifyKeyInScanRange(ptr, scan, lastTuple);
-                        }
+                        ScanUtil.verifyKeyInScanRange(ptr, scan);
                     } catch (ResultSetOutOfScanRangeException e) {
                         LOGGER.error("Row key {} of table {} is out of scan range. Scan start "
                                         + "key: {} , end key: {} , _ScanActualStartRow: {} , "
