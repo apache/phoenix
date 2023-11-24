@@ -219,9 +219,7 @@ public class QueryOptimizer {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
 
-        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         PTable table = dataPlan.getTableRef().getTable();
-
         // TODO: Need to handle CDC hints.
         if (table.getType() == PTableType.CDC) {
             return Arrays.asList(dataPlan);
@@ -248,6 +246,7 @@ public class QueryOptimizer {
         }
         
         List<QueryPlan> plans = Lists.newArrayListWithExpectedSize(1 + indexes.size());
+        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {
