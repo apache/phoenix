@@ -2388,7 +2388,6 @@ public class MetaDataClient {
             if (transactionProvider != null) {
                 // If TTL set, use transaction context TTL property name instead
                 // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
-                //TODO: here we are only setting PROPERTY_TTL for case when phoenixTTL is disabled
                 Object transactionTTL = commonFamilyProps.remove(ColumnFamilyDescriptorBuilder.TTL);
                 if (transactionTTL != null) {
                     commonFamilyProps.put(PhoenixTransactionContext.PROPERTY_TTL, transactionTTL);

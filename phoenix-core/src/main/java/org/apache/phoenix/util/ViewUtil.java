@@ -15,9 +15,7 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.phoenix.filter.RowKeyComparisonFilter;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -69,7 +67,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -81,8 +78,15 @@ import java.util.Properties;
 import java.util.Set;
 
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.*;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -111,9 +115,6 @@ public class ViewUtil {
      *                                       and all orphan views (views that no longer exist)
      *                                       stemming from this table/view and all of its legitimate
      *                                       child views.
-     * @param isTTLDefinedOnAnyChild while going through child views updating this to true to
-     *                               confirm that TTL is defined in the Hierarchy below of the
-     *                               entity for which we are trying to find Descendant Views.
      *
      * @return a Pair where the first element is a list of all legitimate child views (or just 1
      * child view in case findJustOneLegitimateChildView is true) and where the second element is

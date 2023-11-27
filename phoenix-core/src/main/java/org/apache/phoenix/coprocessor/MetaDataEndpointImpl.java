@@ -645,7 +645,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
-
     }
 
     @Override
@@ -1429,7 +1428,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
             ttl = scanTTLFromParent(viewKey, clientTimeStamp);
 
-            //Need to Update Cache for Alter Commands
+            // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
 
         Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
@@ -1617,31 +1616,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return builder.build();
-    }
-
-    public static void dumpTable(Table table) throws IOException {
-        System.out.println("************ dumping " + table + " **************");
-        Scan s = new Scan();
-        s.setRaw(true);
-        s.readAllVersions();
-        int cellCount = 0;
-        int rowCount = 0;
-        try (ResultScanner scanner = table.getScanner(s)) {
-            Result result = null;
-            while ((result = scanner.next()) != null) {
-                rowCount++;
-                CellScanner cellScanner = result.cellScanner();
-                Cell current = null;
-                while (cellScanner.advance()) {
-                    current = cellScanner.current();
-                    System.out.println(current + " column= " +
-                            Bytes.toStringBinary(CellUtil.cloneQualifier(current)) +
-                            " val=" + Bytes.toStringBinary(CellUtil.cloneValue(current)));
-                    cellCount++;
-                }
-            }
-        }
-        System.out.println("----- Row count: " + rowCount + " Cell count: " + cellCount + " -----");
     }
 
     private int scanTTLFromParent(byte[] viewKey, long clientTimeStamp) throws IOException, SQLException {
