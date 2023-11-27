@@ -241,7 +241,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //          "".isEmpty();
         //      }
         String mockCdcJson = "\"This is a mock CDC JSON data\"";
-        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT /*+ INCLUDE(PRE, POST) */ * FROM " + cdcName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         assertEquals(mockCdcJson, rs.getObject(3));

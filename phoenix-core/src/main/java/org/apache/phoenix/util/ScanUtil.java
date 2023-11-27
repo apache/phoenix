@@ -20,6 +20,7 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
@@ -31,6 +32,7 @@ import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1293,7 +1295,8 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForClient(Scan scan, PTable table,
-                                                  PhoenixConnection phoenixConnection) throws SQLException {
+                                                  StatementContext context) throws SQLException {
+        PhoenixConnection phoenixConnection = context.getConnection();
         setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
@@ -1318,6 +1321,8 @@ public class ScanUtil {
 
             PColumn cdcJsonCol = table.getColumnForColumnName(CDC_JSON_COL_NAME);
             scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
+            scan.setAttribute(CDC_INCLUDE_SCOPES, CDCUtil.makeChangeScopeStringFromEnums(
+                    context.getCdcIncludeScopes()).getBytes(StandardCharsets.UTF_8));
         }
     }
 

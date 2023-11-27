@@ -84,6 +84,7 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
+    private Set<PTable.CDCChangeScope> cdcIncludeScopes;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -377,5 +378,12 @@ public class StatementContext {
         } else {
             return retrying;
         }
+    }
+    public Set<PTable.CDCChangeScope> getCdcIncludeScopes() {
+        return cdcIncludeScopes;
+    }
+
+    public void setCDCIncludeScopes(Set<PTable.CDCChangeScope> cdcIncludeScopes) {
+        this.cdcIncludeScopes = cdcIncludeScopes;
     }
 }
