@@ -1129,9 +1129,6 @@ public class ScanUtil {
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
-        if (table.getTableName().getString().equals("N000002") || table.getTableName().getString().equals("__CDC__N000002")) {
-            "".isEmpty();
-        }
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
