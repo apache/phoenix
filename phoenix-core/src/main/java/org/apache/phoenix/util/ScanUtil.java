@@ -19,6 +19,8 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
@@ -1311,8 +1313,11 @@ public class ScanUtil {
         setScanAttributeForPaging(scan, phoenixConnection);
 
         if (table.getType() == PTableType.CDC) {
-            scan.setAttribute(BaseScannerRegionObserver.CDC_DATA_TABLE_NAME,
+            scan.setAttribute(CDC_DATA_TABLE_NAME,
                     table.getParentName().getBytes());
+
+            PColumn cdcJsonCol = table.getColumnForColumnName(CDC_JSON_COL_NAME);
+            scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
         }
     }
 

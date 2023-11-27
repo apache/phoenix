@@ -126,10 +126,6 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         IndexMaintainer indexMaintainer = null;
         byte[][] viewConstants = null;
         PhoenixTransactionContext tx = null;
-        if (innerScanner.getRegionInfo().getTable().getNameAsString().equals("N000002") ||
-                innerScanner.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
-            "".isEmpty();
-        }
         ColumnReference[] dataColumns = IndexUtil.deserializeDataTableColumnsToJoin(scan);
         if (dataColumns != null || ScanUtil.isUncoveredGlobalIndex(scan)) {
             if (dataColumns != null) {

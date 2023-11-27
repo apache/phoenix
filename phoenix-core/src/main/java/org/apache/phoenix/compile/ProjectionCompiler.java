@@ -423,9 +423,6 @@ public class ProjectionCompiler {
                 }
                 isWildcard = true;
                 if (tableRef.getTable().getType() == PTableType.INDEX && ((WildcardParseNode)node).isRewrite()) {
-                    if (tableRef.getTable().getTableName().getString().equals("N000002")) {
-                        "".isEmpty();
-                    }
                     projectAllIndexColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);
                 } else {
                     projectAllTableColumns(context, tableRef, resolveColumn, projectedExpressions, projectedColumns, targetColumns);

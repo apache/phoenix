@@ -151,6 +151,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
     public static final String CDC_DATA_TABLE_NAME = "_CdcDataTableName";
+    public static final String CDC_JSON_COL_QUALIFIER = "_CdcJsonColumn_Qualifier";
 
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);

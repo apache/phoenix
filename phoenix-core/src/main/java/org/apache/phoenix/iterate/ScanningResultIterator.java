@@ -181,9 +181,6 @@ public class ScanningResultIterator implements ResultIterator {
     public Tuple next() throws SQLException {
         try {
             Result result = scanner.next();
-            if (context.getCurrentTable().getTable().getTableName().equals("N000002") || context.getCurrentTable().getTable().getTableName().equals("__CDC__N000002")) {
-                "".isEmpty();
-            }
             while (result != null && (result.isEmpty() || isDummy(result))) {
                 dummyRowCounter += 1;
                 long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();

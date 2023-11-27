@@ -323,11 +323,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 ScanUtil.setUncoveredGlobalIndex(scan);
             }
 
-            // We don't need data columns for CDC
             PTable dataTable = null;
-            if (context.getCurrentTable().getTable().getTableName().getString().equals("N000002") || context.getCurrentTable().getTable().getTableName().getString().equals("__CDC__N000002")) {
-                "".isEmpty();
-            }
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes
             // 1. data columns to be projected and their key value schema.

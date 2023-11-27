@@ -65,6 +65,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
@@ -322,15 +323,11 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     Cell firstCell = result.get(0);
                     byte[] value =
                             "\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8);
-                    // FIXME: This is being done only for column qualifier, should we pass it in
-                    //  as a Scan attribute?
-                    KeyValueColumnExpression cdcExpression =
-                            (KeyValueColumnExpression) tupleProjector.getExpressions()[0];
                     CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
                     dataRow = Result.create(Arrays.asList(builder.
                             setRow(indexToDataRowKeyMap.get(indexRowKey)).
                             setFamily(firstCell.getFamilyArray()).
-                            setQualifier(cdcExpression.getColumnQualifier()).
+                            setQualifier(scan.getAttribute((CDC_JSON_COL_QUALIFIER))).
                             setTimestamp(indexRow.get(0).getTimestamp()).
                             setValue(value).
                             setType(Cell.Type.Put).
