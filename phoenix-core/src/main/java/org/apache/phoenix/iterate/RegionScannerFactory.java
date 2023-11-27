@@ -123,10 +123,6 @@ public abstract class RegionScannerFactory {
       final byte[][] viewConstants, final KeyValueSchema kvSchema,
       final ValueBitSet kvSchemaBitSet, final TupleProjector projector,
       final ImmutableBytesWritable ptr, final boolean useQualifierAsListIndex) throws IOException {
-    if (regionScanner.getRegionInfo().getTable().getNameAsString().equals("N000002") ||
-            regionScanner.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
-      "".isEmpty();
-    }
     return new RegionScanner() {
       private RegionScanner s = regionScanner;
       private RegionInfo regionInfo = env.getRegionInfo();

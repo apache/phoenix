@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -52,7 +51,6 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -146,10 +144,6 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         this.region = region;
         this.env = env;
         this.ptr = ptr;
-        if (innerScanner.getRegionInfo().getTable().getNameAsString().equals("N000002") ||
-                innerScanner.getRegionInfo().getTable().getNameAsString().equals("__CDC__N000002")) {
-            "".isEmpty();
-        }
         this.tupleProjector = tupleProjector;
         this.pageSizeMs = pageSizeMs;
     }
@@ -328,18 +322,17 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     Cell firstCell = result.get(0);
                     byte[] value =
                             "\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8);
-                    //dataRow = Result.create(Arrays.asList(PhoenixKeyValueUtil.newKeyValue(
-                    //        firstCell.getRowArray(), firstCell.getRowOffset(),
-                    //        firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
-                    //        VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0,
-                    //        value.length)));
+                    // FIXME: This is being done only for column qualifier, should we pass it in
+                    //  as a Scan attribute?
+                    KeyValueColumnExpression cdcExpression =
+                            (KeyValueColumnExpression) tupleProjector.getExpressions()[0];
                     CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
                     dataRow = Result.create(Arrays.asList(builder.
                             setRow(indexToDataRowKeyMap.get(indexRowKey)).
-                            setFamily(VALUE_COLUMN_FAMILY).
-                            setQualifier(VALUE_COLUMN_QUALIFIER).
+                            setFamily(firstCell.getFamilyArray()).
+                            setQualifier(cdcExpression.getColumnQualifier()).
                             setTimestamp(indexRow.get(0).getTimestamp()).
-                            setValue("\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8)).
+                            setValue(value).
                             setType(Cell.Type.Put).
                             build()));
                 }

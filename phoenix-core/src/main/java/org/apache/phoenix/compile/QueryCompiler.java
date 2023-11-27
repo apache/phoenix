@@ -698,9 +698,6 @@ public class QueryCompiler {
         boolean isApplicable = true;
         PTable projectedTable = null;
         if (this.projectTuples) {
-            if (context.getCurrentTable().getTable().getTableName().getString().equals("N000002") || context.getCurrentTable().getTable().getTableName().getString().equals("__CDC__N000002")) {
-                "".isEmpty();
-            }
             projectedTable = TupleProjectionCompiler.createProjectedTable(select, context);
             if (projectedTable != null) {
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), select.getUdfParseNodes()));
