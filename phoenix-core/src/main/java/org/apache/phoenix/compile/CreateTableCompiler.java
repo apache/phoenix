@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -81,6 +82,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 
 
@@ -268,21 +270,19 @@ public class CreateTableCompiler {
         byte[] parentSchemaNameInBytes = parentToBe.getSchemaName() != null
                 ? parentToBe.getSchemaName().getBytes() : null;
 
-        ConnectionQueryServices cqs = connection.unwrap(PhoenixConnection.class)
-                .getQueryServices();
-
-        try (Table linkTable = cqs.getTable(SYSTEM_CHILD_LINK_NAME_BYTES)) {
+        ConnectionQueryServices queryServices = connection.getQueryServices();
+        Configuration config = queryServices.getConfiguration();
+        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config) ?
+                SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
+                SYSTEM_CHILD_LINK_NAME_BYTES;
+        try (Table childLinkTable = queryServices.getTable(systemChildLinkTable)) {
             List<PTable> legitimateSiblingViewList =
-                    ViewUtil.findAllDescendantViews(linkTable, cqs.getConfiguration(),
-                            parentTenantIdInBytes, parentSchemaNameInBytes,
-                            parentToBe.getTableName().getBytes(),
+                    ViewUtil.findAllDescendantViews(childLinkTable, config, parentTenantIdInBytes,
+                            parentSchemaNameInBytes, parentToBe.getTableName().getBytes(),
                             HConstants.LATEST_TIMESTAMP, true).getFirst();
-
             if (legitimateSiblingViewList.size() > 0) {
                 PTable siblingView = legitimateSiblingViewList.get(0);
-
                 Expression siblingViewWhere = getWhereFromView(connection, siblingView);
-
                 Set<PColumn> siblingViewPkColsInWhere = new HashSet<>();
                 if (siblingViewWhere != null) {
                     ViewWhereExpressionValidatorVisitor siblingViewValidatorVisitor =
@@ -290,7 +290,6 @@ public class CreateTableCompiler {
                                     siblingViewPkColsInWhere, new HashSet<>());
                     siblingViewWhere.accept(siblingViewValidatorVisitor);
                 }
-
                 if (!pkColumnsInWhere.equals(siblingViewPkColsInWhere)) {
                     return ViewType.READ_ONLY;
                 }
