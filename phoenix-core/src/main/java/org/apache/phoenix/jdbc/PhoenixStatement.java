@@ -444,7 +444,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 throw e;
                             } catch (StaleMetadataCacheException e) {
-                                GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.increment();
+                                GlobalClientMetrics
+                                        .GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER
+                                        .increment();
                                 updateMetrics = false;
                                 PTable pTable = lastQueryPlan.getTableRef().getTable();
                                 String schemaN = pTable.getSchemaName().toString();

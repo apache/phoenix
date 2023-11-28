@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.util;
 
+import java.sql.SQLException;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -36,10 +40,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.SQLException;
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Utility class for last ddl timestamp validation from the client.
@@ -136,7 +136,7 @@ public class ValidateLastDDLTimestampUtil {
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private static RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
-    getValidateDDLTimestampRequest(PhoenixConnection conn, List<TableRef> tableRefs,
+        getValidateDDLTimestampRequest(PhoenixConnection conn, List<TableRef> tableRefs,
                                         boolean isWritePath) throws TableNotFoundException {
 
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder

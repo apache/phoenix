@@ -953,14 +953,13 @@ public class MutationState implements SQLCloseable {
             long timestamp = result.getMutationTime();
             serverTimeStamp = timestamp;
 
-            /*
-             when last_ddl_timestamp validation is enabled,
+            /* when last_ddl_timestamp validation is enabled,
              we don't know if this table's cache result was force updated
-             during the validation, so always validate columns
-             */
+             during the validation, so always validate columns */
             if ((timestamp != QueryConstants.UNSET_TIMESTAMP && result.wasUpdated())
                     || this.validateLastDdlTimestamp) {
-                List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumns().size());
+                List<PColumn> columns
+                        = Lists.newArrayListWithExpectedSize(table.getColumns().size());
                 for (Map.Entry<ImmutableBytesPtr, RowMutationState>
                         rowEntry : rowKeyToColumnMap.entrySet()) {
                     RowMutationState valueEntry = rowEntry.getValue();
@@ -968,7 +967,9 @@ public class MutationState implements SQLCloseable {
                         Map<PColumn, byte[]> colValues = valueEntry.getColumnValues();
                         if (colValues != PRow.DELETE_MARKER) {
                             for (PColumn column : colValues.keySet()) {
-                                if (!column.isDynamic()) columns.add(column);
+                                if (!column.isDynamic()) {
+                                    columns.add(column);
+                                }
                             }
                         }
                     }
@@ -1219,9 +1220,9 @@ public class MutationState implements SQLCloseable {
             try {
                 ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
                         connection, tableRefs, true, true);
-            }
-            catch (StaleMetadataCacheException e) {
-                GlobalClientMetrics.GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.increment();
+            } catch (StaleMetadataCacheException e) {
+                GlobalClientMetrics
+                        .GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.increment();
                 MetaDataClient mc = new MetaDataClient(connection);
                 PName tenantId = connection.getTenantId();
                 LOGGER.debug("Force updating client metadata cache for {}",
