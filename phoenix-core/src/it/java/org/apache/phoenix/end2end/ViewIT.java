@@ -488,7 +488,8 @@ public class ViewIT extends SplitSystemCatalogIT {
             // Assert that in either case (local & global) that index from
             // physical table used for query on view.
             if (localIndex) {
-                assertEquals(fullTableName, explainPlanAttributes.getTableName());
+                assertEquals(fullIndexName1 + "(" + fullTableName + ")",
+                        explainPlanAttributes.getTableName());
                 assertEquals(" [1,1,100] - [1,2,109]",
                     explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
@@ -1026,6 +1027,8 @@ public class ViewIT extends SplitSystemCatalogIT {
         try (Connection conn = DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
             String viewIndexName1 = "I_" + generateUniqueName();
+            String schemaName = SchemaUtil.getSchemaNameFromFullName(viewName);
+            String viewIndexFullName1 = SchemaUtil.getTableName(schemaName, viewIndexName1);
             String viewIndexPhysicalName = MetaDataUtil.
                     getViewIndexPhysicalName(fullTableName);
             if (localIndex) {
@@ -1069,7 +1072,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 assertEquals("PARALLEL "
                         + (saltBuckets == null ? 1 : saltBuckets) + "-WAY",
                     explainPlanAttributes.getIteratorTypeAndScanSize());
-                assertEquals(fullTableName,
+                assertEquals(viewIndexFullName1 + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,51]", explainPlanAttributes.getKeyRanges());
                 assertEquals("SERVER FILTER BY FIRST KEY ONLY",
@@ -1097,6 +1100,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             }
 
             String viewIndexName2 = "I_" + generateUniqueName();
+            String viewIndexFullName2 = SchemaUtil.getTableName(schemaName, viewIndexName2);
             if (localIndex) {
                 stmt.execute("CREATE LOCAL INDEX " + viewIndexName2 + " on "
                         + viewName + "(s)");
@@ -1137,7 +1141,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 physicalTableName = fullTableName;
                 assertEquals("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets)
                     + "-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-                assertEquals(fullTableName,
+                assertEquals(viewIndexFullName2 + "(" + fullTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [" + (2) + ",'foo']",
                     explainPlanAttributes.getKeyRanges());

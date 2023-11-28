@@ -349,7 +349,7 @@ public class IndexToolIT extends BaseTest {
                 explainPlanAttributes.getExplainScanType());
             final String expectedTableName;
             if (localIndex) {
-                expectedTableName = dataTableFullName;
+                expectedTableName = indexTableFullName + "(" + dataTableFullName + ")";
             } else {
                 expectedTableName = indexTableFullName;
             }
@@ -826,8 +826,10 @@ public class IndexToolIT extends BaseTest {
         String expectedExplainPlan;
         if (localIndex) {
             expectedExplainPlan = String.format(" RANGE SCAN OVER %s [1,",
-                normalizeTableNames ? SchemaUtil.normalizeIdentifier(dataTableFullName)
-                        : dataTableFullName);
+                    normalizeTableNames ?
+                            SchemaUtil.normalizeIdentifier(indexTableFullName) + "(" +
+                                    SchemaUtil.normalizeIdentifier(dataTableFullName) + ")":
+                            indexTableFullName + "(" + dataTableFullName + ")");
         } else {
             expectedExplainPlan = String.format(" RANGE SCAN OVER %s",
                 normalizeTableNames ? SchemaUtil.normalizeIdentifier(indexTableFullName)

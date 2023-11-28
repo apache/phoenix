@@ -197,8 +197,8 @@ public class IndexExtendedIT extends BaseTest {
             explainPlanAttributes =
                 plan.getPlanStepsAsAttributes();
             //assert we are pulling from index table.
-            String expectedTableName = localIndex ? dataTableFullName
-                : indexTableFullName;
+            String expectedTableName = localIndex ?
+                    indexTableFullName + "(" + dataTableFullName + ")" : indexTableFullName;
             assertEquals(expectedTableName,
                 explainPlanAttributes.getTableName());
 

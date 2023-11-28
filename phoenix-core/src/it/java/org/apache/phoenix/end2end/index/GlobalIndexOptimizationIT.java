@@ -79,7 +79,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
             ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             String expected =
                     "DELETE ROWS CLIENT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableName +" [1,*] - [1,100]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +
+                            indexTableName+"L" + "(" + dataTableName + ") [1,*] - [1,100]\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "CLIENT MERGE SORT";
             String actual = QueryUtil.getExplainPlan(rs);
