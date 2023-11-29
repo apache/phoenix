@@ -26,6 +26,7 @@ import java.sql.Statement;
 
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -453,73 +454,73 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
               + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
       stmt.execute("CREATE VIEW " + view01
               + " (VCOL1 INTEGER NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
-              + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+              + " AS SELECT * FROM " + tableName + " WHERE COL2 = 'col2'");
       stmt.execute("CREATE VIEW " + view02
               + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
               + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 1");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+              + " (col1, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+              + " (col1, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0004', 2, 'col3_04', 'col4_04', 'col5_04')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0005', -2, 'col3_05', 'col4_05', 'col5_05')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0006', -1, 'col3_06', 'col4_06', 'col5_06')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0007', 1, 'col3_07', 'col4_07', 'col5_07')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01);
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(1, rs.getInt(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(1, rs.getInt(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(1, rs.getInt(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals("0004", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(2, rs.getInt(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals("0005", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(-2, rs.getInt(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals("0006", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(-1, rs.getInt(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(1, rs.getInt(3));
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
+      rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
       Assert.assertTrue(rs.next());
 
       Assert.assertEquals("0001", rs.getString(1));
@@ -570,73 +571,73 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
               + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
       stmt.execute("CREATE VIEW " + view01
               + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
-              + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+              + " AS SELECT * FROM " + tableName + " WHERE COL2 = 'col2'");
       stmt.execute("CREATE VIEW " + view02
               + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
               + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+              + " (col1, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+              + " (col1, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01);
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals("0004", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol2", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals("0005", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol-2", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals("0006", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol-1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
+      rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
       Assert.assertTrue(rs.next());
 
       Assert.assertEquals("0001", rs.getString(1));
@@ -672,53 +673,53 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       Assert.assertFalse(rs.next());
 
       rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY "
-              + "VCOL1 DESC, COL2 ASC");
+              + "VCOL1 DESC, COL1 ASC");
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals("0004", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol2", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals("0005", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol-2", rs.getString(3));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals("0006", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol-1", rs.getString(3));
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02
+      rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02
               + " ORDER BY VCOL2 DESC, VCOL1 DESC");
 
       Assert.assertTrue(rs.next());
@@ -771,73 +772,73 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
               + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))");
       stmt.execute("CREATE VIEW " + view01
               + " (VCOL1 DOUBLE NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
-              + " AS SELECT * FROM " + tableName + " WHERE COL1 = 'col1'");
+              + " AS SELECT * FROM " + tableName + " WHERE COL2 = 'col2'");
       stmt.execute("CREATE VIEW " + view02
               + " (VCOL2 CHAR(10) NOT NULL, COL6 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL2))"
               + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 234.75");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+              + " (col1, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+              + " (col1, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0004', 236.49, 'col3_04', 'col4_04', 'col5_04')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0005', 17.053, 'col3_05', 'col4_05', 'col5_05')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0006', 98.8452, 'col3_06', 'col4_06', 'col5_06')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0007', 234.75, 'col3_07', 'col4_07', 'col5_07')");
       conn.commit();
 
       ResultSet rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01);
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals("0004", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(236.49, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals("0005", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(17.053, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals("0006", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(98.8452, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
+      rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
       Assert.assertTrue(rs.next());
 
       Assert.assertEquals("0001", rs.getString(1));
@@ -873,53 +874,53 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       Assert.assertFalse(rs.next());
 
       rs = stmt.executeQuery("SELECT COL1, COL2, VCOL1 FROM " + view01 + " ORDER BY "
-              + "VCOL1 DESC, COL2 ASC");
+              + "VCOL1 DESC, COL1 ASC");
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0004", rs.getString(2));
+      Assert.assertEquals("0004", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(236.49, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(234.75, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0006", rs.getString(2));
+      Assert.assertEquals("0006", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(98.8452, rs.getDouble(3), 0);
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0005", rs.getString(2));
+      Assert.assertEquals("0005", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals(17.053, rs.getDouble(3), 0);
 
       Assert.assertFalse(rs.next());
 
-      rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02
+      rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02
               + " ORDER BY VCOL2 DESC, VCOL1 DESC");
 
       Assert.assertTrue(rs.next());
@@ -970,11 +971,11 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 ASC, COL2 DESC))");
+              + " (COL1 CHAR(5) NOT NULL, COL2 CHAR(10) NOT NULL, COL3 VARCHAR,"
+              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 DESC, COL2 ASC))");
       stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM " + tableName
-              + " WHERE COL1 = 'col1'");
+              + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1))"
+              + " AS SELECT * FROM " + tableName + " WHERE COL2 = 'col2'");
       stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)"
               + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
       stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
@@ -983,24 +984,24 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
               + "(COL1, COL2, COL3)");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+              + " (col1, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+              + " (col1, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
       conn.commit();
 
-      ResultSet rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
+      ResultSet rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
 
       Assert.assertTrue(rs.next());
 
@@ -1048,8 +1049,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0008", rs.getString(2));
+      Assert.assertEquals("0008", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1059,8 +1060,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("col3_07", rs.getString(3));
       Assert.assertEquals("col4_07", rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1070,8 +1071,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1081,8 +1082,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1092,8 +1093,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1108,8 +1109,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0008", rs.getString(2));
+      Assert.assertEquals("0008", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1119,8 +1120,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1135,15 +1136,15 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0008", rs.getString(2));
+      Assert.assertEquals("0008", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
       Assert.assertEquals("col6_02", rs.getString(4));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("col1", rs.getString(1));
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("col2", rs.getString(2));
       Assert.assertEquals("vcol1", rs.getString(3));
       Assert.assertEquals("col6_02", rs.getString(4));
 
@@ -1163,11 +1164,12 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
       final Statement stmt = conn.createStatement();
 
       stmt.execute("CREATE TABLE " + tableName
-              + " (COL1 TIMESTAMP NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 ASC, COL2 DESC))");
+              + " (COL1 CHAR(5) NOT NULL, COL2 TIMESTAMP NOT NULL, COL3 VARCHAR,"
+              + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1 DESC, COL2 ASC))");
       stmt.execute("CREATE VIEW " + view01
-              + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM " + tableName
-              + " WHERE COL1 = TO_TIMESTAMP('2023-01-20 00:10:00')");
+              + " (VCOL1 CHAR(8) NOT NULL, COL5 VARCHAR CONSTRAINT pk PRIMARY KEY(VCOL1 DESC))"
+              + " AS SELECT * FROM " + tableName
+              + " WHERE COL2 = TO_TIMESTAMP('2023-01-20 00:10:00')");
       stmt.execute("CREATE VIEW " + view02 + " (VCOL2 CHAR(10), COL6 VARCHAR)"
               + " AS SELECT * FROM " + view01 + " WHERE VCOL1 = 'vcol1'");
       stmt.execute("CREATE INDEX " + index_view01 + " ON " + view01 + " (COL5) INCLUDE "
@@ -1176,24 +1178,24 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
               + "(COL1, COL2, COL3)");
 
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
+              + " (col1, vcol2, col5, col6) values ('0001', 'vcol2_01', 'col5_01', 'col6_01')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0002', 'vcol2_02', 'col5_02', 'col6_02')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+              + " (col1, vcol2, col5, col6) values ('0003', 'vcol2_03', 'col5_03', 'col6_03')");
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0004', 'vcol2', 'col3_04', 'col4_04', 'col5_04')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0005', 'vcol-2', 'col3_05', 'col4_05', 'col5_05')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0006', 'vcol-1', 'col3_06', 'col4_06', 'col5_06')");
-      stmt.execute("UPSERT INTO " + view01 + " (col2, vcol1, col3, col4, col5) values "
+      stmt.execute("UPSERT INTO " + view01 + " (col1, vcol1, col3, col4, col5) values "
               + "('0007', 'vcol1', 'col3_07', 'col4_07', 'col5_07')");
       stmt.execute("UPSERT INTO " + view02
-              + " (col2, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
+              + " (col1, vcol2, col5, col6) values ('0008', 'vcol2_08', 'col5_08', 'col6_02')");
       conn.commit();
 
-      ResultSet rs = stmt.executeQuery("SELECT COL2, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
+      ResultSet rs = stmt.executeQuery("SELECT COL1, VCOL1, VCOL2, COL5, COL6 FROM " + view02);
 
       Assert.assertTrue(rs.next());
 
@@ -1241,8 +1243,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0008", rs.getString(2));
+      Assert.assertEquals("0008", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1252,8 +1254,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0007", rs.getString(2));
+      Assert.assertEquals("0007", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertEquals("col3_07", rs.getString(3));
       Assert.assertEquals("col4_07", rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1263,8 +1265,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0003", rs.getString(2));
+      Assert.assertEquals("0003", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1274,8 +1276,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1285,8 +1287,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0001", rs.getString(2));
+      Assert.assertEquals("0001", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1301,8 +1303,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0008", rs.getString(2));
+      Assert.assertEquals("0008", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1312,8 +1314,8 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertNull(rs.getString(3));
       Assert.assertNull(rs.getString(4));
       Assert.assertEquals("vcol1", rs.getString(5));
@@ -1328,15 +1330,15 @@ public class DescOrderKeysIT extends ParallelStatsDisabledIT {
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0008", rs.getString(2));
+      Assert.assertEquals("0008", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertEquals("vcol1", rs.getString(3));
       Assert.assertEquals("col6_02", rs.getString(4));
 
       Assert.assertTrue(rs.next());
 
-      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(1).toInstant().toString());
-      Assert.assertEquals("0002", rs.getString(2));
+      Assert.assertEquals("0002", rs.getString(1));
+      Assert.assertEquals("2023-01-20T00:10:00Z", rs.getTimestamp(2).toInstant().toString());
       Assert.assertEquals("vcol1", rs.getString(3));
       Assert.assertEquals("col6_02", rs.getString(4));
 

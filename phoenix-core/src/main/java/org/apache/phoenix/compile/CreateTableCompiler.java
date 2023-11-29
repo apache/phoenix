@@ -272,9 +272,9 @@ public class CreateTableCompiler {
 
         ConnectionQueryServices queryServices = connection.getQueryServices();
         Configuration config = queryServices.getConfiguration();
-        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config) ?
-                SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
-                SYSTEM_CHILD_LINK_NAME_BYTES;
+        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config)
+                ? SYSTEM_CHILD_LINK_NAMESPACE_BYTES
+                : SYSTEM_CHILD_LINK_NAME_BYTES;
         try (Table childLinkTable = queryServices.getTable(systemChildLinkTable)) {
             List<PTable> legitimateSiblingViewList =
                     ViewUtil.findAllDescendantViews(childLinkTable, config, parentTenantIdInBytes,
