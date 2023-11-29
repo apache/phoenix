@@ -132,10 +132,22 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
         scanner.close();
         return numMatchingRows;
     }
+
     private void createMultiTenantTable(Connection conn, String tableName) throws Exception {
         String ddl = "CREATE TABLE " + tableName +
                 " (TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT CONSTRAINT " +
                 "PK PRIMARY KEY (TENANT_ID,ID)) MULTI_TENANT=true, COLUMN_ENCODED_BYTES = 0";
+
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(ddl);
+        }
+    }
+
+    private void createMultiTenantTableForUpdatableView(Connection conn, String tableName) throws Exception {
+        String ddl = "CREATE TABLE " + tableName +
+                " (TENANT_ID CHAR(10) NOT NULL, ID CHAR(10) NOT NULL, NUM BIGINT NOT NULL " +
+                "CONSTRAINT PK PRIMARY KEY (TENANT_ID,ID,NUM))" +
+                " MULTI_TENANT=true, COLUMN_ENCODED_BYTES = 0";
 
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(ddl);
@@ -604,7 +616,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
              Connection tenant1Connection =
                      PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant1)) {
 
-            createMultiTenantTable(globalConn, baseTableFullName);
+            createMultiTenantTableForUpdatableView(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE NUM = 1";
@@ -670,7 +682,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
              Connection tenant2Connection =
                      PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
-            createMultiTenantTable(globalConn, baseTableFullName);
+            createMultiTenantTableForUpdatableView(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE NUM = %d";
@@ -748,7 +760,7 @@ public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
              Connection tenant2Connection =
                      PhoenixMultiInputUtil.buildTenantConnection(getUrl(), tenant2)) {
 
-            createMultiTenantTable(globalConn, baseTableFullName);
+            createMultiTenantTableForUpdatableView(globalConn, baseTableFullName);
             String ddl = "CREATE VIEW %s (PK1 BIGINT PRIMARY KEY, " +
                     "A BIGINT, B BIGINT, C BIGINT, D BIGINT)" +
                     " AS SELECT * FROM " + baseTableFullName + " WHERE NUM = %d PHOENIX_TTL = %d";
