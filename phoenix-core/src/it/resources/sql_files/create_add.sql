@@ -23,8 +23,8 @@ UPSERT INTO my_schema.my_table values ('a','a_name');
 UPSERT INTO my_schema.my_table values ('b','b_name');
 
 CREATE VIEW IF NOT EXISTS my_table_view (entity_id VARCHAR) 
-                    AS SELECT * FROM  my_schema.my_table WHERE name='a_name';
-UPSERT INTO my_table_view (id, entity_id) values ('c', 'c_entity');
+                    AS SELECT * FROM  my_schema.my_table WHERE id='c';
+UPSERT INTO my_table_view (name, entity_id) values ('a_name', 'c_entity');
 
 CREATE TABLE IF NOT EXISTS my_schema.my_table_immutable 
                     (id VARCHAR NOT NULL PRIMARY KEY, name VARCHAR) IMMUTABLE_ROWS=true;

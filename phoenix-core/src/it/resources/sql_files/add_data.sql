@@ -17,11 +17,11 @@
  */
  
 UPSERT INTO my_schema.my_table values ('x','a_name');
-UPSERT INTO my_table_view (id, entity_id) VALUES ('y', 'y_entity');
+UPSERT INTO my_table_view (name, entity_id) VALUES ('y_name', 'y_entity');
 UPSERT INTO my_schema.my_table_immutable values ('x','x_name');
 
 CREATE VIEW IF NOT EXISTS my_table_second_view (entity_id VARCHAR) 
-                    AS SELECT * FROM  my_schema.my_table WHERE name='b_name';
-UPSERT INTO my_table_second_view (id, entity_id) values ('z', 'z_entity');
+                    AS SELECT * FROM  my_schema.my_table WHERE id='b';
+UPSERT INTO my_table_second_view (name, entity_id) values ('z_name', 'z_entity');
 
-UPSERT INTO my_table_view (id, entity_id) values ('d', 'd_entity');
+UPSERT INTO my_table_view (name, entity_id) values ('d_name', 'd_entity');
