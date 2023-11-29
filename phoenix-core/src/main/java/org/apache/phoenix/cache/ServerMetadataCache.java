@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -57,6 +59,7 @@ public class ServerMetadataCache {
     // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
     private final Cache<ImmutableBytesPtr, Long> lastDDLTimestampMap;
     private Connection connectionForTesting;
+    private MetricsMetadataCachingSource metricsSource;
 
     /**
      * Creates/gets an instance of ServerMetadataCache.
@@ -78,6 +81,8 @@ public class ServerMetadataCache {
 
     private ServerMetadataCache(Configuration conf) {
         this.conf = conf;
+        this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
+                                .getInstance().getMetadataCachingSource();
         long maxTTL = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS,
                 DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS);
         long maxSize = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE,
@@ -111,11 +116,12 @@ public class ServerMetadataCache {
         // Lookup in cache if present.
         Long lastDDLTimestamp = lastDDLTimestampMap.getIfPresent(tableKeyPtr);
         if (lastDDLTimestamp != null) {
+            metricsSource.incrementCacheHitCount();
             LOGGER.trace("Retrieving last ddl timestamp value from cache for tableName: {}",
                     fullTableNameStr);
             return lastDDLTimestamp;
         }
-
+        metricsSource.incrementCacheMissCount();
         PTable table;
         String tenantIDStr = Bytes.toString(tenantID);
         if (tenantIDStr == null || tenantIDStr.isEmpty()) {
