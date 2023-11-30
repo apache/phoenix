@@ -50,13 +50,12 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
-
-
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -120,6 +119,11 @@ import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
@@ -133,13 +137,6 @@ import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.VarBinaryFormatter;
-
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
  * 
@@ -162,7 +159,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     private final Long scn;
     private final boolean buildingIndex;
     private MutationState mutationState;
-    private List<PhoenixStatement> statements = new ArrayList<>();
+    private HashSet<PhoenixStatement> statements = new HashSet<>();
     private boolean isAutoFlush = false;
     private boolean isAutoCommit = false;
     private final PName tenantId;
@@ -720,17 +717,17 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     }
 
     private void closeStatements() throws SQLException {
-        List<? extends PhoenixStatement> statements = this.statements;
-        // create new list to prevent close of statements
-        // from modifying this list.
-        this.statements = Lists.newArrayList();
         try {
             mutationState.rollback();
         } catch (SQLException e) {
             // ignore any exceptions while rolling back
         } finally {
             try {
-                SQLCloseables.closeAll(statements);
+                // create new set to prevent close of statements from modifying this collection.
+                // TODO This could be optimized out by decoupling closing the stmt and removing it
+                // from the connection.
+                HashSet<? extends PhoenixStatement> statementsCopy = new HashSet<>(this.statements);
+                SQLCloseables.closeAll(statementsCopy);
             } finally {
                 statements.clear();
             }
@@ -784,15 +781,13 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 clearMetrics();
             }
             try {
-                if (traceScope != null) {
-                    traceScope.close();
-                }
                 closeStatements();
                 if (childConnections != null) {
                     SQLCloseables.closeAllQuietly(childConnections);
                 }
-
-
+                if (traceScope != null) {
+                    traceScope.close();
+                }
             } finally {
                 services.removeConnection(this);
             }
@@ -866,10 +861,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     @Override
     public SQLXML createSQLXML() throws SQLException {
         throw new SQLFeatureNotSupportedException();
-    }
-
-    public List<PhoenixStatement> getStatements() {
-        return statements;
     }
 
     @Override
@@ -1360,20 +1351,24 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         this.traceScope = traceScope;
     }
 
+    @Override
     public Map<String, Map<MetricType, Long>> getMutationMetrics() {
         return mutationState.getMutationMetricQueue().aggregate();
     }
 
+    @Override
     public Map<String, Map<MetricType, Long>> getReadMetrics() {
         return mutationState.getReadMetricQueue() != null ? mutationState
                 .getReadMetricQueue().aggregate() : Collections
                 .<String, Map<MetricType, Long>> emptyMap();
     }
 
+    @Override
     public boolean isRequestLevelMetricsEnabled() {
         return isRequestLevelMetricsEnabled;
     }
 
+    @Override
     public void clearMetrics() {
         mutationState.getMutationMetricQueue().clearMetrics();
         if (mutationState.getReadMetricQueue() != null) {
