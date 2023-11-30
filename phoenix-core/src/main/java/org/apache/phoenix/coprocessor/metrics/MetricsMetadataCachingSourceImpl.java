@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
+import org.apache.hadoop.metrics2.MetricHistogram;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 
 /**
@@ -30,6 +31,8 @@ public class MetricsMetadataCachingSourceImpl
     private final MutableFastCounter cacheHitCounter;
     private final MutableFastCounter cacheMissCounter;
     private final MutableFastCounter validateDDLTimestampRequestCounter;
+    private final MetricHistogram cacheInvalidationRpcTimeHistogram;
+    private final MetricHistogram cacheInvalidationTotalTimeHistogram;
 
     public MetricsMetadataCachingSourceImpl() {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
@@ -46,6 +49,10 @@ public class MetricsMetadataCachingSourceImpl
                 METADATA_VALIDATION_CACHE_MISS, METADATA_VALIDATION_CACHE_MISS_DESC, 0L);
         validateDDLTimestampRequestCounter = getMetricsRegistry().newCounter(
                 VALIDATE_DDL_TIMESTAMP_REQUESTS, VALIDATE_DDL_TIMESTAMP_REQUEST_DESC, 0L);
+        cacheInvalidationRpcTimeHistogram = getMetricsRegistry().newHistogram(
+                CACHE_INVALIDATION_RPC_TIME, CACHE_INVALIDATION_RPC_TIME_DESC);
+        cacheInvalidationTotalTimeHistogram = getMetricsRegistry().newHistogram(
+                CACHE_INVALIDATION_TOTAL_TIME, CACHE_INVALIDATION_TOTAL_TIME_DESC);
     }
 
     @Override
@@ -61,5 +68,17 @@ public class MetricsMetadataCachingSourceImpl
     @Override
     public void incrementValidateTimestampRequestCount() {
         validateDDLTimestampRequestCounter.incr();
+    }
+
+    @Override
+    public void addCacheInvalidationRpcTime(long t) {
+        System.out.println("adding to cache inv rpc time hist = " + t);
+        cacheInvalidationRpcTimeHistogram.add(t);
+    }
+
+    @Override
+    public void addCacheInvalidationTotalTime(long t) {
+        System.out.println("adding to cache inv total time hist = " + t);
+        cacheInvalidationTotalTimeHistogram.add(t);
     }
 }

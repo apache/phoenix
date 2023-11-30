@@ -42,6 +42,13 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String VALIDATE_DDL_TIMESTAMP_REQUESTS = "validateDDLTimestampRequests";
     String VALIDATE_DDL_TIMESTAMP_REQUEST_DESC = "Number of validate ddl timestamp requests.";
 
+    String CACHE_INVALIDATION_RPC_TIME = "cacheInvalidationRpcTime";
+    String CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for " +
+                                            "cache invalidation RPC";
+    String CACHE_INVALIDATION_TOTAL_TIME = "cacheInvalidationTotalTime";
+    String CACHE_INVALIDATION_TOTAL_TIME_DESC = "Histogram for the total time in milliseconds for " +
+            "cache invalidation on all regionservers";
+
     /**
      * Report the number of cache hits when validating last ddl timestamps.
      */
@@ -56,4 +63,15 @@ public interface MetricsMetadataCachingSource extends BaseSource {
      * Report the number of requests for validating last ddl timestamps.
      */
     void incrementValidateTimestampRequestCount();
+
+    /**
+     * Add to the cache invalidation rpc time histogram.
+     */
+    void addCacheInvalidationRpcTime(long t);
+
+    /**
+     * Add to the cache invalidation total time histogram.
+     * @param t
+     */
+    void addCacheInvalidationTotalTime(long t);
 }
