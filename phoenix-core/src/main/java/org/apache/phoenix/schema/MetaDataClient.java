@@ -99,6 +99,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
@@ -129,6 +130,7 @@ import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -354,8 +356,9 @@ public class MetaDataClient {
                     SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME + "," +
                     INDEX_WHERE +
+                    MAX_LOOKBACK_AGE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -2111,6 +2114,7 @@ public class MetaDataClient {
 
             String schemaVersion = (String) TableProperty.SCHEMA_VERSION.getValue(tableProps);
             String streamingTopicName = (String) TableProperty.STREAMING_TOPIC_NAME.getValue(tableProps);
+            Long maxLookbackAge = (Long) TableProperty.MAX_LOOKBACK_AGE.getValue(tableProps);
 
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
@@ -2895,6 +2899,7 @@ public class MetaDataClient {
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
+                        .setMaxLookbackAge(DEFAULT_PHOENIX_MAX_LOOKBACK_AGE)
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
@@ -3153,6 +3158,7 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setNull(36, Types.VARCHAR);
             }
+            tableUpsert.setLong(37, maxLookbackAge);
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {

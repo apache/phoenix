@@ -83,6 +83,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
@@ -91,6 +92,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -369,6 +371,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
 
+    private static final Cell MAX_LOOKBACK_AGE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
+
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
             TABLE_TYPE_KV,
@@ -408,7 +412,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             SCHEMA_VERSION_KV,
             EXTERNAL_SCHEMA_ID_KV,
             STREAMING_TOPIC_NAME_KV,
-            INDEX_WHERE_KV
+            INDEX_WHERE_KV,
+            MAX_LOOKBACK_AGE_KV
     );
 
     static {
@@ -458,6 +463,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     private static final int INDEX_WHERE_INDEX =
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
+
+    private static final int MAX_LOOKBACK_AGE_INDEX = TABLE_KV_COLUMNS.indexOf(MAX_LOOKBACK_AGE_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1436,6 +1443,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 : null;
         builder.setIndexWhere(indexWhere != null ? indexWhere
                 : oldTable != null ? oldTable.getIndexWhere() : null);
+
+        Cell maxLookbackAgeKv = tableKeyValues[MAX_LOOKBACK_AGE_INDEX];
+        long maxLookbackAge = maxLookbackAgeKv == null ? DEFAULT_PHOENIX_MAX_LOOKBACK_AGE :
+                PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
+                        maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :

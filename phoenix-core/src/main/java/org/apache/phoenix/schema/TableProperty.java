@@ -25,6 +25,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -335,6 +336,30 @@ public enum TableProperty {
 
         @Override public Object getPTableValue(PTable table) {
             return table.getStreamingTopicName();
+        }
+    },
+
+    MAX_LOOKBACK_AGE(PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE, true, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
+            }
+            else if (value instanceof Integer || value instanceof Long) {
+                long maxLookbackAge = ((Number) value).longValue();
+                if (maxLookbackAge < 0L) {
+                    throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be non-negative value in milli-seconds");
+                }
+                return maxLookbackAge;
+            }
+            else {
+                throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be a numeric value in milli-seconds");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getMaxLookbackAge();
         }
     };
 

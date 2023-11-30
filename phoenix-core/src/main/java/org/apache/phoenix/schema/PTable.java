@@ -997,6 +997,8 @@ public interface PTable extends PMetaDataEntity {
      * @throws SQLException
      */
     Set<ColumnReference> getIndexWhereColumns(PhoenixConnection connection) throws SQLException;
+
+    long getMaxLookbackAge();
     /**
      * Class to help track encoded column qualifier counters per column family.
      */

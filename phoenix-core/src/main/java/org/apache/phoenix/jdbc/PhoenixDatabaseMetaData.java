@@ -433,6 +433,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String SYSTEM_TRANSFORM_TABLE = "TRANSFORM";
     public static final String SYSTEM_TRANSFORM_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TRANSFORM_TABLE);
+    public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
+    public static final byte[] MAX_LOOKBACK_AGE_BYTES = Bytes.toBytes(MAX_LOOKBACK_AGE);
+    public static final long MAX_LOOKBACK_AGE_NOT_DEFINED = 0L;
 
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
