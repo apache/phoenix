@@ -41,13 +41,10 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
     public void testSalted() throws Exception { 
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-   
-        try {
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             String table = createSalted(conn);
             testTable(conn, table);
-        } finally {
-            conn.close();
         }
     }
     
@@ -168,36 +165,39 @@ public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
         String hashQuery = getQuery(table, true, swap, sort);
         String sortQuery = getQuery(table, false, swap, sort);
         Statement stmt = conn.createStatement();
-        ResultSet hrs = stmt.executeQuery(hashQuery);
-        ResultSet srs = stmt.executeQuery(sortQuery);
 
-        try {
+        try (ResultSet hrs = stmt.executeQuery(hashQuery);) {
             if (c1 > 0) {
                 assertTrue(hrs.next());
-                assertTrue(srs.next());
-                assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-                assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-                assertEquals(hrs.getInt("c"), srs.getInt("c"));
                 assertEquals(hrs.getInt("v1"), 1);
                 assertEquals(hrs.getInt("v2"), 2);
                 assertEquals(hrs.getInt("c"), c1);
             }
             if (c2 > 0) {
                 assertTrue(hrs.next());
-                assertTrue(srs.next());
-                assertEquals(hrs.getInt("v1"), srs.getInt("v1"));
-                assertEquals(hrs.getInt("v2"), srs.getInt("v2"));
-                assertEquals(hrs.getInt("c"), srs.getInt("c"));
                 assertEquals(hrs.getInt("v1"), 2);
                 assertEquals(hrs.getInt("v2"), 1);
                 assertEquals(hrs.getInt("c"), c2);
             }
             assertFalse(hrs.next());
-            assertFalse(srs.next());
-        } finally {
-            hrs.close();
-            srs.close();
         }
+
+        try (ResultSet srs = stmt.executeQuery(sortQuery)) {
+            if (c1 > 0) {
+                assertTrue(srs.next());
+                assertEquals(srs.getInt("v1"), 1);
+                assertEquals(srs.getInt("v2"), 2);
+                assertEquals(srs.getInt("c"), c1);
+            }
+            if (c2 > 0) {
+                assertTrue(srs.next());
+                assertEquals(srs.getInt("v1"), 2);
+                assertEquals(srs.getInt("v2"), 1);
+                assertEquals(srs.getInt("c"), c2);
+            }
+            assertFalse(srs.next());
+        }
+
     }
 
     private void dropTable(Connection conn, String table) throws Exception {
