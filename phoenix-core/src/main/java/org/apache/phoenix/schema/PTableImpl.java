@@ -57,7 +57,6 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
@@ -80,7 +79,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-import javax.annotation.Nonnull;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -96,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import javax.annotation.Nonnull;
 
 import static org.apache.phoenix.compile.WhereCompiler.transformDNF;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.DYNAMIC_COLUMN_METADATA_STORED_FOR_MUTATION;
@@ -2015,7 +2014,7 @@ public class PTableImpl implements PTable {
 
         byte[] rowKeyPrefix = null;
         if (table.hasRowKeyPrefix()) {
-            rowKeyPrefix = PVarbinary.INSTANCE.toBytes(table.getRowKeyPrefix());
+            rowKeyPrefix = table.getRowKeyPrefix().toByteArray();
         }
 
         String indexWhere = null;
