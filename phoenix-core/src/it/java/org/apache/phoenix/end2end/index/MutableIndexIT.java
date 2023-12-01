@@ -116,7 +116,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             String query = "SELECT char_col1, int_col1, long_col2 from " + fullTableName;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName +" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName +
+                        "(" + fullTableName + ") [1]\nCLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
             }
@@ -183,7 +185,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             if(localIndex) {
                 query = "SELECT b.* from " + fullTableName + " where int_col1 = 4 AND char_col1 = 'chara'";
                 rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName +" [1,'chara',4]\n" +
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName +
+                                "(" + fullTableName + ") [1,'chara',4]\n" +
                         "    SERVER MERGE [B.VARCHAR_COL2, B.CHAR_COL2, B.INT_COL2, B.DECIMAL_COL2, B.DATE_COL]\n" +
                         "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
                 rs = conn.createStatement().executeQuery(query);
@@ -284,7 +287,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName +
+                        "(" + fullTableName + ") [1]\nCLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
             }
@@ -305,7 +310,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName + " [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +
+                        fullIndexName + "(" + fullTableName + ") [1]\nCLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
             }
@@ -326,7 +333,9 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\nCLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));            
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName +
+                        "(" + fullTableName + ") [1]\nCLIENT MERGE SORT",
+                        QueryUtil.getExplainPlan(rs));
             } else {
                 assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + fullIndexName, QueryUtil.getExplainPlan(rs));
             }
@@ -394,7 +403,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if (localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName +
+                        "(" + fullTableName + ") [1]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
             } else {
@@ -521,7 +531,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
             query = "SELECT * FROM " + fullTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             if(localIndex) {
-                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullTableName+" [1]\n"
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName +
+                                "(" + fullTableName + ") [1]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "CLIENT MERGE SORT",
                     QueryUtil.getExplainPlan(rs));

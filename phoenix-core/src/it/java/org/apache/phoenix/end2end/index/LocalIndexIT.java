@@ -386,6 +386,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testUseUncoveredLocalIndexWithPrefix() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -422,7 +423,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
         assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-        assertEquals(indexPhysicalTableName, explainPlanAttributes.getTableName());
+        assertEquals( fullIndexName+ "(" + indexPhysicalTableName + ")",
+                explainPlanAttributes.getTableName());
         assertEquals(" [1,3,4]", explainPlanAttributes.getKeyRanges());
         assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
@@ -454,7 +456,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
         assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-        assertEquals(physicalTableName.toString(), explainPlanAttributes.getTableName());
+        assertEquals(fullIndexName+ "(" + indexPhysicalTableName + ")",
+                explainPlanAttributes.getTableName());
         assertEquals(" [1,3,4,3]", explainPlanAttributes.getKeyRanges());
         assertEquals("[0.V3]", explainPlanAttributes.getServerMergeColumns().toString());
         assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1",
@@ -467,6 +470,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testUseUncoveredLocalIndexWithSplitPrefix() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -485,7 +489,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT pk1, pk2, pk3, v1 FROM " + tableName + " WHERE pk1 = 2 AND pk3 = 3");
         assertEquals(
             "CLIENT PARALLEL 16-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1,2,3]\n"
+                    + fullIndexName +  "(" + indexPhysicalTableName + ") [1,2,3]\n"
                     + "    SERVER MERGE [0.V1]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "CLIENT MERGE SORT",
@@ -497,6 +501,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testUseUncoveredLocalIndex() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -514,7 +519,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT COUNT(*) FROM " + tableName);
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1]\n"
+                    + fullIndexName + "(" + indexPhysicalTableName + ") [1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "    SERVER AGGREGATE INTO SINGLE ROW",
                     QueryUtil.getExplainPlan(rs));
@@ -531,7 +536,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " ORDER BY v2");
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1]\n"
+                    + fullIndexName + "(" + indexPhysicalTableName + ") [1]\n"
                             + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT",
@@ -552,7 +557,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 ORDER BY v3");
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1,2]\n"
+                    + fullIndexName + "(" + indexPhysicalTableName + ") [1,2]\n"
                             + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT",
@@ -581,7 +586,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2");
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1,2]\n"
+                    + fullIndexName + "(" + indexPhysicalTableName + ") [1,2]\n"
                             + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY\n"
                             + "CLIENT MERGE SORT",
@@ -592,7 +597,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v4 = 4");
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1,2]\n"
+                    + fullIndexName + "(" + indexPhysicalTableName + ") [1,2]\n"
                             + "    SERVER MERGE [0.V1]\n"
                             + "    SERVER FILTER BY FIRST KEY ONLY AND TO_INTEGER(\"V4\") = 4\n"
                             + "CLIENT MERGE SORT",
@@ -603,7 +608,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3");
         assertEquals(
             "CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-                    + indexPhysicalTableName + " [1,2]\n"
+                    + fullIndexName + "(" + indexPhysicalTableName + ") [1,2]\n"
                     + "    SERVER MERGE [0.V1]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0\n"
                     + "CLIENT MERGE SORT",
@@ -794,6 +799,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testLocalIndexUsedForUncoveredOrderBy() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -814,7 +820,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [1]\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1]\n"
                                 + "    SERVER MERGE [0.K3]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
@@ -837,7 +843,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             rs = conn1.createStatement().executeQuery("EXPLAIN "+ query);
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [1]\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1]\n"
                                 + "    SERVER MERGE [0.K3]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
@@ -863,6 +869,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testLocalIndexReverseScanShouldReturnAllRows() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -883,7 +890,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [1]\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
                         QueryUtil.getExplainPlan(rs));
@@ -908,6 +915,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     public void testLocalIndexScanJoinColumnsFromDataTable() throws Exception {
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         String indexTableName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), isNamespaceMapped);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
@@ -933,7 +941,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName + " [1,'a']\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1,'a']\n"
                                 + "    SERVER MERGE [0.K3]\n"
                                 + "    SERVER FILTER BY FIRST KEY ONLY\n"
                                 + "CLIENT MERGE SORT",
@@ -957,7 +965,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [1,*] - [1,'z']\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1,*] - [1,'z']\n"
                         + "    SERVER MERGE [0.K3]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                          + "CLIENT MERGE SORT",
@@ -994,7 +1002,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [1,*] - [1,'z']\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1,*] - [1,'z']\n"
                         + "    SERVER MERGE [0.K3]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\nCLIENT MERGE SORT",
@@ -1023,7 +1031,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
             rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
             assertEquals(
                 "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER "
-                        + indexPhysicalTableName +" [1,*] - [1,'z']\n"
+                        + fullIndexName + "(" + indexPhysicalTableName + ") [1,*] - [1,'z']\n"
                         + "    SERVER MERGE [0.K3]\n"
                         + "    SERVER FILTER BY FIRST KEY ONLY\n"
                         + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]\nCLIENT MERGE SORT",
