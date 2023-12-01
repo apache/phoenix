@@ -3308,6 +3308,7 @@ public class MetaDataClient {
                         .setStreamingTopicName(streamingTopicName)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
+                        .setMaxLookbackAge(maxLookbackAge)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -3765,7 +3766,8 @@ public class MetaDataClient {
                 metaPropertiesEvaluated.getPhysicalTableName(),
                 metaPropertiesEvaluated.getSchemaVersion(),
                 metaPropertiesEvaluated.getColumnEncodedBytes(),
-                metaPropertiesEvaluated.getStreamingTopicName());
+                metaPropertiesEvaluated.getStreamingTopicName(),
+                metaPropertiesEvaluated.getMaxLookbackAge());
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional,
@@ -3773,7 +3775,7 @@ public class MetaDataClient {
                                        String schemaVersion, QualifierEncodingScheme columnEncodedBytes) throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null,
             updateCacheFrequency, null, null, null, null, -1L, null, null, null,phoenixTTL, false, physicalTableName,
-                schemaVersion, columnEncodedBytes, null);
+                schemaVersion, columnEncodedBytes, null, null);
     }
 
     private long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta,
@@ -3782,7 +3784,7 @@ public class MetaDataClient {
             Boolean isMultiTenant, Boolean storeNulls, Long guidePostWidth, Boolean appendOnlySchema,
             ImmutableStorageScheme immutableStorageScheme, Boolean useStatsForParallelization,
             Long phoenixTTL, Boolean isChangeDetectionEnabled, String physicalTableName, String schemaVersion,
-                                      QualifierEncodingScheme columnEncodedBytes, String streamingTopicName)
+                                      QualifierEncodingScheme columnEncodedBytes, String streamingTopicName, Long maxLookbackAge)
             throws SQLException {
         String schemaName = table.getSchemaName().getString();
         String tableName = table.getTableName().getString();
@@ -3852,6 +3854,9 @@ public class MetaDataClient {
         }
         if (!Strings.isNullOrEmpty(streamingTopicName)) {
             mutateStringProperty(connection, tenantId, schemaName, tableName, STREAMING_TOPIC_NAME, streamingTopicName);
+        }
+        if (maxLookbackAge != null) {
+            mutateLongProperty(connection, tenantId, schemaName, tableName, MAX_LOOKBACK_AGE, maxLookbackAge);
         }
         return seqNum;
     }
@@ -5360,6 +5365,8 @@ public class MetaDataClient {
                         metaProperties.setSchemaVersion((String) value);
                     } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
                         metaProperties.setStreamingTopicName((String) value);
+                    } else if (propName.equalsIgnoreCase(MAX_LOOKBACK_AGE)) {
+                        metaProperties.setMaxLookbackAge((Long) value);
                     }
                 }
                 // if removeTableProps is true only add the property if it is not an HTable or Phoenix Table property
@@ -5568,6 +5575,11 @@ public class MetaDataClient {
             }
         }
 
+        if (metaProperties.getMaxLookbackAge().longValue() != table.getMaxLookbackAge()) {
+            metaPropertiesEvaluated.setMaxLookbackAge(metaProperties.getMaxLookbackAge());
+            changingPhoenixTableProperty = true;
+        }
+
         return changingPhoenixTableProperty;
     }
 
@@ -5591,6 +5603,8 @@ public class MetaDataClient {
         private String physicalTableName = null;
         private String schemaVersion = null;
         private String streamingTopicName = null;
+
+        private Long maxLookbackAge = null;
 
         public Boolean getImmutableRowsProp() {
             return isImmutableRowsProp;
@@ -5739,6 +5753,14 @@ public class MetaDataClient {
         public void setStreamingTopicName(String streamingTopicName) {
             this.streamingTopicName = streamingTopicName;
         }
+
+        public Long getMaxLookbackAge() {
+            return maxLookbackAge;
+        }
+
+        public void setMaxLookbackAge(Long maxLookbackAge) {
+            this.maxLookbackAge = maxLookbackAge;
+        }
     }
 
     private static class MetaPropertiesEvaluated {
@@ -5759,6 +5781,8 @@ public class MetaDataClient {
         private String physicalTableName = null;
         private String schemaVersion = null;
         private String streamingTopicName = null;
+
+        private Long maxLookbackAge = null;
 
         public Boolean getIsImmutableRows() {
             return isImmutableRows;
@@ -5887,6 +5911,14 @@ public class MetaDataClient {
 
         public void setStreamingTopicName(String streamingTopicName) {
             this.streamingTopicName = streamingTopicName;
+        }
+
+        public Long getMaxLookbackAge() {
+            return maxLookbackAge;
+        }
+
+        public void setMaxLookbackAge(Long maxLookbackAge) {
+            this.maxLookbackAge = maxLookbackAge;
         }
     }
 

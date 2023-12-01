@@ -1545,6 +1545,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         physicalTables.add(PNameFactory.newName(parentPhysicalTableName));
                         setPhysicalName = true;
                         parentLogicalName = SchemaUtil.getTableName(parentTable.getSchemaName(), parentTable.getTableName());
+                        maxLookbackAge = parentTable.getMaxLookbackAge();
                     }
                 } else if (linkType == LinkType.PARENT_TABLE) {
                     parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(famName.getBytes()));
@@ -1579,6 +1580,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         builder.setIndexes(indexes != null ? indexes : oldTable != null
             ? oldTable.getIndexes() : Collections.<PTable>emptyList());
+
+        builder.setMaxLookbackAge(maxLookbackAge);
 
         if (physicalTables == null || physicalTables.size() == 0) {
             builder.setPhysicalNames(oldTable != null ? oldTable.getPhysicalNames()
