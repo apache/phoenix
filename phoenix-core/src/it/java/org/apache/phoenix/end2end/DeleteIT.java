@@ -225,7 +225,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
         if (createIndex) {
             if (local) {
                 conn.createStatement().execute("CREATE LOCAL INDEX IF NOT EXISTS " + localIndexName + " ON " + tableName + "(j)");
-                indexInUse = tableName;
+                indexInUse = localIndexName + "(" + tableName + ")";
             } else {
                 conn.createStatement().execute("CREATE INDEX IF NOT EXISTS " + indexName + " ON " + tableName + "(j)");
             }

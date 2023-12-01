@@ -201,6 +201,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
 		String indexName = "IND_" + generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, tableName);
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullIndexName = SchemaUtil.getTableName(SCHEMA2, indexName);
 
         try (Connection conn = getConnection();
              Connection conn1 = getTenantConnection("10")) {
@@ -249,7 +250,9 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             String sql = "SELECT * FROM " + fullViewName + " WHERE v2 = 100";
             ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
             assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + " [1,'10',100]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "(" +
+                        SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName),
+                                 isNamespaceMapped) + ") [1,'10',100]\n" +
                     "    SERVER MERGE [0.V1]\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
