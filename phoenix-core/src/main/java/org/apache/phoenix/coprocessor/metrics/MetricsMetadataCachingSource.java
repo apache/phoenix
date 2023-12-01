@@ -42,12 +42,19 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String VALIDATE_DDL_TIMESTAMP_REQUESTS = "validateDDLTimestampRequests";
     String VALIDATE_DDL_TIMESTAMP_REQUEST_DESC = "Number of validate ddl timestamp requests.";
 
+    String CACHE_INVALIDATION_OPERATIONS = "cacheInvalidationOperations";
+    String CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke cache invalidation " +
+                                                    "within a DDL operation";
+
+    String CACHE_INVALIDATION_SUCCESS = "cacheInvalidationSuccess";
+    String CACHE_INVALIDATION_SUCCESS_DESC = "Number of times cache invalidation was successful.";
+
     String CACHE_INVALIDATION_RPC_TIME = "cacheInvalidationRpcTime";
-    String CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for " +
-                                            "cache invalidation RPC";
+    String CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for "
+                                                + "cache invalidation RPC";
     String CACHE_INVALIDATION_TOTAL_TIME = "cacheInvalidationTotalTime";
-    String CACHE_INVALIDATION_TOTAL_TIME_DESC = "Histogram for the total time in milliseconds for " +
-            "cache invalidation on all regionservers";
+    String CACHE_INVALIDATION_TOTAL_TIME_DESC = "Histogram for the total time in milliseconds for "
+                                                    + "cache invalidation on all regionservers";
 
     /**
      * Report the number of cache hits when validating last ddl timestamps.
@@ -63,6 +70,16 @@ public interface MetricsMetadataCachingSource extends BaseSource {
      * Report the number of requests for validating last ddl timestamps.
      */
     void incrementValidateTimestampRequestCount();
+
+    /**
+     * Report number of cache invalidations performed.
+     */
+    void incrementCacheInvalidationOperationsCount();
+
+    /**
+     * Report number of cache invalidations which were successful.
+     */
+    void incrementCacheInvalidationSuccessCount();
 
     /**
      * Add to the cache invalidation rpc time histogram.
