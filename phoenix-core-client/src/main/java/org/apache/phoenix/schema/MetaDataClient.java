@@ -1036,7 +1036,17 @@ public class MetaDataClient {
         argUpsert.execute();
     }
 
-    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
+    public MutationState createTable(
+            CreateTableStatement statement,
+            byte[][] splits,
+            PTable parent,
+            String viewStatement,
+            ViewType viewType,
+            PDataType viewIndexIdType,
+            byte[] rowKeyPrefix,
+            byte[][] viewColumnConstants,
+            BitSet isViewColumnReferenced
+    ) throws SQLException {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
@@ -1101,9 +1111,23 @@ public class MetaDataClient {
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
-        table = createTableInternal(statement, splits, parent, viewStatement, viewType,
-                viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null,
-                null, null, tableProps, commonFamilyProps);
+        table = createTableInternal(
+                statement,
+                splits,
+                parent,
+                viewStatement,
+                viewType,
+                viewIndexIdType,
+                rowKeyPrefix,
+                viewColumnConstants,
+                isViewColumnReferenced,
+                false,
+                null,
+                null,
+                null,
+                tableProps,
+                commonFamilyProps
+        );
 
         if (table == null || table.getType() == PTableType.VIEW
                 || statement.isNoVerify() /*|| table.isTransactional()*/) {
@@ -1783,13 +1807,36 @@ public class MetaDataClient {
             PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
-            CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
-                    statement.getProps(), columnDefs, pk, statement.getSplitNodes(),
-                    PTableType.INDEX, statement.ifNotExists(), null,
-                    statement.getWhere(), statement.getBindCount(), null);
-            table = createTableInternal(tableStatement, splits, dataTable, null, null,
-                    getViewIndexDataType() ,null, null, allocateIndexId,
-                    statement.getIndexType(), asyncCreatedDate, null, tableProps, commonFamilyProps);
+            CreateTableStatement tableStatement = FACTORY.createTable(
+                    indexTableName,
+                    statement.getProps(),
+                    columnDefs,
+                    pk,
+                    statement.getSplitNodes(),
+                    PTableType.INDEX,
+                    statement.ifNotExists(),
+                    null,
+                    statement.getWhere(),
+                    statement.getBindCount(),
+                    null
+            );
+            table = createTableInternal(
+                    tableStatement,
+                    splits,
+                    dataTable,
+                    null,
+                    null,
+                    getViewIndexDataType(),
+                    null,
+                    null,
+                    null,
+                    allocateIndexId,
+                    statement.getIndexType(),
+                    asyncCreatedDate,
+                    null,
+                    tableProps,
+                    commonFamilyProps
+            );
         }
         finally {
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
@@ -1896,7 +1943,7 @@ public class MetaDataClient {
                 null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
-        createTableInternal(tableStatement, null, dataTable, null, null, null,
+        createTableInternal(tableStatement, null, dataTable, null, null, null, null,
                 null, null, false, null,
                 null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
         return new MutationState(0, 0, connection);
@@ -2240,13 +2287,22 @@ public class MetaDataClient {
         return parentName.getString().equals(view.getPhysicalName().getString());
     }
 
-    private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
-                                       final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-                                       final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
-                                       IndexType indexType, Date asyncCreatedDate,
-                                       Set<PTable.CDCChangeScope> cdcIncludeScopes,
-                                       Map<String, Object> tableProps,
-                                       Map<String, Object> commonFamilyProps) throws SQLException {
+    private PTable createTableInternal(
+            CreateTableStatement statement,
+            byte[][] splits,
+            final PTable parent,
+            String viewStatement,
+            ViewType viewType,
+            PDataType viewIndexIdType,
+            final byte[] rowKeyPrefix,
+            final byte[][] viewColumnConstants,
+            final BitSet isViewColumnReferenced,
+            boolean allocateIndexId,
+            IndexType indexType,
+            Date asyncCreatedDate,
+            Set<PTable.CDCChangeScope> cdcIncludeScopes,
+            Map<String, Object> tableProps,
+            Map<String, Object> commonFamilyProps) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         TableName tableNameNode = null;
@@ -2297,7 +2353,6 @@ public class MetaDataClient {
 
             Integer phoenixTTL = TTL_NOT_DEFINED;
             Integer phoenixTTLProp = (Integer) TableProperty.TTL.getValue(tableProps);
-            byte[] rowKeyPrefix = null;
 
             // Validate TTL prop value if set
             if (phoenixTTLProp != null) {
@@ -2666,11 +2721,9 @@ public class MetaDataClient {
                         // set to the parent value if the property is not set on the view
                         updateCacheFrequency = parent.getUpdateCacheFrequency();
                     }
-
                     if (viewType == ViewType.UPDATABLE) {
                         phoenixTTL = getTTLFromParent(parent);
                     }
-
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
                     // TODO PHOENIX-4766 Add an options to stop sending parent metadata when creating views
@@ -3145,6 +3198,8 @@ public class MetaDataClient {
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
                         .setLastDDLTimestamp(0L)
+                        .setRowKeyPrefix(rowKeyPrefix)
+                        .setTTL(TTL_NOT_DEFINED)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
                         .setTTL(TTL_NOT_DEFINED)
@@ -3423,8 +3478,7 @@ public class MetaDataClient {
             if (rowKeyPrefix == null) {
                 tableUpsert.setNull(38, Types.VARBINARY);
             } else {
-                //Need to update are we have Prefix Builder in place.
-                tableUpsert.setNull(38, Types.VARBINARY);
+                tableUpsert.setBytes(38, rowKeyPrefix);
             }
 
             tableUpsert.execute();

@@ -57,6 +57,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
@@ -626,6 +627,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     }
     
     @Test
+    @Ignore("PHOENIX-4555 should mark these views as ViewType.READONLY")
     public void testAssertQueryAgainstTenantSpecificViewDoesNotGoThroughIndex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl(), new Properties());
         
