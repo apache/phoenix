@@ -100,4 +100,9 @@ public class ChangePermsStatement implements BindableStatement {
     public PhoenixStatement.Operation getOperation() {
         return PhoenixStatement.Operation.ADMIN;
     }
+
+    @Override
+    public String getKeyword() {
+        return isGrantStatement ? "GRANT" : "REVOKE";
+    }
 }

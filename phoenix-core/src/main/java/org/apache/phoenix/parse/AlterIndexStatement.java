@@ -74,4 +74,9 @@ public class AlterIndexStatement extends SingleTableStatement {
     public ListMultimap<String,Pair<String,Object>> getProps() { return props; }
 
     public PTableType getTableType(){ return tableType; }
+
+    @Override
+    public String getKeyword() {
+        return "ALTER INDEX";
+    }
 }

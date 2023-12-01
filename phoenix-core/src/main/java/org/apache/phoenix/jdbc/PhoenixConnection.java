@@ -50,7 +50,6 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -67,9 +66,6 @@ import javax.annotation.Nullable;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
-import org.apache.htrace.Sampler;
-import org.apache.htrace.TraceScope;
-import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -119,12 +115,6 @@ import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -138,6 +128,17 @@ import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.VarBinaryFormatter;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
+
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
+import org.apache.phoenix.trace.NullScope;
+import org.apache.phoenix.trace.TraceUtil;
 /**
  * 
  * JDBC Connection implementation of Phoenix. Currently the following are
@@ -168,10 +169,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     private final String timePattern;
     private final String timestampPattern;
     private int statementExecutionCounter;
-    private TraceScope traceScope = null;
+    private Span manualTraceSpan;
     private volatile boolean isClosed = false;
     private volatile boolean isClosing = false;
-    private Sampler<?> sampler;
     private boolean readOnly = false;
     private Consistency consistency = Consistency.STRONG;
     private Map<String, String> customTracingAnnotations = emptyMap();
@@ -199,7 +199,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     private ConnectionActivityLogger connectionActivityLogger = ConnectionActivityLogger.NO_OP_LOGGER;
 
     static {
-        Tracing.addTraceMetricsSource();
         CONNECTION_PROPERTIES = PhoenixRuntime.getConnectionProperties();
     }
 
@@ -209,6 +208,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         return props;
     }
 
+    //TODO handle active Tracing span for copy constructors
     public PhoenixConnection(PhoenixConnection connection,
             boolean isDescRowKeyOrderUpgrade, boolean isRunningUpgrade)
                     throws SQLException {
@@ -218,7 +218,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 isRunningUpgrade, connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
-        this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
 
@@ -246,7 +245,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 connection.isRunningUpgrade(), connection.buildingIndex, true);
         this.isAutoCommit = connection.isAutoCommit;
         this.isAutoFlush = connection.isAutoFlush;
-        this.sampler = connection.sampler;
         this.statementExecutionCounter = connection.statementExecutionCounter;
     }
 
@@ -388,7 +386,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
             this.services.addConnection(this);
 
             // setup tracing, if its enabled
-            this.sampler = Tracing.getConfiguredSampler(this);
             this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
             this.scannerQueue = new LinkedBlockingQueue<>();
             this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
@@ -481,6 +478,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
      * @param connection
      */
     public void addChildConnection(PhoenixConnection connection) {
+        //TODO handle trace pan
         childConnections.add(connection);
     }
 
@@ -490,6 +488,7 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
      * @param connection
      */
     public void removeChildConnection(PhoenixConnection connection) {
+       //TODO handle trace span
         childConnections.remove(connection);
     }
 
@@ -501,14 +500,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     @VisibleForTesting
     public int getChildConnectionsCount() {
         return childConnections.size();
-    }
-
-    public Sampler<?> getSampler() {
-        return this.sampler;
-    }
-
-    public void setSampler(Sampler<?> sampler) throws SQLException {
-        this.sampler = sampler;
     }
 
     public Map<String, String> getCustomTracingAnnotations() {
@@ -781,12 +772,13 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 clearMetrics();
             }
             try {
+
                 closeStatements();
                 if (childConnections != null) {
                     SQLCloseables.closeAllQuietly(childConnections);
                 }
-                if (traceScope != null) {
-                    traceScope.close();
+                if (manualTraceSpan != null) {
+                    manualTraceSpan.end();
                 }
             } finally {
                 services.removeConnection(this);
@@ -819,18 +811,18 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     @Override
     public void commit() throws SQLException {
-        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
-            @Override
-            public Void call() throws SQLException {
-                checkOpen();
-                try {
-                    mutationState.commit();
-                } finally {
-                    mutationState.resetExecuteMutationTimeMap();
-                }
-                return null;
-            }
-        }, Tracing.withTracing(this, "committing mutations"));
+        checkOpen();
+        Span span = TraceUtil.createSpan(this, "committing mutations");
+        try (Scope ignored = span.makeCurrent()) {
+            mutationState.commit();
+            span.setStatus(StatusCode.OK);
+        } catch (Exception e) {
+            TraceUtil.setError(span, e);
+            throw e;
+        } finally {
+            span.end();
+            mutationState.resetExecuteMutationTimeMap();
+        }
         statementExecutionCounter = 0;
     }
 
@@ -1116,14 +1108,19 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     @Override
     public void rollback() throws SQLException {
-        CallRunner.run(new CallRunner.CallableThrowable<Void, SQLException>() {
-            @Override
-            public Void call() throws SQLException {
-                checkOpen();
+        if (!mutationState.isEmpty()) {
+            checkOpen();
+            Span span = TraceUtil.createSpan(this, "rolling back");
+            try (Scope scope = span.makeCurrent()) {
                 mutationState.rollback();
-                return null;
+                span.setStatus(StatusCode.OK);
+            } catch (Exception e) {
+                TraceUtil.setError(span, e);
+                throw e;
+            } finally {
+                span.end();
             }
-        }, Tracing.withTracing(this, "rolling back"));
+        }
         statementExecutionCounter = 0;
     }
 
@@ -1343,14 +1340,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
         }
     }
 
-    public TraceScope getTraceScope() {
-        return traceScope;
-    }
-
-    public void setTraceScope(TraceScope traceScope) {
-        this.traceScope = traceScope;
-    }
-
     @Override
     public Map<String, Map<MetricType, Long>> getMutationMetrics() {
         return mutationState.getMutationMetricQueue().aggregate();
@@ -1484,5 +1473,46 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
 
     public void setActivityLogger(ConnectionActivityLogger connectionActivityLogger) {
         this.connectionActivityLogger = connectionActivityLogger;
+    }
+
+    public synchronized void startManualTraceSpan() {
+        if (manualTraceSpan != null) {
+            // TODO What to do if we try turn on tracing for a connection that is already on ?
+            // For now we just ignore it, but it may be better to throw an exception ?
+            return;
+        }
+        manualTraceSpan = TraceUtil.createSpan(this, "PhoenixConnection manual trace", true);
+    }
+
+    public synchronized void endManualTraceSpan() {
+        if (manualTraceSpan == null) {
+            // TODO What to do if we try turn off tracing for a connection that is already off ?
+            // For now we just ignore it, but it may be better to throw an exception ?
+            return;
+        }
+        // FIXME: If we still have traced queries running (i.e. open ResultSets), then events after
+        // this will be parent less, or at least those spans will be truncated.
+        // I don't see a way to avoid that, though.
+        try {
+            manualTraceSpan.end();
+        } finally {
+            manualTraceSpan = null;
+        }
+    }
+
+    public Scope makeCurrent() {
+        if (manualTraceSpan == null) {
+            return NullScope.INSTANCE;
+        } else {
+            return manualTraceSpan.makeCurrent();
+        }
+    }
+
+    public String getManualTraceSpanId() {
+        if (manualTraceSpan == null) {
+            return null;
+        } else {
+            return manualTraceSpan.getSpanContext().getSpanId();
+        }
     }
 }

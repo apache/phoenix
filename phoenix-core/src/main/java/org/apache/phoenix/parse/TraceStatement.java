@@ -46,4 +46,9 @@ public class TraceStatement implements BindableStatement {
     public double getSamplingRate() {
         return samplingRate;
     }
+
+    @Override
+    public String getKeyword() {
+        return "TRACE " + (traceOn ? "ON" : "OFF");
+    }
 }

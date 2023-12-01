@@ -82,4 +82,8 @@ public class DeleteStatement extends DMLStatement implements FilterableStatement
     	throw new UnsupportedOperationException("Table sampling is not allowd for Deletion");
     }
 
+    @Override
+    public String getKeyword() {
+        return "DELETE";
+    }
 }

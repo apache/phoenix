@@ -35,4 +35,9 @@ public class ShowCreateTable implements BindableStatement {
     }
 
     public ShowCreateTable() {}
+
+    @Override
+    public String getKeyword() {
+        return "SHOW CREATE TABLE";
+    }
 }

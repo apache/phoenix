@@ -51,7 +51,13 @@ import java.util.Map;
 
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
+import org.apache.phoenix.trace.TraceUtil;
+
 import com.google.protobuf.InvalidProtocolBufferException;
+
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
+
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -166,7 +172,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     private Object exception;
     private long queryTime;
     private final Calendar localCalendar;
-
+    
     public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector,
             StatementContext ctx) throws SQLException {
         this.rowProjector = rowProjector;
@@ -221,9 +227,15 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         if (isClosed) {
             return;
         }
-        try {
+        Span span = statement.getLastQuerySpan();
+        // lastQuerySpan may be null for synthetic resultsets
+        try (Scope ignored = (span == null) ? Scope.noop() : span.makeCurrent()) {
             scanner.close();
         } finally {
+            //TODO should we move this to the end of this block ?
+            if (span != null) {
+                span.end();
+            }
             isClosed = true;
             statement.removeResultSet(this);
             overAllQueryMetrics.endQuery();
@@ -875,10 +887,13 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     @Override
     public boolean next() throws SQLException {
         checkOpen();
-        try {
+        Span span = statement.getLastQuerySpan();
+        //TODO can we have null lastQuerySpan when calling next() ?
+        try (Scope ignored = (span == null) ? Scope.noop() : span.makeCurrent()) {
             if (!firstRecordRead) {
                 firstRecordRead = true;
                 overAllQueryMetrics.startResultSetWatch();
+                span.addEvent("first Result of ResultSet read");
             }
             currentRow = scanner.next();
             if (currentRow != null) {
@@ -901,6 +916,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
                 queryLogger.log(QueryLogInfo.EXCEPTION_TRACE_I, Throwables.getStackTraceAsString(e));
             }
             this.exception = e;
+            TraceUtil.setError(span, e);
             if (e.getCause() instanceof SQLException) {
                 throw (SQLException) e.getCause();
             }

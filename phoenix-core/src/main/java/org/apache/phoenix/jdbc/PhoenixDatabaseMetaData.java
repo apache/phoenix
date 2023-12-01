@@ -77,7 +77,12 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
+
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.trace.TraceUtil;
 
 /**
  *
@@ -762,204 +767,205 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     }
     
     @Override
-    public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern, String columnNamePattern)
-            throws SQLException {
-        try {
-        boolean isTenantSpecificConnection = connection.getTenantId() != null;
+    public ResultSet getColumns(String catalog, String schemaPattern, String tableNamePattern,
+            String columnNamePattern) throws SQLException {
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
-        // Allow a "." in columnNamePattern for column family match
-        String colPattern = null;
-        String cfPattern = null;
-        if (columnNamePattern != null && columnNamePattern.length() > 0) {
-            int index = columnNamePattern.indexOf('.');
-            if (index <= 0) {
-                colPattern = columnNamePattern;
-            } else {
-                cfPattern = columnNamePattern.substring(0, index);
-                if (columnNamePattern.length() > index+1) {
-                    colPattern = columnNamePattern.substring(index+1);
+        Span span = TraceUtil.createSpan(connection, "PhoenixDataBaseMetaData.getColumns() collecting data");
+        try (Scope ignored = span.makeCurrent()) {
+            boolean isTenantSpecificConnection = connection.getTenantId() != null;
+            // Allow a "." in columnNamePattern for column family match
+            String colPattern = null;
+            String cfPattern = null;
+            if (columnNamePattern != null && columnNamePattern.length() > 0) {
+                int index = columnNamePattern.indexOf('.');
+                if (index <= 0) {
+                    colPattern = columnNamePattern;
+                } else {
+                    cfPattern = columnNamePattern.substring(0, index);
+                    if (columnNamePattern.length() > index + 1) {
+                        colPattern = columnNamePattern.substring(index + 1);
+                    }
                 }
             }
-        }
-        try (ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null)) {
-            while (rs.next()) {
-                String schemaName = rs.getString(TABLE_SCHEM);
-                String tableName = rs.getString(TABLE_NAME);
-                String tenantId = rs.getString(TABLE_CAT);
-                String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-                PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
-                boolean isSalted = table.getBucketNum()!=null;
-                boolean tenantColSkipped = false;
-                List<PColumn> columns = table.getColumns();
-                int startOffset = isSalted ? 1 : 0;
-                columns = Lists.newArrayList(columns.subList(startOffset, columns.size()));
-                for (PColumn column : columns) {
+            try (ResultSet rs = getTables(catalog, schemaPattern, tableNamePattern, null)) {
+                while (rs.next()) {
+                    String schemaName = rs.getString(TABLE_SCHEM);
+                    String tableName = rs.getString(TABLE_NAME);
+                    String tenantId = rs.getString(TABLE_CAT);
+                    String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+                    PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+                    boolean isSalted = table.getBucketNum() != null;
+                    boolean tenantColSkipped = false;
+                    List<PColumn> columns = table.getColumns();
+                    int startOffset = isSalted ? 1 : 0;
+                    columns = Lists.newArrayList(columns.subList(startOffset, columns.size()));
+                    for (PColumn column : columns) {
                     if (isTenantSpecificConnection && column.equals(table.getPKColumns().get(startOffset))) {
-                        // skip the tenant column
-                        tenantColSkipped = true;
-                        continue;
-                    }
+                            // skip the tenant column
+                            tenantColSkipped = true;
+                            continue;
+                        }
                     String columnFamily = column.getFamilyName()!=null ? column.getFamilyName().getString() : null;
-                    String columnName = column.getName().getString();
+                        String columnName = column.getName().getString();
                     if (cfPattern != null && cfPattern.length() > 0) { // if null or empty, will pick up all columns
-                        if (columnFamily==null || !match(columnFamily, cfPattern)) {
-                            continue;
+                            if (columnFamily == null || !match(columnFamily, cfPattern)) {
+                                continue;
+                            }
                         }
-                    }
-                    if (colPattern != null && colPattern.length() > 0) {
-                        if (!match(columnName, colPattern)) {
-                            continue;
+                        if (colPattern != null && colPattern.length() > 0) {
+                            if (!match(columnName, colPattern)) {
+                                continue;
+                            }
                         }
-                    }
-                    // generate row key
-                    // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
-                    byte[] rowKey =
-                            SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, null);
+                        // generate row key
+                        // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
+                        byte[] rowKey =
+                                SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
+                                    null);
 
-                    // add one cell for each column info
-                    List<Cell> cells = Lists.newArrayListWithCapacity(25);
-                    // DATA_TYPE
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        DATA_TYPE_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
-                    // TYPE_NAME
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        column.getDataType().getSqlTypeNameBytes()));
-                    // COLUMN_SIZE
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        // add one cell for each column info
+                        List<Cell> cells = Lists.newArrayListWithCapacity(25);
+                        // DATA_TYPE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            DATA_TYPE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
+                        // TYPE_NAME
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            column.getDataType().getSqlTypeNameBytes()));
+                        // COLUMN_SIZE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            COLUMN_SIZE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                             column.getMaxLength() != null
                                     ? PInteger.INSTANCE.toBytes(column.getMaxLength())
                                     : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // BUFFER_LENGTH
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(BUFFER_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // DECIMAL_DIGITS
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        DECIMAL_DIGITS_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        column.getScale() != null ? PInteger.INSTANCE.toBytes(column.getScale())
-                                : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // NUM_PREC_RADIX
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(NUM_PREC_RADIX), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // NULLABLE
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        NULLABLE_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PInteger.INSTANCE.toBytes(SchemaUtil.getIsNullableInt(column.isNullable()))));
-                    // REMARKS
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                            Bytes.toBytes(REMARKS),
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-                    // COLUMN_DEF
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                            Bytes.toBytes(COLUMN_DEF),
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        // BUFFER_LENGTH
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(BUFFER_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // DECIMAL_DIGITS
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            DECIMAL_DIGITS_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            column.getScale() != null ? PInteger.INSTANCE.toBytes(column.getScale())
+                                    : ByteUtil.EMPTY_BYTE_ARRAY));
+                        // NUM_PREC_RADIX
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(NUM_PREC_RADIX), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // NULLABLE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            NULLABLE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE
+                                    .toBytes(SchemaUtil.getIsNullableInt(column.isNullable()))));
+                        // REMARKS
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(REMARKS), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // COLUMN_DEF
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(COLUMN_DEF), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                             PVarchar.INSTANCE.toBytes(column.getExpressionStr())));
-                    // SQL_DATA_TYPE
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(SQL_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // SQL_DATETIME_SUB
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(SQL_DATETIME_SUB), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // CHAR_OCTET_LENGTH
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(CHAR_OCTET_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // ORDINAL_POSITION
-                    int ordinal =
-                            column.getPosition() + (isSalted ? 0 : 1) - (tenantColSkipped ? 1 : 0);
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                            ORDINAL_POSITION_BYTES,
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP, PInteger.INSTANCE.toBytes(ordinal)));
-                    String isNullable =
-                            column.isNullable() ? Boolean.TRUE.toString() : Boolean.FALSE.toString();
-                    // IS_NULLABLE
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(IS_NULLABLE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PVarchar.INSTANCE.toBytes(isNullable)));
-                    // SCOPE_CATALOG
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(SCOPE_CATALOG), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // SCOPE_SCHEMA
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(SCOPE_SCHEMA), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // SCOPE_TABLE
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                            Bytes.toBytes(SCOPE_TABLE),
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-                    // SOURCE_DATA_TYPE
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(SOURCE_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // IS_AUTOINCREMENT
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(IS_AUTOINCREMENT), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        ByteUtil.EMPTY_BYTE_ARRAY));
-                    // ARRAY_SIZE
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, ARRAY_SIZE_BYTES,
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        // SQL_DATA_TYPE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(SQL_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // SQL_DATETIME_SUB
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(SQL_DATETIME_SUB), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // CHAR_OCTET_LENGTH
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(CHAR_OCTET_LENGTH), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // ORDINAL_POSITION
+                        int ordinal =
+                                column.getPosition() + (isSalted ? 0 : 1)
+                                        - (tenantColSkipped ? 1 : 0);
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            ORDINAL_POSITION_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PInteger.INSTANCE.toBytes(ordinal)));
+                        String isNullable =
+                                column.isNullable() ? Boolean.TRUE.toString()
+                                        : Boolean.FALSE.toString();
+                        // IS_NULLABLE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(IS_NULLABLE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PVarchar.INSTANCE.toBytes(isNullable)));
+                        // SCOPE_CATALOG
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(SCOPE_CATALOG), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // SCOPE_SCHEMA
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(SCOPE_SCHEMA), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // SCOPE_TABLE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(SCOPE_TABLE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // SOURCE_DATA_TYPE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(SOURCE_DATA_TYPE), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // IS_AUTOINCREMENT
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(IS_AUTOINCREMENT), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            ByteUtil.EMPTY_BYTE_ARRAY));
+                        // ARRAY_SIZE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            ARRAY_SIZE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                             column.getArraySize() != null
                                     ? PInteger.INSTANCE.toBytes(column.getArraySize())
                                     : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // COLUMN_FAMILY
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        COLUMN_FAMILY_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getFamilyName() != null
-                                ? column.getFamilyName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // TYPE_ID
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
-                    // VIEW_CONSTANT
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        VIEW_CONSTANT_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant() != null
-                                ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // MULTI_TENANT
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        MULTI_TENANT_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
-                    // KEY_SEQ_COLUMN
-                    byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-                    int pkPos = table.getPKColumns().indexOf(column);
-                    if (pkPos!=-1) {
-                        short keySeq = (short) (pkPos + 1 - startOffset - (tenantColSkipped ? 1 : 0));
-                        keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
+                        // COLUMN_FAMILY
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            COLUMN_FAMILY_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            column.getFamilyName() != null ? column.getFamilyName().getBytes()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY));
+                        // TYPE_ID
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
+                        // VIEW_CONSTANT
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            VIEW_CONSTANT_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            column.getViewConstant() != null ? column.getViewConstant()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY));
+                        // MULTI_TENANT
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            MULTI_TENANT_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PBoolean.INSTANCE.toBytes(table.isMultiTenant())));
+                        // KEY_SEQ_COLUMN
+                        byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+                        int pkPos = table.getPKColumns().indexOf(column);
+                        if (pkPos != -1) {
+                            short keySeq =
+                                    (short) (pkPos + 1 - startOffset - (tenantColSkipped ? 1 : 0));
+                            keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
+                        }
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            KEY_SEQ_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
+                        Collections.sort(cells, new CellComparatorImpl());
+                        Tuple tuple = new MultiKeyValueTuple(cells);
+                        tuples.add(tuple);
                     }
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
-                    Collections.sort(cells, new CellComparatorImpl());
-                    Tuple tuple = new MultiKeyValueTuple(cells);
-                    tuples.add(tuple);
                 }
             }
-        }
-
-        PhoenixStatement stmt = new PhoenixStatement(connection);
-        stmt.closeOnCompletion();
-        return new PhoenixResultSet(new MaterializedResultIterator(tuples), GET_COLUMNS_ROW_PROJECTOR, new StatementContext(stmt, false));
+            span.setStatus(StatusCode.OK);
+        } catch (Exception e) {
+            TraceUtil.setError(span, e);
+            throw e;
         } finally {
             if (connection.getAutoCommit()) {
-                connection.commit();
+                try (Scope ignored = span.makeCurrent()) {
+                    connection.commit();
+                }
             }
+            span.end();
         }
+        PhoenixStatement stmt = new PhoenixStatement(connection);
+        stmt.closeOnCompletion();
+        return new PhoenixResultSet(new MaterializedResultIterator(tuples),
+                GET_COLUMNS_ROW_PROJECTOR, new StatementContext(stmt, false));
     }
 
     @Override
@@ -1182,93 +1188,103 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
         if (tableName == null || tableName.length() == 0) {
             return getEmptyResultSet();
         }
-        String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
-        boolean isSalted = table.getBucketNum() != null;
-        boolean tenantColSkipped = false;
-        List<PColumn> pkColumns = table.getPKColumns();
-        List<PColumn> sorderPkColumns =
-                Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
-        // sort the columns by name
-        Collections.sort(sorderPkColumns, new Comparator<PColumn>(){
-            @Override public int compare(PColumn c1, PColumn c2) {
-                return c1.getName().getString().compareTo(c2.getName().getString());
-            }
-        });
-
-        try {
         List<Tuple> tuples = Lists.newArrayListWithExpectedSize(10);
-        try (ResultSet rs = getTables(catalog, schemaName, tableName, null)) {
-            while (rs.next()) {
-                String tenantId = rs.getString(TABLE_CAT);
-                for (PColumn column : sorderPkColumns) {
-                    String columnName = column.getName().getString();
-                    // generate row key
-                    // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
-                    byte[] rowKey =
-                            SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName, null);
+        Span span = TraceUtil.createSpan(connection, "PhoenixDataBaseMetaData.getPrimaryKeys() collecting data");
+        try (Scope ignored = span.makeCurrent()) {
+            String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+            PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+            boolean isSalted = table.getBucketNum() != null;
+            boolean tenantColSkipped = false;
+            List<PColumn> pkColumns = table.getPKColumns();
+            List<PColumn> sorderPkColumns =
+                    Lists.newArrayList(pkColumns.subList(isSalted ? 1 : 0, pkColumns.size()));
+            // sort the columns by name
+            Collections.sort(sorderPkColumns, new Comparator<PColumn>() {
+                @Override
+                public int compare(PColumn c1, PColumn c2) {
+                    return c1.getName().getString().compareTo(c2.getName().getString());
+                }
+            });
+            try (ResultSet rs = getTables(catalog, schemaName, tableName, null)) {
+                while (rs.next()) {
+                    String tenantId = rs.getString(TABLE_CAT);
+                    for (PColumn column : sorderPkColumns) {
+                        String columnName = column.getName().getString();
+                        // generate row key
+                        // TENANT_ID, TABLE_SCHEM, TABLE_NAME , COLUMN_NAME are row key columns
+                        byte[] rowKey =
+                                SchemaUtil.getColumnKey(tenantId, schemaName, tableName, columnName,
+                                    null);
 
-                    // add one cell for each column info
-                    List<Cell> cells = Lists.newArrayListWithCapacity(8);
-                    // KEY_SEQ_COLUMN
-                    byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
-                    int pkPos = pkColumns.indexOf(column);
-                    if (pkPos != -1) {
-                        short keySeq =
-                                (short) (pkPos + 1 - (isSalted ? 1 : 0) - (tenantColSkipped ? 1 : 0));
-                        keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
-                    }
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, KEY_SEQ_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
-                    // PK_NAME
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, PK_NAME_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, table.getPKName() != null
-                                ? table.getPKName().getBytes() : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // ASC_OR_DESC
-                    char sortOrder = column.getSortOrder() == SortOrder.ASC ? 'A' : 'D';
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        ASC_OR_DESC_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        Bytes.toBytes(sortOrder)));
-                    // DATA_TYPE
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, DATA_TYPE_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
-                    // TYPE_NAME
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        column.getDataType().getSqlTypeNameBytes()));
-                    // COLUMN_SIZE
-                    cells.add(
-                        PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES,
-                            MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                        // add one cell for each column info
+                        List<Cell> cells = Lists.newArrayListWithCapacity(8);
+                        // KEY_SEQ_COLUMN
+                        byte[] keySeqBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+                        int pkPos = pkColumns.indexOf(column);
+                        if (pkPos != -1) {
+                            short keySeq =
+                                    (short) (pkPos + 1 - (isSalted ? 1 : 0)
+                                            - (tenantColSkipped ? 1 : 0));
+                            keySeqBytes = PSmallint.INSTANCE.toBytes(keySeq);
+                        }
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            KEY_SEQ_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP, keySeqBytes));
+                        // PK_NAME
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            PK_NAME_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            table.getPKName() != null ? table.getPKName().getBytes()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY));
+                        // ASC_OR_DESC
+                        char sortOrder = column.getSortOrder() == SortOrder.ASC ? 'A' : 'D';
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            ASC_OR_DESC_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            Bytes.toBytes(sortOrder)));
+                        // DATA_TYPE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            DATA_TYPE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PInteger.INSTANCE.toBytes(column.getDataType().getResultSetSqlType())));
+                        // TYPE_NAME
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(TYPE_NAME), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            column.getDataType().getSqlTypeNameBytes()));
+                        // COLUMN_SIZE
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            COLUMN_SIZE_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                             column.getMaxLength() != null
                                     ? PInteger.INSTANCE.toBytes(column.getMaxLength())
                                     : ByteUtil.EMPTY_BYTE_ARRAY));
-                    // TYPE_ID
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
-                        Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
-                        PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
-                    // VIEW_CONSTANT
-                    cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES, VIEW_CONSTANT_BYTES,
-                        MetaDataProtocol.MIN_TABLE_TIMESTAMP, column.getViewConstant() != null
-                                ? column.getViewConstant() : ByteUtil.EMPTY_BYTE_ARRAY));
-                    Collections.sort(cells, new CellComparatorImpl());
-                    Tuple tuple = new MultiKeyValueTuple(cells);
-                    tuples.add(tuple);
+                        // TYPE_ID
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            Bytes.toBytes(TYPE_ID), MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            PInteger.INSTANCE.toBytes(column.getDataType().getSqlType())));
+                        // VIEW_CONSTANT
+                        cells.add(PhoenixKeyValueUtil.newKeyValue(rowKey, TABLE_FAMILY_BYTES,
+                            VIEW_CONSTANT_BYTES, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+                            column.getViewConstant() != null ? column.getViewConstant()
+                                    : ByteUtil.EMPTY_BYTE_ARRAY));
+                        Collections.sort(cells, new CellComparatorImpl());
+                        Tuple tuple = new MultiKeyValueTuple(cells);
+                        tuples.add(tuple);
+                    }
                 }
             }
+            span.setStatus(StatusCode.OK);
+        } catch (Exception e) {
+            TraceUtil.setError(span, e);
+            throw e;
+        }finally {
+            if (connection.getAutoCommit()) {
+                try (Scope ignored = span.makeCurrent()) {
+                    connection.commit();
+                }
+            }
+            span.end();
         }
-
+        //The statement Trace span is long lived, it must not overlap with the previous one.
         PhoenixStatement stmt = new PhoenixStatement(connection);
         stmt.closeOnCompletion();
         return new PhoenixResultSet(new MaterializedResultIterator(tuples),
-                GET_PRIMARY_KEYS_ROW_PROJECTOR,
-                new StatementContext(stmt, false));
-        } finally {
-            if (connection.getAutoCommit()) {
-                connection.commit();
-            }
-        }
+                GET_PRIMARY_KEYS_ROW_PROJECTOR, new StatementContext(stmt, false));
     }
 
     @Override

@@ -30,5 +30,12 @@
         <include>org.apache.logging.log4j:log4j-1.2-api</include>
       </includes>
     </dependencySet>
+    <dependencySet>
+      <unpack>false</unpack>
+      <outputDirectory>/lib/tracing</outputDirectory>
+      <includes>
+        <include>io.opentelemetry.javaagent:opentelemetry-javaagent</include>
+      </includes>
+    </dependencySet>
   </dependencySets>
 </component>

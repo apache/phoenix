@@ -44,4 +44,9 @@ public class CreateFunctionStatement extends MutableStatement {
     public boolean isReplace() {
         return isReplace;
     }
+
+    @Override
+    public String getKeyword() {
+        return "CREATE FUNCTION";
+    }
 }

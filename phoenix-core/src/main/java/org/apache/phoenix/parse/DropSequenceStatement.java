@@ -43,9 +43,14 @@ public class DropSequenceStatement extends MutableStatement {
     public boolean ifExists() {
         return ifExists;
     }
-    
+
     @Override
     public Operation getOperation() {
         return Operation.DELETE;
+    }
+
+    @Override
+    public String getKeyword() {
+        return "DROP SEQUENCE";
     }
 }

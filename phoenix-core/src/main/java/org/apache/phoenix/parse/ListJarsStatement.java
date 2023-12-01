@@ -31,4 +31,8 @@ public class ListJarsStatement implements BindableStatement {
         return Operation.QUERY;
     }
 
+    @Override
+    public String getKeyword() {
+        return "LIST JARS";
+    }
 }

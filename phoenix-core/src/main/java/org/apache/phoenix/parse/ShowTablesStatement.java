@@ -89,4 +89,9 @@ public class ShowTablesStatement extends ShowStatement {
     public int hashCode() {
       return Objects.hash(targetSchema, dbPattern);
     }
+
+    @Override
+    public String getKeyword() {
+        return "SHOW TABLES";
+    }
 }

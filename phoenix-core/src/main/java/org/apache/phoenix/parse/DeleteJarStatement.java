@@ -33,4 +33,9 @@ public class DeleteJarStatement extends MutableStatement {
     public LiteralParseNode getJarPath() {
         return jarPath;
     }
+
+    @Override
+    public String getKeyword() {
+        return "DELETE JAR";
+    }
 }

@@ -65,4 +65,9 @@ public class DropTableStatement extends MutableStatement {
 	public boolean getSkipAddingParentColumns() {
 		return skipAddingParentColumns;
 	}
+
+    @Override
+    public String getKeyword() {
+        return "DROP TABLE";
+    }
 }

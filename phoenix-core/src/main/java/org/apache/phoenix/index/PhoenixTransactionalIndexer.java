@@ -25,38 +25,33 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.execute.PhoenixTxIndexMutationGenerator;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
 import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
-import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
-import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.apache.phoenix.util.TransactionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 
 /**
  * Do all the work of managing local index updates for a transactional table from a single coprocessor. Since the transaction
@@ -153,13 +148,8 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         setBatchMutateContext(c, context);
         
         Collection<Pair<Mutation, byte[]>> indexUpdates = null;
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-        try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-            Span current = scope.getSpan();
-            if (current == null) {
-                current = NullSpan.INSTANCE;
-            }
-
+        Span span = TraceUtil.createServerSideSpan("Starting to build index updates");
+        try (Scope ignored = span.makeCurrent()) {
             RegionCoprocessorEnvironment env = c.getEnvironment();
             PhoenixTransactionContext txnContext = indexMetaData.getTransactionContext();
             if (txnContext == null) {
@@ -194,12 +184,16 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
                 context.indexUpdates = indexUpdates;
             }
 
-            current.addTimelineAnnotation("Built index updates, doing preStep");
-            TracingUtils.addAnnotation(current, "index update count", context.indexUpdates.size());
+            span.addEvent("Built index updates, doing preStep");
+            span.setAttribute("index update count", context.indexUpdates.size());
+            span.setStatus(StatusCode.OK);
         } catch (Throwable t) {
+            TraceUtil.setError(span, t);
             String msg = "Failed to update index with entries:" + indexUpdates;
             LOGGER.error(msg, t);
             ServerUtil.throwIOException(msg, t);
+        } finally {
+            span.end();
         }
     }
 
@@ -210,24 +204,22 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         if (context == null || context.indexUpdates == null) {
             return;
         }
-        // get the current span, or just use a null-span to avoid a bunch of if statements
-        try (TraceScope scope = Trace.startSpan("Starting to write index updates")) {
-            Span current = scope.getSpan();
-            if (current == null) {
-                current = NullSpan.INSTANCE;
-            }
-
+        Span span = TraceUtil.createServerSideSpan("Starting to write index updates");
+        try (Scope scope = span.makeCurrent()) {
             if (success) { // if miniBatchOp was successfully written, write index updates
                 if (!context.indexUpdates.isEmpty()) {
                     this.writer.write(context.indexUpdates, false, context.clientVersion);
                 }
-                current.addTimelineAnnotation("Wrote index updates");
+                span.addEvent("Wrote index updates");
             }
+            span.setStatus(StatusCode.OK);
         } catch (Throwable t) {
+            TraceUtil.setError(span, t);
             String msg = "Failed to write index updates:" + context.indexUpdates;
             LOGGER.error(msg, t);
             ServerUtil.throwIOException(msg, t);
          } finally {
+             span.end();
              removeBatchMutateContext(c);
          }
     }

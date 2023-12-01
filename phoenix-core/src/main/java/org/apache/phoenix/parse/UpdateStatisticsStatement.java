@@ -53,4 +53,9 @@ public class UpdateStatisticsStatement extends SingleTableStatement {
     public Map<String,Object> getProps() {
         return props;
     };
+
+    @Override
+    public String getKeyword() {
+        return "UPDATE STATISTICS";
+    }
 }

@@ -38,4 +38,9 @@ public class DropFunctionStatement extends MutableStatement {
     public boolean ifExists() {
         return ifExists;
     }
+
+    @Override
+    public String getKeyword() {
+        return "DROP FUNCTION";
+    }
 }

@@ -25,7 +25,17 @@ import subprocess
 import sys
 import phoenix_utils
 
+# Since sandbox is used exclusively for development and debugging, it is easiest to
+# unconditionally enable tracing
+def set_sandbox_tracing():
+    global sandbox_trace_opts
+    sandbox_trace_opts = os.environ.get("PHOENIX_TRACE_OPTS")
+    if sandbox_trace_opts is None or phoenix_trace_opts == "":
+        sandbox_trace_opts = " -javaagent:" + phoenix_utils.opentelemetry_agent_jar + " -Dotel.metrics.exporter=none -Dotel.instrumentation.jdbc.enabled=false"
+    return ""
+
 phoenix_utils.setPath()
+set_sandbox_tracing()
 
 base_dir = os.path.join(phoenix_utils.current_dir, '..')
 phoenix_target_dir = os.path.join(base_dir, 'phoenix-core', 'target')
@@ -44,9 +54,10 @@ cp_components = [phoenix_target_dir + "/*"]
 with open(cp_file_path, 'r') as cp_file:
     cp_components.append(cp_file.read())
 
-java_cmd = ("java $PHOENIX_OPTS -Dlog4j2.configurationFile=file:%s " +
-                "-cp %s org.apache.phoenix.Sandbox") % (
-                            logging_config, ":".join(cp_components))
+java_cmd = ("java -Dlog4j2.configurationFile=file:%s " +
+            ' ' + sandbox_trace_opts + ' -Dotel.service.name="phoenix-sandbox" ' +
+                "-cp %s org.apache.phoenix.Sandbox") % ( 
+                    logging_config, ":".join(cp_components))
 
 proc = subprocess.Popen(java_cmd, shell=True)
 try:

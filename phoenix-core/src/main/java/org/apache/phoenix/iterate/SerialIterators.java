@@ -43,7 +43,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.TraceUtil;
 import org.apache.phoenix.util.QueryUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -97,7 +97,7 @@ public class SerialIterators extends BaseResultIterators {
                 flattenedScans = Lists.reverse(flattenedScans);
             }
             final List<Scan> finalScans = flattenedScans;
-            Future<PeekingResultIterator> future = executor.submit(Tracing.wrap(new JobCallable<PeekingResultIterator>() {
+            Future<PeekingResultIterator> future = executor.submit(TraceUtil.wrap(new JobCallable<PeekingResultIterator>() {
                 @Override
                 public PeekingResultIterator call() throws Exception {
                     PeekingResultIterator itr = new SerialIterator(finalScans, tableName, renewLeaseThreshold, offset, caches, maxQueryEndTime);

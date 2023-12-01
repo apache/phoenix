@@ -23,7 +23,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 /**
  * Parent class for all SHOW statements. SHOW SCHEMAS, SHOW TABLES etc.
  */
-public class ShowStatement implements BindableStatement {
+public abstract class ShowStatement implements BindableStatement {
     @Override
     public int getBindCount() {
         return 0;

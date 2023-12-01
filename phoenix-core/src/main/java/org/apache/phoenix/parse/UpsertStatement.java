@@ -60,4 +60,9 @@ public class UpsertStatement extends DMLStatement {
     public List<Pair<ColumnName,ParseNode>> getOnDupKeyPairs() {
         return onDupKeyPairs;
     }
+
+    @Override
+    public String getKeyword() {
+        return "UPSERT";
+    }
 }

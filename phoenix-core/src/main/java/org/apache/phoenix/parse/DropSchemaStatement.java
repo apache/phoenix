@@ -52,4 +52,8 @@ public class DropSchemaStatement extends MutableStatement {
         return Operation.DELETE;
     }
 
+    @Override
+    public String getKeyword() {
+        return "DROP SCHEMA";
+    }
 }

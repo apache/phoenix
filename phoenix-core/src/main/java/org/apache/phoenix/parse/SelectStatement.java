@@ -371,4 +371,8 @@ public class SelectStatement implements FilterableStatement {
         return offset;
     }
 
+    @Override
+    public String getKeyword() {
+        return "SELECT";
+    }
 }

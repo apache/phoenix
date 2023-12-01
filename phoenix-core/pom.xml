@@ -214,6 +214,21 @@
               <outputDirectory>${project.basedir}/../lib</outputDirectory>
             </configuration>
           </execution>
+          <execution>
+            <id>copy-otel-agent-for-sqlline</id>
+            <goals>
+              <goal>copy</goal>
+            </goals>
+            <configuration>
+              <artifactItems>
+                <artifactItem>
+                  <groupId>io.opentelemetry.javaagent</groupId>
+                  <artifactId>opentelemetry-javaagent</artifactId>
+                </artifactItem>
+              </artifactItems>
+              <outputDirectory>${project.basedir}/../lib/tracing</outputDirectory>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
       <plugin>
@@ -501,10 +516,6 @@
       <artifactId>protobuf-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.htrace</groupId>
-      <artifactId>htrace-core</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
@@ -568,6 +579,18 @@
     <dependency>
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-context</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-semconv</artifactId>
     </dependency>
 
     <!-- Other test dependencies -->

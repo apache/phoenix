@@ -31,4 +31,8 @@ public class ExecuteUpgradeStatement implements BindableStatement {
         return Operation.UPGRADE;
     }
 
+    @Override
+    public String getKeyword() {
+        return "EXECUTE UPGRADE";
+    }
 }

@@ -244,7 +244,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -631,8 +630,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
-        // Start the phoenix trace collection
-        Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
     }
