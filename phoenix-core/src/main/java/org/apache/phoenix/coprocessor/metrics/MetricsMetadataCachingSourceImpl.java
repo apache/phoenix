@@ -72,13 +72,11 @@ public class MetricsMetadataCachingSourceImpl
 
     @Override
     public void addCacheInvalidationRpcTime(long t) {
-        System.out.println("adding to cache inv rpc time hist = " + t);
         cacheInvalidationRpcTimeHistogram.add(t);
     }
 
     @Override
     public void addCacheInvalidationTotalTime(long t) {
-        System.out.println("adding to cache inv total time hist = " + t);
         cacheInvalidationTotalTimeHistogram.add(t);
     }
 }
