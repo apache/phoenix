@@ -101,11 +101,12 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             // create base table
             String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
-                    "A0 CHAR(1) NOT NULL PRIMARY KEY," +
-                    "A1 CHAR(1)," +
-                    "A2 CHAR(1)," +
-                    "A3 CHAR(1)," +
-                    "A4 CHAR(1))";
+                    "A0 CHAR(1) NOT NULL," +
+                    "A1 CHAR(1) NOT NULL," +
+                    "A2 CHAR(1) NOT NULL," +
+                    "A3 CHAR(1) NOT NULL," +
+                    "A4 CHAR(1)" +
+                    " CONSTRAINT PK PRIMARY KEY (A0, A1, A2, A3))";
             conn.createStatement().execute(baseTableDdl);
             
             // create the parent view on the base table for a value of A
@@ -192,7 +193,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
         assertEquals("2", rs.getString(4));
         assertFalse(rs.next());
     }
-    
+
     private void assertQueryUsesBaseTable(final String baseTableName, final String viewName, Connection conn) throws SQLException {
         String sql = "SELECT A0, A1, A2, A4 FROM " + viewName +" WHERE A4 IN ('1', '2', '3') ";
         ExplainPlan plan = conn.prepareStatement(sql)
