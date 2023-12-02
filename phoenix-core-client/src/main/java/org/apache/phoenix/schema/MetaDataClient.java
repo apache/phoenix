@@ -128,6 +128,7 @@ import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_P
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
+import static org.apache.phoenix.schema.PTable.ViewType.UPDATABLE;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -161,6 +162,7 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.Objects;
 
+import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.CreateCDCStatement;
@@ -1176,7 +1178,7 @@ public class MetaDataClient {
                     tableProps.put(prop.getFirst(), prop.getSecond());
                     if (!isPhoenixTTLEnabled()) {
                         //Handling FOREVER and NONE case for TTL when phoenix.table.ttl.enable is false.
-                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond());
+                        Object value = ConnectionQueryServicesImpl.convertForeverAndNoneTTLValue(prop.getSecond(), false);
                         commonFamilyProps.put(prop.getFirst(), value);
                     }
                     //If phoenix.table.ttl.enabled is true doesn't store TTL as columnFamilyProp
@@ -2242,40 +2244,35 @@ public class MetaDataClient {
         }
     }
 
-    /**
-     * TODO:- Change this to store TTL as only one level where it is defined!
-     * Get TTL defined for Index or View in its parent hierarchy as defining TTL directly on index
-     * or view is not allowed. View on SYSTEM table is not allowed and already handled during
-     * plan compilation.
-     * @param parent
-     * @return appropriate TTL for the entity calling the function.
-     * @throws TableNotFoundException
+
+    /***
+     * Get TTL defined for given entity (Index, View or Table) in hierarchy
+     * * For an index it will return TTL defined either from parent table
+     *      or from parent view's hierarchy if it is defined.
+     * * For view it will return TTL defined from its parent table or from parent view's hierarchy
+     *      if it is defined
+     * * For table it will just return TTL_NOT_DEFINED as it has no parent.
+     * @param parent entity's parent
+     * @return TTL from hierarchy if defined otherwise TTL_NOT_DEFINED.
+     * @throws TableNotFoundException if not able ot find any table in hierarchy
      */
-    private Integer getTTLFromParent(PTable parent) throws TableNotFoundException, SQLException {
-        return (parent.getType() == TABLE) ? Integer.valueOf(parent.getTTL())
-                : (parent.getType() == VIEW ? getTTLFromAncestor(parent) : null);
+    private Integer checkAndGetTTLFromHierarchy(PTable parent) throws SQLException {
+        return parent != null ? (parent.getType() == TABLE ? parent.getTTL()
+                : (parent.getType() == VIEW ? getTTLFromViewHierarchy(parent) : TTL_NOT_DEFINED))
+                : TTL_NOT_DEFINED;
     }
 
     /**
-     * Get TTL defined for the given View according to its hierarchy.
+     * Get TTL defined for the given View if it is defined in hierarchy.
      * @param view
      * @return appropriate TTL from Views defined above for the entity calling.
-     * @throws TableNotFoundException
+     * @throws TableNotFoundException if not able to find any table in hierarchy
      */
-    private Integer getTTLFromAncestor(PTable view) throws TableNotFoundException, SQLException {
-        try {
+    private Integer getTTLFromViewHierarchy(PTable view) throws SQLException {
             return view.getTTL() != TTL_NOT_DEFINED
                     ? Integer.valueOf(view.getTTL()) : (checkIfParentIsTable(view)
-                    ? connection.getTable(new PTableKey(null,
-                            view.getPhysicalNames().get(0).getString())).getTTL()
-                    : getTTLFromAncestor(connection.getTable(new PTableKey(
-                                    connection.getTenantId(), view.getParentName().getString()))));
-        } catch (TableNotFoundException tne) {
-            //Check again for TTL from ancestors, what if view here is tenant view on top of
-            //Global View without any tenant id.
-            return getTTLFromAncestor(connection.getTable(new PTableKey(null,
-                    view.getParentName().getString())));
-        }
+                    ? PhoenixRuntime.getTable(connection, view.getPhysicalNames().get(0).toString()).getTTL()
+                    : getTTLFromViewHierarchy(PhoenixRuntime.getTable(connection, view.getParentName().toString())));
     }
 
     private boolean checkIfParentIsTable(PTable view) {
@@ -2351,12 +2348,13 @@ public class MetaDataClient {
                     tableType == PTableType.VIEW ? parent.getColumns().size()
                             : QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 
-            Integer phoenixTTL = TTL_NOT_DEFINED;
-            Integer phoenixTTLProp = (Integer) TableProperty.TTL.getValue(tableProps);
+            Integer ttl = TTL_NOT_DEFINED;
+            Integer ttlFromHierarchy = TTL_NOT_DEFINED;
+            Integer ttlProp = (Integer) TableProperty.TTL.getValue(tableProps);
 
             // Validate TTL prop value if set
-            if (phoenixTTLProp != null) {
-                if (phoenixTTLProp < 0) {
+            if (ttlProp != null) {
+                if (ttlProp < 0) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
                             .setMessage(String.format("entity = %s, TTL value should be > 0",
                                     tableName))
@@ -2364,16 +2362,25 @@ public class MetaDataClient {
                             .buildException();
                 }
 
-                if (tableType != TABLE) {
+                if (tableType != TABLE && (tableType != VIEW || viewType != UPDATABLE)) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.
-                            TTL_SUPPORTED_FOR_TABLES_ONLY)
+                            TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
                             .setSchemaName(schemaName)
                             .setTableName(tableName)
                             .build()
                             .buildException();
                 }
-                //Set Only in case of Tables.
-                phoenixTTL = phoenixTTLProp;
+                ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent);
+                if (ttlFromHierarchy != TTL_NOT_DEFINED) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                            TTL_ALREADY_DEFINED_IN_HIERARCHY)
+                            .setSchemaName(schemaName)
+                            .setTableName(tableName)
+                            .build()
+                            .buildException();
+                }
+
+                ttl = ttlProp;
             }
 
             Boolean isChangeDetectionEnabledProp =
@@ -2399,8 +2406,6 @@ public class MetaDataClient {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 isImmutableRows = parent.isImmutableRows();
                 isAppendOnlySchema = parent.isAppendOnlySchema();
-                //Check up hierarchy and get appropriate TTL
-                phoenixTTL = getTTLFromParent(parent);
 
                 // Index on view
                 // TODO: Can we support a multi-tenant index directly on a multi-tenant
@@ -2605,7 +2610,7 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if ((isPhoenixTTLEnabled() ? phoenixTTLProp != null
+            if ((isPhoenixTTLEnabled() ? ttlProp != null
                     : TableProperty.TTL.getValue(commonFamilyProps) != null)
                     && transactionProvider != null 
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
@@ -2623,9 +2628,9 @@ public class MetaDataClient {
             if (transactionProvider != null) {
                 // If TTL set, use transaction context TTL property name instead
                 // Note: After PHOENIX-6627, is PhoenixTransactionContext.PROPERTY_TTL still useful?
-                Object ttl = commonFamilyProps.remove(ColumnFamilyDescriptorBuilder.TTL);
-                if (ttl != null) {
-                    commonFamilyProps.put(PhoenixTransactionContext.PROPERTY_TTL, ttl);
+                Object transactionTTL = commonFamilyProps.remove(ColumnFamilyDescriptorBuilder.TTL);
+                if (transactionTTL != null) {
+                    commonFamilyProps.put(PhoenixTransactionContext.PROPERTY_TTL, transactionTTL);
                 }
             }
 
@@ -2720,9 +2725,6 @@ public class MetaDataClient {
                     if (updateCacheFrequencyProp == null) {
                         // set to the parent value if the property is not set on the view
                         updateCacheFrequency = parent.getUpdateCacheFrequency();
-                    }
-                    if (viewType == ViewType.UPDATABLE) {
-                        phoenixTTL = getTTLFromParent(parent);
                     }
                     disableWAL = (disableWALProp == null ? parent.isWALDisabled() : disableWALProp);
                     defaultFamilyName = parent.getDefaultFamilyName() == null ? null : parent.getDefaultFamilyName().getString();
@@ -3469,10 +3471,10 @@ public class MetaDataClient {
                 tableUpsert.setString(36, cdcIncludeScopesStr);
             }
 
-            if (phoenixTTL == null) {
+            if (ttl == null || ttl == TTL_NOT_DEFINED) {
                 tableUpsert.setNull(37, Types.INTEGER);
             } else {
-                tableUpsert.setInt(37, phoenixTTL);
+                tableUpsert.setInt(37, ttl);
             }
 
             if (rowKeyPrefix == null) {
@@ -3629,7 +3631,7 @@ public class MetaDataClient {
                                 : statement.getWhereClause().toString())
                         .setMaxLookbackAge(maxLookbackAge)
                         .setCDCIncludeScopes(cdcIncludeScopes)
-                        .setTTL(phoenixTTL == null ? TTL_NOT_DEFINED : phoenixTTL)
+                        .setTTL(ttl == null || ttl == TTL_NOT_DEFINED ? ttlFromHierarchy : ttl)
                         .setRowKeyPrefix(rowKeyPrefix)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
@@ -4113,10 +4115,10 @@ public class MetaDataClient {
     }
 
     private  long incrementTableSeqNum(PTable table, PTableType expectedType, int columnCountDelta, Boolean isTransactional,
-                                       Long updateCacheFrequency, Integer ttl, String physicalTableName,
+                                       Long updateCacheFrequency, String physicalTableName,
                                        String schemaVersion, QualifierEncodingScheme columnEncodedBytes) throws SQLException {
         return incrementTableSeqNum(table, expectedType, columnCountDelta, isTransactional, null,
-            updateCacheFrequency, null, null, null, null, -1L, null, null, null,ttl, false, physicalTableName,
+            updateCacheFrequency, null, null, null, null, -1L, null, null, null,null, false, physicalTableName,
                 schemaVersion, columnEncodedBytes, null, null);
     }
 
@@ -4183,7 +4185,7 @@ public class MetaDataClient {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
         }
         if (ttl != null) {
-            mutateIntegerProperty(connection, tenantId, schemaName, tableName, TTL, ttl);
+            mutateIntegerProperty(connection, tenantId, schemaName, tableName, TTL, ttl == TTL_NOT_DEFINED ? null : ttl);
         }
         if (isChangeDetectionEnabled != null) {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, CHANGE_DETECTION_ENABLED, isChangeDetectionEnabled);
@@ -4397,6 +4399,7 @@ public class MetaDataClient {
 
             boolean retried = false;
             boolean changingPhoenixTableProperty = false;
+            MutableBoolean areWeIntroducingTTLAtThisLevel = new MutableBoolean(false);
             MetaProperties metaProperties = new MetaProperties();
             while (true) {
                 Map<String, List<Pair<String, Object>>> properties=new HashMap<>(stmtProperties.size());;
@@ -4434,7 +4437,37 @@ public class MetaDataClient {
                 }
 
                 MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
-                changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
+                changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName,areWeIntroducingTTLAtThisLevel);
+                if (areWeIntroducingTTLAtThisLevel.booleanValue()) {
+                    //As we are introducing TTL for the first time at this level, we need to check
+                    //if TTL is already defined up or down in the hierarchy.
+                    Integer ttlAlreadyDefined = TTL_NOT_DEFINED;
+                    //Check up the hierarchy
+                    if (table.getType() != PTableType.TABLE) {
+                        ttlAlreadyDefined = checkAndGetTTLFromHierarchy(PhoenixRuntime.getTableNoCache(connection, table.getParentName().toString()));
+                    }
+                    if (ttlAlreadyDefined != TTL_NOT_DEFINED) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                                TTL_ALREADY_DEFINED_IN_HIERARCHY)
+                                .setSchemaName(schemaName)
+                                .setTableName(tableName)
+                                .build()
+                                .buildException();
+                    }
+
+                    /**
+                     * To check if TTL is defined at any of the child below we are checking it at
+                     * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List,
+                     * ColumnMutator, int, PTable, PTable, boolean)} level where in function
+                     * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
+                     * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[],
+                     * byte[], byte[], List, int)} we are already traversing through
+                     * allDescendantViews.
+                     */
+
+
+
+                }
 
                 boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName, table, tableName, null, tenantIdToUse, connection);
                 if (isTransformNeeded) {
@@ -4600,12 +4633,11 @@ public class MetaDataClient {
 
                 if (!table.getIndexes().isEmpty() &&
                         (numPkColumnsAdded>0 || metaProperties.getNonTxToTx() ||
-                                metaPropertiesEvaluated.getUpdateCacheFrequency() != null || metaPropertiesEvaluated.getTTL() != null)) {
+                                metaPropertiesEvaluated.getUpdateCacheFrequency() != null)) {
                     for (PTable index : table.getIndexes()) {
                         incrementTableSeqNum(index, index.getType(), numPkColumnsAdded,
                                 metaProperties.getNonTxToTx() ? Boolean.TRUE : null,
                                 metaPropertiesEvaluated.getUpdateCacheFrequency(),
-                                metaPropertiesEvaluated.getTTL(),
                                 metaPropertiesEvaluated.getPhysicalTableName(),
                                 metaPropertiesEvaluated.getSchemaVersion(),
                                 metaProperties.getColumnEncodedBytesProp());
@@ -4619,7 +4651,6 @@ public class MetaDataClient {
                         incrementTableSeqNum(index, index.getType(), columnDefs.size(),
                                 Boolean.FALSE,
                                 metaPropertiesEvaluated.getUpdateCacheFrequency(),
-                                metaPropertiesEvaluated.getTTL(),
                                 metaPropertiesEvaluated.getPhysicalTableName(),
                                 metaPropertiesEvaluated.getSchemaVersion(),
                                 metaPropertiesEvaluated.getColumnEncodedBytes());
@@ -5110,7 +5141,7 @@ public class MetaDataClient {
                     }
                     if (!indexColumnsToDrop.isEmpty()) {
                         long indexTableSeqNum = incrementTableSeqNum(index, index.getType(), -indexColumnsToDrop.size(),
-                                null, null, null, null, null, null);
+                                null, null, null, null, null);
                         dropColumnMutations(index, indexColumnsToDrop);
                         long clientTimestamp = MutationState.getTableTimestamp(timeStamp, connection.getSCN());
                         connection.removeColumn(tenantId, index.getName().getString(),
@@ -5122,7 +5153,7 @@ public class MetaDataClient {
                 connection.rollback();
 
                 long seqNum = incrementTableSeqNum(table, statement.getTableType(), -tableColumnsToDrop.size(),
-                        null, null, null, null, null, null);
+                        null, null, null, null, null);
                 tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                 connection.rollback();
                 // Force table header to be first in list
@@ -5344,7 +5375,7 @@ public class MetaDataClient {
 
             boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName, table, indexName, dataTableName, tenantId, connection);
             MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
-            boolean changingPhoenixTableProperty= evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName);
+            boolean changingPhoenixTableProperty= evaluateStmtProperties(metaProperties,metaPropertiesEvaluated,table,schemaName,tableName,new MutableBoolean(false));
 
             PIndexState newIndexState = statement.getIndexState();
 
@@ -5762,7 +5793,10 @@ public class MetaDataClient {
         return metaProperties;
     }
 
-    private boolean evaluateStmtProperties(MetaProperties metaProperties, MetaPropertiesEvaluated metaPropertiesEvaluated, PTable table, String schemaName, String tableName)
+    private boolean evaluateStmtProperties(MetaProperties metaProperties,
+                                           MetaPropertiesEvaluated metaPropertiesEvaluated,
+                                           PTable table, String schemaName, String tableName,
+                                           MutableBoolean areWeIntroducingTTLAtThisLevel)
             throws SQLException {
         boolean changingPhoenixTableProperty = false;
 
@@ -5921,9 +5955,10 @@ public class MetaDataClient {
                         .build()
                         .buildException();
             }
-            if (table.getType() != PTableType.TABLE) {
+            if (table.getType() != PTableType.TABLE && (table.getType() != PTableType.VIEW ||
+                    table.getViewType() != UPDATABLE)) {
                 throw new SQLExceptionInfo.Builder(
-                        SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_ONLY)
+                        SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY)
                         .build()
                         .buildException();
             }
@@ -5931,6 +5966,9 @@ public class MetaDataClient {
                 metaPropertiesEvaluated.setTTL(metaProperties.getTTL());
                 changingPhoenixTableProperty = true;
             }
+            //Updating Introducing TTL variable to true so that we will check if TTL is already
+            //defined in hierarchy or not.
+            areWeIntroducingTTLAtThisLevel.setTrue();
         }
 
         if (metaProperties.isChangeDetectionEnabled() != null) {

@@ -370,8 +370,11 @@ public enum SQLExceptionCode {
             + " only if none of the parents have indexes in the parent hierarchy"),
     MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY(10957, "44A39", "Max lookback age can only be set for tables"),
     UNKNOWN_INCLUDE_CHANGE_SCOPE(10958, "44A40", "Unknown change scope for CDC INCLUDE"),
-    TTL_SUPPORTED_FOR_TABLES_ONLY(10959, "44A41", TTL
-            + "property can only be set for tables"),
+    TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10959, "44A41", TTL
+            + "property can only be set for tables and updatable views only"),
+
+    TTL_ALREADY_DEFINED_IN_HIERARCHY(10960, "44A42", TTL
+            + " property is already defined in hierarchy for this entity"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
