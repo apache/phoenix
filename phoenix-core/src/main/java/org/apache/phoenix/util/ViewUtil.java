@@ -152,6 +152,52 @@ public class ViewUtil {
 
     }
 
+    /**
+     * Find all the descendant views of a given table or view in a depth-first fashion.
+     * Note that apart from scanning the {@code parent->child } links, we also validate each view
+     * by trying to resolve it.
+     * Use {@link ViewUtil#findAllRelatives(Table, byte[], byte[], byte[], LinkType,
+     * TableViewFinderResult)} if you want to find other links and don't care about orphan results.
+     *
+     * @param sysCatOrsysChildLink Table corresponding to either SYSTEM.CATALOG or SYSTEM.CHILD_LINK
+     * @param sysCat Table corresponding to SYSTEM.CATALOG especially for checking if TTL is defined
+     *               at any of the descendant view. This can be null then we are not scanning it for
+     *               checking if TTL is defined or not.
+     * @param serverSideConfig server-side configuration
+     * @param parentTenantId tenantId of the view (null if it is a table or global view)
+     * @param parentSchemaName schema name of the table/view
+     * @param parentTableOrViewName name of the table/view
+     * @param clientTimeStamp client timestamp
+     * @param legitimateChildViews List to be returned as first element of Pair containing
+     *                             legitimate child views
+     * @param orphanChildViews list to be returned as second element of Pair containing orphan views
+     * @param findJustOneLegitimateChildView if true, we are only interested in knowing if there is
+     *                                       at least one legitimate child view, so we return early.
+     *                                       If false, we want to find all legitimate child views
+     *                                       and all orphan views (views that no longer exist)
+     *                                       stemming from this table/view and all of its legitimate
+     *                                       child views.
+     * @param scanSysCatForTTLDefinedOnAnyChildPair Boolean pair, where first element is used in
+     *                                              {@link ViewUtil#findImmediateRelatedViews(Table,
+     *                                              Table, byte[], byte[], byte[], LinkType, long,
+     *                                              Pair)} to determine if we have to scan the
+     *                                              sysCat or not for checking if TTL is defined.
+     *                                              Second element is used to store the result if
+     *                                              we found atleast one children in hierarchy where
+     *                                              TTL is defined or not.
+     *
+     * @return a Pair where the first element is a list of all legitimate child views (or just 1
+     * child view in case findJustOneLegitimateChildView is true) and where the second element is
+     * a list of all orphan views stemming from this table/view and all of its legitimate child
+     * views (in case findJustOneLegitimateChildView is true, this list will be incomplete since we
+     * are not interested in it anyhow)
+     *
+     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
+     * @throws SQLException thrown if there is an error getting a connection to the server or an
+     * error retrieving the PTable for a child view
+     */
+
+
     public static Pair<List<PTable>, List<TableInfo>> findAllDescendantViews(
             Table sysCatOrsysChildLink, Table sysCat, Configuration serverSideConfig,
             byte[] parentTenantId, byte[] parentSchemaName, byte[] parentTableOrViewName,
@@ -275,6 +321,23 @@ public class ViewUtil {
 
     /**
      * Runs a scan on SYSTEM.CATALOG or SYSTEM.CHILD_LINK to get the immediate related tables/views.
+     * @param sysCatOrsysChildLink Table corresponding to either SYSTEM.CATALOG or SYSTEM.CHILD_LINK
+     * @param sysCat Table corresponding to SYSTEM.CATALOG especially for checking if TTL is defined
+     *               at immediate related view. This can be null then we are not scanning it for
+     *               checking if TTL is defined or not.
+     * @param tenantId tenantId of the key (null if it is a table or global view)
+     * @param schema schema name to use in the key
+     * @param table table/view name to use in the key
+     * @param linkType link type
+     * @param timestamp client timestamp
+     * @param scanSysCatForTTLDefinedOnAnyChildPair Boolean pair, where first element is used to
+     *                                              determine if we have to scan the
+     *                                              sysCat or not for checking if TTL is defined.
+     *                                              Second element is used to store the result if
+     *                                              we found atleast one children in hierarchy where
+     *                                              TTL is defined or not.
+     * @return TableViewFinderResult of the scan to get immediate related table/views.
+     * @throws IOException thrown if there is an error scanning SYSTEM.CHILD_LINK or SYSTEM.CATALOG
      */
     private static TableViewFinderResult findImmediateRelatedViews(Table sysCatOrsysChildLink,
             @Nullable Table sysCat, byte[] tenantId, byte[] schema, byte[] table,

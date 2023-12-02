@@ -22,10 +22,13 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -33,6 +36,7 @@ import org.junit.experimental.categories.Category;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 
@@ -40,6 +44,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_
 import static org.apache.phoenix.exception.SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY;
 import static org.apache.phoenix.exception.SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
@@ -49,6 +54,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
 
     private static final long DEFAULT_TTL_FOR_TEST = 86400;
     private static final long DEFAULT_TTL_FOR_CHILD = 10000;
+    public static final String TENANT_URL_FMT = "%s;%s=%s";
 
     /**
      * test TTL is being set as PhoenixTTL when PhoenixTTL is enabled.
@@ -60,7 +66,6 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     createTableWithOrWithOutTTLAsItsProperty(conn, true)));
             assertEquals("TTL is not set correctly at Phoenix level", DEFAULT_TTL_FOR_TEST,
                     table.getTTL());
-            assertNull("RowKeyPrefix should be Null", table.getRowKeyPrefix());
         }
     }
 
@@ -223,11 +228,11 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String tenantID1 = generateUniqueName();
 
             Properties props = new Properties();
-            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantID);
+            props.setProperty(TENANT_ID_ATTRIB, tenantID);
             Connection tenantConn = DriverManager.getConnection(getUrl(), props);
 
             Properties props1 = new Properties();
-            props1.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantID1);
+            props1.setProperty(TENANT_ID_ATTRIB, tenantID1);
             Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
 
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
@@ -295,7 +300,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             String tenantID = generateUniqueName();
 
             Properties props = new Properties();
-            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantID);
+            props.setProperty(TENANT_ID_ATTRIB, tenantID);
             Connection tenantConn = DriverManager.getConnection(getUrl(), props);
 
             String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
@@ -353,6 +358,57 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             conn.createStatement().execute(ddl);
             assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_CHILD, viewName);
 
+        }
+    }
+
+    @Test
+    public void testAlteringTTLAtOneLevelAndCheckingAtAnotherLevel() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tenantID = generateUniqueName();
+            String tenantID1 = generateUniqueName();
+
+            Properties props = new Properties();
+            props.setProperty(TENANT_ID_ATTRIB, tenantID);
+            Connection tenantConn = DriverManager.getConnection(getUrl(), props);
+
+            Properties props1 = new Properties();
+            props1.setProperty(TENANT_ID_ATTRIB, tenantID1);
+            Connection tenantConn1 = DriverManager.getConnection(getUrl(), props1);
+
+            String tableName = createTableWithOrWithOutTTLAsItsProperty(conn, true);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_TEST,
+                    tableName);
+
+            //View should have gotten TTL from parent table.
+            String viewName = createUpdatableViewOnTableWithTTL(conn, tableName, false);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_TEST, viewName);
+
+            //Child View's PTable gets TTL from parent View's PTable which gets from Table.
+            String childView = createViewOnViewWithTTL(tenantConn, viewName, false);
+            assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_TEST, childView);
+
+            String childView1 = createViewOnViewWithTTL(tenantConn1, viewName, false);
+            assertTTLValueOfTableOrView(tenantConn1.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_TEST, childView1);
+
+            String alter = "ALTER TABLE " + tableName + " SET TTL = " + DEFAULT_TTL_FOR_CHILD;
+            conn.createStatement().execute(alter);
+
+            //Clear Cache for all Tables to reflect Alter TTL commands in hierarchy
+            clearCache(conn, null, tableName);
+            clearCache(conn, null, viewName);
+            clearCache(tenantConn, null, childView);
+            clearCache(tenantConn1, null, childView1);
+
+            //Assert TTL for each entity again with altered value
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_CHILD, viewName);
+            assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_CHILD, childView);
+            assertTTLValueOfTableOrView(tenantConn1.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_CHILD, childView1);
         }
     }
 
@@ -428,4 +484,25 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         return childView;
     }
 
+    /**
+     * TODO :- We are externally calling clearCache for Alter Table scenario, remove this after
+     * https://issues.apache.org/jira/browse/PHOENIX-7135 is completed.
+     * @throws SQLException
+     */
+
+    public static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
+
+        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
+        PName tenantIdName = currentConnection.getTenantId();
+        String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
+
+        // Clear server side cache
+        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
+                Bytes.toBytes(tenantId), schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY :
+                        Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
+
+        // Clear connection cache
+        currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
+                String.format("%s.%s", schemaName, tableName), null, 0);
+    }
 }
