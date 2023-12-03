@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -1280,6 +1281,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 .getColumnQualifierBytes()));
         assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
                 .getColumnQualifierBytes()));
+        assertEquals(DEFAULT_PHOENIX_MAX_LOOKBACK_AGE, table.getMaxLookbackAge());
     }
 
     @Test
@@ -1696,6 +1698,27 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
 
             value = result.getValue(familyName, emptyColumnQualifier);
             assertNull(value);
+        }
+    }
+
+    @Test
+    public void testCreateTableWithTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName +
+                    " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
+                    " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
+                    "MAX_LOOKBACK_AGE=259200000"; // Set table level max lookback age to 3 days in milli-seconds
+            conn.createStatement().execute(createDdl);
+            ResultSet rs = conn.createStatement().executeQuery("SELECT MAX_LOOKBACK_AGE FROM \"SYSTEM\".\"CATALOG\"\n"
+                    + "WHERE TENANT_ID IS NULL AND\n"
+                    + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
+                    + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
+            assertTrue(rs.next());
+            assertEquals(259200000, rs.getInt(1));
+            assertFalse(rs.next());
         }
     }
 

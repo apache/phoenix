@@ -1795,4 +1795,9 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
                     newLastDDLTimestamp > oldLastDDLTimestamp);
         }
     }
+
+    @Test
+    public void testChangeTableLevelMaxLookbackAge() {
+
+    }
 }
