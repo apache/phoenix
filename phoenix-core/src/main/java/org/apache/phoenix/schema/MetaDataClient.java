@@ -355,7 +355,7 @@ public class MetaDataClient {
                     PHYSICAL_TABLE_NAME + "," +
                     SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME + "," +
-                    INDEX_WHERE +
+                    INDEX_WHERE + "," +
                     MAX_LOOKBACK_AGE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -5365,7 +5365,7 @@ public class MetaDataClient {
                         metaProperties.setSchemaVersion((String) value);
                     } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
                         metaProperties.setStreamingTopicName((String) value);
-                    } else if (propName.equalsIgnoreCase(MAX_LOOKBACK_AGE)) {
+                    } else if (propName.equals(MAX_LOOKBACK_AGE)) {
                         metaProperties.setMaxLookbackAge((Long) value);
                     }
                 }
@@ -5575,7 +5575,7 @@ public class MetaDataClient {
             }
         }
 
-        if (metaProperties.getMaxLookbackAge().longValue() != table.getMaxLookbackAge()) {
+        if (metaProperties.getMaxLookbackAge() != null && metaProperties.getMaxLookbackAge().longValue() != table.getMaxLookbackAge()) {
             metaPropertiesEvaluated.setMaxLookbackAge(metaProperties.getMaxLookbackAge());
             changingPhoenixTableProperty = true;
         }

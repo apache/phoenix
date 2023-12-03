@@ -343,7 +343,7 @@ public enum TableProperty {
         @Override
         public Object getValue(Object value) {
             if (value == null) {
-                return DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
+                return (long) DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
             }
             else if (value instanceof Integer || value instanceof Long) {
                 long maxLookbackAge = ((Number) value).longValue();
