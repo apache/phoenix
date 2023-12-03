@@ -5366,7 +5366,7 @@ public class MetaDataClient {
                     } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
                         metaProperties.setStreamingTopicName((String) value);
                     } else if (propName.equals(MAX_LOOKBACK_AGE)) {
-                        metaProperties.setMaxLookbackAge((Long) value);
+                        metaProperties.setMaxLookbackAge(((Number) value).longValue());
                     }
                 }
                 // if removeTableProps is true only add the property if it is not an HTable or Phoenix Table property
