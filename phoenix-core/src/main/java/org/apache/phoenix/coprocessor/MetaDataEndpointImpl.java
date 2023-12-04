@@ -2999,7 +2999,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // Add to list of HTables to delete, unless it's a view or its a shared index
             if (tableType == INDEX && table.getViewIndexId() != null) {
                 sharedTablesToDelete.add(new SharedTableState(table));
-            } else if (tableType != PTableType.VIEW) {
+            } else if (tableType != PTableType.VIEW && tableType != PTableType.CDC) {
                 tableNamesToDelete.add(table.getPhysicalName().getBytes());
             }
             invalidateList.add(cacheKey);

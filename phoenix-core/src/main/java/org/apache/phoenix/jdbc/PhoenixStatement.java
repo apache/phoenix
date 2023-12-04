@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_CDC_INDEX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
@@ -215,6 +216,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -1591,6 +1593,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                 @Override
                 public MutationState execute() throws SQLException {
+                    String indexName = ExecutableDropIndexStatement.this.getIndexName().getName();
+                    if (CDCUtil.isACDCIndex(indexName)) {
+                        throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX)
+                                .setTableName(indexName)
+                                .build().buildException();
+                    }
                     MetaDataClient client = new MetaDataClient(getContext().getConnection());
                     return client.dropIndex(ExecutableDropIndexStatement.this);
                 }
@@ -1607,7 +1615,20 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         @SuppressWarnings("unchecked")
         @Override
         public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
-            return null;
+            final StatementContext context = new StatementContext(stmt);
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("DROP CDC"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.dropCDC(ExecutableDropCDCStatement.this);
+                }
+            };
         }
     }
 
