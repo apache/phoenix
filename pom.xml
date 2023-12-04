@@ -711,6 +711,26 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.4.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.5.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.4.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -1572,6 +1592,7 @@
       <modules>
         <module>phoenix-client-parent</module>
         <module>phoenix-client-parent/phoenix-client-embedded</module>
+        <module>phoenix-client-parent/phoenix-client-lite</module>
         <module>phoenix-server</module>
         <module>phoenix-assembly</module>
       </modules>
