@@ -67,12 +67,14 @@ import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixMonitoredResultSet;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.GlobalMetric;
 import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.AmbiguousColumnException;
@@ -1463,6 +1465,22 @@ public class PhoenixRuntime {
 
     public static Map<String, List<HistogramDistribution>> getSizeHistograms() {
         return TableMetricsManager.getSizeHistogramsForAllTables();
+    }
+
+    public static Map<String, List<HistogramDistribution>> getAllConnectionQueryServicesHistograms() {
+        return ConnectionQueryServicesMetricsManager.getHistogramsForAllConnectionQueryServices();
+    }
+
+    public static Map<String, List<ConnectionQueryServicesMetric>> getAllConnectionQueryServicesCounters() {
+        return ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
+    }
+
+    /**
+     * This is only used in testcases to reset the connection query services Metrics data
+     */
+    @VisibleForTesting
+    public static void clearAllConnectionQueryServiceMetrics() {
+        ConnectionQueryServicesMetricsManager.clearAllConnectionQueryServiceMetrics();
     }
 
     /**

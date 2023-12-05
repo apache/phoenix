@@ -139,6 +139,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(rs.getString("TABLE_NAME"), viewName);
             assertEquals(PTableType.VIEW.toString(), rs.getString("TABLE_TYPE"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
     
@@ -163,6 +165,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(rs.getString(3), tableAName);
             assertEquals(PTableType.TABLE.toString(), rs.getString(4));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getTables(null, null, null, null);
             assertTrue(rs.next());
@@ -214,6 +218,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
             assertEquals("false", rs.getString(PhoenixDatabaseMetaData.TRANSACTIONAL));
             assertEquals(Boolean.FALSE, rs.getBoolean(PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED));
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getTables(null, tableCSchema, tableC, null);
             assertTrue(rs.next());
@@ -227,6 +233,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(tableC, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getTables(null, "", "%TABLE", new String[] { PTableType.TABLE.toString() });
             assertTrue(rs.next());
@@ -238,6 +246,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(tableS, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -257,6 +267,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("VIEW", rs.getString(1));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -302,6 +314,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(schema4, rs.getString("TABLE_SCHEM"));
             assertEquals(seq4, rs.getString("TABLE_NAME"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             String foo = generateUniqueName();
             String basSchema = generateUniqueName();
@@ -345,6 +359,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(bas, rs.getString("TABLE_NAME"));
             assertEquals(PTableType.TABLE.toString(), rs.getString("TABLE_TYPE"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs =
                     dbmd.getTables(null, "B%", null,
@@ -360,6 +376,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(seq3, rs.getString("TABLE_NAME"));
             assertEquals(PhoenixDatabaseMetaData.SEQUENCE_TABLE_TYPE, rs.getString("TABLE_TYPE"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -433,12 +451,16 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(rs.getString(1), schema1);
             assertEquals(rs.getString(2), null);
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getSchemas(null, "");
             assertTrue(rs.next());
             assertEquals(rs.getString(1), null);
             assertEquals(rs.getString(2), null);
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getSchemas(null, null);
             assertTrue(rs.next());
@@ -452,6 +474,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(schema1, rs.getString("TABLE_SCHEM"));
             assertEquals(null, rs.getString("TABLE_CATALOG"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -538,6 +562,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(3, rs.getInt("DECIMAL_DIGITS"));
 
         assertFalse(rs.next());
+        rs.close();
+        assertTrue(rs.getStatement().isClosed());
 
         // Look up only columns in a column family
         rs = dbmd.getColumns(null, "", table, "A.");
@@ -555,6 +581,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertTrue(rs.wasNull());
 
         assertFalse(rs.next());
+        rs.close();
+        assertTrue(rs.getStatement().isClosed());
 
         // Look up KV columns in a column family
         rs = dbmd.getColumns("", "", table, "%.COL%");
@@ -621,6 +649,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(3, rs.getInt("DECIMAL_DIGITS"));
 
         assertFalse(rs.next());
+        rs.close();
+        assertTrue(rs.getStatement().isClosed());
 
         // Look up KV columns in a column family
         rs = dbmd.getColumns("", "", table, "B.COL2");
@@ -630,6 +660,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
         assertEquals(SchemaUtil.normalizeIdentifier("col2"), rs.getString("COLUMN_NAME"));
         assertFalse(rs.next());
+        rs.close();
+        assertTrue(rs.getStatement().isClosed());
 
         String table2 = generateUniqueName();
         ensureTableCreated(getUrl(), table2, TABLE_WITH_SALTING, null);
@@ -637,6 +669,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(1, rs.getInt("ORDINAL_POSITION"));
         assertFalse(rs.next());
+        rs.close();
+        assertTrue(rs.getStatement().isClosed());
 
     }
 
@@ -660,6 +694,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(1, rs.getInt("KEY_SEQ"));
             assertEquals(null, rs.getString("PK_NAME"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getPrimaryKeys(null, schema2, table2);
             assertTrue(rs.next());
@@ -693,6 +729,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
                                                                                          // row
 
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             rs = dbmd.getColumns("", schema2, table2, null);
             assertTrue(rs.next());
@@ -735,6 +773,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(SchemaUtil.normalizeIdentifier("key_prefix"), rs.getString("COLUMN_NAME"));
 
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             String table3 = generateUniqueName();
             conn.createStatement().execute(
@@ -749,6 +789,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(1, rs.getInt("KEY_SEQ"));
             assertEquals(null, rs.getString("PK_NAME"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -811,6 +853,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(SchemaUtil.normalizeIdentifier("b"), rs.getString("COLUMN_FAMILY"));
             assertEquals(SchemaUtil.normalizeIdentifier("col5"), rs.getString("COLUMN_NAME"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -959,6 +1003,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(ViewType.MAPPED.name(), rs.getString(PhoenixDatabaseMetaData.VIEW_TYPE));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
 
             String deleteStmt = "DELETE FROM " + tableName;
             PreparedStatement ps = pconn.prepareStatement(deleteStmt);
@@ -1172,6 +1218,8 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             assertEquals(schema1, rs.getString("TABLE_SCHEM"));
             assertEquals(table1, rs.getString("TABLE_NAME"));
             assertFalse(rs.next());
+            rs.close();
+            assertTrue(rs.getStatement().isClosed());
         }
     }
 
@@ -1201,5 +1249,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
             }
         }
         assertTrue("Could not find REMARKS column", foundRemarksColumn);
+        rs.close();
+        assertTrue(rs.getStatement().isClosed());
     }
 }

@@ -107,8 +107,8 @@ public class RebuildIndexConnectionPropsIT extends BaseTest {
                     rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
                 ConnectionQueryServices rebuildQueryServices = rebuildIndexConnection.getQueryServices();
                 Connection rebuildIndexHConnection =
-                        (Connection) Whitebox.getInternalState(rebuildQueryServices,
-                            "connection");
+                        (Connection) Whitebox.getInternalState(Whitebox.getInternalState(rebuildQueryServices,
+                        "parent"), "connection");
                 Connection regularHConnection =
                         (Connection) Whitebox.getInternalState(
                             regularConnection.getQueryServices(), "connection");

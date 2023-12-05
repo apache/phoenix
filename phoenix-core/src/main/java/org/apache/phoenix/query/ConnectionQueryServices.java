@@ -226,4 +226,5 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
         throw new UnsupportedOperationException();
     }
 
+    int getConnectionCount(boolean isInternal);
 }

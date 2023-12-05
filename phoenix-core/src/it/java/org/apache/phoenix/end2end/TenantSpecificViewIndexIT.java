@@ -154,6 +154,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
             boolean isNamespaceMapped, long indexIdOffset) throws Exception {
         Properties props = new Properties();
         String indexName = "I_"+ generateUniqueName();
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(viewName);
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
@@ -224,19 +226,18 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         if (localIndex) {
-            assertEquals(SchemaUtil.getPhysicalTableName(
-                Bytes.toBytes(tableName), isNamespaceMapped).toString(),
+            assertEquals(fullIndexName + "(" + SchemaUtil.getPhysicalTableName(
+                Bytes.toBytes(tableName), isNamespaceMapped).toString() + ")",
                 explainPlanAttributes.getTableName());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
             assertEquals(" [" + (1L + indexIdOffset) + ",'"
                 + tenantId + "','f']", explainPlanAttributes.getKeyRanges());
         } else {
-            assertEquals(
-                Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
+            assertEquals(Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(
                     SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName),
-                        isNamespaceMapped).toBytes())),
-                explainPlanAttributes.getTableName());
+                            isNamespaceMapped).toBytes())),
+                    explainPlanAttributes.getTableName());
             assertNull(explainPlanAttributes.getClientSortAlgo());
             assertEquals(" [" + (Short.MIN_VALUE + indexIdOffset) + ",'"
                 + tenantId + "','f']", explainPlanAttributes.getKeyRanges());

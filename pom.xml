@@ -781,6 +781,11 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
+          <exclusion>
+            <!-- See HADOOP-18991 -->
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -800,6 +805,11 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <!-- See HADOOP-18991 -->
+            <groupId>commons-beanutils</groupId>
+            <artifactId>commons-beanutils</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1229,10 +1239,6 @@
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
           </exclusion>
-          <exclusion>
-            <groupId>commons-beanutils</groupId>
-            <artifactId>commons-beanutils</artifactId>
-          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1281,10 +1287,6 @@
         <artifactId>omid-common</artifactId>
         <version>${omid.version}</version>
         <exclusions>
-          <exclusion>
-            <groupId>commons-beanutils</groupId>
-            <artifactId>commons-beanutils</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>

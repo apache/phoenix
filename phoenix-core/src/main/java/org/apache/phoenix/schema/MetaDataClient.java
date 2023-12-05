@@ -19,17 +19,6 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
-import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
-import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
-import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
-import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
-import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
-import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -60,6 +49,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_WHERE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED;
@@ -87,10 +77,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -105,6 +99,17 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
+import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.INDEX_NAME;
+import static org.apache.phoenix.coprocessor.tasks.IndexRebuildTask.REBUILD_ALL;
+import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
+import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
@@ -152,6 +157,10 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
+import org.apache.phoenix.query.DelegateQueryServices;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
@@ -287,7 +296,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Ints;
 
-
 public class MetaDataClient {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataClient.class);
 
@@ -344,9 +352,10 @@ public class MetaDataClient {
                     CHANGE_DETECTION_ENABLED + "," +
                     PHYSICAL_TABLE_NAME + "," +
                     SCHEMA_VERSION + "," +
-                    STREAMING_TOPIC_NAME +
+                    STREAMING_TOPIC_NAME + "," +
+                    INDEX_WHERE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -1600,6 +1609,12 @@ public class MetaDataClient {
                 }
             }
 
+            Configuration config = connection.getQueryServices().getConfiguration();
+            if (!connection.getQueryServices().getProps()
+                .getBoolean(DISABLE_VIEW_SUBTREE_VALIDATION,
+                    DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION)) {
+                verifyIfDescendentViewsExtendPk(dataTable, config);
+            }
             // for view indexes
             if (dataTable.getType() == PTableType.VIEW) {
                 String physicalName = dataTable.getPhysicalName().getString();
@@ -1624,7 +1639,6 @@ public class MetaDataClient {
                 }
             }
 
-            Configuration config = connection.getQueryServices().getConfiguration();
             long threshold = Long.parseLong(config.get(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD));
 
             if (threshold > 0 && !statement.isAsync()) {
@@ -1667,8 +1681,13 @@ public class MetaDataClient {
             PrimaryKeyConstraint pk = FACTORY.primaryKey(null, allPkColumns);
 
             tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME, dataTable.getPhysicalName().getString());
-            CreateTableStatement tableStatement = FACTORY.createTable(indexTableName, statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX, statement.ifNotExists(), null, null, statement.getBindCount(), null);
-            table = createTableInternal(tableStatement, splits, dataTable, null, null, getViewIndexDataType() ,null, null, allocateIndexId, statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
+            CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
+                    statement.getProps(), columnDefs, pk, statement.getSplitNodes(),
+                    PTableType.INDEX, statement.ifNotExists(), null,
+                    statement.getWhere(), statement.getBindCount(), null);
+            table = createTableInternal(tableStatement, splits, dataTable, null, null,
+                    getViewIndexDataType() ,null, null, allocateIndexId,
+                    statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
         }
         finally {
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
@@ -1698,6 +1717,65 @@ public class MetaDataClient {
         }
 
         return buildIndex(table, tableRef);
+    }
+
+    /**
+     * Go through all the descendent views from the child view hierarchy and find if any of the
+     * descendent views extends the primary key, throw error.
+     *
+     * @param tableOrView view or table on which the index is being created.
+     * @param config the configuration.
+     * @throws SQLException if any of the descendent views extends pk or if something goes wrong
+     * while querying descendent view hierarchy.
+     */
+    private void verifyIfDescendentViewsExtendPk(PTable tableOrView, Configuration config)
+        throws SQLException {
+        if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
+            return;
+        }
+        if (connection.getQueryServices() instanceof DelegateQueryServices) {
+            DelegateQueryServices services = (DelegateQueryServices) connection.getQueryServices();
+            if (services.getDelegate() instanceof ConnectionlessQueryServicesImpl) {
+                return;
+            }
+        }
+        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config) ?
+            SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
+            SYSTEM_CHILD_LINK_NAME_BYTES;
+        try (Table childLinkTable =
+                     connection.getQueryServices().getTable(systemChildLinkTable)) {
+            byte[] tenantId = connection.getTenantId() == null ? null
+                    : connection.getTenantId().getBytes();
+            byte[] schemaNameBytes = tableOrView.getSchemaName().getBytes();
+            byte[] viewOrTableName = tableOrView.getTableName().getBytes();
+            Pair<List<PTable>, List<TableInfo>> descViews =
+                    ViewUtil.findAllDescendantViews(
+                            childLinkTable,
+                            config,
+                            tenantId,
+                            schemaNameBytes,
+                            viewOrTableName,
+                            HConstants.LATEST_TIMESTAMP,
+                            false);
+            List<PTable> legitimateChildViews = descViews.getFirst();
+            int dataTableOrViewPkCols = tableOrView.getPKColumns().size();
+            if (legitimateChildViews != null && legitimateChildViews.size() > 0) {
+                for (PTable childView : legitimateChildViews) {
+                    if (childView.getPKColumns().size() > dataTableOrViewPkCols) {
+                        LOGGER.error("Creation of view index not allowed as child view {}"
+                                + " extends pk", childView.getName());
+                        throw new SQLExceptionInfo.Builder(
+                                SQLExceptionCode
+                                        .CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK)
+                                .build()
+                                .buildException();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error while retrieving descendent views", e);
+            throw new SQLException(e);
+        }
     }
 
     public MutationState dropSequence(DropSequenceStatement statement) throws SQLException {
@@ -2820,6 +2898,8 @@ public class MetaDataClient {
                         .setColumns(columns.values())
                         .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED)
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
+                        .setIndexWhere(statement.getWhereClause() == null ? null
+                                : statement.getWhereClause().toString())
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
@@ -3073,7 +3153,11 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setString(35, streamingTopicName);
             }
-
+            if (tableType == INDEX && statement.getWhereClause() != null) {
+                tableUpsert.setString(36, statement.getWhereClause().toString());
+            } else {
+                tableUpsert.setNull(36, Types.VARCHAR);
+            }
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -3221,6 +3305,8 @@ public class MetaDataClient {
                         .setExternalSchemaId(result.getTable() != null ?
                         result.getTable().getExternalSchemaId() : null)
                         .setStreamingTopicName(streamingTopicName)
+                        .setIndexWhere(statement.getWhereClause() == null ? null
+                                : statement.getWhereClause().toString())
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);

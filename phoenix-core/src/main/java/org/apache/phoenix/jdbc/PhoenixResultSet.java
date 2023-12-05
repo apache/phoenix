@@ -174,6 +174,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         this.scanner = resultIterator;
         this.context = ctx;
         this.statement = context.getStatement();
+        statement.setLastResultSet(this);
         this.readMetricsQueue = context.getReadMetricsQueue();
         this.overAllQueryMetrics = context.getOverallQueryMetrics();
         this.queryLogger = context.getQueryLogger() != null ? context.getQueryLogger() : QueryLogger.NO_OP_INSTANCE;
@@ -218,12 +219,14 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
 
     @Override
     public void close() throws SQLException {
-        if (isClosed) { return; }
+        if (isClosed) {
+            return;
+        }
         try {
             scanner.close();
         } finally {
             isClosed = true;
-            statement.getResultSets().remove(this);
+            statement.removeResultSet(this);
             overAllQueryMetrics.endQuery();
             overAllQueryMetrics.stopResultSetWatch();
             if (context.getCurrentTable() != null && context.getCurrentTable().getTable() != null

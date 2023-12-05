@@ -57,6 +57,16 @@ public abstract class BaseJoinIT extends ParallelStatsDisabledIT {
     protected static final String JOIN_SUPPLIER_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_SUPPLIER_TABLE + '"';
     protected static final String JOIN_COITEM_TABLE_FULL_NAME = '"' + JOIN_SCHEMA + "\".\"" + JOIN_COITEM_TABLE + '"';
 
+    protected static final String JOIN_CUSTOMER_INDEX = "IDX_CUSTOMER";
+    protected static final String JOIN_ITEM_INDEX = "IDX_ITEM";
+    protected static final String JOIN_SUPPLIER_INDEX = "IDX_SUPPLIER";
+    protected static final String JOIN_CUSTOMER_INDEX_FULL_NAME =
+            SchemaUtil.getTableName(JOIN_SCHEMA, JOIN_CUSTOMER_INDEX);
+    protected static final String JOIN_ITEM_INDEX_FULL_NAME =
+            SchemaUtil.getTableName(JOIN_SCHEMA, JOIN_ITEM_INDEX);
+    protected static final String JOIN_SUPPLIER_INDEX_FULL_NAME =
+            SchemaUtil.getTableName(JOIN_SCHEMA, JOIN_SUPPLIER_INDEX);
+
     private static final Map<String,String> tableDDLMap;
     
     static {

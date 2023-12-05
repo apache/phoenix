@@ -56,6 +56,7 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.query.server.orderBy.spooling.enabled";
     public static final String HBASE_CLIENT_KEYTAB = "hbase.myclient.keytab";
     public static final String HBASE_CLIENT_PRINCIPAL = "hbase.myclient.principal";
+    String QUERY_SERVICES_NAME = "phoenix.query.services.name";
     public static final String SPOOL_DIRECTORY = "phoenix.spool.directory";
     public static final String AUTO_COMMIT_ATTRIB = "phoenix.connection.autoCommit";
     // consistency configuration setting
@@ -158,6 +159,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_FAILURE_HANDLING_REBUILD_INTERVAL_ATTRIB =
         "phoenix.index.failure.handling.rebuild.interval";
     public static final String INDEX_REBUILD_TASK_INITIAL_DELAY = "phoenix.index.rebuild.task.initial.delay";
+    public static final String START_TRUNCATE_TASK_DELAY = "phoenix.start.truncate.task.delay";
     
     public static final String INDEX_FAILURE_HANDLING_REBUILD_NUMBER_OF_BATCHES_PER_TABLE = "phoenix.index.rebuild.batch.perTable";
     // If index disable timestamp is older than this threshold, then index rebuild task won't attempt to rebuild it
@@ -392,6 +394,17 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_HISTOGRAM_LATENCY_RANGES = "phoenix.histogram.latency.ranges";
     // The range of bins for size metrics for histogram.
     public static final String PHOENIX_HISTOGRAM_SIZE_RANGES = "phoenix.histogram.size.ranges";
+
+    // Connection Query Service Metrics Configs
+    String CONNECTION_QUERY_SERVICE_METRICS_ENABLED = "phoenix.conn.query.service.metrics.enabled";
+    String CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_CLASSNAME =
+            "phoenix.monitoring.connection.query.service.metricProvider.className";
+    String CONNECTION_QUERY_SERVICE_METRICS_PUBLISHER_ENABLED =
+            "phoenix.conn.query.service.metricsPublisher.enabled";
+    // The range of bins for Connection Query Service Metrics of histogram.
+    String CONNECTION_QUERY_SERVICE_HISTOGRAM_SIZE_RANGES =
+            "phoenix.conn.query.service.histogram.size.ranges";
+
     // This config is used to move (copy and delete) the child links from the SYSTEM.CATALOG to SYSTEM.CHILD_LINK table.
     // As opposed to a copy and async (out of band) delete.
     public static final String MOVE_CHILD_LINKS_DURING_UPGRADE_ENABLED = "phoenix.move.child_link.during.upgrade";
@@ -422,6 +435,17 @@ public interface QueryServices extends SQLCloseable {
      *  Parameter to disable the server merges for hinted uncovered indexes
      */
     String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
+
+    /**
+     * Param to determine whether client can disable validation to figure out if any of the
+     * descendent views extend primary key of their parents. Since this is a bit of
+     * expensive call, we can opt in to disable it. By default, this check will always be performed
+     * while creating index (PHOENIX-7067) on any table or view. This config can be used for
+     * disabling other subtree validation purpose as well.
+     */
+    String DISABLE_VIEW_SUBTREE_VALIDATION = "phoenix.disable.view.subtree.validation";
+
+    boolean DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION = false;
 
     /**
      * Get executor service used for parallel scans
