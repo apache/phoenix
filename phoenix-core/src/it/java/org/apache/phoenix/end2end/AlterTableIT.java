@@ -1797,7 +1797,43 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testChangeTableLevelMaxLookbackAge() {
+    public void testChangeTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        long baseMaxLookbackAge = 86400000; // 1 day
+        long maxLookbackAge = baseMaxLookbackAge;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE  " + fullTableName +
+                    "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + "MAX_LOOKBACK_AGE=" + maxLookbackAge;
+            conn.createStatement().execute(ddl);
+            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
+            maxLookbackAge = 3L * baseMaxLookbackAge;
+            ddl  = "ALTER TABLE " + fullTableName + " SET MAX_LOOKBACK_AGE = " + maxLookbackAge;
+            conn.createStatement().execute(ddl);
+            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
+            maxLookbackAge = 2L * baseMaxLookbackAge;
+            ddl  = "ALTER TABLE " + fullTableName + " SET MAX_LOOKBACK_AGE = " + maxLookbackAge;
+            conn.createStatement().execute(ddl);
+            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
+            maxLookbackAge = 0;
+            ddl  = "ALTER TABLE " + fullTableName + " SET MAX_LOOKBACK_AGE = " + maxLookbackAge;
+            conn.createStatement().execute(ddl);
+            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
+        }
+    }
 
+    private void assertMaxLookbackAge(String schemaName, String dataTableName, long expectedMaxLookbackAge) throws Exception {
+        String query = "SELECT MAX_LOOKBACK_AGE FROM \"SYSTEM\".\"CATALOG\"\n"
+                + "WHERE TENANT_ID IS NULL AND\n"
+                + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
+                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(expectedMaxLookbackAge, rs.getLong(1));
+            assertFalse(rs.next());
+        }
     }
 }

@@ -1717,7 +1717,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                     + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
                     + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
             assertTrue(rs.next());
-            assertEquals(259200000, rs.getInt(1));
+            assertEquals(259200000, rs.getLong(1));
             assertFalse(rs.next());
         }
     }
