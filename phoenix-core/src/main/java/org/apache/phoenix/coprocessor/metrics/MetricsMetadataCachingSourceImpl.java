@@ -32,7 +32,7 @@ public class MetricsMetadataCachingSourceImpl
     private final MutableFastCounter cacheMissCounter;
     private final MutableFastCounter validateDDLTimestampRequestCounter;
     private final MutableFastCounter cacheInvalidationOpsCounter;
-    private final MutableFastCounter getCacheInvalidationSuccessCounter;
+    private final MutableFastCounter cacheInvalidationSuccessCounter;
     private final MetricHistogram cacheInvalidationRpcTimeHistogram;
     private final MetricHistogram cacheInvalidationTotalTimeHistogram;
 
@@ -53,7 +53,7 @@ public class MetricsMetadataCachingSourceImpl
                 VALIDATE_DDL_TIMESTAMP_REQUESTS, VALIDATE_DDL_TIMESTAMP_REQUEST_DESC, 0L);
         cacheInvalidationOpsCounter = getMetricsRegistry().newCounter(
                 CACHE_INVALIDATION_OPERATIONS, CACHE_INVALIDATION_OPERATIONS_DESC, 0L);
-        getCacheInvalidationSuccessCounter = getMetricsRegistry().newCounter(
+        cacheInvalidationSuccessCounter = getMetricsRegistry().newCounter(
                 CACHE_INVALIDATION_SUCCESS, CACHE_INVALIDATION_SUCCESS_DESC, 0L);
         cacheInvalidationRpcTimeHistogram = getMetricsRegistry().newHistogram(
                 CACHE_INVALIDATION_RPC_TIME, CACHE_INVALIDATION_RPC_TIME_DESC);
@@ -93,6 +93,6 @@ public class MetricsMetadataCachingSourceImpl
 
     @Override
     public void incrementCacheInvalidationSuccessCount() {
-        getCacheInvalidationSuccessCounter.incr();
+        cacheInvalidationSuccessCounter.incr();
     }
 }

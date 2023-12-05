@@ -43,8 +43,8 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String VALIDATE_DDL_TIMESTAMP_REQUEST_DESC = "Number of validate ddl timestamp requests.";
 
     String CACHE_INVALIDATION_OPERATIONS = "cacheInvalidationOperations";
-    String CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke cache invalidation " +
-                                                    "within a DDL operation";
+    String CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke cache invalidation "
+                                                    + "within a DDL operation";
 
     String CACHE_INVALIDATION_SUCCESS = "cacheInvalidationSuccess";
     String CACHE_INVALIDATION_SUCCESS_DESC = "Number of times cache invalidation was successful.";
