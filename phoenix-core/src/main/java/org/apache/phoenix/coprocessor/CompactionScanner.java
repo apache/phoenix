@@ -126,8 +126,8 @@ public class CompactionScanner implements InternalScanner {
         PhoenixRowTracker rowTracker = new PhoenixRowTracker(tableName, cfd);
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor(rowTracker);
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor(rowTracker);
-        LOGGER.info(String.format("Compaction params:- (table=%s, ttl=%d, mlb=%d, max=%d, min=%d, ct=%d, csw=%d, mlbw=%d, ttlw=%d)",
-                tableName, ttl*1000,this.maxLookbackInMillis, this.maxVersion, this.minVersion,
+        LOGGER.info(String.format("Compaction params:- (table=%s,type=%s, ttl=%d, mlb=%d, max=%d, min=%d, ct=%d, csw=%d, mlbw=%d, ttlw=%d)",
+                tableName, table.getType().toString(), ttl*1000,this.maxLookbackInMillis, this.maxVersion, this.minVersion,
                 this.compactionTime, compactionWindowStart, this.maxLookbackWindowStart, ttlWindowStart));
 
     }
@@ -927,10 +927,8 @@ public class CompactionScanner implements InternalScanner {
     }
 
     class PhoenixRowTracker {
-        boolean isMultiTenant = true;
+        boolean checkTTLInHierarchy = true;
         String fullTableName;
-        String columnFamilyName;
-        ColumnFamilyDescriptor cfd;
         RowContext rowContext;
         TableTTLInfoCache ttlCache;
         PrefixIndex index;
@@ -938,8 +936,6 @@ public class CompactionScanner implements InternalScanner {
 
         PhoenixRowTracker(String fullTableName, ColumnFamilyDescriptor cfd) {
             this.fullTableName = fullTableName;
-            this.columnFamilyName = cfd.getNameAsString();
-            this.cfd = cfd;
             this.ttlCache = new TableTTLInfoCache();
             this.index  = new PrefixIndex();
 
@@ -959,7 +955,7 @@ public class CompactionScanner implements InternalScanner {
         }
         public void visit(List<Cell> result) {
 
-            if (isMultiTenant) {
+            if (checkTTLInHierarchy) {
                 boolean matched = false;
                 byte[] rowkey = EMPTY_BYTE_ARRAY;
                 byte[] prefix = EMPTY_BYTE_ARRAY;

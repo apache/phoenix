@@ -209,6 +209,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         isPhoenixTableTTLEnabled =
                 e.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+        LOGGER.info(QueryServices.PHOENIX_TABLE_TTL_ENABLED + "is enabled " + isPhoenixTableTTLEnabled);
+
     }
 
     Configuration getUpsertSelectConfig() {
@@ -604,7 +606,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
                         } catch (Exception e) {
                             if (e instanceof TableNotFoundException) {
-                                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
+                                LOGGER.info("Ignoring HBase table that is not a Phoenix table: "
                                         + fullTableName);
                                 // non-Phoenix HBase tables won't be found, do nothing
                             } else {
