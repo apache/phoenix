@@ -46,28 +46,28 @@ public class MetricsMetadataCachingSourceImpl
                                        String metricsJmxContext) {
         super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
         cacheHitCounter = getMetricsRegistry().newCounter(
-                METADATA_VALIDATION_CACHE_HIT, METADATA_VALIDATION_CACHE_HIT_DESC, 0L);
+                REGIONSERVER_METADATA_CACHE_HITS, REGIONSERVER_METADATA_CACHE_HITS_DESC, 0L);
         cacheMissCounter = getMetricsRegistry().newCounter(
-                METADATA_VALIDATION_CACHE_MISS, METADATA_VALIDATION_CACHE_MISS_DESC, 0L);
+                REGIONSERVER_METADATA_CACHE_MISSES, REGIONSERVER_METADATA_CACHE_MISSES_DESC, 0L);
         validateDDLTimestampRequestCounter = getMetricsRegistry().newCounter(
                 VALIDATE_DDL_TIMESTAMP_REQUESTS, VALIDATE_DDL_TIMESTAMP_REQUEST_DESC, 0L);
         cacheInvalidationOpsCounter = getMetricsRegistry().newCounter(
-                CACHE_INVALIDATION_OPERATIONS, CACHE_INVALIDATION_OPERATIONS_DESC, 0L);
+                METADATA_CACHE_INVALIDATION_OPERATIONS, METADATA_CACHE_INVALIDATION_OPERATIONS_DESC, 0L);
         cacheInvalidationSuccessCounter = getMetricsRegistry().newCounter(
-                CACHE_INVALIDATION_SUCCESS, CACHE_INVALIDATION_SUCCESS_DESC, 0L);
+                METADATA_CACHE_INVALIDATION_SUCCESS, METADATA_CACHE_INVALIDATION_SUCCESS_DESC, 0L);
         cacheInvalidationRpcTimeHistogram = getMetricsRegistry().newHistogram(
-                CACHE_INVALIDATION_RPC_TIME, CACHE_INVALIDATION_RPC_TIME_DESC);
+                METADATA_CACHE_INVALIDATION_RPC_TIME, METADATA_CACHE_INVALIDATION_RPC_TIME_DESC);
         cacheInvalidationTotalTimeHistogram = getMetricsRegistry().newHistogram(
-                CACHE_INVALIDATION_TOTAL_TIME, CACHE_INVALIDATION_TOTAL_TIME_DESC);
+                METADATA_CACHE_INVALIDATION_TOTAL_TIME, METADATA_CACHE_INVALIDATION_TOTAL_TIME_DESC);
     }
 
     @Override
-    public void incrementCacheHitCount() {
+    public void incrementRegionServerMetadataCacheHitCount() {
         cacheHitCounter.incr();
     }
 
     @Override
-    public void incrementCacheMissCount() {
+    public void incrementRegionServerMetadataCacheMissCount() {
         cacheMissCounter.incr();
     }
 
@@ -77,22 +77,22 @@ public class MetricsMetadataCachingSourceImpl
     }
 
     @Override
-    public void addCacheInvalidationRpcTime(long t) {
+    public void addMetadataCacheInvalidationRpcTime(long t) {
         cacheInvalidationRpcTimeHistogram.add(t);
     }
 
     @Override
-    public void addCacheInvalidationTotalTime(long t) {
+    public void addMetadataCacheInvalidationTotalTime(long t) {
         cacheInvalidationTotalTimeHistogram.add(t);
     }
 
     @Override
-    public void incrementCacheInvalidationOperationsCount() {
+    public void incrementMetadataCacheInvalidationOperationsCount() {
         cacheInvalidationOpsCounter.incr();
     }
 
     @Override
-    public void incrementCacheInvalidationSuccessCount() {
+    public void incrementMetadataCacheInvalidationSuccessCount() {
         cacheInvalidationSuccessCounter.incr();
     }
 }

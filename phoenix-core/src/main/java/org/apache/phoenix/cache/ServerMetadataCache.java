@@ -116,12 +116,12 @@ public class ServerMetadataCache {
         // Lookup in cache if present.
         Long lastDDLTimestamp = lastDDLTimestampMap.getIfPresent(tableKeyPtr);
         if (lastDDLTimestamp != null) {
-            metricsSource.incrementCacheHitCount();
+            metricsSource.incrementRegionServerMetadataCacheHitCount();
             LOGGER.trace("Retrieving last ddl timestamp value from cache for tableName: {}",
                     fullTableNameStr);
             return lastDDLTimestamp;
         }
-        metricsSource.incrementCacheMissCount();
+        metricsSource.incrementRegionServerMetadataCacheMissCount();
         PTable table;
         String tenantIDStr = Bytes.toString(tenantID);
         if (tenantIDStr == null || tenantIDStr.isEmpty()) {

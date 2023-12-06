@@ -29,42 +29,42 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String METRICS_DESCRIPTION = "Metrics about Distributed Metadata Caching";
     String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
-    String METADATA_VALIDATION_CACHE_HIT = "metadataValidationCacheHits";
-    String METADATA_VALIDATION_CACHE_HIT_DESC
+    String REGIONSERVER_METADATA_CACHE_HITS = "numRegionServerMetadataCacheHits";
+    String REGIONSERVER_METADATA_CACHE_HITS_DESC
             = "Number of cache hits in PhoenixRegionServerEndpoint "
                 + "when serving validate ddl timestamp requests.";
 
-    String METADATA_VALIDATION_CACHE_MISS = "metadataValidationCacheMisses";
-    String METADATA_VALIDATION_CACHE_MISS_DESC
+    String REGIONSERVER_METADATA_CACHE_MISSES = "numRegionServerMetadataCacheMisses";
+    String REGIONSERVER_METADATA_CACHE_MISSES_DESC
             = "Number of cache misses in PhoenixRegionServerEndpoint "
                 + "when serving validate ddl timestamp requests.";
 
-    String VALIDATE_DDL_TIMESTAMP_REQUESTS = "validateDDLTimestampRequests";
+    String VALIDATE_DDL_TIMESTAMP_REQUESTS = "numValidateDDLTimestampRequests";
     String VALIDATE_DDL_TIMESTAMP_REQUEST_DESC = "Number of validate ddl timestamp requests.";
 
-    String CACHE_INVALIDATION_OPERATIONS = "cacheInvalidationOperations";
-    String CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke cache invalidation "
+    String METADATA_CACHE_INVALIDATION_OPERATIONS = "numMetadataCacheInvalidationOps";
+    String METADATA_CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke cache invalidation "
                                                     + "within a DDL operation";
 
-    String CACHE_INVALIDATION_SUCCESS = "cacheInvalidationSuccess";
-    String CACHE_INVALIDATION_SUCCESS_DESC = "Number of times cache invalidation was successful.";
+    String METADATA_CACHE_INVALIDATION_SUCCESS = "numMetadataCacheInvalidationOpsSuccess";
+    String METADATA_CACHE_INVALIDATION_SUCCESS_DESC = "Number of times cache invalidation was successful.";
 
-    String CACHE_INVALIDATION_RPC_TIME = "cacheInvalidationRpcTime";
-    String CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for "
+    String METADATA_CACHE_INVALIDATION_RPC_TIME = "metadataCacheInvalidationRpcTimeMs";
+    String METADATA_CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for "
                                                 + "cache invalidation RPC";
-    String CACHE_INVALIDATION_TOTAL_TIME = "cacheInvalidationTotalTime";
-    String CACHE_INVALIDATION_TOTAL_TIME_DESC = "Histogram for the total time in milliseconds for "
+    String METADATA_CACHE_INVALIDATION_TOTAL_TIME = "metadataCacheInvalidationTotalTimeMs";
+    String METADATA_CACHE_INVALIDATION_TOTAL_TIME_DESC = "Histogram for the total time in milliseconds for "
                                                     + "cache invalidation on all regionservers";
 
     /**
      * Report the number of cache hits when validating last ddl timestamps.
      */
-    void incrementCacheHitCount();
+    void incrementRegionServerMetadataCacheHitCount();
 
     /**
      * Report the number of cache misses when validating last ddl timestamps.
      */
-    void incrementCacheMissCount();
+    void incrementRegionServerMetadataCacheMissCount();
 
     /**
      * Report the number of requests for validating last ddl timestamps.
@@ -74,21 +74,21 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     /**
      * Report number of cache invalidations performed.
      */
-    void incrementCacheInvalidationOperationsCount();
+    void incrementMetadataCacheInvalidationOperationsCount();
 
     /**
      * Report number of cache invalidations which were successful.
      */
-    void incrementCacheInvalidationSuccessCount();
+    void incrementMetadataCacheInvalidationSuccessCount();
 
     /**
      * Add to the cache invalidation rpc time histogram.
      */
-    void addCacheInvalidationRpcTime(long t);
+    void addMetadataCacheInvalidationRpcTime(long t);
 
     /**
      * Add to the cache invalidation total time histogram.
      * @param t
      */
-    void addCacheInvalidationTotalTime(long t);
+    void addMetadataCacheInvalidationTotalTime(long t);
 }

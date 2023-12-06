@@ -3485,7 +3485,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             + " is not loaded");
             return;
         }
-        metricsMetadataCachingSource.incrementCacheInvalidationOperationsCount();
+        metricsMetadataCachingSource.incrementMetadataCacheInvalidationOperationsCount();
         Properties properties = new Properties();
         // Skip checking of system table existence since the system tables should have created
         // by now.
@@ -3499,8 +3499,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             PhoenixStopWatch stopWatch = new PhoenixStopWatch().start();
             invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
             metricsMetadataCachingSource
-                    .addCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
-            metricsMetadataCachingSource.incrementCacheInvalidationSuccessCount();
+                    .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+            metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
         }
     }
 
@@ -3551,7 +3551,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     LOGGER.info("Invalidating metadata cache"
                             + " on region server: {} completed successfully and it took {} ms",
                             serverName, cacheInvalidationTime);
-                    metricsMetadataCachingSource.addCacheInvalidationRpcTime(cacheInvalidationTime);
+                    metricsMetadataCachingSource.addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
                 } catch (ServiceException se) {
                     LOGGER.error("Invalidating metadata cache failed for regionserver {}",
                             serverName, se);
