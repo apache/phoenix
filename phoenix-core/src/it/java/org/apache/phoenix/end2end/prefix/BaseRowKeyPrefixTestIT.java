@@ -254,7 +254,7 @@ public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
         String globalViewName = String.format(GLOBAL_VIEW_NAME_FMT, partitionName);
         try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             try (Statement cstmt = globalConnection.createStatement()) {
-                String globalViewOptions = (partition % 2 != 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
+                String globalViewOptions = (partition % 2 == 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
                 //String tenantViewOptions = "";
                 String VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s(ID1 %s not null,ID2 %s not null,ID3 %s not null, ROW_ID CHAR(15) not null, COL2 VARCHAR " +
                         "CONSTRAINT pk PRIMARY KEY (ID1 %s, ID2 %s, ID3 %s, ROW_ID)) " +
@@ -290,8 +290,8 @@ public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
         String tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
         String tenantConnectionUrl = String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
         String tenantViewName = String.format(TENANT_VIEW_NAME_FMT, partitionName, tenantViewNum);
-        //String tenantViewOptions = (partition % 2 != 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
-        String tenantViewOptions = "";
+        String tenantViewOptions = (partition % 2 != 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
+        //String tenantViewOptions = "";
         try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
             tenantConnection.setAutoCommit(true);
             try (Statement cstmt = tenantConnection.createStatement()) {
@@ -586,8 +586,8 @@ public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                 rowkey = result.getRow();
                 numMatchingRows++;
             }
-//            assertEquals(String.format("Expected rows do match for table = %s, rowId = %s",
-//                    Bytes.toString(hbaseTableName), rowId), 1, numMatchingRows);
+            assertEquals(String.format("Expected rows do match for table = %s, rowId = %s",
+                    Bytes.toString(hbaseTableName), rowId), 1, numMatchingRows);
 
             PrefixFilter matchFilter = new PrefixFilter(prefix);
             LOGGER.debug(String.format("row-key = %s, tenantId = %s, prefix = %s, matched = %s",
@@ -636,9 +636,9 @@ public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
                 rowkey = result.getRow();
                 numMatchingRows++;
             }
-//            assertEquals(String.format("Expected rows do match for index table = %s, row-key = %s, rowId = %s",
-//                    Bytes.toString(hbaseIndexTableName), Bytes.toStringBinary(rowkey), rowId),
-//                    1, numMatchingRows);
+            assertEquals(String.format("Expected rows do match for index table = %s, row-key = %s, rowId = %s",
+                    Bytes.toString(hbaseIndexTableName), Bytes.toStringBinary(rowkey), rowId),
+                    1, numMatchingRows);
 
         }
     }
@@ -942,7 +942,59 @@ public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    @Ignore
     public void testGetViewInfo() {
         ViewUtil.getRowKeyPrefixesForTable2("TEST_ENTITY.N000001");
+    }
+
+
+    @Test
+    @Ignore
+    public void testGetViewIndexInfo() {
+        ViewUtil.getRowKeyPrefixesForIndexes2("_IDX_TEST_ENTITY.N000013");
+    }
+
+    @Test
+    @Ignore
+    public void testResetServerCache() {
+        try {
+            clearCache(true, true, Arrays.asList(new String[] {"00D0x0000000001", "00D0x0000000002", "00D0x0000000003"}));
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private void clearCache(boolean globalFixNeeded, boolean tenantFixNeeded, List<String> allTenants)
+            throws SQLException {
+
+        if (globalFixNeeded) {
+            try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+                clearCache(globalConnection, "TEST_ENTITY", "G1_550");
+            }
+        }
+        if (tenantFixNeeded || globalFixNeeded) {
+            for (String tenantId : allTenants) {
+                String tenantConnectionUrl = String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
+                try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
+                    clearCache(tenantConnection, "TEST_ENTITY", "TV_550_1");
+                }
+            }
+        }
+    }
+
+    private static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
+
+        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
+        PName tenantIdName = currentConnection.getTenantId();
+        String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
+
+        // Clear server side cache
+        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
+                Bytes.toBytes(tenantId), Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
+
+        // Clear connection cache
+        currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
+                String.format("%s.%s", schemaName, tableName), null, 0);
     }
 }
