@@ -664,8 +664,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 rowkey = result.getRow();
                 numMatchingRows++;
             }
-//            assertEquals(String.format("Expected rows do match for table = %s, rowId = %s",
-//                    Bytes.toString(hbaseTableName), rowId), 1, numMatchingRows);
+            assertEquals(String.format("Expected rows do match for table = %s, rowId = %s",
+                    Bytes.toString(hbaseTableName), rowId), 1, numMatchingRows);
 
             PrefixFilter matchFilter = new PrefixFilter(prefix);
             LOGGER.debug(String.format("row-key = %s, tenantId = %s, prefix = %s, matched = %s",
@@ -1052,10 +1052,5 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             }
         }
         return baseTableName;
-    }
-
-    @Test
-    public void testGetViewInfo() {
-        ViewUtil.getRowKeyPrefixesForTable2("TEST_ENTITY.N000001");
     }
 }
