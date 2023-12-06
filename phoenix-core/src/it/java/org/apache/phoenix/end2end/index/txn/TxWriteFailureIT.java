@@ -172,7 +172,8 @@ public class TxWriteFailureIT extends BaseTest {
         rs = conn.createStatement().executeQuery("EXPLAIN "+indexSql);
         if(localIndex) {
             assertEquals(
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + dataTableFullName + " [1]\n" + 
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexFullName +
+                        "(" + dataTableFullName + ") [1]\n" +
                 "    SERVER FILTER BY EMPTY COLUMN ONLY\n" +
                 "CLIENT MERGE SORT",
                 QueryUtil.getExplainPlan(rs));

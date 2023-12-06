@@ -180,8 +180,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(indexPhysicalTableName,
-                explainPlanAttributes.getTableName());
+            assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
+                    explainPlanAttributes.getTableName());
             assertEquals(" [1,'a'] - [1,'b']",
                 explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
@@ -214,8 +214,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(indexPhysicalTableName,
-                explainPlanAttributes.getTableName());
+            assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
+                    explainPlanAttributes.getTableName());
             assertEquals(" [1,'a']",
                 explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
@@ -243,8 +243,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(indexPhysicalTableName,
-                explainPlanAttributes.getTableName());
+            assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
+                    explainPlanAttributes.getTableName());
             assertEquals(" [1,*] - [1,'z']",
                 explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
@@ -278,8 +278,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(indexPhysicalTableName,
-                explainPlanAttributes.getTableName());
+            assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
+                    explainPlanAttributes.getTableName());
             assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
