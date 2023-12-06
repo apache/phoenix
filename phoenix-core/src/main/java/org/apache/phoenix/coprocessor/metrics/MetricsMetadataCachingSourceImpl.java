@@ -95,4 +95,18 @@ public class MetricsMetadataCachingSourceImpl
     public void incrementMetadataCacheInvalidationSuccessCount() {
         cacheInvalidationSuccessCounter.incr();
     }
+
+    @Override
+    public MetadataCachingMetricValues getCurrentMetricValues() {
+        return new MetadataCachingMetricValues
+                .Builder()
+                .setCacheHitCount(cacheHitCounter.value())
+                .setCacheMissCount(cacheMissCounter.value())
+                .setValidateDDLTimestampRequestsCount(validateDDLTimestampRequestCounter.value())
+                .setCacheInvalidationRpcTimeCount(cacheInvalidationRpcTimeHistogram.getCount())
+                .setCacheInvalidationTotalTimeCount(cacheInvalidationTotalTimeHistogram.getCount())
+                .setCacheInvalidationOpsCount(cacheInvalidationOpsCounter.value())
+                .setCacheInvalidationSuccessCount(cacheInvalidationSuccessCounter.value())
+                .build();
+    }
 }

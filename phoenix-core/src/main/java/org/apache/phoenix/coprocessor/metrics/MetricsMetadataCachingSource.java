@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor.metrics;
 
 import org.apache.hadoop.hbase.metrics.BaseSource;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Interface for metrics about Distributed Metadata Caching
@@ -43,18 +44,20 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String VALIDATE_DDL_TIMESTAMP_REQUEST_DESC = "Number of validate ddl timestamp requests.";
 
     String METADATA_CACHE_INVALIDATION_OPERATIONS = "numMetadataCacheInvalidationOps";
-    String METADATA_CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke cache invalidation "
-                                                    + "within a DDL operation";
+    String METADATA_CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke "
+                                                    + "cache invalidation within a DDL operation";
 
     String METADATA_CACHE_INVALIDATION_SUCCESS = "numMetadataCacheInvalidationOpsSuccess";
-    String METADATA_CACHE_INVALIDATION_SUCCESS_DESC = "Number of times cache invalidation was successful.";
+    String METADATA_CACHE_INVALIDATION_SUCCESS_DESC
+            = "Number of times cache invalidation was successful.";
 
     String METADATA_CACHE_INVALIDATION_RPC_TIME = "metadataCacheInvalidationRpcTimeMs";
     String METADATA_CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for "
                                                 + "cache invalidation RPC";
     String METADATA_CACHE_INVALIDATION_TOTAL_TIME = "metadataCacheInvalidationTotalTimeMs";
-    String METADATA_CACHE_INVALIDATION_TOTAL_TIME_DESC = "Histogram for the total time in milliseconds for "
-                                                    + "cache invalidation on all regionservers";
+    String METADATA_CACHE_INVALIDATION_TOTAL_TIME_DESC
+            = "Histogram for the total time in milliseconds "
+                + "for cache invalidation on all regionservers";
 
     /**
      * Report the number of cache hits when validating last ddl timestamps.
@@ -91,4 +94,113 @@ public interface MetricsMetadataCachingSource extends BaseSource {
      * @param t
      */
     void addMetadataCacheInvalidationTotalTime(long t);
+
+    /**
+     * Return current values of all metrics.
+     * @return {@link MetadataCachingMetricValues} object
+     */
+    @VisibleForTesting
+    MetadataCachingMetricValues getCurrentMetricValues();
+
+    /**
+     * Class to represent values of all metrics related to server metadata caching.
+     */
+    @VisibleForTesting
+    class MetadataCachingMetricValues {
+        private long cacheHitCount;
+        private long cacheMissCount;
+        private long validateDDLTimestampRequestsCount;
+        private long cacheInvalidationOpsCount;
+        private long cacheInvalidationSuccessCount;
+        private long cacheInvalidationRpcTimeCount;
+        private long cacheInvalidationTotalTimeCount;
+
+        MetadataCachingMetricValues(Builder builder) {
+            this.cacheHitCount = builder.cacheHitCount;
+            this.cacheMissCount = builder.cacheMissCount;
+            this.validateDDLTimestampRequestsCount = builder.validateDDLTimestampRequestsCount;
+            this.cacheInvalidationOpsCount = builder.cacheInvalidationOpsCount;
+            this.cacheInvalidationSuccessCount = builder.cacheInvalidationSuccessCount;
+            this.cacheInvalidationRpcTimeCount = builder.cacheInvalidationRpcTimeCount;
+            this.cacheInvalidationTotalTimeCount = builder.cacheInvalidationTotalTimeCount;
+        }
+
+        public long getCacheHitCount() {
+            return cacheHitCount;
+        }
+
+        public long getCacheMissCount() {
+            return cacheMissCount;
+        }
+
+        public long getValidateDDLTimestampRequestsCount() {
+            return validateDDLTimestampRequestsCount;
+        }
+
+        public long getCacheInvalidationOpsCount() {
+            return cacheInvalidationOpsCount;
+        }
+
+        public long getCacheInvalidationSuccessCount() {
+            return cacheInvalidationSuccessCount;
+        }
+
+        public long getCacheInvalidationRpcTimeCount() {
+            return cacheInvalidationRpcTimeCount;
+        }
+
+        public long getCacheInvalidationTotalTimeCount() {
+            return cacheInvalidationTotalTimeCount;
+        }
+
+        public static class Builder {
+            private long cacheHitCount;
+            private long cacheMissCount;
+            private long validateDDLTimestampRequestsCount;
+            private long cacheInvalidationOpsCount;
+            private long cacheInvalidationSuccessCount;
+            private long cacheInvalidationRpcTimeCount;
+            private long cacheInvalidationTotalTimeCount;
+
+            public MetadataCachingMetricValues build() {
+                return new MetadataCachingMetricValues(this);
+            }
+
+            public Builder setCacheHitCount(long c) {
+                this.cacheHitCount = c;
+                return this;
+            }
+            public Builder setCacheMissCount(long cacheMissCount) {
+                this.cacheMissCount = cacheMissCount;
+                return this;
+            }
+
+            public Builder setValidateDDLTimestampRequestsCount(
+                    long validateDDLTimestampRequestsCount) {
+                this.validateDDLTimestampRequestsCount = validateDDLTimestampRequestsCount;
+                return this;
+            }
+
+            public Builder setCacheInvalidationOpsCount(long cacheInvalidationOpsCount) {
+                this.cacheInvalidationOpsCount = cacheInvalidationOpsCount;
+                return this;
+            }
+
+            public Builder setCacheInvalidationSuccessCount(long cacheInvalidationSuccessCount) {
+                this.cacheInvalidationSuccessCount = cacheInvalidationSuccessCount;
+                return this;
+            }
+
+            public Builder setCacheInvalidationRpcTimeCount(long cacheInvalidationRpcTimeCount) {
+                this.cacheInvalidationRpcTimeCount = cacheInvalidationRpcTimeCount;
+                return this;
+            }
+
+            public Builder setCacheInvalidationTotalTimeCount(
+                    long cacheInvalidationTotalTimeCount) {
+                this.cacheInvalidationTotalTimeCount = cacheInvalidationTotalTimeCount;
+                return this;
+            }
+        }
+    }
 }

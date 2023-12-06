@@ -18,6 +18,8 @@
 package org.apache.phoenix.cache;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -1300,6 +1302,111 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Assert.assertTrue("TableNotFoundException was not thrown when parent view " +
                             "was dropped (cascade) concurrently with upserts.",
                     e instanceof TableNotFoundException);
+        }
+    }
+
+    /**
+     * Test server side metrics are populated correctly.
+     * Client-1 creates a table and creates an index on it.
+     * Client-2 queries the table.
+     */
+    @Test
+    public void testServerSideMetrics() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
+        MetricsMetadataCachingSource metricsSource
+                = MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
+
+        //take a snapshot of current metric values
+        MetricsMetadataCachingSource.MetadataCachingMetricValues oldMetricValues
+                = metricsSource.getCurrentMetricValues();
+
+        long cacheHit = 0;
+        long cacheMiss = 0;
+        long validateDDLRequestCount = 0;
+        long cacheInvOpsCount = 0;
+        long cacheInvSuccessCount = 0;
+        long cacheInvRpcTimeCount = 0;
+        long cacheInvTotalTimeCount = 0;
+
+        try (Connection conn1 = cqs1.connect(url1, props);
+             Connection conn2 = cqs2.connect(url2, props)) {
+
+            // no metric changes
+            createTable(conn1, tableName, NEVER);
+
+            // client validates table, regionserver does not find table in its cache
+            query(conn2, tableName);
+            validateDDLRequestCount++;
+            cacheMiss++;
+
+            // last_ddl_timestamp is bumped for the table
+            // cache invalidation operation succeeds for table
+            // cache invalidation operation succeeds for index state change
+            // only one region server in tests for cache invalidation RPC
+            createIndex(conn1, tableName, indexName, "v1");
+            cacheInvOpsCount += 2;
+            cacheInvRpcTimeCount += 2;
+            cacheInvTotalTimeCount += 2;
+            cacheInvSuccessCount += 2;
+
+            // client validates only table since it does not know about the index yet
+            // regionserver does not find table in its cache
+            query(conn2, tableName);
+            validateDDLRequestCount++;
+            cacheMiss++;
+
+            // client validates both index and table this time
+            // regionserver finds table but does not find index in its cache
+            query(conn2, tableName);
+            validateDDLRequestCount++;
+            cacheHit++; //table
+            cacheMiss++; //index
+
+            // client validates index and table again
+            // regionserver finds both index and table in its cache
+            query(conn2, tableName);
+            validateDDLRequestCount++;
+            cacheHit += 2;
+
+            MetricsMetadataCachingSource.MetadataCachingMetricValues newMetricValues
+                    = metricsSource.getCurrentMetricValues();
+
+            assertEquals("Incorrect number of cache hits on region server.", cacheHit,
+                    newMetricValues.getCacheHitCount() - oldMetricValues.getCacheHitCount());
+
+            assertEquals("Incorrect number of cache misses on region server.", cacheMiss,
+                newMetricValues.getCacheMissCount() - oldMetricValues.getCacheMissCount());
+
+            assertEquals("Incorrect number of validate ddl timestamp requests.",
+                    validateDDLRequestCount,
+                    newMetricValues.getValidateDDLTimestampRequestsCount()
+                            - oldMetricValues.getValidateDDLTimestampRequestsCount());
+
+            assertEquals("Incorrect number of cache invalidation ops count.",
+                    cacheInvOpsCount,
+                    newMetricValues.getCacheInvalidationOpsCount()
+                            - oldMetricValues.getCacheInvalidationOpsCount());
+
+            assertEquals("Incorrect number of successful cache invalidation ops count.",
+                    cacheInvSuccessCount,
+                    newMetricValues.getCacheInvalidationSuccessCount()
+                            - oldMetricValues.getCacheInvalidationSuccessCount());
+
+            assertEquals("Incorrect number of cache invalidation RPC times.",
+                    cacheInvRpcTimeCount,
+                    newMetricValues.getCacheInvalidationRpcTimeCount()
+                            - oldMetricValues.getCacheInvalidationRpcTimeCount());
+
+            assertEquals("Incorrect number of cache invalidation total times.",
+                    cacheInvTotalTimeCount,
+                    newMetricValues.getCacheInvalidationTotalTimeCount()
+                            - oldMetricValues.getCacheInvalidationTotalTimeCount());
         }
     }
 

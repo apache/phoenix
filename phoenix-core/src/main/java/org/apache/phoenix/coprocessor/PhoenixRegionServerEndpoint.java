@@ -59,9 +59,9 @@ public class PhoenixRegionServerEndpoint
     public void validateLastDDLTimestamp(RpcController controller,
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request,
             RpcCallback<RegionServerEndpointProtos.ValidateLastDDLTimestampResponse> done) {
+        metricsSource.incrementValidateTimestampRequestCount();
         for (RegionServerEndpointProtos.LastDDLTimestampRequest lastDDLTimestampRequest
                 : request.getLastDDLTimestampRequestsList()) {
-            metricsSource.incrementValidateTimestampRequestCount();
             byte[] tenantID = lastDDLTimestampRequest.getTenantId().toByteArray();
             byte[] schemaName = lastDDLTimestampRequest.getSchemaName().toByteArray();
             byte[] tableName = lastDDLTimestampRequest.getTableName().toByteArray();
