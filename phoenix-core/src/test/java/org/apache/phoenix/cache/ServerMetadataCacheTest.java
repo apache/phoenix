@@ -1331,6 +1331,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         long validateDDLRequestCount = 0;
         long cacheInvOpsCount = 0;
         long cacheInvSuccessCount = 0;
+        long cacheInvFailureCount = 0;
         long cacheInvRpcTimeCount = 0;
         long cacheInvTotalTimeCount = 0;
 
@@ -1397,6 +1398,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                     cacheInvSuccessCount,
                     newMetricValues.getCacheInvalidationSuccessCount()
                             - oldMetricValues.getCacheInvalidationSuccessCount());
+
+            assertEquals("Incorrect number of failed cache invalidation ops count.",
+                    cacheInvFailureCount,
+                    newMetricValues.getCacheInvalidationFailureCount()
+                            - oldMetricValues.getCacheInvalidationFailureCount());
 
             assertEquals("Incorrect number of cache invalidation RPC times.",
                     cacheInvRpcTimeCount,

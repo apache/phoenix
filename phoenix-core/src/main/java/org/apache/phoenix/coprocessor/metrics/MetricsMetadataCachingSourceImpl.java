@@ -33,6 +33,7 @@ public class MetricsMetadataCachingSourceImpl
     private final MutableFastCounter validateDDLTimestampRequestCounter;
     private final MutableFastCounter cacheInvalidationOpsCounter;
     private final MutableFastCounter cacheInvalidationSuccessCounter;
+    private final MutableFastCounter cacheInvalidationFailureCounter;
     private final MetricHistogram cacheInvalidationRpcTimeHistogram;
     private final MetricHistogram cacheInvalidationTotalTimeHistogram;
 
@@ -56,6 +57,8 @@ public class MetricsMetadataCachingSourceImpl
                 METADATA_CACHE_INVALIDATION_OPERATIONS_DESC, 0L);
         cacheInvalidationSuccessCounter = getMetricsRegistry().newCounter(
             METADATA_CACHE_INVALIDATION_SUCCESS, METADATA_CACHE_INVALIDATION_SUCCESS_DESC, 0L);
+        cacheInvalidationFailureCounter = getMetricsRegistry().newCounter(
+            METADATA_CACHE_INVALIDATION_FAILURE, METADATA_CACHE_INVALIDATION_FAILURE_DESC, 0L);
         cacheInvalidationRpcTimeHistogram = getMetricsRegistry().newHistogram(
             METADATA_CACHE_INVALIDATION_RPC_TIME, METADATA_CACHE_INVALIDATION_RPC_TIME_DESC);
         cacheInvalidationTotalTimeHistogram = getMetricsRegistry().newHistogram(
@@ -98,6 +101,11 @@ public class MetricsMetadataCachingSourceImpl
     }
 
     @Override
+    public void incrementMetadataCacheInvalidationFailureCount() {
+        cacheInvalidationFailureCounter.incr();
+    }
+
+    @Override
     public MetadataCachingMetricValues getCurrentMetricValues() {
         return new MetadataCachingMetricValues
                 .Builder()
@@ -108,6 +116,7 @@ public class MetricsMetadataCachingSourceImpl
                 .setCacheInvalidationTotalTimeCount(cacheInvalidationTotalTimeHistogram.getCount())
                 .setCacheInvalidationOpsCount(cacheInvalidationOpsCounter.value())
                 .setCacheInvalidationSuccessCount(cacheInvalidationSuccessCounter.value())
+                .setCacheInvalidationFailureCount(cacheInvalidationFailureCounter.value())
                 .build();
     }
 }

@@ -3497,10 +3497,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // get current list of regionservers.
             Collection<ServerName> serverNames = admin.getRegionServers(true);
             PhoenixStopWatch stopWatch = new PhoenixStopWatch().start();
-            invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
-            metricsMetadataCachingSource
-                    .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
-            metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
+            try {
+                invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
+                metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
+            } catch (Throwable t) {
+                metricsMetadataCachingSource.incrementMetadataCacheInvalidationFailureCount();
+                throw t;
+            } finally {
+                metricsMetadataCachingSource
+                        .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+            }
         }
     }
 

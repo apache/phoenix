@@ -52,6 +52,9 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String METADATA_CACHE_INVALIDATION_SUCCESS_DESC
             = "Number of times cache invalidation was successful.";
 
+    String METADATA_CACHE_INVALIDATION_FAILURE = "numMetadataCacheInvalidationOpsFailure";
+    String METADATA_CACHE_INVALIDATION_FAILURE_DESC = "Number of times cache invalidation failed.";
+
     String METADATA_CACHE_INVALIDATION_RPC_TIME = "metadataCacheInvalidationRpcTimeMs";
     String METADATA_CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for "
                                                 + "cache invalidation RPC";
@@ -86,6 +89,11 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     void incrementMetadataCacheInvalidationSuccessCount();
 
     /**
+     * Report number of cache invalidations which failed.
+     */
+    void incrementMetadataCacheInvalidationFailureCount();
+
+    /**
      * Add to the cache invalidation rpc time histogram.
      */
     void addMetadataCacheInvalidationRpcTime(long t);
@@ -113,6 +121,7 @@ public interface MetricsMetadataCachingSource extends BaseSource {
         private long validateDDLTimestampRequestsCount;
         private long cacheInvalidationOpsCount;
         private long cacheInvalidationSuccessCount;
+        private long cacheInvalidationFailureCount;
         private long cacheInvalidationRpcTimeCount;
         private long cacheInvalidationTotalTimeCount;
 
@@ -122,6 +131,7 @@ public interface MetricsMetadataCachingSource extends BaseSource {
             this.validateDDLTimestampRequestsCount = builder.validateDDLTimestampRequestsCount;
             this.cacheInvalidationOpsCount = builder.cacheInvalidationOpsCount;
             this.cacheInvalidationSuccessCount = builder.cacheInvalidationSuccessCount;
+            this.cacheInvalidationFailureCount = builder.cacheInvalidationFailureCount;
             this.cacheInvalidationRpcTimeCount = builder.cacheInvalidationRpcTimeCount;
             this.cacheInvalidationTotalTimeCount = builder.cacheInvalidationTotalTimeCount;
         }
@@ -146,6 +156,10 @@ public interface MetricsMetadataCachingSource extends BaseSource {
             return cacheInvalidationSuccessCount;
         }
 
+        public long getCacheInvalidationFailureCount() {
+            return cacheInvalidationFailureCount;
+        }
+
         public long getCacheInvalidationRpcTimeCount() {
             return cacheInvalidationRpcTimeCount;
         }
@@ -160,6 +174,7 @@ public interface MetricsMetadataCachingSource extends BaseSource {
             private long validateDDLTimestampRequestsCount;
             private long cacheInvalidationOpsCount;
             private long cacheInvalidationSuccessCount;
+            private long cacheInvalidationFailureCount;
             private long cacheInvalidationRpcTimeCount;
             private long cacheInvalidationTotalTimeCount;
 
@@ -189,6 +204,11 @@ public interface MetricsMetadataCachingSource extends BaseSource {
 
             public Builder setCacheInvalidationSuccessCount(long cacheInvalidationSuccessCount) {
                 this.cacheInvalidationSuccessCount = cacheInvalidationSuccessCount;
+                return this;
+            }
+
+            public Builder setCacheInvalidationFailureCount(long cacheInvalidationFailureCount) {
+                this.cacheInvalidationFailureCount = cacheInvalidationFailureCount;
                 return this;
             }
 
