@@ -40,8 +40,9 @@ public interface MetricsMetadataCachingSource extends BaseSource {
             = "Number of cache misses in PhoenixRegionServerEndpoint "
                 + "when serving validate ddl timestamp requests.";
 
-    String VALIDATE_DDL_TIMESTAMP_REQUESTS = "numValidateDDLTimestampRequests";
-    String VALIDATE_DDL_TIMESTAMP_REQUEST_DESC = "Number of validate ddl timestamp requests.";
+    String VALIDATE_LAST_DDL_TIMESTAMP_REQUESTS = "numValidateLastDDLTimestampRequests";
+    String VALIDATE_LAST_DDL_TIMESTAMP_REQUEST_DESC
+            = "Number of validate last ddl timestamp requests.";
 
     String METADATA_CACHE_INVALIDATION_OPERATIONS = "numMetadataCacheInvalidationOps";
     String METADATA_CACHE_INVALIDATION_OPERATIONS_DESC = "Number of times we invoke "
