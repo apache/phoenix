@@ -226,9 +226,12 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 VARCHAR)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k) VALUES (1)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k) VALUES (2)");
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
+        conn.commit();
+        Thread.sleep(1000);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.commit();
         String cdcName = generateUniqueName();
         String cdc_sql = "CREATE CDC " + cdcName

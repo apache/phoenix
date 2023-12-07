@@ -1320,6 +1320,7 @@ public class ScanUtil {
             scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
             scan.setAttribute(CDC_INCLUDE_SCOPES, CDCUtil.makeChangeScopeStringFromEnums(
                     context.getCdcIncludeScopes()).getBytes(StandardCharsets.UTF_8));
+            CDCUtil.initForRawScan(scan);
         }
     }
 

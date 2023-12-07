@@ -18,10 +18,12 @@
 
 package org.apache.phoenix.iterate;
 
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.phoenix.coprocessor.CDCGlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.UncoveredGlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.UncoveredLocalIndexRegionScanner;
 import org.apache.phoenix.schema.KeyValueSchema;
@@ -133,8 +135,7 @@ public abstract class RegionScannerFactory {
       long extraLimit = -1;
 
       {
-          // for indexes construct the row filter for uncovered columns if it exists
-          if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)) {
+        if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)) {
               byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_FILTER);
               if (expBytes == null) {
                   // For older clients
@@ -166,22 +167,24 @@ public abstract class RegionScannerFactory {
               PTable.ImmutableStorageScheme storageScheme =
                           indexMaintainer.getIndexStorageScheme();
                   Scan dataTableScan = new Scan();
-                  if (dataColumns != null) {
-                    for (int i = 0; i < dataColumns.length; i++) {
-                      if (storageScheme ==
-                              PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                        dataTableScan.addFamily(dataColumns[i].getFamily());
-                      } else {
-                        dataTableScan.addColumn(dataColumns[i].getFamily(),
-                                dataColumns[i].getQualifier());
+                  if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
+                    if (dataColumns != null) {
+                      for (int i = 0; i < dataColumns.length; i++) {
+                        if (storageScheme ==
+                                PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                          dataTableScan.addFamily(dataColumns[i].getFamily());
+                        } else {
+                          dataTableScan.addColumn(dataColumns[i].getFamily(),
+                                  dataColumns[i].getQualifier());
+                        }
                       }
-                    }
-                  } else if (indexMaintainer.isUncovered()) {
-                    // Indexed columns and the columns in index where clause should also be added
-                    // to the data columns to scan for uncovered global indexes. This is required
-                    // to verify the index row against the data table row.
-                    for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
-                      dataTableScan.addColumn(column.getFamily(), column.getQualifier());
+                    } else if (indexMaintainer.isUncovered()) {
+                      // Indexed columns and the columns in index where clause should also be added
+                      // to the data columns to scan for uncovered global indexes. This is required
+                      // to verify the index row against the data table row.
+                      for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
+                        dataTableScan.addColumn(column.getFamily(), column.getQualifier());
+                      }
                     }
                   }
                   if (ScanUtil.isLocalIndex(scan)) {
@@ -189,9 +192,16 @@ public abstract class RegionScannerFactory {
                             dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
                             pageSizeMs, offset, actualStartKey, extraLimit);
                   } else {
-                    s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                            dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs, extraLimit);
+                    if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
+                      s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                              dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                              pageSizeMs, extraLimit);
+                    }
+                    else {
+                      s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                              dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                              pageSizeMs, extraLimit);
+                    }
                   }
               }
           }

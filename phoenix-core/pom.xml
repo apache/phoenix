@@ -249,6 +249,11 @@
   </build>
 
   <dependencies>
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+    </dependency>
+
     <!-- shaded thirdparty dependencies -->
     <dependency>
       <groupId>org.apache.phoenix.thirdparty</groupId>

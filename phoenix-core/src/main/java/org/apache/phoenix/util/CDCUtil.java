@@ -22,10 +22,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.util.StringUtils;
@@ -93,5 +96,20 @@ public class CDCUtil {
 
     public static boolean isACDCIndex(PTable indexTable) {
         return isACDCIndex(indexTable.getTableName().getString());
+    }
+
+    public static Scan initForRawScan(Scan scan) {
+        scan.setRaw(true);
+        scan.readAllVersions();
+        scan.setCacheBlocks(false);
+        Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
+        if (! familyMap.isEmpty()) {
+            familyMap.keySet().stream().forEach(fQual -> {
+                if (familyMap.get(fQual) != null) {
+                    familyMap.get(fQual).clear();
+                }
+            });
+        }
+        return scan;
     }
 }
