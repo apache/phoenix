@@ -116,6 +116,7 @@ public class BackwardCompatibilityIT {
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        conf.set(QueryServices.PHOENIX_TABLE_TTL_ENABLED_FOR_UPGRADE, String.valueOf(true));
         hbaseTestUtil.startMiniCluster();
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
         url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;

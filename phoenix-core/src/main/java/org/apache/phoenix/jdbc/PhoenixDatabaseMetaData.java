@@ -139,6 +139,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
+    public static final byte[] TABLE_SCHEM_BYTES = Bytes.toBytes(TABLE_SCHEM);
     public static final String LOGICAL_TABLE_NAME = "LOGICAL_TABLE_NAME";
     public static final String LOGICAL_PARENT_NAME = "LOGICAL_PARENT_NAME";
     public static final String REMARKS = "REMARKS";

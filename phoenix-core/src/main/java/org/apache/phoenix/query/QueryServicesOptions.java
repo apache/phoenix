@@ -419,6 +419,8 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
     public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
     public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
+
+    public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED_DURING_UPGRADE = false;
     public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
     public static final boolean DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX = true;
 
