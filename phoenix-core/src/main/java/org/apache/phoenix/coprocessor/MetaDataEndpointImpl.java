@@ -3557,7 +3557,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     LOGGER.info("Invalidating metadata cache"
                             + " on region server: {} completed successfully and it took {} ms",
                             serverName, cacheInvalidationTime);
-                    metricsMetadataCachingSource.addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
+                    metricsMetadataCachingSource
+                            .addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
                 } catch (ServiceException se) {
                     LOGGER.error("Invalidating metadata cache failed for regionserver {}",
                             serverName, se);

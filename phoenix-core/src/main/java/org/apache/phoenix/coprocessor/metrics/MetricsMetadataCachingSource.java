@@ -168,6 +168,9 @@ public interface MetricsMetadataCachingSource extends BaseSource {
             return cacheInvalidationTotalTimeCount;
         }
 
+        /**
+         * Builder for {@link MetadataCachingMetricValues}
+         */
         public static class Builder {
             private long cacheHitCount;
             private long cacheMissCount;
