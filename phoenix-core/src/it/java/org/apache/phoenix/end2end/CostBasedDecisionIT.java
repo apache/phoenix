@@ -107,11 +107,13 @@ public class CostBasedDecisionIT extends BaseTest {
         conn.setAutoCommit(true);
         try {
             String tableName = BaseTest.generateUniqueName();
+            String indexName = tableName + "_IDX";
             conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" +
                     "rowkey VARCHAR PRIMARY KEY,\n" +
                     "c1 VARCHAR,\n" +
                     "c2 VARCHAR)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx ON " + tableName + " (c1)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName +
+                    " (c1)");
 
             String query = "SELECT c1, max(rowkey), max(c2) FROM " + tableName + " where rowkey <= 'z' GROUP BY c1";
             // Use the index table plan that opts out order-by when stats are not available.
@@ -153,7 +155,7 @@ public class CostBasedDecisionIT extends BaseTest {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(indexName + "(" + tableName + ")", explainPlanAttributes.getTableName());
             assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'",
                 explainPlanAttributes.getServerWhereFilter());
@@ -173,13 +175,15 @@ public class CostBasedDecisionIT extends BaseTest {
         conn.setAutoCommit(true);
         try {
             String tableName = BaseTest.generateUniqueName();
+            String indexName1 = tableName + "_IDX1";
+            String indexName2 = tableName + "_IDX2";
             conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" +
                     "rowkey VARCHAR PRIMARY KEY,\n" +
                     "c1 INTEGER,\n" +
                     "c2 INTEGER,\n" +
                     "c3 INTEGER)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx1 ON " + tableName + " (c1) INCLUDE (c2, c3)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx2 ON " + tableName + " (c2, c3) INCLUDE (c1)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName1 + " ON " + tableName + " (c1) INCLUDE (c2, c3)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + " (c2, c3) INCLUDE (c1)");
 
             String query = "SELECT * FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
             // Use the idx2 plan with a wider PK slot span when stats are not available.
@@ -192,7 +196,7 @@ public class CostBasedDecisionIT extends BaseTest {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(indexName2 + "(" + tableName + ")", explainPlanAttributes.getTableName());
             assertEquals(" [2,*] - [2,9,000]",
                 explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)",
@@ -220,7 +224,7 @@ public class CostBasedDecisionIT extends BaseTest {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(tableName, explainPlanAttributes.getTableName());
+            assertEquals(indexName1 + "(" + tableName + ")", explainPlanAttributes.getTableName());
             assertEquals(" [1,10] - [1,20]",
                 explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)",
@@ -239,19 +243,22 @@ public class CostBasedDecisionIT extends BaseTest {
         conn.setAutoCommit(true);
         try {
             String tableName = BaseTest.generateUniqueName();
+            String indexName1 = tableName + "_IDX1";
+            String indexName2 = tableName + "_IDX2";
             conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" +
                     "rowkey VARCHAR PRIMARY KEY,\n" +
                     "c1 INTEGER,\n" +
                     "c2 INTEGER,\n" +
                     "c3 INTEGER)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx1 ON " + tableName + " (c1) INCLUDE (c2, c3)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx2 ON " + tableName + " (c2, c3) INCLUDE (c1)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName1 + " ON " + tableName + "(c1) INCLUDE (c2, c3)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName + " (c2, c3) INCLUDE (c1)");
 
             String query = "UPSERT INTO " + tableName + " SELECT * FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
             // Use the idx2 plan with a wider PK slot span when stats are not available.
             verifyQueryPlan(query,
                     "UPSERT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9,000]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName2 + "(" + tableName + ")" +
+                            " [2,*] - [2,9,000]\n" +
                             "    SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)\n" +
                             "CLIENT MERGE SORT");
 
@@ -269,7 +276,8 @@ public class CostBasedDecisionIT extends BaseTest {
             // Use the idx2 plan that scans less data when stats become available.
             verifyQueryPlan(query,
                     "UPSERT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,10] - [1,20]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName1 + "(" + tableName + ")" +
+                            " [1,10] - [1,20]\n" +
                             "    SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)\n" +
                             "CLIENT MERGE SORT");
         } finally {
@@ -284,19 +292,23 @@ public class CostBasedDecisionIT extends BaseTest {
         conn.setAutoCommit(true);
         try {
             String tableName = BaseTest.generateUniqueName();
+            String indexName1 = tableName + "_IDX1";
+            String indexName2 = tableName + "_IDX2";
             conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" +
                     "rowkey VARCHAR PRIMARY KEY,\n" +
                     "c1 INTEGER,\n" +
                     "c2 INTEGER,\n" +
                     "c3 INTEGER)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx1 ON " + tableName + " (c1) INCLUDE (c2, c3)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx2 ON " + tableName + " (c2, c3) INCLUDE (c1)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName1 + " ON " + tableName + " (c1) INCLUDE (c2, c3)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName2 + " ON " + tableName +
+                    " (c2, c3) INCLUDE (c1)");
 
             String query = "DELETE FROM " + tableName + " where c1 BETWEEN 10 AND 20 AND c2 < 9000 AND C3 < 5000";
             // Use the idx2 plan with a wider PK slot span when stats are not available.
             verifyQueryPlan(query,
                     "DELETE ROWS CLIENT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [2,*] - [2,9,000]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName2 + "(" + tableName + ")" +
+                            " [2,*] - [2,9,000]\n" +
                             "    SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)\n" +
                             "CLIENT MERGE SORT");
 
@@ -314,7 +326,8 @@ public class CostBasedDecisionIT extends BaseTest {
             // Use the idx2 plan that scans less data when stats become available.
             verifyQueryPlan(query,
                     "DELETE ROWS CLIENT SELECT\n" +
-                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,10] - [1,20]\n" +
+                    "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName1 + "(" + tableName + ")" +
+                            " [1,10] - [1,20]\n" +
                             "    SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)\n" +
                             "CLIENT MERGE SORT");
         } finally {
@@ -329,11 +342,12 @@ public class CostBasedDecisionIT extends BaseTest {
         conn.setAutoCommit(true);
         try {
             String tableName = BaseTest.generateUniqueName();
+            String indexName = tableName + "_IDX";
             conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" +
                     "rowkey VARCHAR PRIMARY KEY,\n" +
                     "c1 VARCHAR,\n" +
                     "c2 VARCHAR)");
-            conn.createStatement().execute("CREATE LOCAL INDEX " + tableName + "_idx ON " + tableName + " (c1)");
+            conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + " (c1)");
 
             String query = "SELECT c1, max(rowkey), max(c2) FROM " + tableName + " where rowkey <= 'z' GROUP BY c1 "
                     + "UNION ALL SELECT c1, max(rowkey), max(c2) FROM " + tableName + " where rowkey >= 'a' GROUP BY c1";
@@ -361,12 +375,14 @@ public class CostBasedDecisionIT extends BaseTest {
             // Use the optimal plan based on cost when stats become available.
             verifyQueryPlan(query,
                     "UNION ALL OVER 2 QUERIES\n" +
-                    "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
+                    "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + "(" + tableName +
+                            ") [1]\n" +
                     "        SERVER MERGE [0.C2]\n" +
                     "        SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'\n" +
                     "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +
                     "    CLIENT MERGE SORT\n" +
-                    "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
+                    "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + "(" + tableName +
+                            ") [1]\n" +
                     "        SERVER MERGE [0.C2]\n" +
                     "        SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" >= 'a'\n" +
                     "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +
@@ -383,6 +399,7 @@ public class CostBasedDecisionIT extends BaseTest {
         conn.setAutoCommit(true);
         try {
             String tableName = BaseTest.generateUniqueName();
+            String indexName = tableName + "_IDX";
             conn.createStatement().execute("CREATE TABLE " + tableName + " (\n" +
                     "rowkey VARCHAR PRIMARY KEY,\n" +
                     "c1 VARCHAR,\n" +
@@ -415,13 +432,15 @@ public class CostBasedDecisionIT extends BaseTest {
 
             // Use the optimal plan based on cost when stats become available.
             verifyQueryPlan(query,
-                    "CLIENT PARALLEL 626-WAY RANGE SCAN OVER " + tableName + " [1,'X0'] - [1,'X1']\n" +
+                    "CLIENT PARALLEL 626-WAY RANGE SCAN OVER " + indexName + "(" + tableName +
+                            ") [1,'X0'] - [1,'X1']\n" +
                     "    SERVER MERGE [0.C2]\n" +
                     "    SERVER FILTER BY FIRST KEY ONLY\n" +
                     "    SERVER SORTED BY [\"T1.:ROWKEY\"]\n" +
                     "CLIENT MERGE SORT\n" +
                     "    PARALLEL INNER-JOIN TABLE 0\n" +
-                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" +
+                    "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + "(" + tableName +
+                            ") [1]\n" +
                     "            SERVER MERGE [0.C2]\n" +
                     "            SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'\n" +
                     "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]\n" +

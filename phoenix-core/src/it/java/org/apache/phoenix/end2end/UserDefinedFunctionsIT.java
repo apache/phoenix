@@ -828,7 +828,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
             explainPlanAttributes.getIteratorTypeAndScanSize());
         assertEquals("RANGE SCAN ",
             explainPlanAttributes.getExplainScanType());
-        assertEquals("T5", explainPlanAttributes.getTableName());
+        assertEquals("IDX2(T5)", explainPlanAttributes.getTableName());
         assertEquals(" [1,'kcoj']", explainPlanAttributes.getKeyRanges());
         assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
