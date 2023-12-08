@@ -90,6 +90,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
         String schemaName = generateUniqueName();
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), false);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -157,8 +158,8 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                     explainPlanAttributes.getIteratorTypeAndScanSize());
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(indexPhysicalTableName,
-                    explainPlanAttributes.getTableName());
+                assertEquals(fullIndexName + "(" + indexPhysicalTableName + ")",
+                        explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                     explainPlanAttributes.getServerWhereFilter());
@@ -177,7 +178,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                     explainPlanAttributes.getIteratorTypeAndScanSize());
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(indexPhysicalTableName,
+                assertEquals(fullIndexName + "_2(" + indexPhysicalTableName +  ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [2]", explainPlanAttributes.getKeyRanges());
                 assertEquals("SERVER FILTER BY FIRST KEY ONLY",
@@ -214,6 +215,7 @@ public class LocalIndexSplitMergeIT extends BaseTest {
         String schemaName = generateUniqueName();
         String tableName = schemaName + "." + generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
+        String fullIndexName = schemaName + "." + indexName;
         TableName physicalTableName = SchemaUtil.getPhysicalTableName(tableName.getBytes(), false);
         String indexPhysicalTableName = physicalTableName.getNameAsString();
 
@@ -272,8 +274,8 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(indexPhysicalTableName,
-                explainPlanAttributes.getTableName());
+            assertEquals(fullIndexName + "(" + indexPhysicalTableName +  ")",
+                    explainPlanAttributes.getTableName());
             assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
@@ -289,8 +291,8 @@ public class LocalIndexSplitMergeIT extends BaseTest {
                 explainPlanAttributes.getIteratorTypeAndScanSize());
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
-            assertEquals(indexPhysicalTableName,
-                explainPlanAttributes.getTableName());
+            assertEquals(fullIndexName + "_2(" + indexPhysicalTableName + ")",
+                    explainPlanAttributes.getTableName());
             assertEquals(" [2]", explainPlanAttributes.getKeyRanges());
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());

@@ -63,7 +63,7 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     }
     
     @Override
-    protected ConnectionQueryServices getDelegate() {
+    public ConnectionQueryServices getDelegate() {
         return (ConnectionQueryServices)super.getDelegate();
     }
     
@@ -415,5 +415,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
 
     public ConnectionLimiter getConnectionLimiter() {
         return getDelegate().getConnectionLimiter();
+    }
+
+    @Override
+    public int getConnectionCount(boolean isInternal) {
+        return getDelegate().getConnectionCount(isInternal);
     }
 }

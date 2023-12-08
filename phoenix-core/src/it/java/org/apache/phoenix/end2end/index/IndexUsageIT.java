@@ -150,7 +150,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullDataTableName,
+                assertEquals("INDEX_TEST." + indexName + "(" + fullDataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals("CLIENT MERGE SORT",
                     explainPlanAttributes.getClientSortAlgo());
@@ -221,7 +221,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [TO_BIGINT(\"(A.INT_COL1 + 1)\")]",
                 explainPlanAttributes.getServerAggregate());
             if (localIndex) {
-                assertEquals(fullDataTableName,
+                assertEquals("INDEX_TEST." + indexName + "(" + fullDataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,0] - [1,*]",
                     explainPlanAttributes.getKeyRanges());
@@ -292,7 +292,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
-                assertEquals(fullDataTableName,
+                assertEquals("INDEX_TEST." + indexName + "(" + fullDataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,2]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
@@ -361,7 +361,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullDataTableName,
+                assertEquals("INDEX_TEST." + indexName + "(" + fullDataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
                 assertEquals("CLIENT MERGE SORT",
@@ -445,7 +445,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
             if (localIndex) {
-                assertEquals(dataTableName,
+                assertEquals(indexName + "(" + dataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,'x_1']",
                     explainPlanAttributes.getKeyRanges());
@@ -481,7 +481,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(dataTableName,
+                assertEquals(indexName + "(" + dataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1]",
                     explainPlanAttributes.getKeyRanges());
@@ -571,7 +571,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             if (localIndex) {
                 assertEquals("RANGE SCAN ",
                     explainPlanAttributes.getExplainScanType());
-                assertEquals(fullDataTableName,
+                assertEquals("INDEX_TEST." + indexName + "(" + fullDataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,2]",
                     explainPlanAttributes.getKeyRanges());
@@ -639,7 +639,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             assertEquals("RANGE SCAN ",
                 explainPlanAttributes.getExplainScanType());
             if (local) {
-                assertEquals(dataTableName,
+                assertEquals(indexName1 + "(" + dataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,173]",
                     explainPlanAttributes.getKeyRanges());
@@ -676,7 +676,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (local) {
-                assertEquals(dataTableName,
+                assertEquals(indexName2 + "(" + dataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [" + (2) + ",'foo2_bar2']",
                     explainPlanAttributes.getKeyRanges());
@@ -860,7 +860,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             assertEquals("SERVER FILTER BY FIRST KEY ONLY",
                 explainPlanAttributes.getServerWhereFilter());
             if (localIndex) {
-                assertEquals(dataTableName,
+                assertEquals(indexName + "(" + dataTableName + ")",
                     explainPlanAttributes.getTableName());
                 assertEquals(" [1,'id:id1']",
                     explainPlanAttributes.getKeyRanges());
@@ -938,11 +938,13 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
             rs = conn.createStatement().executeQuery("EXPLAIN "+query);
             String explainPlan = QueryUtil.getExplainPlan(rs);
             if (localIndex) {
-            	assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1,'1David']\n" + 
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +
+                        indexName + "(" + tableName + ") [1,'1David']\n" +
                         "    SERVER FILTER BY FIRST KEY ONLY\n" +
                         "CLIENT MERGE SORT\n" +
                         "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n" +
-                        "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [1]\n" + 
+                        "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +
+                        indexName + "(" + tableName + ") [1]\n" +
                         "            SERVER FILTER BY FIRST KEY ONLY\n" +
                         "        CLIENT MERGE SORT", explainPlan);
             }

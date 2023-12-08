@@ -249,7 +249,8 @@ public class IndexBuildTimestampIT extends BaseTest {
             String selectSql = String.format("SELECT * FROM %s WHERE val = 'abc'", (view ? viewName : dataTableName));
             conn = DriverManager.getConnection(getUrl());
             // assert we are pulling from index table
-            assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view ? "_IDX_" + dataTableName : indexName));
+            assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view && !localIndex ?
+                    "_IDX_" + dataTableName : indexName));
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             assertTrue (rs.next());
             assertTrue(rs.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp() < clock2.initialTime() &&
@@ -258,7 +259,8 @@ public class IndexBuildTimestampIT extends BaseTest {
             selectSql =
                     String.format("SELECT * FROM %s WHERE val = 'bcd'", (view ? viewName : dataTableName));
             // assert we are pulling from index table
-            assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view ? "_IDX_" + dataTableName : indexName));
+            assertExplainPlan(conn, localIndex, selectSql, dataTableName, (view && !localIndex ?
+                    "_IDX_" + dataTableName : indexName));
 
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue (rs.next());

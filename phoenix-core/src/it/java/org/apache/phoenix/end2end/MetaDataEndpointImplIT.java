@@ -101,7 +101,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testUpsertIntoChildViewWithPKAndIndex() throws Exception {
+    public void testUpsertIntoChildViewWithPK() throws Exception {
         String baseTable = generateUniqueName();
         String view = generateUniqueName();
         String childView = generateUniqueName();
@@ -117,12 +117,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
                     + "V4 VARCHAR CONSTRAINT PKVIEW PRIMARY KEY(V2, V3)) AS SELECT * FROM " 
                     + baseTable + " WHERE KEY_PREFIX = '0CY'";
             conn.createStatement().execute(view1DDL);
-    
-            // Create an Index on the base view
-            String view1Index = generateUniqueName() + "_IDX";
-            conn.createStatement().execute("CREATE INDEX " + view1Index + 
-                " ON " + view + " (V2, V3) include (V1, V4)");
-    
+
             // Create a child view with primary key constraint
             String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
                     + " (V5 VARCHAR NOT NULL, V6 VARCHAR NOT NULL CONSTRAINT PK PRIMARY KEY "
@@ -137,7 +132,7 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     }
     
     @Test
-    public void testUpsertIntoTenantChildViewWithPKAndIndex() throws Exception {
+    public void testUpsertIntoTenantChildViewWithPK() throws Exception {
         String baseTable = generateUniqueName();
         String view = generateUniqueName();
         String childView = generateUniqueName();
@@ -155,11 +150,6 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
                     + baseTable + " WHERE KEY_PREFIX = '0CY'";
             conn.createStatement().execute(view1DDL);
     
-            // Create an Index on the base view
-            String view1Index = generateUniqueName() + "_IDX";
-            conn.createStatement().execute("CREATE INDEX " + view1Index + 
-                " ON " + view + " (V2, V3) include (V1, V4)");
-    
             // Create a child view with primary key constraint owned by tenant
             Properties tenantProps = new Properties();
             tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -167,12 +157,12 @@ public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
                 String childViewDDL = "CREATE VIEW IF NOT EXISTS " + childView 
                         + " (V5 VARCHAR NOT NULL, V6 VARCHAR NOT NULL CONSTRAINT PK PRIMARY KEY "
                         + "(V5, V6)) AS SELECT * FROM " + view;
-                conn.createStatement().execute(childViewDDL);
+                tenantConn.createStatement().execute(childViewDDL);
+                String upsert = "UPSERT INTO " + childView + " (TENANT_ID, V2, V3, V5, V6) "
+                        + "VALUES ('00D005000000000',  'zzzzz', 10, 'zzzzz', 'zzzzz')";
+                tenantConn.createStatement().executeUpdate(upsert);
+                tenantConn.commit();
             }
-            
-            String upsert = "UPSERT INTO " + childView + " (TENANT_ID, V2, V3, V5, V6) "
-                    + "VALUES ('00D005000000000',  'zzzzz', 10, 'zzzzz', 'zzzzz')";
-            conn.createStatement().executeUpdate(upsert);
             conn.commit();
         }
     }

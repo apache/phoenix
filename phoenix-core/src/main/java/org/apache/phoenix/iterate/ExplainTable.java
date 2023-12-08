@@ -50,9 +50,11 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -147,7 +149,20 @@ public abstract class ExplainTable {
             scanTypeDetails = explainSkipScan();
         }
         buf.append(scanTypeDetails);
-        buf.append("OVER ").append(tableRef.getTable().getPhysicalName().getString());
+
+        String tableName = tableRef.getTable().getPhysicalName().getString();
+        if (tableRef.getTable().getIndexType() == PTable.IndexType.LOCAL) {
+            String indexName = tableRef.getTable().getName().getString();
+            if (tableRef.getTable().getViewIndexId() != null
+                    && indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                int lastIndexOf = indexName.lastIndexOf(
+                        QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                indexName = indexName.substring(lastIndexOf + 1);
+            }
+            tableName = indexName + "(" + tableName + ")";
+        }
+        buf.append("OVER ").append(tableName);
+
         if (!scanRanges.isPointLookup()) {
             buf.append(appendKeyRanges());
         }
@@ -161,8 +176,7 @@ public abstract class ExplainTable {
                 explainPlanAttributesBuilder.setClientSortedBy("REVERSE");
             }
             explainPlanAttributesBuilder.setExplainScanType(scanTypeDetails);
-            explainPlanAttributesBuilder.setTableName(tableRef.getTable()
-                .getPhysicalName().getString());
+            explainPlanAttributesBuilder.setTableName(tableName);
             if (!scanRanges.isPointLookup()) {
                 explainPlanAttributesBuilder.setKeyRanges(appendKeyRanges());
             }
