@@ -10,7 +10,6 @@ public class TableTTLInfo implements Comparable {
 	private final byte[] tenantId;
 	private final byte[] tableName;
 	private final byte[] prefix;
-
 	private final int ttl;
 
 	public TableTTLInfo(String physicalTableName, String tenantId, String tableName, String prefix, int ttl) {

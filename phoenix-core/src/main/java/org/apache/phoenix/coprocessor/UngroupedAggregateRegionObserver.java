@@ -111,6 +111,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -599,7 +600,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     InternalScanner internalScanner = scanner;
                     if (request.isMajor()) {
                         boolean isDisabled = false;
-                        final String fullTableName = tableName.getNameAsString();
+                        boolean isMultiTenantIndexTable = false;
+                        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                            isMultiTenantIndexTable = true;
+                        }
+                        final String fullTableName = isMultiTenantIndexTable ?
+                                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(), MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
+                                tableName.getNameAsString();
+
                         PTable table = null;
                         try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                 compactionConfig).unwrap(PhoenixConnection.class)) {
