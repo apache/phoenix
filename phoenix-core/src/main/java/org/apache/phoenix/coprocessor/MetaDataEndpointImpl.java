@@ -331,6 +331,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             "phoenix.metadata.cache.invalidation.timeoutMs";
     // Default to 10 seconds.
     public static final long PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT = 10 * 1000;
+    public static final String PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED =
+            "phoenix.metadata.invalidate.cache.enabled";
     // KeyValues for Table
     private static final Cell TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
@@ -3485,12 +3487,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
         Configuration conf = env.getConfiguration();
-        String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
-        if (value == null
-                || !value.contains(PhoenixRegionServerEndpoint.class.getName())) {
-            // PhoenixRegionServerEndpoint is not loaded. We don't have to invalidate the cache.
-            LOGGER.info("Skip invalidating server metadata cache since PhoenixRegionServerEndpoint"
-                            + " is not loaded");
+        boolean invalidateCacheEnabled = conf.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
+                false);
+        if (!invalidateCacheEnabled) {
+            LOGGER.info("Skip invalidating server metadata cache since conf property" +
+                    " phoenix.metadata.invalidate.cache.enabled is set to false");
             return;
         }
         Properties properties = new Properties();
