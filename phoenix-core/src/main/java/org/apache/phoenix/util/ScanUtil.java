@@ -22,7 +22,9 @@ import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORD
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.COL_QUALIFIER_TO_NAME_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PK_COL_EXPRESSIONS;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
@@ -31,6 +33,10 @@ import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
@@ -38,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +68,7 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableComparator;
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
@@ -72,6 +80,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -91,12 +100,14 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
@@ -1313,6 +1324,9 @@ public class ScanUtil {
         setScanAttributeForPaging(scan, phoenixConnection);
 
         if (table.getType() == PTableType.CDC) {
+            PTable dataTable = PhoenixRuntime.getTable(phoenixConnection,
+                    SchemaUtil.getTableName(table.getSchemaName().getString(),
+                            table.getParentTableName().getString()));
             scan.setAttribute(CDC_DATA_TABLE_NAME,
                     table.getParentName().getBytes());
 
@@ -1321,6 +1335,129 @@ public class ScanUtil {
             scan.setAttribute(CDC_INCLUDE_SCOPES, CDCUtil.makeChangeScopeStringFromEnums(
                     context.getCdcIncludeScopes()).getBytes(StandardCharsets.UTF_8));
             CDCUtil.initForRawScan(scan);
+            List<PColumn> columns = dataTable.getColumns();
+            Map<byte[], String> colQualNameMap = new HashMap<>(columns.size());
+            List<Pair<String, PDataType>> pkColNamesAndTypes = new ArrayList<>();
+            List<PColumn> pkCols = new ArrayList<>();
+            for (PColumn col: columns) {
+                if (col.getColumnQualifierBytes() != null) {
+                    colQualNameMap.put(col.getColumnQualifierBytes(), col.getName().getString());
+                }
+                else {
+                    pkColNamesAndTypes.add(new Pair<>(col.getName().getString(),
+                            col.getDataType()));
+                    pkCols.add(col);
+                }
+            }
+            List<RowKeyColumnExpression> pkColExpressions = new ArrayList();
+            for (int i = 0; i < pkCols.size(); ++i) {
+                pkColExpressions.add(new RowKeyColumnExpression(pkCols.get(i),
+                        new RowKeyValueAccessor(pkCols, i), pkCols.get(i).getName().getString()));
+            }
+            scan.setAttribute(COL_QUALIFIER_TO_NAME_MAP,
+                    serializeColumnQualifierToNameMap(colQualNameMap));
+            //scan.setAttribute(PK_COL_NAMES_AND_TYPES,
+            //        serializePKColNamesAndTypes(pkColNamesAndTypes));
+            scan.setAttribute(PK_COL_EXPRESSIONS, serializePKColExpressions(pkColExpressions));
+        }
+    }
+
+    public static byte[] serializeColumnQualifierToNameMap(Map<byte[], String> colQualNameMap) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(stream);
+        try {
+            output.writeInt(colQualNameMap.size());
+            for (Map.Entry<byte[], String> entry: colQualNameMap.entrySet()) {
+                output.writeInt(entry.getKey().length);
+                output.write(entry.getKey());
+                WritableUtils.writeString(output, entry.getValue());
+            }
+            return stream.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Map<byte[], String> deserializeColumnQualifierToNameMap(byte[] mapBytes) {
+        ByteArrayInputStream stream = new ByteArrayInputStream(mapBytes);
+        DataInputStream input = new DataInputStream(stream);
+        try {
+            int size = input.readInt();
+            Map<byte[], String> colQualNameMap = new HashMap<>(size);
+            for (int i = 0; i < size; ++i) {
+                int qualLength = input.readInt();
+                byte[] qualBytes = new byte[qualLength];
+                input.read(qualBytes);
+                String colName = WritableUtils.readString(input);
+                colQualNameMap.put(qualBytes, colName);
+            }
+            return colQualNameMap;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static byte[] serializePKColExpressions(List<RowKeyColumnExpression> pkColExpressions) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(stream);
+        try {
+            output.writeInt(pkColExpressions.size());
+            for (RowKeyColumnExpression expr: pkColExpressions) {
+                expr.write(output);
+            }
+            return stream.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static List<RowKeyColumnExpression> deserializePKColExpressions(byte[] colExprBytes) {
+        ByteArrayInputStream stream = new ByteArrayInputStream(colExprBytes);
+        DataInputStream input = new DataInputStream(stream);
+        try {
+            int nExprs = input.readInt();
+            List<RowKeyColumnExpression> pkColExpressions = new ArrayList<>(nExprs);
+            for (int i = 0; i < nExprs; ++i) {
+                RowKeyColumnExpression expr = new RowKeyColumnExpression();
+                expr.readFields(input);
+                pkColExpressions.add(expr);
+            }
+            return pkColExpressions;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static byte[] serializePKColNamesAndTypes(
+            List<Pair<String, PDataType>> pkColNamesAndTypes) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(stream);
+        try {
+            output.writeInt(pkColNamesAndTypes.size());
+            for (Pair<String, PDataType> entry: pkColNamesAndTypes) {
+                WritableUtils.writeString(output, entry.getFirst());
+                WritableUtils.writeString(output, entry.getSecond().getSqlTypeName());
+            }
+            return stream.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static List<Pair<String, PDataType>> deserializePKColNamesAndTypes(
+            byte[] pkColInfoBytes) {
+        ByteArrayInputStream stream = new ByteArrayInputStream(pkColInfoBytes);
+        DataInputStream output = new DataInputStream(stream);
+        try {
+            int pkcolNum = output.readInt();
+            List<Pair<String, PDataType>> pkColNamesAndTypes = new ArrayList<>(pkcolNum);
+            for (int i = 0; i < pkcolNum; ++i) {
+                pkColNamesAndTypes.add(new Pair<>(WritableUtils.readString(output),
+                        PDataType.fromSqlTypeName(WritableUtils.readString(output))));
+            }
+            return pkColNamesAndTypes;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 

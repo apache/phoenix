@@ -245,7 +245,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //      }
         String mockCdcJson = "\"This is a mock CDC JSON data\"";
         ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT /*+ INCLUDE(PRE, POST) */ * FROM " + cdcName);
+                "SELECT /*+ INCLUDE(PRE, POST) */ * FROM " + cdcName); // + " ORDER BY k"); // FIXME: causing InvalidQualifierBytesException
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         assertEquals(mockCdcJson, rs.getObject(3));
