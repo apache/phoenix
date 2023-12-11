@@ -363,14 +363,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 // Use original plan for data table so that data and immutable indexes will be sent
                                 // TODO: for joins, we need to iterate through all tables, but we need the original table,
                                 // not the projected table, so plan.getContext().getResolver().getTables() won't work.
-                                if (plan.getTableRef() != null
-                                        && plan.getTableRef().getTable() != null && !Strings
-                                        .isNullOrEmpty(
-                                                plan.getTableRef().getTable().getPhysicalName()
-                                                        .toString())) {
-                                    tableName = plan.getTableRef().getTable().getPhysicalName()
-                                            .toString();
-                                }
                                 if (plan.getContext().getScanRanges().isPointLookup()) {
                                     pointLookup = true;
                                 }
@@ -379,6 +371,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 plan =
                                         connection.getQueryServices().getOptimizer()
                                                 .optimize(PhoenixStatement.this, plan);
+
+                                if (plan.getTableRef() != null
+                                        && plan.getTableRef().getTable() != null && !Strings
+                                        .isNullOrEmpty(
+                                                plan.getTableRef().getTable().getPhysicalName()
+                                                        .toString())) {
+                                    tableName = plan.getTableRef().getTable().getPhysicalName()
+                                            .toString();
+                                }
                                 // this will create its own trace internally, so we don't wrap this
                                 // whole thing in tracing
                                 ResultIterator resultIterator = plan.iterator();
