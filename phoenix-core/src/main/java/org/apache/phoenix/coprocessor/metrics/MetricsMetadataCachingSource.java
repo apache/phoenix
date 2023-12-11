@@ -56,8 +56,8 @@ public interface MetricsMetadataCachingSource extends BaseSource {
     String METADATA_CACHE_INVALIDATION_FAILURE_DESC = "Number of times cache invalidation failed.";
 
     String METADATA_CACHE_INVALIDATION_RPC_TIME = "metadataCacheInvalidationRpcTimeMs";
-    String METADATA_CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for "
-                                                + "cache invalidation RPC";
+    String METADATA_CACHE_INVALIDATION_RPC_TIME_DESC = "Histogram for the time in milliseconds for"
+                                                + " cache invalidation RPC";
     String METADATA_CACHE_INVALIDATION_TOTAL_TIME = "metadataCacheInvalidationTotalTimeMs";
     String METADATA_CACHE_INVALIDATION_TOTAL_TIME_DESC
             = "Histogram for the total time in milliseconds "
