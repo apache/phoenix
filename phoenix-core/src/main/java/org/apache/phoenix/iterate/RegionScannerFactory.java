@@ -176,15 +176,12 @@ public abstract class RegionScannerFactory {
                                 dataColumns[i].getQualifier());
                       }
                     }
-                  } else  if (indexMaintainer.isUncovered()) {
-                    // Indexed columns should also be added to the data columns to join for uncovered global indexes.
-                    // This is required to verify the index row against the data table row.
-                    for (ColumnReference cr: indexMaintainer.getIndexedColumns()) {
-                      if (storageScheme == PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                        dataTableScan.addFamily(cr.getFamily());
-                      } else {
-                        dataTableScan.addColumn(cr.getFamily(), cr.getQualifier());
-                      }
+                  } else if (indexMaintainer.isUncovered()) {
+                    // Indexed columns and the columns in index where clause should also be added
+                    // to the data columns to scan for uncovered global indexes. This is required
+                    // to verify the index row against the data table row.
+                    for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
+                      dataTableScan.addColumn(column.getFamily(), column.getQualifier());
                     }
                   }
                   if (ScanUtil.isLocalIndex(scan)) {

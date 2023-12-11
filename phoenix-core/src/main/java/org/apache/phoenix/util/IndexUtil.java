@@ -40,6 +40,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hbase.ArrayBackedTag;
@@ -893,6 +894,36 @@ public class IndexUtil {
         }
         return ts;
     }
+
+    public static List<Cell> readColumnsFromRow(Put row, Set<ColumnReference> cols) {
+        if (row == null) {
+            return Collections.EMPTY_LIST;
+        }
+
+        List<Cell> columns = Lists.newArrayList();
+
+        if (cols.isEmpty()) {
+            // just return any cell FirstKeyOnlyFilter
+            for (List<Cell> cells : row.getFamilyCellMap().values()) {
+                if (cells == null || cells.isEmpty()) {
+                    continue;
+                }
+                columns.add(cells.get(0));
+                break;
+            }
+            return columns;
+        }
+
+        IndexUtil.SimpleValueGetter valueGetter = new IndexUtil.SimpleValueGetter(row);
+        for (ColumnReference colRef : cols) {
+            Cell cell = valueGetter.getLatestCell(colRef, HConstants.LATEST_TIMESTAMP);
+            if (cell != null) {
+                columns.add(cell);
+            }
+        }
+        return columns;
+    }
+
     public static class SimpleValueGetter implements ValueGetter {
         final ImmutableBytesWritable valuePtr = new ImmutableBytesWritable();
         final Put put;

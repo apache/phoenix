@@ -507,8 +507,9 @@ public class MutableIndexFailureIT extends BaseTest {
         ResultSet rs = conn.createStatement().executeQuery(query);
         String expectedPlan = " OVER "
                 + (localIndex
-                        ? Bytes.toString(
-                                SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
+                        ? fullIndexName + "(" + Bytes.toString(
+                                SchemaUtil.getPhysicalTableName(fullTableName.getBytes(),
+                                        isNamespaceMapped).getName()) + ")"
                         : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped).getNameAsString());
         String explainPlan = QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
         assertTrue(explainPlan, explainPlan.contains(expectedPlan));

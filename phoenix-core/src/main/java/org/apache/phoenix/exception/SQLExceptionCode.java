@@ -106,7 +106,10 @@ public enum SQLExceptionCode {
         }
     }),
     CANNOT_INDEX_COLUMN_ON_TYPE(302, "23100", "The column cannot be index due to its type."),
-
+    INVALID_INDEX_WHERE_WITH_SUBQUERY(303, "23101",
+            " Index where clause cannot include a subquery."),
+    CANNOT_EVALUATE_INDEX_WHERE(304, "23102",
+            "Invalid index where clause. It cannot be evaluated on a data table row."),
     /**
      * Invalid Cursor State (errorcode 04, sqlstate 24)
      */
@@ -351,6 +354,10 @@ public enum SQLExceptionCode {
             + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
+    CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK(10955, "44A37", "Index can be created "
+            + "only if none of the child views extends primary key"),
+    VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES(10956, "44A38", "View can extend parent primary key"
+            + " only if none of the parents have indexes in the parent hierarchy"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

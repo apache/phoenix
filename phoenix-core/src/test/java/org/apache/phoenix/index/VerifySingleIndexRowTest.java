@@ -271,7 +271,7 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         }
     }
 
-    private void initializeRebuildScannerAttributes() {
+    private void initializeRebuildScannerAttributes() throws SQLException {
         when(rebuildScanner.setIndexTableTTL(Matchers.anyInt())).thenCallRealMethod();
         when(rebuildScanner.setIndexMaintainer(Matchers.<IndexMaintainer>any())).thenCallRealMethod();
         when(rebuildScanner.setMaxLookBackInMills(Matchers.anyLong())).thenCallRealMethod();
