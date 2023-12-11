@@ -71,9 +71,6 @@ else:
     jdbc_url = 'jdbc:phoenix:' + zookeeper
 sqlfile = tryDecode(args.sqlfile)
 
-# HBase configuration folder path (where hbase-site.xml reside) for
-# HBase/Phoenix client side property override
-hbase_config_path = phoenix_utils.hbase_conf_dir
 
 if sqlfile and not os.path.isfile(sqlfile):
     parser.print_help()
@@ -81,36 +78,6 @@ if sqlfile and not os.path.isfile(sqlfile):
 
 if sqlfile:
     sqlfile = "--run=" + phoenix_utils.shell_quote([sqlfile])
-
-java_home = os.getenv('JAVA_HOME')
-
-# load hbase-env.??? to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
-hbase_env_path = None
-hbase_env_cmd  = None
-if os.name == 'posix':
-    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
-    hbase_env_cmd = ['bash', '-c', 'source %s && env' % hbase_env_path]
-elif os.name == 'nt':
-    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
-    hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
-if not hbase_env_path or not hbase_env_cmd:
-    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
-    sys.exit(-1)
-
-hbase_env = {}
-if os.path.isfile(hbase_env_path):
-    p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
-    for x in p.stdout:
-        (k, _, v) = x.decode().partition('=')
-        hbase_env[k.strip()] = v.strip()
-
-if 'JAVA_HOME' in hbase_env:
-    java_home = hbase_env['JAVA_HOME']
-
-if java_home:
-    java = os.path.join(java_home, 'bin', 'java')
-else:
-    java = 'java'
 
 colorSetting = tryDecode(args.color)
 # disable color setting for windows OS
@@ -123,7 +90,7 @@ if os.uname()[4].startswith('ppc'):
 else:
     disable_jna = ""
 
-java_cmd = java + ' $PHOENIX_OPTS ' + \
+java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + ' $PHOENIX_OPTS ' + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \
