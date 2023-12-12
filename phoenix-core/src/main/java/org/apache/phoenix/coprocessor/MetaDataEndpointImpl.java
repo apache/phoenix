@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow;
-import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.coprocessor.generated.MetaDataProtos.MutationCode.UNABLE_TO_CREATE_CHILD_LINK;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE_BYTES;
@@ -3490,8 +3489,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         boolean invalidateCacheEnabled = conf.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
                 false);
         if (!invalidateCacheEnabled) {
-            LOGGER.info("Skip invalidating server metadata cache since conf property" +
-                    " phoenix.metadata.invalidate.cache.enabled is set to false");
+            LOGGER.info("Skip invalidating server metadata cache since conf property"
+                    + " phoenix.metadata.invalidate.cache.enabled is set to false");
             return;
         }
         Properties properties = new Properties();
