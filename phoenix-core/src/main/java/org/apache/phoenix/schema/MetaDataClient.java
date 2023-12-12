@@ -2221,7 +2221,7 @@ public class MetaDataClient {
                 }
                 // Salt the index table if the data table is salted
                 if (saltBucketNum == null) {
-                    if (parent != null) {
+                    if (tableType != PTableType.INDEX && parent != null) {
                         saltBucketNum = parent.getBucketNum();
                     }
                 } else if (saltBucketNum.intValue() == 0) {
