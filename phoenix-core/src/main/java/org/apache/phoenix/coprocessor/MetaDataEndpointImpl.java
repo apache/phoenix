@@ -91,6 +91,7 @@ import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -2112,9 +2113,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // upgraded, we disallow dropping a base table that has child views, so in that case
             // this is a no-op (See PHOENIX-5544)
             if (!Bytes.toString(schemaName).equals(QueryConstants.SYSTEM_SCHEMA_NAME)) {
-                ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName,
-                        getSystemTableForChildLinks(clientVersion, env.getConfiguration())
-                                .getName());
+                ViewUtil.dropChildViews(env, tenantIdBytes, schemaName, tableName);
             }
 
             byte[] parentTableKey = null;
@@ -2684,8 +2683,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             if (pTableType == PTableType.TABLE || pTableType == PTableType.VIEW) {
                 // check to see if the table has any child views
-                try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
-                        getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
+                try (Table hTable = ServerUtil.getHTableSystemChildLink(env)) {
                     // This call needs to be done before acquiring the row lock on the header row
                     // for the table/view being dropped, otherwise the calls to resolve its child
                     // views via PhoenixRuntime.getTableNoCache() will deadlock since this call
@@ -2809,9 +2807,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
 
                 // after the view metadata is dropped, drop parent->child link
-                MetaDataResponse response = processRemoteRegionMutations(
-                        getSystemTableForChildLinks(request.getClientVersion(),
-                                env.getConfiguration()).getName(), childLinkMutations,
+                MetaDataResponse response = processRemoteRegionMutationsOnSystemChildLinkTable(
+                        childLinkMutations,
                         MetaDataProtos.MutationCode.UNABLE_TO_DELETE_CHILD_LINK);
                 if (response != null) {
                     done.run(response);
@@ -2925,6 +2922,35 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return null;
     }
 
+    private MetaDataResponse processRemoteRegionMutationsOnSystemChildLinkTable(
+            List<Mutation> remoteMutations, MetaDataProtos.MutationCode mutationCode)
+            throws IOException {
+        if (remoteMutations.isEmpty())
+            return null;
+        MetaDataResponse.Builder builder = MetaDataResponse.newBuilder();
+        try (Table hTable =
+                     ServerUtil.getHTableForCoprocessorScan(env,
+                             SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
+                                     env.getConfiguration()))) {
+            hTable.batch(remoteMutations, null);
+        } catch (Exception e){
+            try (Table hTable =
+                         ServerUtil.getHTableForCoprocessorScan(env,
+                                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                                         env.getConfiguration()))) {
+                hTable.batch(remoteMutations, null);
+            } catch (Throwable t) {
+                LOGGER.error("Unable to write mutations to " +
+                        Bytes.toString(SYSTEM_CHILD_LINK_NAME_BYTES), t);
+            } finally {
+                builder.setReturnCode(mutationCode);
+                builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+                return builder.build();
+            }
+        }
+        return null;
+    }
+
     private MetaDataMutationResult doDropTable(byte[] key, byte[] tenantId, byte[] schemaName,
             byte[] tableName, byte[] parentTableName, PTableType tableType,
             List<Mutation> catalogMutations, List<Mutation> childLinkMutations,
@@ -2979,7 +3005,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 return new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND,
                         EnvironmentEdgeManager.currentTimeMillis(), null);
             }
-
             // Add to list of HTables to delete, unless it's a view or its a shared index
             if (tableType == INDEX && table.getViewIndexId() != null) {
                 sharedTablesToDelete.add(new SharedTableState(table));

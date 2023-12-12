@@ -21,6 +21,8 @@ import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDE
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.DEFAULT_INDEX_WRITER_RPC_RETRIES_NUMBER;
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_PAUSE;
 import static org.apache.phoenix.hbase.index.write.IndexWriterUtils.INDEX_WRITER_RPC_RETRIES_NUMBER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -188,10 +190,6 @@ public class ServerUtil {
         }
         return null;
     }
-
-    private static boolean coprocessorScanWorks(RegionCoprocessorEnvironment env) {
-        return (VersionUtil.encodeVersion(env.getHBaseVersion()) >= COPROCESSOR_SCAN_WORKS);
-    }
     
     /*
      * This code works around HBASE-11837 which causes HTableInterfaces retrieved from
@@ -216,17 +214,19 @@ public class ServerUtil {
     
     public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env,
                                                                Table writerTable) throws IOException {
-        if (coprocessorScanWorks(env)) {
-            return writerTable;
-        }
-        return getTableFromSingletonPool(env, writerTable.getName());
+        return writerTable;
     }
     
     public static Table getHTableForCoprocessorScan (RegionCoprocessorEnvironment env, TableName tableName) throws IOException {
-        if (coprocessorScanWorks(env)) {
-            return env.getConnection().getTable(tableName);
+        return env.getConnection().getTable(tableName);
+    }
+
+    public static Table getHTableSystemChildLink (RegionCoprocessorEnvironment env) throws IOException {
+        try {
+            return env.getConnection().getTable(SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES, env.getConfiguration()));
+        } catch (Exception e){
+            return env.getConnection().getTable(SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
         }
-        return getTableFromSingletonPool(env, tableName);
     }
     
     public static long parseServerTimestamp(Throwable t) {
