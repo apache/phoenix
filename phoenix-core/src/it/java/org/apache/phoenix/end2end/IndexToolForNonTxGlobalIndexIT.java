@@ -913,12 +913,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            conn.createStatement().execute("CREATE TABLE " + dataTableFullName + " "
-                    + "(key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (key1 BIGINT NOT NULL, key2 BIGINT NOT NULL, val1 VARCHAR, val2 BIGINT, "
                     + "val3 BIGINT, val4 DOUBLE, val5 BIGINT, val6 VARCHAR "
-                    + "CONSTRAINT my_pk PRIMARY KEY(key1, key2)) COLUMN_ENCODED_BYTES=0");
+                    + "CONSTRAINT my_pk PRIMARY KEY(key1, key2, val6)) COLUMN_ENCODED_BYTES=0");
             conn.createStatement().execute(
-                    "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName + " WHERE val6 = 'def'");
+                    "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName  +
+                            " WHERE val6 = 'def'");
             conn.createStatement().execute(String.format(
                     "CREATE INDEX " + viewIndexName + " ON " + viewFullName
                             + " (val3) INCLUDE(val5) " + this.indexDDLOptions));
@@ -1377,84 +1378,6 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
                     + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
             conn.createStatement().execute("UPSERT INTO " + view1FullName
                     + "(ORGANIZATION_ID, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'D', NULL)");
-            conn.commit();
-
-            String createViewIndex =
-                    "CREATE INDEX IF NOT EXISTS " + indexTableName + " ON " + view1FullName
-                            + " (VIEW_COLB) ASYNC " + this.indexDDLOptions;
-            conn.createStatement().execute(createViewIndex);
-            conn.commit();
-            // Rebuild using index tool
-            IndexToolIT.runIndexTool(useSnapshot, schemaName, view1Name, indexTableName);
-            ResultSet rs =
-                    conn.createStatement()
-                            .executeQuery("SELECT COUNT(*) FROM " + indexTableFullName);
-            rs.next();
-            assertEquals(2, rs.getInt(1));
-
-            Pair<Integer, Integer> putsAndDeletes =
-                    countPutsAndDeletes("_IDX_" + dataTableFullName);
-            assertEquals(4, (int) putsAndDeletes.getFirst());
-            assertEquals(2, (int) putsAndDeletes.getSecond());
-        }
-    }
-
-    @Test
-    public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
-        if (!mutable) {
-            return;
-        }
-        String schemaName = generateUniqueName();
-        String dataTableName = generateUniqueName();
-        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
-        String view1Name = generateUniqueName();
-        String view1FullName = SchemaUtil.getTableName(schemaName, view1Name);
-        String view2Name = generateUniqueName();
-        String view2FullName = SchemaUtil.getTableName(schemaName, view2Name);
-        String indexTableName = generateUniqueName();
-        String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            // Create Table and Views. Note the view is on a non PK data table column
-            String createTable =
-                    "CREATE TABLE IF NOT EXISTS " + dataTableFullName + " (\n"
-                            + "    ORGANIZATION_ID VARCHAR NOT NULL,\n"
-                            + "    KEY_PREFIX CHAR(3) NOT NULL,\n" + "    CREATED_BY VARCHAR,\n"
-                            + "    CONSTRAINT PK PRIMARY KEY (\n" + "        ORGANIZATION_ID,\n"
-                            + "        KEY_PREFIX\n" + "    )\n"
-                            + ") VERSIONS=1, COLUMN_ENCODED_BYTES=0";
-            conn.createStatement().execute(createTable);
-            String createView1 =
-                    "CREATE VIEW IF NOT EXISTS " + view1FullName + " (\n"
-                            + " VIEW_COLA VARCHAR NOT NULL,\n"
-                            + " VIEW_COLB CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
-                            + " VIEW_COLA\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
-                            + " WHERE CREATED_BY = 'foo'";
-            conn.createStatement().execute(createView1);
-            String createView2 =
-                    "CREATE VIEW IF NOT EXISTS " + view2FullName + " (\n"
-                            + " VIEW_COL1 VARCHAR NOT NULL,\n"
-                            + " VIEW_COL2 CHAR(1) CONSTRAINT PKVIEW PRIMARY KEY (\n"
-                            + " VIEW_COL1\n" + " )) AS \n" + " SELECT * FROM " + dataTableFullName
-                            + " WHERE CREATED_BY = 'bar'";
-            conn.createStatement().execute(createView2);
-
-            // We want to verify if deletes and set null result in expected rebuild of view index
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'aaa', 'A', 'G')");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ccc', 'C', 'I')");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', 'J')");
-
-            conn.createStatement().execute("UPSERT INTO " + view2FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COL1, VIEW_COL2) VALUES('ORG2', 'bbb', 'B', 'H')");
-            conn.commit();
-            conn.createStatement().execute("DELETE FROM " + view1FullName
-                    + " WHERE ORGANIZATION_ID = 'ORG1' AND VIEW_COLA = 'C'");
-            conn.createStatement().execute("UPSERT INTO " + view1FullName
-                    + "(ORGANIZATION_ID, KEY_PREFIX, VIEW_COLA, VIEW_COLB) VALUES('ORG1', 'ddd', 'D', NULL)");
             conn.commit();
 
             String createViewIndex =

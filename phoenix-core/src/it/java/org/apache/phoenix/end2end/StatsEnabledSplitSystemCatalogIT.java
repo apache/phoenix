@@ -134,23 +134,25 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
         String fullTableName = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
         String fullViewName2 = SchemaUtil.getTableName(generateUniqueName(), generateUniqueName());
-        String ddl = "CREATE VIEW " + fullViewName2 + " AS SELECT * FROM " + fullViewName1 + " WHERE k3 = 2";
+        String ddl = "CREATE VIEW " + fullViewName2 + " AS SELECT * FROM " + fullViewName1 + " " +
+                "WHERE k2 = 101";
         ViewIT.testUpdatableView(fullTableName, fullViewName1, fullViewName2, ddl, null, tableDDLOptions);
         Connection conn = DriverManager.getConnection(getUrl());
         ResultSet rs = conn.createStatement().executeQuery("SELECT k1, k2, k3 FROM " + fullViewName2);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(109, rs.getInt(2));
-        assertEquals(2, rs.getInt(3));
+        assertEquals(101, rs.getInt(2));
+        assertEquals(1, rs.getInt(3));
         assertFalse(rs.next());
         
-        conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k2) VALUES(122)");
+        conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k3) VALUES(10)");
         conn.commit();
-        rs = conn.createStatement().executeQuery("SELECT k1, k2, k3 FROM " + fullViewName2 + " WHERE k2 >= 120");
+        rs = conn.createStatement().executeQuery("SELECT k1, k2, k3 FROM " + fullViewName2 + " " +
+                "WHERE k3 >= 10");
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(122, rs.getInt(2));
-        assertEquals(2, rs.getInt(3));
+        assertEquals(101, rs.getInt(2));
+        assertEquals(10, rs.getInt(3));
         assertFalse(rs.next());
         
         try {
@@ -161,7 +163,7 @@ public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
         }
 
         try {
-            conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k2,k3) select k2, 3 from " + fullViewName1);
+            conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k2,k3) select 102, k3 from " + fullViewName1);
             fail();
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());

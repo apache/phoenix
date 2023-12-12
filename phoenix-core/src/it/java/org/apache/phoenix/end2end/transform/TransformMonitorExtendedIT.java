@@ -241,7 +241,8 @@ public class TransformMonitorExtendedIT extends BaseTest {
             conn.setAutoCommit(true);
             int numOfRows = 1;
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-            TransformToolIT.createTableAndUpsertRows(conn, dataTableFullName1, numOfRows, "TABLE_ONLY", dataTableDdl);
+            TransformToolIT.createTableAndUpsertRowsForUpdatableView(conn, dataTableFullName1,
+                    numOfRows, "TABLE_ONLY", dataTableDdl);
 
             SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName1);
 
@@ -362,7 +363,8 @@ public class TransformMonitorExtendedIT extends BaseTest {
             conn.setAutoCommit(true);
             int numOfRows = 1;
             conn.createStatement().execute("CREATE SCHEMA IF NOT EXISTS " + schemaName);
-            TransformToolIT.createTableAndUpsertRows(conn, dataTableFullName1, numOfRows, "TABLE_ONLY", dataTableDdl);
+            TransformToolIT.createTableAndUpsertRowsForUpdatableView(conn, dataTableFullName1,
+                    numOfRows, "TABLE_ONLY", dataTableDdl);
 
             SingleCellIndexIT.assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN, PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName1);
 

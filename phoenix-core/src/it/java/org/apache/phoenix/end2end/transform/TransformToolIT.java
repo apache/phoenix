@@ -149,6 +149,19 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
         conn.commit();
     }
 
+    public static void createTableAndUpsertRowsForUpdatableView(
+            Connection conn, String dataTableFullName, int numOfRows, String constantVal,
+            String tableOptions) throws SQLException {
+        String stmString1 =
+                "CREATE TABLE IF NOT EXISTS " + dataTableFullName
+                        + " (ID INTEGER NOT NULL, NAME VARCHAR, ZIP INTEGER NOT NULL, " +
+                        "DATA VARCHAR CONSTRAINT PK PRIMARY KEY (ID, ZIP, DATA))"
+                        + tableOptions;
+        conn.createStatement().execute(stmString1);
+        upsertRows(conn, dataTableFullName, 1, numOfRows, constantVal);
+        conn.commit();
+    }
+
     public static void upsertRows(Connection conn, String dataTableFullName, int startIdx, int numOfRows) throws SQLException {
         upsertRows(conn, dataTableFullName, startIdx, numOfRows, "");
     }

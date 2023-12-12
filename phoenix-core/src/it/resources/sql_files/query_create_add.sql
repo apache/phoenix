@@ -19,6 +19,7 @@
 SELECT COUNT(*) from my_schema.my_table;
 SELECT * FROM my_schema.my_table;
 SELECT id from my_table_view;
+SELECT name FROM my_table_view;
 
 SELECT COUNT(*) from my_schema.my_table_immutable;
 SELECT * FROM my_schema.my_table_immutable;

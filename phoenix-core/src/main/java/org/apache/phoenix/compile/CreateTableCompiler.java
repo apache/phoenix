@@ -22,10 +22,14 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -54,9 +58,12 @@ import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -73,6 +80,10 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.ViewUtil;
+
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 
 
 public class CreateTableCompiler {
@@ -97,6 +108,8 @@ public class CreateTableCompiler {
         ParseNode whereNode = create.getWhereClause();
         String viewStatementToBe = null;
         byte[][] viewColumnConstantsToBe = null;
+        Set<PColumn> pkColumnsInWhere = new HashSet<>();
+        Set<PColumn> nonPkColumnsInWhere = new HashSet<>();
         BitSet isViewColumnReferencedToBe = null;
         // Check whether column families having local index column family suffix or not if present
         // don't allow creating table.
@@ -106,7 +119,9 @@ public class CreateTableCompiler {
         PrimaryKeyConstraint pkConstraint = create.getPrimaryKeyConstraint();
         for (int i = 0; i < columnDefs.size(); i++) {
             ColumnDef columnDef = columnDefs.get(i);
-            if (columnDef.getColumnDefName().getFamilyName()!=null && columnDef.getColumnDefName().getFamilyName().contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+            if (columnDef.getColumnDefName().getFamilyName() != null
+                    && columnDef.getColumnDefName().getFamilyName()
+                    .contains(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNALLOWED_COLUMN_FAMILY)
                         .build().buildException();
             }
@@ -165,9 +180,26 @@ public class CreateTableCompiler {
                     viewColumnConstantsToBe = new byte[nColumns][];
                     ViewWhereExpressionVisitor visitor = new ViewWhereExpressionVisitor(parentToBe, viewColumnConstantsToBe);
                     where.accept(visitor);
+
+                    viewTypeToBe = visitor.isUpdatable() ? ViewType.UPDATABLE : ViewType.READ_ONLY;
+                    if (viewTypeToBe == ViewType.UPDATABLE) {
+                        ViewWhereExpressionValidatorVisitor validatorVisitor =
+                                new ViewWhereExpressionValidatorVisitor(parentToBe,
+                                        pkColumnsInWhere, nonPkColumnsInWhere);
+                        where.accept(validatorVisitor);
+                        if (!(connection.getQueryServices()
+                                instanceof ConnectionlessQueryServicesImpl)) {
+                            try {
+                                viewTypeToBe = setViewTypeToBe(connection, parentToBe,
+                                        pkColumnsInWhere, nonPkColumnsInWhere);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }
+
                     // If view is not updatable, viewColumnConstants should be empty. We will still
                     // inherit our parent viewConstants, but we have no additional ones.
-                    viewTypeToBe = visitor.isUpdatable() ? ViewType.UPDATABLE : ViewType.READ_ONLY;
                     if (viewTypeToBe != ViewType.UPDATABLE) {
                         viewColumnConstantsToBe = null;
                     }
@@ -208,6 +240,118 @@ public class CreateTableCompiler {
 
         return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
             viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, connection);
+    }
+
+    /**
+     * Restrict view to be UPDATABLE if the WHERE clause satisfies following criteria:
+     * 1. filters on PK column(s)
+     * 2. filters on PK column(s) in the order they are defined
+     * 3. filters on the same set of PK column(s) as its sibling views
+     * Otherwise, mark the view as READ_ONLY
+     *
+     * @param connection The client connection
+     * @param parentToBe To be parent for given view
+     * @param pkColumnsInWhere Set of primary key in where clause
+     * @param nonPkColumnsInWhere Set of non-primary key columns in where clause
+     * @throws IOException thrown if there is an error finding sibling views
+     * @throws SQLException
+     */
+    private ViewType setViewTypeToBe(final PhoenixConnection connection, final PTable parentToBe,
+                                     final Set<PColumn> pkColumnsInWhere,
+                                     final Set<PColumn> nonPkColumnsInWhere)
+            throws IOException, SQLException {
+        if (nonPkColumnsInWhere.size() > 0
+                || !isPkColumnsInOrder(pkColumnsInWhere, parentToBe.getPKColumns())) {
+            return ViewType.READ_ONLY;
+        }
+
+        byte[] parentTenantIdInBytes = parentToBe.getTenantId() != null
+                ? parentToBe.getTenantId().getBytes() : null;
+        byte[] parentSchemaNameInBytes = parentToBe.getSchemaName() != null
+                ? parentToBe.getSchemaName().getBytes() : null;
+
+        ConnectionQueryServices queryServices = connection.getQueryServices();
+        Configuration config = queryServices.getConfiguration();
+        byte[] systemChildLinkTable = SchemaUtil.isNamespaceMappingEnabled(null, config)
+                ? SYSTEM_CHILD_LINK_NAMESPACE_BYTES
+                : SYSTEM_CHILD_LINK_NAME_BYTES;
+        try (Table childLinkTable = queryServices.getTable(systemChildLinkTable)) {
+            List<PTable> legitimateSiblingViewList =
+                    ViewUtil.findAllDescendantViews(childLinkTable, config, parentTenantIdInBytes,
+                            parentSchemaNameInBytes, parentToBe.getTableName().getBytes(),
+                            HConstants.LATEST_TIMESTAMP, true).getFirst();
+            if (legitimateSiblingViewList.size() > 0) {
+                PTable siblingView = legitimateSiblingViewList.get(0);
+                Expression siblingViewWhere = getWhereFromView(connection, siblingView);
+                Set<PColumn> siblingViewPkColsInWhere = new HashSet<>();
+                if (siblingViewWhere != null) {
+                    ViewWhereExpressionValidatorVisitor siblingViewValidatorVisitor =
+                            new ViewWhereExpressionValidatorVisitor(parentToBe,
+                                    siblingViewPkColsInWhere, new HashSet<>());
+                    siblingViewWhere.accept(siblingViewValidatorVisitor);
+                }
+                if (!pkColumnsInWhere.equals(siblingViewPkColsInWhere)) {
+                    return ViewType.READ_ONLY;
+                }
+            }
+        }
+        return ViewType.UPDATABLE;
+    }
+
+    /**
+     * Get the where Expression of given view.
+     * @param connection The client connection
+     * @param view PTable of the view
+     * @return A where Expression
+     * @throws SQLException
+     */
+    private Expression getWhereFromView(final PhoenixConnection connection, final PTable view)
+            throws SQLException {
+        String viewStatement = view.getViewStatement();
+        if (viewStatement == null) {
+            return null;
+        }
+        SelectStatement select = new SQLParser(viewStatement).parseQuery();
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
+        StatementContext context = new StatementContext(new PhoenixStatement(connection), resolver);
+        BitSet isViewColumnReferencedToBe = new BitSet(view.getColumns().size());
+        ExpressionCompiler expressionCompiler = new ColumnTrackingExpressionCompiler(context,
+                isViewColumnReferencedToBe);
+        ParseNode whereNode = select.getWhere();
+        Expression where = whereNode.accept(expressionCompiler);
+        return where;
+    }
+
+    /**
+     * Check if given primary key columns are in order (consecutive in position) as they are
+     * defined.
+     * @param pkColumns A set of primary key columns to be checked
+     * @param tablePkColumns The list of table's pk columns
+     * @return true if pkColumns are in order
+     */
+    private boolean isPkColumnsInOrder(final Set<PColumn> pkColumns,
+                                       final List<PColumn> tablePkColumns) {
+        if (pkColumns.size() <= 1) {
+            return true;
+        }
+
+        List<Integer> tablePkPositions = new ArrayList<>();
+        List<Integer> pkPositions = new ArrayList<>();
+        tablePkColumns.forEach(tablePkColumn -> tablePkPositions.add(tablePkColumn.getPosition()));
+        pkColumns.forEach(pkColumn -> pkPositions.add(pkColumn.getPosition()));
+
+        Collections.sort(pkPositions);
+        int allPkIndex = Collections.binarySearch(tablePkPositions, pkPositions.get(0));
+        if (allPkIndex < 0) {
+            return false;
+        }
+        for (int i = 1; i < pkPositions.size(); i++) {
+            allPkIndex++;
+            if (pkPositions.get(i) != tablePkPositions.get(allPkIndex)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -422,6 +566,100 @@ public class CreateTableCompiler {
         }
         
     }
+
+    /**
+     * Visitor for view's where expression, which updates primary key columns and non-primary key
+     * columns for validating if the view is updatable
+     */
+    public static class ViewWhereExpressionValidatorVisitor extends
+            StatelessTraverseNoExpressionVisitor<Boolean> {
+        private boolean isUpdatable = true;
+        private final PTable table;
+        private final Set<PColumn> pkColumns;
+        private final Set<PColumn> nonPKColumns;
+
+        public ViewWhereExpressionValidatorVisitor(PTable table, Set<PColumn> pkColumns,
+                                                    Set<PColumn> nonPKColumns) {
+            this.table = table;
+            this.pkColumns = pkColumns;
+            this.nonPKColumns = nonPKColumns;
+        }
+
+        public boolean isUpdatable() {
+            return isUpdatable;
+        }
+
+        @Override
+        public Boolean defaultReturn(Expression node, List<Boolean> l) {
+            // We only hit this if we're trying to traverse somewhere
+            // in which we don't have a visitLeave that returns non null
+            isUpdatable = false;
+            return null;
+        }
+
+        @Override
+        public Iterator<Expression> visitEnter(AndExpression node) {
+            return node.getChildren().iterator();
+        }
+
+        @Override
+        public Boolean visitLeave(AndExpression node, List<Boolean> l) {
+            return l.isEmpty() ? null : Boolean.TRUE;
+        }
+
+        @Override
+        public Iterator<Expression> visitEnter(ComparisonExpression node) {
+            if (node.getFilterOp() == CompareOperator.EQUAL
+                    && node.getChildren().get(1).isStateless()
+                    && node.getChildren().get(1).getDeterminism() == Determinism.ALWAYS) {
+                return Iterators.singletonIterator(node.getChildren().get(0));
+            }
+            return super.visitEnter(node);
+        }
+
+        @Override
+        public Boolean visitLeave(ComparisonExpression node, List<Boolean> l) {
+            if (l.isEmpty()) {
+                return null;
+            }
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public Iterator<Expression> visitEnter(IsNullExpression node) {
+            return node.isNegate() ? super.visitEnter(node) : node.getChildren().iterator();
+        }
+
+        @Override
+        public Boolean visitLeave(IsNullExpression node, List<Boolean> l) {
+            // Nothing to do as we've already set the position to an empty byte array
+            return l.isEmpty() ? null : Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean visit(RowKeyColumnExpression node) {
+            this.pkColumns.add(table.getPKColumns().get(node.getPosition()));
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean visit(KeyValueColumnExpression node) {
+            try {
+                this.nonPKColumns.add(
+                        table.getColumnFamily(node.getColumnFamily())
+                                .getPColumnForColumnQualifier(node.getColumnQualifier()));
+            } catch (SQLException e) {
+                throw new RuntimeException(e); // Impossible
+            }
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean visit(SingleCellColumnExpression node) {
+            return visit(node.getKeyValueExpression());
+        }
+    }
+
     private static class VarbinaryDatum implements PDatum {
 
         @Override
