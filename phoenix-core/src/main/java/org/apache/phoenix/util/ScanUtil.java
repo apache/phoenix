@@ -22,9 +22,9 @@ import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORD
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.COL_QUALIFIER_TO_NAME_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PK_COL_EXPRESSIONS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_NAME_MAP;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_TYPE_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
@@ -120,6 +120,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -804,7 +805,7 @@ public class ScanUtil {
      * that the slot at index 2 has a slot index of 2 but a row key index of 3.
      * To calculate the "adjusted position" index, we simply add up the number of extra slots spanned and offset
      * the slotPosition by that much.
-     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
+     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#getSlotSpans()}
      * @param slotPosition  the index of a slot in the SkipScan slots list.
      * @return  the equivalent row key position in the RowKeySchema
      */
@@ -1336,29 +1337,18 @@ public class ScanUtil {
                     context.getCdcIncludeScopes()).getBytes(StandardCharsets.UTF_8));
             CDCUtil.initForRawScan(scan);
             List<PColumn> columns = dataTable.getColumns();
-            Map<byte[], String> colQualNameMap = new HashMap<>(columns.size());
-            List<Pair<String, PDataType>> pkColNamesAndTypes = new ArrayList<>();
-            List<PColumn> pkCols = new ArrayList<>();
+            Map<byte[], String> dataColQualNameMap = new HashMap<>(columns.size());
+            Map<byte[], PDataType> dataColTypeMap = new HashMap<>();
             for (PColumn col: columns) {
                 if (col.getColumnQualifierBytes() != null) {
-                    colQualNameMap.put(col.getColumnQualifierBytes(), col.getName().getString());
-                }
-                else {
-                    pkColNamesAndTypes.add(new Pair<>(col.getName().getString(),
-                            col.getDataType()));
-                    pkCols.add(col);
+                    dataColQualNameMap.put(col.getColumnQualifierBytes(), col.getName().getString());
+                    dataColTypeMap.put(col.getColumnQualifierBytes(), col.getDataType());
                 }
             }
-            List<RowKeyColumnExpression> pkColExpressions = new ArrayList();
-            for (int i = 0; i < pkCols.size(); ++i) {
-                pkColExpressions.add(new RowKeyColumnExpression(pkCols.get(i),
-                        new RowKeyValueAccessor(pkCols, i), pkCols.get(i).getName().getString()));
-            }
-            scan.setAttribute(COL_QUALIFIER_TO_NAME_MAP,
-                    serializeColumnQualifierToNameMap(colQualNameMap));
-            //scan.setAttribute(PK_COL_NAMES_AND_TYPES,
-            //        serializePKColNamesAndTypes(pkColNamesAndTypes));
-            scan.setAttribute(PK_COL_EXPRESSIONS, serializePKColExpressions(pkColExpressions));
+            scan.setAttribute(DATA_COL_QUALIFIER_TO_NAME_MAP,
+                    serializeColumnQualifierToNameMap(dataColQualNameMap));
+            scan.setAttribute(DATA_COL_QUALIFIER_TO_TYPE_MAP,
+                    serializeColumnQualifierToTypeMap(dataColTypeMap));
         }
     }
 
@@ -1382,8 +1372,8 @@ public class ScanUtil {
         ByteArrayInputStream stream = new ByteArrayInputStream(mapBytes);
         DataInputStream input = new DataInputStream(stream);
         try {
+            Map<byte[], String> colQualNameMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
             int size = input.readInt();
-            Map<byte[], String> colQualNameMap = new HashMap<>(size);
             for (int i = 0; i < size; ++i) {
                 int qualLength = input.readInt();
                 byte[] qualBytes = new byte[qualLength];
@@ -1397,46 +1387,16 @@ public class ScanUtil {
         }
     }
 
-    public static byte[] serializePKColExpressions(List<RowKeyColumnExpression> pkColExpressions) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        DataOutputStream output = new DataOutputStream(stream);
-        try {
-            output.writeInt(pkColExpressions.size());
-            for (RowKeyColumnExpression expr: pkColExpressions) {
-                expr.write(output);
-            }
-            return stream.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static List<RowKeyColumnExpression> deserializePKColExpressions(byte[] colExprBytes) {
-        ByteArrayInputStream stream = new ByteArrayInputStream(colExprBytes);
-        DataInputStream input = new DataInputStream(stream);
-        try {
-            int nExprs = input.readInt();
-            List<RowKeyColumnExpression> pkColExpressions = new ArrayList<>(nExprs);
-            for (int i = 0; i < nExprs; ++i) {
-                RowKeyColumnExpression expr = new RowKeyColumnExpression();
-                expr.readFields(input);
-                pkColExpressions.add(expr);
-            }
-            return pkColExpressions;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static byte[] serializePKColNamesAndTypes(
-            List<Pair<String, PDataType>> pkColNamesAndTypes) {
+    public static byte[] serializeColumnQualifierToTypeMap(
+            Map<byte[], PDataType> pkColNamesAndTypes) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream output = new DataOutputStream(stream);
         try {
             output.writeInt(pkColNamesAndTypes.size());
-            for (Pair<String, PDataType> entry: pkColNamesAndTypes) {
-                WritableUtils.writeString(output, entry.getFirst());
-                WritableUtils.writeString(output, entry.getSecond().getSqlTypeName());
+            for (Map.Entry<byte[], PDataType> entry: pkColNamesAndTypes.entrySet()) {
+                output.writeInt(entry.getKey().length);
+                output.write(entry.getKey());
+                WritableUtils.writeString(output, entry.getValue().getSqlTypeName());
             }
             return stream.toByteArray();
         } catch (IOException e) {
@@ -1444,18 +1404,21 @@ public class ScanUtil {
         }
     }
 
-    public static List<Pair<String, PDataType>> deserializePKColNamesAndTypes(
+    public static Map<byte[], PDataType> deserializeColumnQualifierToTypeMap(
             byte[] pkColInfoBytes) {
         ByteArrayInputStream stream = new ByteArrayInputStream(pkColInfoBytes);
-        DataInputStream output = new DataInputStream(stream);
+        DataInputStream input = new DataInputStream(stream);
         try {
-            int pkcolNum = output.readInt();
-            List<Pair<String, PDataType>> pkColNamesAndTypes = new ArrayList<>(pkcolNum);
-            for (int i = 0; i < pkcolNum; ++i) {
-                pkColNamesAndTypes.add(new Pair<>(WritableUtils.readString(output),
-                        PDataType.fromSqlTypeName(WritableUtils.readString(output))));
+            Map<byte[], PDataType> colQualTypeMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+            int colCnt = input.readInt();
+            for (int i = 0; i < colCnt; ++i) {
+                int qualLength = input.readInt();
+                byte[] qualBytes = new byte[qualLength];
+                input.read(qualBytes);
+                colQualTypeMap.put(qualBytes,
+                        PDataType.fromSqlTypeName(WritableUtils.readString(input)));
             }
-            return pkColNamesAndTypes;
+            return colQualTypeMap;
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

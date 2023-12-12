@@ -323,7 +323,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         return false;
     }
 
-    private boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
+    protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
             result.addAll(indexRow);
@@ -331,20 +331,6 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
                 Result dataRow = dataRows.get(new ImmutableBytesPtr(
                         indexToDataRowKeyMap.get(indexRowKey)));
-                if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
-                    Cell firstCell = result.get(0);
-                    byte[] value =
-                            "\"This is a mock CDC JSON data\"".getBytes(StandardCharsets.UTF_8);
-                    CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
-                    dataRow = Result.create(Arrays.asList(builder.
-                            setRow(indexToDataRowKeyMap.get(indexRowKey)).
-                            setFamily(firstCell.getFamilyArray()).
-                            setQualifier(scan.getAttribute((CDC_JSON_COL_QUALIFIER))).
-                            setTimestamp(indexRow.get(0).getTimestamp()).
-                            setValue(value).
-                            setType(Cell.Type.Put).
-                            build()));
-                }
 
                 if (dataRow != null) {
                     long ts = indexRow.get(0).getTimestamp();

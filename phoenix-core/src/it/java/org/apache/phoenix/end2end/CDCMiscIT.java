@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import com.google.gson.Gson;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -34,8 +35,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -243,15 +246,21 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
         //          "".isEmpty();
         //      }
-        String mockCdcJson = "\"This is a mock CDC JSON data\"";
+        Gson gson = new Gson();
         ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT /*+ INCLUDE(PRE, POST) */ * FROM " + cdcName); // + " ORDER BY k"); // FIXME: causing InvalidQualifierBytesException
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
-        assertEquals(mockCdcJson, rs.getObject(3));
+        assertEquals(new HashMap(){{put("V1", 100d);}}, gson.fromJson(rs.getString(3),
+                HashMap.class));
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
-        assertEquals(mockCdcJson, rs.getObject(3));
+        assertEquals(new HashMap(){{put("V1", 200d);}}, gson.fromJson(rs.getString(3),
+                HashMap.class));
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        assertEquals(new HashMap(){{put("V1", 101d);}}, gson.fromJson(rs.getString(3),
+                HashMap.class));
         assertEquals(false, rs.next());
     }
 

@@ -153,9 +153,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String CDC_DATA_TABLE_NAME = "_CdcDataTableName";
     public static final String CDC_JSON_COL_QUALIFIER = "_CdcJsonColumn_Qualifier";
     public static final String CDC_INCLUDE_SCOPES = "_CdcIncludeScopes";
-    public static final String COL_QUALIFIER_TO_NAME_MAP = "_ColQualToNameMap";
-    public static final String PK_COL_NAMES_AND_TYPES = "_PkColumnNamesAndTypes";
-    public static final String PK_COL_EXPRESSIONS = "_PkColumnExpressions";
+    public static final String DATA_COL_QUALIFIER_TO_NAME_MAP = "_DataColQualToNameMap";
+    public static final String DATA_COL_QUALIFIER_TO_TYPE_MAP = "_DataColQualToTypeMap";
 
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
