@@ -2472,7 +2472,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         Connection conn = DriverManager.getConnection(getUrl());
         try {
             conn.createStatement().execute("CREATE TABLE t1(k INTEGER PRIMARY KEY,"+
-                    " col1 CHAR(8), col2 VARCHAR(10), col3 decimal(10,2))");
+                    " col1 CHAR(8), col2 VARCHAR, col3 decimal(10,2))");
             conn.createStatement().execute("CREATE TABLE t2(k TINYINT PRIMARY KEY," +
                     " col1 CHAR(20), col2 CHAR(30), col3 double)");
             QueryPlan plan = getQueryPlan("SELECT * from t1 union all select * from t2",
@@ -2485,10 +2485,10 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             assertTrue(rowProj.getColumnProjector(1).getExpression().getMaxLength() == 20);
             assertTrue(rowProj.getColumnProjector(2).getExpression().getDataType()
                 instanceof PVarchar);
-            assertTrue(rowProj.getColumnProjector(2).getExpression().getMaxLength() == 30);
+            assertTrue(rowProj.getColumnProjector(2).getExpression().getMaxLength() == null);
             assertTrue(rowProj.getColumnProjector(3).getExpression().getDataType()
                 instanceof PDecimal);
-            assertTrue(rowProj.getColumnProjector(3).getExpression().getScale() == 2);
+            assertTrue(rowProj.getColumnProjector(3).getExpression().getScale() == null);
         } finally {
             conn.close();
         }

@@ -70,7 +70,7 @@ public class UnionCompiler {
                 if(targetTypes.size() < i+1 ) {
                     targetTypes.add(new TargetDataExpression(colproj.getExpression()));
                 } else {
-                    compareExperssions(i, colproj.getExpression(), targetTypes);
+                    compareExpressions(i, colproj.getExpression(), targetTypes.get(i));
                 }
             }
         }
@@ -130,34 +130,35 @@ public class UnionCompiler {
         return new TableRef(null, tempTable, 0, false);
     }
 
-    private static void compareExperssions(int i, Expression expression,
-            List<TargetDataExpression> targetTypes) throws SQLException {
+    private static void compareExpressions(int i, Expression expression,
+            TargetDataExpression targetExpression) throws SQLException {
         PDataType type = expression.getDataType();
-        if (type != null && type.isCoercibleTo(targetTypes.get(i).getType())) {
+        assert type != null;
+        if (type.isCoercibleTo(targetExpression.getType())) {
             ;
         }
-        else if (targetTypes.get(i).getType() == null || targetTypes.get(i).getType().isCoercibleTo(type)) {
-            targetTypes.get(i).setType(type);
+        else if (targetExpression.getType() == null || targetExpression.getType().isCoercibleTo(type)) {
+            targetExpression.setType(type);
         } else {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode
-                .SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS).setMessage("Column # " + i + " is "
-                    + targetTypes.get(i).getType().getSqlTypeName() + " in 1st query where as it is "
+                    .SELECT_COLUMN_TYPE_IN_UNIONALL_DIFFS).setMessage("Column # " + i + " is "
+                    + targetExpression.getType().getSqlTypeName() + " in 1st query where as it is "
                     + type.getSqlTypeName() + " in 2nd query")
-                .build().buildException();
+                    .build().buildException();
         }
         Integer len = expression.getMaxLength();
-        if (len != null && (targetTypes.get(i).getMaxLength() == null ||
-                len > targetTypes.get(i).getMaxLength())) {
-            targetTypes.get(i).setMaxLength(len);
+        if (len == null || (targetExpression.getMaxLength() != null &&
+                len > targetExpression.getMaxLength())) {
+            targetExpression.setMaxLength(len);
         }
         Integer scale = expression.getScale();
-        if (scale != null && (targetTypes.get(i).getScale() == null ||
-                scale > targetTypes.get(i).getScale())){
-            targetTypes.get(i).setScale(scale);
+        if (scale == null || (targetExpression.getScale() != null &&
+                scale > targetExpression.getScale())){
+            targetExpression.setScale(scale);
         }
-       SortOrder sortOrder = expression.getSortOrder();
-        if (sortOrder != null && (!sortOrder.equals(targetTypes.get(i).getSortOrder())))
-            targetTypes.get(i).setSortOrder(SortOrder.getDefault()); 
+        SortOrder sortOrder = expression.getSortOrder();
+        if (sortOrder != null && (!sortOrder.equals(targetExpression.getSortOrder())))
+            targetExpression.setSortOrder(SortOrder.getDefault());
     }
 
     private static TupleProjector getTupleProjector(RowProjector rowProj,

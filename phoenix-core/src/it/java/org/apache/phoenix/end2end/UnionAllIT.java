@@ -1134,4 +1134,44 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testUnionAllWithLiteralColumn() throws Exception {
+        String tableName1 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String ddl = "CREATE TABLE " + tableName1 + " " +
+                    "  (id varchar not null, col1 varchar, col2 varchar(10)" +
+                    "  CONSTRAINT pk PRIMARY KEY (id))\n";
+            createTestTable(getUrl(), ddl);
+
+            String dml = "UPSERT INTO " + tableName1 + " VALUES(?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a");
+            stmt.setString(2, "11111");
+            stmt.setString(3, "11111");
+            stmt.execute();
+            conn.commit();
+
+            String query  = "select t.id, case when t.col1='11111' then 'yes' else 'no' end c1, " +
+                    "  case when '11111'=t.col2 then 'yes' else 'no' end c2 " +
+                    "from ( " +
+                    "  select id, col1, col2 from " + tableName1 +
+                    "  union all" +
+                    "  select 'b' id, '2' col1, '2' col2" +
+                    ") t";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString(1));
+            //Bug: PHOENIX-5413, here should be yes
+            assertEquals("yes", rs.getString(2));
+            assertEquals("yes", rs.getString(3));
+
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertEquals("no", rs.getString(2));
+            assertEquals("no", rs.getString(3));
+        }
+    }
 }
