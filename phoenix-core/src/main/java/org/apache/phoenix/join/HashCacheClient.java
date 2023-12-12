@@ -20,6 +20,7 @@ package org.apache.phoenix.join;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -173,7 +174,7 @@ public class HashCacheClient  {
                 byte[] compressed = new byte[maxCompressedSize]; // size for worst case
                 int compressedSize = Snappy.compress(baOut.getBuffer(), 0, baOut.size(), compressed, 0);
                 // Last realloc to size of compressed buffer.
-                ptr.set(compressed,0,compressedSize);
+                ptr.set(Arrays.copyOfRange(compressed, 0, compressedSize));
             } finally {
                 dataOut.close();
             }
