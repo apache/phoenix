@@ -663,7 +663,7 @@ public class ScanUtil {
     }
 
     public static boolean isReversed(Scan scan) {
-        return scan.getAttribute(BaseScannerRegionObserver.REVERSE_SCAN) != null;
+    	return Arrays.equals(scan.getAttribute(BaseScannerRegionObserver.REVERSE_SCAN),PDataType.TRUE_BYTES);
     }
     
     public static void setReversed(Scan scan) {
