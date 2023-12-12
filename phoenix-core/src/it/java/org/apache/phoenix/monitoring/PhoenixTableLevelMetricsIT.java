@@ -135,7 +135,6 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Collection;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -1263,14 +1262,25 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 }
                 assertTrue(!getPhoenixTableClientMetrics().get(indexName).isEmpty());
                 // Assert that the index is used
-                Collection<PhoenixTableMetric> tableMetrics = getPhoenixTableClientMetrics().get(indexName);
-                tableMetrics.stream()
-                        .forEach(metric -> assertMetricValue(metric, SELECT_SQL_COUNTER, 1, CompareOp.EQ));
-
-                //for base Table
-                tableMetrics = getPhoenixTableClientMetrics().get(dataTable);
-                tableMetrics.stream()
-                        .forEach(metric -> assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ));
+                boolean metricExits = false;
+                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(indexName)) {
+                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                        metricExits = true;
+                        assertMetricValue(metric, SELECT_SQL_COUNTER, 1, CompareOp.EQ);
+                        break;
+                    }
+                }
+                assertTrue(metricExits);
+                metricExits = false;
+                //assert BaseTable is not being queried
+                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
+                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                        metricExits = true;
+                        assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
+                        break;
+                    }
+                }
+                assertTrue(metricExits);
             }
         }
     }
