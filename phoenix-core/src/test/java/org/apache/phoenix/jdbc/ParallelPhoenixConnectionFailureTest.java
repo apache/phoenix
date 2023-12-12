@@ -33,7 +33,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.stubbing.Answer;
@@ -42,7 +41,6 @@ import org.mockito.stubbing.Answer;
  * Test to make sure once an error is encountered on an underlying phoenix connection
  * we don't use that connection during the entire lifecycle of client conenction
  */
-@Ignore
 public class ParallelPhoenixConnectionFailureTest extends BaseTest {
 
     private static String url =
