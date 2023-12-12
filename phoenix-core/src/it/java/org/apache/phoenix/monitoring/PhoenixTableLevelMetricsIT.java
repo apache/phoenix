@@ -135,6 +135,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Collection;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -1216,7 +1217,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
     }
 
-    @Test  public void testMetricsWithIndexUsage() throws Exception {
+    @Test
+    public void testMetricsWithIndexUsage() throws Exception {
         // Generate unique names for the table and index
         String dataTable = generateUniqueName();
         String indexName = generateUniqueName() + "_IDX";
@@ -1261,13 +1263,14 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 }
                 assertTrue(!getPhoenixTableClientMetrics().get(indexName).isEmpty());
                 // Assert that the index is used
-                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(indexName)) {
-                    assertMetricValue(metric, SELECT_SQL_COUNTER, 1, CompareOp.EQ);
-                }
-                //assert BaseTable is not being queried
-                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
-                    assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
-                }
+                Collection<PhoenixTableMetric> tableMetrics = getPhoenixTableClientMetrics().get(indexName);
+                tableMetrics.stream()
+                        .forEach(metric -> assertMetricValue(metric, SELECT_SQL_COUNTER, 1, CompareOp.EQ));
+
+                //for base Table
+                tableMetrics = getPhoenixTableClientMetrics().get(dataTable);
+                tableMetrics.stream()
+                        .forEach(metric -> assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ));
             }
         }
     }
