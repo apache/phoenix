@@ -170,6 +170,7 @@ public class UnionPlan implements QueryPlan {
         if (isOrdered) { // TopN
             scanner = new MergeSortTopNResultIterator(iterators, limit, offset, orderBy.getOrderByExpressions());
         } else {
+            //TODO use RoundRobinResultIterator
             scanner = new ConcatResultIterator(iterators);
             if (offset != null) {
                 scanner = new OffsetResultIterator(scanner, offset);
