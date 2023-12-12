@@ -311,7 +311,17 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
           if (!mutations.isEmpty()) {
               Region region = e.getEnvironment().getRegion();
               // Otherwise, submit the mutations directly here
-                region.batchMutate(mutations.toArray(new Mutation[0]));
+              OperationStatus[] batchMutationStatus = region.batchMutate(
+                      mutations.toArray(new Mutation[mutations.size()])
+              );
+              IOException batchMutationException = ServerUtil.createIOException(batchMutationStatus);
+              if (batchMutationException != null) {
+                  LOGGER.warn(
+                          "Encountered exception during batch mutation, which will be rethrown to user.",
+                          batchMutationException
+                  );
+                  throw batchMutationException;
+              }
           }
           return Result.EMPTY_RESULT;
       } catch (Throwable t) {
