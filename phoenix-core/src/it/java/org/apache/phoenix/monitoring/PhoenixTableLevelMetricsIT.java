@@ -1236,8 +1236,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
         // Insert data into the table
         String insertData = "UPSERT INTO " + dataTable + " VALUES (?, ?)";
-        try (Connection conn = getConnFromTestDriver()) {
-            PreparedStatement stmt = conn.prepareStatement(insertData);
+        try (Connection conn = getConnFromTestDriver();
+             PreparedStatement stmt = conn.prepareStatement(insertData)) {
             for (int i = 1; i <= 10; i++) {
                 stmt.setString(1, "key" + i);
                 stmt.setInt(2, i);
