@@ -1262,25 +1262,25 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 }
                 assertTrue(!getPhoenixTableClientMetrics().get(indexName).isEmpty());
                 // Assert that the index is used
-                boolean metricExits = false;
+                boolean metricExists = false;
                 for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(indexName)) {
                     if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
-                        metricExits = true;
+                        metricExists = true;
                         assertMetricValue(metric, SELECT_SQL_COUNTER, 1, CompareOp.EQ);
                         break;
                     }
                 }
-                assertTrue(metricExits);
-                metricExits = false;
+                assertTrue(metricExists);
+                metricExists = false;
                 //assert BaseTable is not being queried
                 for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
                     if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
-                        metricExits = true;
+                        metricExists = true;
                         assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
                         break;
                     }
                 }
-                assertTrue(metricExits);
+                assertTrue(metricExists);
             }
         }
     }
