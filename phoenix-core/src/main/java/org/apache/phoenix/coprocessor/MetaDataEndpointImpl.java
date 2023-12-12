@@ -189,6 +189,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRespons
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
+import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -609,6 +611,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean allowSplittableSystemCatalogRollback;
 
     private MetricsMetadataSource metricsSource;
+    private MetricsMetadataCachingSource metricsMetadataCachingSource;
     private long metadataCacheInvalidationTimeoutMs;
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
@@ -653,6 +656,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
+        metricsMetadataCachingSource
+                = MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     }
 
     @Override
@@ -3493,6 +3498,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             + " is not loaded");
             return;
         }
+        metricsMetadataCachingSource.incrementMetadataCacheInvalidationOperationsCount();
         Properties properties = new Properties();
         // Skip checking of system table existence since the system tables should have created
         // by now.
@@ -3503,7 +3509,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // This will incur an extra RPC to the master. This RPC is required since we want to
             // get current list of regionservers.
             Collection<ServerName> serverNames = admin.getRegionServers(true);
-            invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
+            PhoenixStopWatch stopWatch = new PhoenixStopWatch().start();
+            try {
+                invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
+                metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
+            } catch (Throwable t) {
+                metricsMetadataCachingSource.incrementMetadataCacheInvalidationFailureCount();
+                throw t;
+            } finally {
+                metricsMetadataCachingSource
+                        .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+            }
         }
     }
 
@@ -3550,10 +3566,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // hbase.rpc.timeout. Even if the future times out, this runnable can be in
                     // RUNNING state and will not be interrupted.
                     service.invalidateServerMetadataCache(controller, protoRequest);
+                    long cacheInvalidationTime = innerWatch.stop().elapsedMillis();
                     LOGGER.info("Invalidating metadata cache"
                             + " on region server: {} completed successfully and it took {} ms",
-                            serverName, innerWatch.stop().elapsedMillis());
-                    // TODO Create a histogram metric for time taken for invalidating the cache.
+                            serverName, cacheInvalidationTime);
+                    metricsMetadataCachingSource
+                            .addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
                 } catch (ServiceException se) {
                     LOGGER.error("Invalidating metadata cache failed for regionserver {}",
                             serverName, se);

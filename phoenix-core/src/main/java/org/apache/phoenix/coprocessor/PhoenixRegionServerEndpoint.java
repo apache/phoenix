@@ -30,6 +30,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
+import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -43,17 +45,21 @@ public class PhoenixRegionServerEndpoint
         extends RegionServerEndpointProtos.RegionServerEndpointService
         implements RegionServerCoprocessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
+    private MetricsMetadataCachingSource metricsSource;
     protected Configuration conf;
 
     @Override
     public void start(CoprocessorEnvironment env) throws IOException {
         this.conf = env.getConfiguration();
+        this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
+                                .getInstance().getMetadataCachingSource();
     }
 
     @Override
     public void validateLastDDLTimestamp(RpcController controller,
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request,
             RpcCallback<RegionServerEndpointProtos.ValidateLastDDLTimestampResponse> done) {
+        metricsSource.incrementValidateTimestampRequestCount();
         for (RegionServerEndpointProtos.LastDDLTimestampRequest lastDDLTimestampRequest
                 : request.getLastDDLTimestampRequestsList()) {
             byte[] tenantID = lastDDLTimestampRequest.getTenantId().toByteArray();

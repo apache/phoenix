@@ -1215,7 +1215,8 @@ public class MutationState implements SQLCloseable {
 
         //if enabled, validate last ddl timestamps for all tables in the mutationsMap
         //for now, force update client cache for all tables if StaleMetadataCacheException is seen
-        if (this.validateLastDdlTimestamp) {
+        //mutationsMap can be empty, for e.g. during a DDL operation
+        if (this.validateLastDdlTimestamp && !this.mutationsMap.isEmpty()) {
             List<TableRef> tableRefs = new ArrayList<>(this.mutationsMap.keySet());
             try {
                 ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
