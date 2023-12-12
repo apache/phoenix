@@ -165,7 +165,6 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
 
     private Object exception;
     private long queryTime;
-    private final Calendar localCalendar;
 
     public PhoenixResultSet(ResultIterator resultIterator, RowProjector rowProjector,
             StatementContext ctx) throws SQLException {
@@ -189,7 +188,6 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             this.startPositionForDynamicCols = 0;
         }
         this.isApplyTimeZoneDisplacement = statement.getConnection().isApplyTimeZoneDisplacement();
-        this.localCalendar = statement.getLocalCalendar();
     }
     
     @Override
@@ -449,30 +447,37 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     }
 
     @Override
-    public Date getDate(int columnIndex) throws SQLException {
-        return getDate(columnIndex, localCalendar);
-    }
-
-    @Override
     public Date getDate(String columnLabel) throws SQLException {
         return getDate(findColumn(columnLabel));
     }
 
     @Override
+    public Date getDate(int columnIndex) throws SQLException {
+        Date value = getDateWithoutDisplacement(columnIndex);
+        if (!wasNull && isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value);
+        } else {
+            return value;
+        }
+    }
+
+    @Override
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
+        Date value = getDateWithoutDisplacement(columnIndex);
+        if (!wasNull && isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value, cal);
+        } else {
+            return value;
+        }
+    }
+
+    private Date getDateWithoutDisplacement(int columnIndex) throws SQLException {
         checkCursorState();
         Date value =
                 (Date) getRowProjector().getColumnProjector(columnIndex - 1).getValue(currentRow,
                     PDate.INSTANCE, ptr);
         wasNull = (value == null);
-        if (wasNull) {
-            return null;
-        }
-        if (isApplyTimeZoneDisplacement) {
-            return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
-        } else {
-            return value;
-        }
+        return value;
     }
 
     @Override
@@ -608,16 +613,13 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
             PDataType type = projector.getExpression().getDataType();
             if (type == PDate.INSTANCE || type == PUnsignedDate.INSTANCE) {
                 value =
-                        DateUtil.applyOutputDisplacement((java.sql.Date) value,
-                            localCalendar.getTimeZone());
+                        DateUtil.applyOutputDisplacement((java.sql.Date) value);
             } else if (type == PTime.INSTANCE || type == PUnsignedTime.INSTANCE) {
                 value =
-                        DateUtil.applyOutputDisplacement((java.sql.Time) value,
-                            localCalendar.getTimeZone());
+                        DateUtil.applyOutputDisplacement((java.sql.Time) value);
             } else if (type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
                 value =
-                        DateUtil.applyOutputDisplacement((java.sql.Timestamp) value,
-                            localCalendar.getTimeZone());
+                        DateUtil.applyOutputDisplacement((java.sql.Timestamp) value);
             }
         }
         return value;
@@ -721,39 +723,41 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     }
 
     @Override
-    public Time getTime(int columnIndex) throws SQLException {
-        return getTime(columnIndex, localCalendar);
-    }
-
-    @Override
     public Time getTime(String columnLabel) throws SQLException {
         return getTime(findColumn(columnLabel));
     }
 
     @Override
-    public Time getTime(int columnIndex, Calendar cal) throws SQLException {
-        checkCursorState();
-        Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
-            PTime.INSTANCE, ptr);
-        wasNull = (value == null);
-        if (wasNull) {
-            return null;
-        }
-        if (isApplyTimeZoneDisplacement) {
-            return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
+    public Time getTime(String columnLabel, Calendar cal) throws SQLException {
+        return getTime(findColumn(columnLabel), cal);
+    }
+
+    @Override
+    public Time getTime(int columnIndex) throws SQLException {
+        Time value = getTimeWithoutDisplacement(columnIndex);
+        if (!wasNull && isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value);
         } else {
             return value;
         }
     }
 
     @Override
-    public Time getTime(String columnLabel, Calendar cal) throws SQLException {
-        return getTime(findColumn(columnLabel),cal);
+    public Time getTime(int columnIndex, Calendar cal) throws SQLException {
+        Time value = getTimeWithoutDisplacement(columnIndex);
+        if (!wasNull && isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value, cal);
+        } else {
+            return value;
+        }
     }
 
-    @Override
-    public Timestamp getTimestamp(int columnIndex) throws SQLException {
-        return getTimestamp(columnIndex, localCalendar);
+    private Time getTimeWithoutDisplacement(int columnIndex) throws SQLException {
+        checkCursorState();
+        Time value = (Time)getRowProjector().getColumnProjector(columnIndex-1).getValue(currentRow,
+            PTime.INSTANCE, ptr);
+        wasNull = (value == null);
+        return value;
     }
 
     @Override
@@ -762,24 +766,36 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     }
 
     @Override
-    public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
-        checkCursorState();
-        Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
-                .getValue(currentRow, PTimestamp.INSTANCE, ptr);
-        wasNull = (value == null);
-        if (wasNull) {
-            return null;
-        }
-        if (isApplyTimeZoneDisplacement) {
-            return DateUtil.applyOutputDisplacement(value, cal.getTimeZone());
+    public Timestamp getTimestamp(String columnLabel, Calendar cal) throws SQLException {
+        return getTimestamp(findColumn(columnLabel), cal);
+    }
+
+    @Override
+    public Timestamp getTimestamp(int columnIndex) throws SQLException {
+        Timestamp value = getTimestampWithoutDisplacement(columnIndex);
+        if (!wasNull && isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value);
         } else {
             return value;
         }
     }
 
     @Override
-    public Timestamp getTimestamp(String columnLabel, Calendar cal) throws SQLException {
-        return getTimestamp(findColumn(columnLabel),cal);
+    public Timestamp getTimestamp(int columnIndex, Calendar cal) throws SQLException {
+        Timestamp value = getTimestampWithoutDisplacement(columnIndex);
+        if (!wasNull && isApplyTimeZoneDisplacement) {
+            return DateUtil.applyOutputDisplacement(value, cal);
+        } else {
+            return value;
+        }
+    }
+
+    private Timestamp getTimestampWithoutDisplacement(int columnIndex) throws SQLException {
+        checkCursorState();
+        Timestamp value = (Timestamp)getRowProjector().getColumnProjector(columnIndex-1)
+                .getValue(currentRow, PTimestamp.INSTANCE, ptr);
+        wasNull = (value == null);
+        return value;
     }
 
     @Override
