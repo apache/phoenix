@@ -30,6 +30,7 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Map;
+import java.util.UUID;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1096,6 +1097,21 @@ public class PDataTypeForArraysTest {
                 PVarchar.INSTANCE, strArr);
         byte[] bytes2 = PVarcharArray.INSTANCE.toBytes(arr);
         assertTrue(Bytes.compareTo(bytes1, bytes2) == 0);
+    }
+
+
+    @Test
+    public void testForUUIDArray() {
+        UUID[] uuidArr = new UUID[2];
+        uuidArr[0] = UUID.randomUUID();
+        uuidArr[1] = UUID.randomUUID();
+        PhoenixArray arr = PArrayDataType.instantiatePhoenixArray(
+        PUUID.INSTANCE, uuidArr);
+        PUUIDArray.INSTANCE.toObject(arr, PUUIDArray.INSTANCE);
+        byte[] bytes = PUUIDArray.INSTANCE.toBytes(arr);
+        PhoenixArray resultArr = (PhoenixArray) PUUIDArray.INSTANCE
+                .toObject(bytes, 0, bytes.length);
+        assertEquals(arr, resultArr);
     }
 
     @Test

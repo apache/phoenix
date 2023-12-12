@@ -30,7 +30,7 @@ public class PTinyint extends PWholeNumber<Byte> {
   public static final PTinyint INSTANCE = new PTinyint();
 
   private PTinyint() {
-    super("TINYINT", Types.TINYINT, Byte.class, new ByteCodec(), 5);
+      super("TINYINT", Types.TINYINT, Byte.class, new ByteCodec(), ORDINAL_TINYINT);
   }
 
   @Override

@@ -27,7 +27,8 @@ public class PUnsignedTinyint extends PWholeNumber<Byte> {
   public static final PUnsignedTinyint INSTANCE = new PUnsignedTinyint();
 
   private PUnsignedTinyint() {
-    super("UNSIGNED_TINYINT", 11, Byte.class, new UnsignedByteCodec(), 18);
+      super("UNSIGNED_TINYINT", SQLTYPE_UNSIGNED_TINYINT /* no constant available in Types */,
+              Byte.class, new UnsignedByteCodec(), ORDINAL_UNSIGNED_TINYINT);
   }
 
   @Override

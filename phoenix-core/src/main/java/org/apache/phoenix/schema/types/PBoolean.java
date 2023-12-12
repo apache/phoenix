@@ -31,7 +31,7 @@ public class PBoolean extends PDataType<Boolean> {
     public static final PBoolean INSTANCE = new PBoolean();
 
     private PBoolean() {
-        super("BOOLEAN", Types.BOOLEAN, Boolean.class, null, 21);
+        super("BOOLEAN", Types.BOOLEAN, Boolean.class, null, ORDINAL_BOOLEAN);
     }
 
     @Override

@@ -45,6 +45,7 @@ import java.util.BitSet;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.MutationPlan;
@@ -448,6 +449,11 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
     @Override
     public void setNull(int parameterIndex, int sqlType, String typeName) throws SQLException {
         setParameter(parameterIndex, null);
+    }
+
+
+    public void setUUID(int parameterIndex, UUID o) throws SQLException {
+        setObject(parameterIndex, o);
     }
 
     @Override

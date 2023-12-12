@@ -27,7 +27,7 @@ public class PTimestampArray extends PArrayDataType<Timestamp[]> {
 
     private PTimestampArray() {
         super("TIMESTAMP ARRAY", PDataType.ARRAY_TYPE_BASE + PTimestamp.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 36);
+                PhoenixArray.class, null, ORDINAL_TIMESTAMP_ARRAY);
     }
 
     @Override

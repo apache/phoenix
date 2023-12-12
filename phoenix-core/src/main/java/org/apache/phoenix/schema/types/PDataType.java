@@ -524,6 +524,74 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         }
     };
 
+    // Ordinal list. It makes easy to "reorder" cardinals. for instance, UUID and UUID_INDEXABLE
+    // insertions makes shift down all Arrays
+
+    protected static final Integer ORDINAL_VARCHAR = 0;
+    protected static final Integer ORDINAL_CHAR = 1;
+    protected static final Integer ORDINAL_BIGINT = 2;
+    protected static final Integer ORDINAL_INTEGER = 3;
+    protected static final Integer ORDINAL_SMALLINT = 4;
+    protected static final Integer ORDINAL_TINYINT = 5;
+    protected static final Integer ORDINAL_FLOAT = 6;
+    protected static final Integer ORDINAL_DOUBLE = 7;
+    protected static final Integer ORDINAL_DECIMAL = 8;
+    protected static final Integer ORDINAL_TIMESTAMP = 9;
+    protected static final Integer ORDINAL_TIME = 10;
+    protected static final Integer ORDINAL_DATE = 11;
+    protected static final Integer ORDINAL_UNSIGNED_TIMESTAMP = 12;
+    protected static final Integer ORDINAL_UNSIGNED_TIME = 13;
+    protected static final Integer ORDINAL_UNSIGNED_DATE = 14;
+    protected static final Integer ORDINAL_UNSIGNED_LONG = 15;
+    protected static final Integer ORDINAL_UNSIGNED_INT = 16;
+    protected static final Integer ORDINAL_UNSIGNED_SMALLINT = 17;
+    protected static final Integer ORDINAL_UNSIGNED_TINYINT = 18;
+    protected static final Integer ORDINAL_UNSIGNED_FLOAT = 19;
+    protected static final Integer ORDINAL_UNSIGNED_DOUBLE = 20;
+    protected static final Integer ORDINAL_BOOLEAN = 21;
+    protected static final Integer ORDINAL_VARBINARY = 22;
+    protected static final Integer ORDINAL_BINARY = 23;
+    protected static final Integer ORDINAL_UUID = 24;
+    protected static final Integer ORDINAL_UUID_INDEXABLE = 25;
+    protected static final Integer ORDINAL_INTEGER_ARRAY = 26;
+    protected static final Integer ORDINAL_BOOLEAN_ARRAY = 27;
+    protected static final Integer ORDINAL_VARCHAR_ARRAY = 28;
+    protected static final Integer ORDINAL_VARBINARY_ARRAY = 29;
+    protected static final Integer ORDINAL_BINARY_ARRAY = 30;
+    protected static final Integer ORDINAL_CHAR_ARRAY = 31;
+    protected static final Integer ORDINAL_BIGINT_ARRAY = 32;
+    protected static final Integer ORDINAL_SMALLINT_ARRAY = 33;
+    protected static final Integer ORDINAL_TINYINT_ARRAY = 34;
+    protected static final Integer ORDINAL_FLOAT_ARRAY = 35;
+    protected static final Integer ORDINAL_DOUBLE_ARRAY = 36;
+    protected static final Integer ORDINAL_DECIMAL_ARRAY = 37;
+    protected static final Integer ORDINAL_TIMESTAMP_ARRAY = 38;
+    protected static final Integer ORDINAL_UNSIGNED_TIMESTAMP_ARRAY = 39;
+    protected static final Integer ORDINAL_TIME_ARRAY = 40;
+    protected static final Integer ORDINAL_UNSIGNED_TIME_ARRAY = 41;
+    protected static final Integer ORDINAL_DATE_ARRAY = 42;
+    protected static final Integer ORDINAL_UNSIGNED_DATE_ARRAY = 43;
+    protected static final Integer ORDINAL_UNSIGNED_LONG_ARRAY = 44;
+    protected static final Integer ORDINAL_UNSIGNED_INT_ARRAY = 45;
+    protected static final Integer ORDINAL_UNSIGNED_SMALLINT_ARRAY = 46;
+    protected static final Integer ORDINAL_UNSIGNED_TINYINT_ARRAY = 47;
+    protected static final Integer ORDINAL_UNSIGNED_FLOAT_ARRAY = 48;
+    protected static final Integer ORDINAL_UNSIGNED_DOUBLE_ARRAY = 49;
+    protected static final Integer ORDINAL_UUID_ARRAY = 50;
+
+    // "sqlType" constants that are not available in java.sql.Types
+    protected static final Integer SQLTYPE_UNSIGNED_INT = 9;
+    protected static final Integer SQLTYPE_UNSIGNED_LONG = 10;
+    protected static final Integer SQLTYPE_UNSIGNED_TINYINT = 11;
+    protected static final Integer SQLTYPE_UNSIGNED_SMALLINT = 13;
+    protected static final Integer SQLTYPE_UNSIGNED_FLOAT = 14;
+    protected static final Integer SQLTYPE_UNSIGNED_DOUBLE = 15;
+    protected static final Integer SQLTYPE_UNSIGNED_TIME = 18;
+    protected static final Integer SQLTYPE_UNSIGNED_DATE = 19;
+    protected static final Integer SQLTYPE_UNSIGNED_TIMESTAMP = 20;
+    protected static final Integer SQLTYPE_UUID = 2100;
+    protected static final Integer SQLTYPE_UUID_INDEXABLE = 2101;
+
     /**
      * Serialize a BigDecimal into a variable length byte array in such a way that it is binary comparable.
      *

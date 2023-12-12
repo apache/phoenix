@@ -25,7 +25,7 @@ public class PSmallintArray extends PArrayDataType<short[]> {
 
     private PSmallintArray() {
         super("SMALLINT ARRAY", PDataType.ARRAY_TYPE_BASE + PSmallint.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 31);
+                PhoenixArray.class, null, ORDINAL_SMALLINT_ARRAY);
     }
 
     @Override

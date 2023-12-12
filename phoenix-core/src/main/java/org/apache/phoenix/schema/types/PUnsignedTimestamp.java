@@ -25,7 +25,8 @@ public class PUnsignedTimestamp extends PTimestamp {
     public static final PUnsignedTimestamp INSTANCE = new PUnsignedTimestamp();
 
     private PUnsignedTimestamp() {
-        super("UNSIGNED_TIMESTAMP", 20, 12);
+        super("UNSIGNED_TIMESTAMP", SQLTYPE_UNSIGNED_TIMESTAMP /* no constant available in Types */,
+                ORDINAL_UNSIGNED_TIMESTAMP);
     }
 
     @Override

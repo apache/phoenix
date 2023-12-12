@@ -24,7 +24,8 @@ public class PBinaryArray extends PArrayDataType<byte[][]> {
     public static final PBinaryArray INSTANCE = new PBinaryArray();
 
     private PBinaryArray() {
-        super("BINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PBinary.INSTANCE.getSqlType(), PhoenixArray.class, null, 28);
+        super("BINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PBinary.INSTANCE.getSqlType(),
+                PhoenixArray.class, null, ORDINAL_BINARY_ARRAY);
     }
 
     @Override

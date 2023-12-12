@@ -25,7 +25,7 @@ public class PUnsignedDoubleArray extends PArrayDataType<double[]> {
 
     private PUnsignedDoubleArray() {
         super("UNSIGNED_DOUBLE ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedDouble.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 47);
+                PhoenixArray.class, null, ORDINAL_UNSIGNED_DOUBLE_ARRAY);
     }
 
     @Override

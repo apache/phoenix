@@ -25,7 +25,7 @@ public class PVarcharArray extends PArrayDataType<String> {
 
     private PVarcharArray() {
         super("VARCHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PVarchar.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 26);
+                PhoenixArray.class, null, ORDINAL_VARCHAR_ARRAY);
     }
 
     @Override

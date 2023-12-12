@@ -25,7 +25,7 @@ public class PVarbinaryArray extends PArrayDataType<byte[][]> {
 
     private PVarbinaryArray() {
         super("VARBINARY ARRAY", PDataType.ARRAY_TYPE_BASE + PVarbinary.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 27);
+                PhoenixArray.class, null, ORDINAL_VARBINARY_ARRAY);
     }
 
     @Override

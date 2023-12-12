@@ -26,7 +26,7 @@ public class PUnsignedSmallintArray extends PArrayDataType<short[]> {
     private PUnsignedSmallintArray() {
         super("UNSIGNED_SMALLINT ARRAY",
                 PDataType.ARRAY_TYPE_BASE + PUnsignedSmallint.INSTANCE.getSqlType(), PhoenixArray.class,
-                null, 44);
+                null, ORDINAL_UNSIGNED_SMALLINT_ARRAY);
     }
 
     @Override

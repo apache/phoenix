@@ -32,7 +32,7 @@ public class PBinary extends PBinaryBase {
     public static final PBinary INSTANCE = new PBinary();
 
     private PBinary() {
-        super("BINARY", Types.BINARY, byte[].class, null, 23);
+        super("BINARY", Types.BINARY, byte[].class, null, ORDINAL_BINARY);
     }
 
     @Override

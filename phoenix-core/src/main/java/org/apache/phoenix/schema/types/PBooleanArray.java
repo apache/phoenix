@@ -25,7 +25,8 @@ public class PBooleanArray extends PArrayDataType<boolean[]> {
     public static final PBooleanArray INSTANCE = new PBooleanArray();
 
     private PBooleanArray() {
-        super("BOOLEAN ARRAY", PDataType.ARRAY_TYPE_BASE + PBoolean.INSTANCE.getSqlType(), PhoenixArray.class, null, 25);
+        super("BOOLEAN ARRAY", PDataType.ARRAY_TYPE_BASE + PBoolean.INSTANCE.getSqlType(),
+                PhoenixArray.class, null, ORDINAL_BOOLEAN_ARRAY);
     }
 
     @Override

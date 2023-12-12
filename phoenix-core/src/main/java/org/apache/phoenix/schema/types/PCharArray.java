@@ -25,7 +25,7 @@ public class PCharArray extends PArrayDataType<String[]> {
 
     private PCharArray() {
         super("CHAR ARRAY", PDataType.ARRAY_TYPE_BASE + PChar.INSTANCE.getSqlType(), PhoenixArray.class,
-                null, 29);
+                null, ORDINAL_CHAR_ARRAY);
     }
 
     @Override

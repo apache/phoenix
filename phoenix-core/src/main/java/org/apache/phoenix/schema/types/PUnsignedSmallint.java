@@ -27,7 +27,8 @@ public class PUnsignedSmallint extends PWholeNumber<Short> {
   public static final PUnsignedSmallint INSTANCE = new PUnsignedSmallint();
 
   private PUnsignedSmallint() {
-    super("UNSIGNED_SMALLINT", 13, Short.class, new UnsignedShortCodec(), 17);
+      super("UNSIGNED_SMALLINT", SQLTYPE_UNSIGNED_SMALLINT /* no constant available in Types */,
+              Short.class, new UnsignedShortCodec(), ORDINAL_UNSIGNED_SMALLINT);
   }
 
   @Override

@@ -25,7 +25,7 @@ public class PIntegerArray extends PArrayDataType<int[]> {
 
     private PIntegerArray() {
         super("INTEGER ARRAY", PDataType.ARRAY_TYPE_BASE + PInteger.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 24);
+                PhoenixArray.class, null, ORDINAL_INTEGER_ARRAY);
     }
 
     @Override

@@ -41,8 +41,8 @@ public class PUnsignedLong extends PWholeNumber<Long> {
     public static final PUnsignedLong INSTANCE = new PUnsignedLong();
 
     private PUnsignedLong() {
-        super("UNSIGNED_LONG", 10 /* no constant available in Types */, Long.class,
-                new UnsignedLongCodec(), 15);
+        super("UNSIGNED_LONG", SQLTYPE_UNSIGNED_LONG /* no constant available in Types */,
+                Long.class, new UnsignedLongCodec(), ORDINAL_UNSIGNED_LONG);
     }
 
     @Override

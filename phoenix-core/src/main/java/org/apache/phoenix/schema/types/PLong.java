@@ -33,7 +33,7 @@ public class PLong extends PWholeNumber<Long> {
     public static final PLong INSTANCE = new PLong();
 
     private PLong() {
-        super("BIGINT", Types.BIGINT, Long.class, new LongCodec(), 2);
+        super("BIGINT", Types.BIGINT, Long.class, new LongCodec(), ORDINAL_BIGINT);
     }
 
     @Override

@@ -25,7 +25,7 @@ public class PUnsignedIntArray extends PArrayDataType<int[]> {
 
     private PUnsignedIntArray() {
         super("UNSIGNED_INT ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedInt.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 43);
+                PhoenixArray.class, null, ORDINAL_UNSIGNED_INT_ARRAY);
     }
 
     @Override

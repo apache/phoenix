@@ -27,7 +27,7 @@ public class PDateArray extends PArrayDataType<Date[]> {
 
     private PDateArray() {
         super("DATE ARRAY", PDataType.ARRAY_TYPE_BASE + PDate.INSTANCE.getSqlType(), PhoenixArray.class,
-                null, 40);
+                null, ORDINAL_DATE_ARRAY);
     }
 
     @Override

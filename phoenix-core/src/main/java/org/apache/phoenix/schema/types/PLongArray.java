@@ -25,7 +25,7 @@ public class PLongArray extends PArrayDataType<long[]> {
 
     private PLongArray() {
         super("BIGINT ARRAY", PDataType.ARRAY_TYPE_BASE + PLong.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 30);
+                PhoenixArray.class, null, ORDINAL_BIGINT_ARRAY);
     }
 
     @Override
