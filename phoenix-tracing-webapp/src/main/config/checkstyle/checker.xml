@@ -26,7 +26,9 @@ limitations under the License.
   http://checkstyle.sourceforge.net
 -->
 
-<!DOCTYPE module PUBLIC "-//Puppy Crawl//DTD Check Configuration 1.1//EN" "http://www.puppycrawl.com/dtds/configuration_1_1.dtd">
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
 
 <!-- Calcite customization of default Checkstyle behavior -->
 <module name="Checker">
@@ -55,6 +57,15 @@ limitations under the License.
   <!-- See http://checkstyle.sf.net/config_whitespace.html -->
     <!-- No tabs allowed! -->
   <module name="FileTabCharacter"/>
+
+  <!-- Checks for Size Violations.                    -->
+  <!-- See http://checkstyle.sf.net/config_sizes.html -->
+  <!-- Lines cannot exceed 100 chars, except if they are hyperlinks
+       or strings (possibly preceded by '+' and followed by say '),'. -->
+  <module name="LineLength">
+    <property name="max" value="100"/>
+    <property name="ignorePattern" value="^import|@see|@link|@BaseMessage|href|^[ +]*&quot;.*&quot;[);,]*$"/>
+  </module>
 
   <module name="TreeWalker">
 
@@ -216,14 +227,6 @@ limitations under the License.
       <property name="message" value="C-style comment"/>
     </module>
 
-    <!-- Checks for Size Violations.                    -->
-    <!-- See http://checkstyle.sf.net/config_sizes.html -->
-    <!-- Lines cannot exceed 100 chars, except if they are hyperlinks
-         or strings (possibly preceded by '+' and followed by say '),'. -->
-    <module name="LineLength">
-      <property name="max" value="100"/>
-      <property name="ignorePattern" value="^import|@see|@link|@BaseMessage|href|^[ +]*&quot;.*&quot;[);,]*$"/>
-    </module>
       <!-- Over time, we will revise this down -->
     <module name="MethodLength">
       <property name="max" value="390"/>
