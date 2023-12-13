@@ -35,6 +35,7 @@ import java.util.Properties;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS;
+import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.fail;
 
@@ -48,6 +49,7 @@ public class InvalidateMetadataCacheIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // to fail fast in case of exception.
         props.put("hbase.client.retries.number", String.valueOf(0));
+        props.put(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, "true");
         props.put(REGIONSERVER_COPROCESSOR_CONF_KEY,
                 FailingPhoenixRegionServerEndpoint.class.getName());
         // Setting phoenix metadata cache invalidation timeout to a small number to fail fast.

@@ -58,6 +58,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -80,6 +81,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
+        props.put(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
