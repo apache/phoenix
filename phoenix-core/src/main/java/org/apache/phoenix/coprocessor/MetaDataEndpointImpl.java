@@ -42,6 +42,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYT
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_WHERE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ARRAY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_NAMESPACE_MAPPED_BYTES;
@@ -188,6 +189,8 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRespons
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
+import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -381,6 +384,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
     private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
+    private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -420,7 +425,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             CHANGE_DETECTION_ENABLED_KV,
             SCHEMA_VERSION_KV,
             EXTERNAL_SCHEMA_ID_KV,
-            STREAMING_TOPIC_NAME_KV
+            STREAMING_TOPIC_NAME_KV,
+            INDEX_WHERE_KV
     );
 
     static {
@@ -468,6 +474,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
     private static final int STREAMING_TOPIC_NAME_INDEX =
         TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
+    private static final int INDEX_WHERE_INDEX =
+            TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -603,6 +611,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean allowSplittableSystemCatalogRollback;
 
     private MetricsMetadataSource metricsSource;
+    private MetricsMetadataCachingSource metricsMetadataCachingSource;
     private long metadataCacheInvalidationTimeoutMs;
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
@@ -647,6 +656,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
+        metricsMetadataCachingSource
+                = MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     }
 
     @Override
@@ -1441,6 +1452,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
             oldTable != null ? oldTable.getStreamingTopicName() : null);
 
+        Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];
+        String indexWhere = indexWhereKv != null
+                ? (String) PVarchar.INSTANCE.toObject(indexWhereKv.getValueArray(),
+                        indexWhereKv.getValueOffset(), indexWhereKv.getValueLength())
+                : null;
+        builder.setIndexWhere(indexWhere != null ? indexWhere
+                : oldTable != null ? oldTable.getIndexWhere() : null);
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :
@@ -3480,6 +3498,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             + " is not loaded");
             return;
         }
+        metricsMetadataCachingSource.incrementMetadataCacheInvalidationOperationsCount();
         Properties properties = new Properties();
         // Skip checking of system table existence since the system tables should have created
         // by now.
@@ -3490,7 +3509,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // This will incur an extra RPC to the master. This RPC is required since we want to
             // get current list of regionservers.
             Collection<ServerName> serverNames = admin.getRegionServers(true);
-            invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
+            PhoenixStopWatch stopWatch = new PhoenixStopWatch().start();
+            try {
+                invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
+                metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
+            } catch (Throwable t) {
+                metricsMetadataCachingSource.incrementMetadataCacheInvalidationFailureCount();
+                throw t;
+            } finally {
+                metricsMetadataCachingSource
+                        .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+            }
         }
     }
 
@@ -3537,10 +3566,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // hbase.rpc.timeout. Even if the future times out, this runnable can be in
                     // RUNNING state and will not be interrupted.
                     service.invalidateServerMetadataCache(controller, protoRequest);
+                    long cacheInvalidationTime = innerWatch.stop().elapsedMillis();
                     LOGGER.info("Invalidating metadata cache"
                             + " on region server: {} completed successfully and it took {} ms",
-                            serverName, innerWatch.stop().elapsedMillis());
-                    // TODO Create a histogram metric for time taken for invalidating the cache.
+                            serverName, cacheInvalidationTime);
+                    metricsMetadataCachingSource
+                            .addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
                 } catch (ServiceException se) {
                     LOGGER.error("Invalidating metadata cache failed for regionserver {}",
                             serverName, se);

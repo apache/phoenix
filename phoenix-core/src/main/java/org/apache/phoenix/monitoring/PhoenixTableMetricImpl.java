@@ -40,6 +40,16 @@ public class PhoenixTableMetricImpl implements PhoenixTableMetric {
         numberOfSamples.set(0);
     }
 
+    /**
+     * Set the Metric value as current value
+     *
+     * @param value
+     */
+    @Override
+    public void set(long value) {
+        metric.set(value);
+    }
+
     @Override public long getNumberOfSamples() {
         return numberOfSamples.get();
     }

@@ -482,8 +482,9 @@ public class PhoenixTxIndexMutationGenerator {
         }
     }
     
-    public static PhoenixTxIndexMutationGenerator newGenerator(final PhoenixConnection connection, PTable table, List<PTable> indexes,
-            Map<String, byte[]> attributes) {
+    public static PhoenixTxIndexMutationGenerator newGenerator(final PhoenixConnection connection,
+            PTable table, List<PTable> indexes, Map<String, byte[]> attributes)
+            throws SQLException {
         final List<IndexMaintainer> indexMaintainers = Lists.newArrayListWithExpectedSize(indexes.size());
         for (PTable index : indexes) {
             IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);

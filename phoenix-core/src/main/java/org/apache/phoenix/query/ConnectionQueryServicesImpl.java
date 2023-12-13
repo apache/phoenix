@@ -307,7 +307,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.apache.phoenix.util.TimeKeeper;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -460,6 +459,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         for (Entry<String,String> entry : connectionInfo.asProps()) {
             config.set(entry.getKey(), entry.getValue());
         }
+        if (connectionInfo.getPrincipal() != null) {
+            config.set(QUERY_SERVICES_NAME, connectionInfo.getPrincipal());
+        }
+        LOGGER.info(String.format("CQS initialized with connection query service : %s",
+                config.get(QUERY_SERVICES_NAME)));
         this.connectionInfo = connectionInfo;
 
         // Without making a copy of the configuration we cons up, we lose some of our properties
@@ -792,6 +796,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     public PMetaData getMetaDataCache() {
         return latestMetaData;
+    }
+
+    @Override
+    public int getConnectionCount(boolean isInternal) {
+        if (isInternal) {
+            return connectionLimiter.getInternalConnectionCount();
+        } else {
+            return connectionLimiter.getConnectionCount();
+        }
     }
 
     @Override
@@ -4142,19 +4155,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0) {
             metaConnection = addColumnsIfNotExists(metaConnection,
-                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 -3,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 4,
                     PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME
                             + " " + PVarchar.INSTANCE.getSqlTypeName());
 
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 -2,
+                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 3,
                     PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 -1,
+                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 2,
                 PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
+                MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 1,
                 PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
+            metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
+                    PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

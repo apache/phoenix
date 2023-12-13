@@ -819,4 +819,9 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     public PMetaData getMetaDataCache() {
         return metaData;
     }
+
+    @Override
+    public int getConnectionCount(boolean isInternal) {
+        return 0;
+    }
 }

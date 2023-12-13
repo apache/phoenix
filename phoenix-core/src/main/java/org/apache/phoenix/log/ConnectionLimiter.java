@@ -36,4 +36,8 @@ public interface ConnectionLimiter {
     boolean isLastConnection();
 
     boolean isShouldThrottleNumConnections();
+
+    int getConnectionCount();
+
+    int getInternalConnectionCount();
 }

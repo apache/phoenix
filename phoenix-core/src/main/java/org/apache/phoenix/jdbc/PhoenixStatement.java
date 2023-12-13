@@ -221,7 +221,6 @@ import org.apache.phoenix.util.PhoenixContextExecutor;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
-import org.apache.phoenix.util.SQLCloseables;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
@@ -282,7 +281,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     protected final PhoenixConnection connection;
     private static final int NO_UPDATE = -1;
     private static final String TABLE_UNKNOWN = "";
-    private List<PhoenixResultSet> resultSets = new ArrayList<PhoenixResultSet>();
     private QueryPlan lastQueryPlan;
     private PhoenixResultSet lastResultSet;
     private int lastUpdateCount = NO_UPDATE;
@@ -290,6 +288,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private String lastUpdateTable = TABLE_UNKNOWN;
     private Operation lastUpdateOperation;
     private boolean isClosed = false;
+    private boolean closeOnCompletion = false;
     private int maxRows;
     private int fetchSize = -1;
     private int queryTimeoutMillis;
@@ -314,7 +313,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     protected List<PhoenixResultSet> getResultSets() {
-        return resultSets;
+        if (lastResultSet != null) {
+            return Collections.singletonList(lastResultSet);
+        } else {
+            return Collections.emptyList();
+        }
     }
     
     public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector, StatementContext context) throws SQLException {
@@ -353,6 +356,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             boolean updateMetrics = true;
                             boolean pointLookup = false;
                             String tableName = null;
+                            clearResultSet();
                             PhoenixResultSet rs = null;
                             try {
                                 PhoenixConnection conn = getConnection();
@@ -418,8 +422,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 rs =
                                         newResultSet(resultIterator, plan.getProjector(),
                                                 plan.getContext());
-                                resultSets.add(rs);
-                                setLastResultSet(rs);
+                                // newResultset sets lastResultset
+                                setLastQueryPlan(plan);
                                 setLastUpdateCount(NO_UPDATE);
                                 setLastUpdateTable(tableName == null ? TABLE_UNKNOWN : tableName);
                                 setLastUpdateOperation(stmt.getOperation());
@@ -589,6 +593,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             MutationState state = null;
                             MutationPlan plan = null;
                             final long startExecuteMutationTime = EnvironmentEdgeManager.currentTimeMillis();
+                            clearResultSet();
                             try {
                                 PhoenixConnection conn = getConnection();
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
@@ -617,7 +622,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 if (connection.getAutoCommit()) {
                                     connection.commit();
                                 }
-                                setLastResultSet(null);
                                 setLastQueryPlan(null);
                                 // Unfortunately, JDBC uses an int for update count, so we
                                 // just max out at Integer.MAX_VALUE
@@ -1426,9 +1430,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     private static class ExecutableCreateIndexStatement extends CreateIndexStatement implements CompilableStatement {
 
-        public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async , bindCount, udfParseNodes);
+        public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable,
+                IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns,
+                List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props,
+                boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String,
+                UDFParseNode> udfParseNodes, ParseNode where) {
+            super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists,
+                    indexType, async , bindCount, udfParseNodes, where);
         }
 
         @SuppressWarnings("unchecked")
@@ -1938,9 +1946,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
         
         @Override
-        public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable, IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
-                ListMultimap<String,Pair<String,Object>> props, boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes) {
-            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes);
+        public CreateIndexStatement createIndex(NamedNode indexName, NamedTableNode dataTable,
+                IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns,
+                List<ParseNode> splits, ListMultimap<String,Pair<String,Object>> props,
+                boolean ifNotExists, IndexType indexType, boolean async, int bindCount, Map<String,
+                UDFParseNode> udfParseNodes, ParseNode where) {
+            return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint,
+                    includeColumns, splits, props, ifNotExists, indexType, async, bindCount,
+                    udfParseNodes, where);
         }
         
         @Override
@@ -2119,17 +2132,36 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public void close() throws SQLException {
         try {
-            List<PhoenixResultSet> resultSets = this.resultSets;
-            // Create new list so that remove of the PhoenixResultSet
-            // during closeAll doesn't needless do a linear search
-            // on this list.
-            this.resultSets = Lists.newArrayList();
-            SQLCloseables.closeAll(resultSets);
+            clearResultSet();
         } finally {
             try {
                 connection.removeStatement(this);
             } finally {
                 isClosed = true;
+            }
+        }
+    }
+
+    // From the ResultSet javadoc:
+    // A ResultSet object is automatically closed when the Statement object that generated it is
+    // closed, re-executed, or used to retrieve the next result from a sequence of multiple results.
+    private void clearResultSet() throws SQLException {
+        if (lastResultSet != null) {
+            try {
+                lastResultSet.close();
+            } finally {
+                lastResultSet = null;
+            }
+        }
+    }
+
+    // Called from ResultSet.close(). rs is already closed.
+    // We use a separate function to avoid calling close() again
+    void removeResultSet(ResultSet rs) throws SQLException {
+        if (rs == lastResultSet) {
+            lastResultSet = null;
+            if (closeOnCompletion) {
+                this.close();
             }
         }
     }
@@ -2363,7 +2395,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public ResultSet getResultSet() throws SQLException {
         ResultSet rs = getLastResultSet();
-        setLastResultSet(null);
         return rs;
     }
 
@@ -2383,6 +2414,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return ResultSet.TYPE_FORWARD_ONLY;
     }
 
+    @Override
     public Operation getUpdateOperation() {
         return getLastUpdateOperation();
     }
@@ -2510,19 +2542,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     @Override
     public void closeOnCompletion() throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        closeOnCompletion = true;
     }
 
     @Override
     public boolean isCloseOnCompletion() throws SQLException {
-        throw new SQLFeatureNotSupportedException();
+        return closeOnCompletion;
     }
 
     private PhoenixResultSet getLastResultSet() {
         return lastResultSet;
     }
 
-    private void setLastResultSet(PhoenixResultSet lastResultSet) {
+    void setLastResultSet(PhoenixResultSet lastResultSet) {
         this.lastResultSet = lastResultSet;
     }
 

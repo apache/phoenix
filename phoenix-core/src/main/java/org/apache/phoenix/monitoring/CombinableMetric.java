@@ -58,6 +58,14 @@ public interface CombinableMetric extends Metric {
         @Override
         public void reset() {}
 
+        /**
+         * Set the Metric value as current value
+         *
+         * @param value
+         */
+        @Override
+        public void set(long value) {}
+
         @Override
         public String getPublishString() {
             return EMPTY_STRING;
