@@ -57,22 +57,28 @@ public abstract class ConnectionInfo {
 
     protected static final boolean HAS_MASTER_REGISTRY;
     protected static final boolean HAS_RPC_REGISTRY;
+    // HBase 2.2 and older doesn't have the ZK registry class by the expected name
+    protected static final boolean DO_NOT_SET_REGISTRY;
 
     static {
         String version = VersionInfo.getVersion();
         if (getMajorVersion(version) >= 3) {
             HAS_MASTER_REGISTRY = true;
             HAS_RPC_REGISTRY = true;
+            DO_NOT_SET_REGISTRY = false;
         } else {
             if (VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3.0") < 0) {
                 HAS_MASTER_REGISTRY = false;
                 HAS_RPC_REGISTRY = false;
+                DO_NOT_SET_REGISTRY = true;
             } else if (VersionInfo.compareVersion(VersionInfo.getVersion(), "2.5.0") < 0) {
                 HAS_MASTER_REGISTRY = true;
                 HAS_RPC_REGISTRY = false;
+                DO_NOT_SET_REGISTRY = false;
             } else {
                 HAS_MASTER_REGISTRY = true;
                 HAS_RPC_REGISTRY = true;
+                DO_NOT_SET_REGISTRY = false;
             }
         }
     }
