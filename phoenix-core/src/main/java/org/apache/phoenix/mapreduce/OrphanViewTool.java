@@ -27,6 +27,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.util.EnvironmentEdgeManager.currentTimeMillis;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -167,7 +168,13 @@ public class OrphanViewTool extends Configured implements Tool {
     // The set of orphan links. These links can be CHILD_TABLE, PARENT_TABLE, or PHYSICAL_TABLE links
     HashSet<Link> orphanLinkSet = new HashSet<>();
 
-    public static final String fileName[] = {"OrphanView.txt", "OrphanPhysicalTableLink.txt", "OrphanParentTableLink.txt", "OrphanChildTableLink.txt"};
+    private static final long fileCreatedTime= currentTimeMillis();
+
+    public static final String fileName[] = {"OrphanView_" + fileCreatedTime + ".txt",
+            "OrphanPhysicalTableLink_" + fileCreatedTime + ".txt",
+            "OrphanParentTableLink_" + fileCreatedTime + ".txt",
+            "OrphanChildTableLink_" + fileCreatedTime + ".txt"};
+
     private static final Option OUTPUT_PATH_OPTION = new Option("op", "output-path", true,
             "Output path where the files listing orphan views and links are written");
     private static final Option INPUT_PATH_OPTION = new Option("ip", "input-path", true,
