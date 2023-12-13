@@ -366,7 +366,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
         if (!accessCheckEnabled) { return; }
 
         for (MasterObserver observer : getAccessControllers()) {
-            if (tableType != PTableType.VIEW) {
+            if (tableType != PTableType.VIEW && tableType != PTableType.CDC) {
                 observer.preDeleteTable(getMasterObsevrverContext(), physicalTableName);
             }
             if (indexes != null) {
@@ -377,7 +377,8 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
             }
         }
         //checking similar permission checked during the create of the view.
-        if (tableType == PTableType.VIEW || tableType == PTableType.INDEX) {
+        if (tableType == PTableType.VIEW || tableType == PTableType.INDEX
+                || tableType == PTableType.CDC) {
             if (execPermissionsCheckEnabled) {
                 requireAccess("Drop "+tableType, parentPhysicalTableName, Action.READ, Action.EXEC);
             } else {

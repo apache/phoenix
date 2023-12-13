@@ -191,14 +191,17 @@ public class SubqueryIT extends BaseJoinIT {
                 }});
         testCases.add(new String[][] {
                 {
-                "CREATE LOCAL INDEX \"idx_customer\" ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
-                "CREATE LOCAL INDEX \"idx_item\" ON " + JOIN_ITEM_TABLE_FULL_NAME + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-                "CREATE LOCAL INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
+                "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
+                "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + " " +
+                        "(name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+                "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)"
                 }, {
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "\\(" + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL INNER-JOIN TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " \\[1\\]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_INDEX_FULL_NAME +
+                        "\\(" + JOIN_SUPPLIER_TABLE_FULL_NAME + "\\) \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    PARALLEL SEMI-JOIN TABLE 1 \\(SKIP MERGE\\)\n" +
@@ -207,12 +210,14 @@ public class SubqueryIT extends BaseJoinIT {
                 "        CLIENT MERGE SORT\n" +
                 "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN \\(\\$\\d+.\\$\\d+\\)",
                             
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + " [1]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_INDEX_FULL_NAME +
+                        "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + ") [1]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "    SERVER SORTED BY [\"I.0:NAME\"]\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
                 "        CLIENT MERGE SORT\n" +
                 "    PARALLEL SEMI-JOIN TABLE 1(DELAYED EVALUATION) (SKIP MERGE)\n" +
                 "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
@@ -222,7 +227,8 @@ public class SubqueryIT extends BaseJoinIT {
                 "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + JOIN_COITEM_TABLE_FULL_NAME + "\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 0\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "\\(" + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" + 
@@ -231,7 +237,8 @@ public class SubqueryIT extends BaseJoinIT {
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
                 "                CLIENT MERGE SORT\n" +
                 "    PARALLEL LEFT-JOIN TABLE 1\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "\\(" + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" + 
@@ -239,10 +246,12 @@ public class SubqueryIT extends BaseJoinIT {
                 "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n" +
                 "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n" +
                 "                CLIENT MERGE SORT\n" +
-                "            DYNAMIC SERVER FILTER BY \"" + JOIN_SCHEMA + ".idx_item.:item_id\" IN \\(\\$\\d+.\\$\\d+\\)\n" +
+                "            DYNAMIC SERVER FILTER BY \"" + JOIN_ITEM_INDEX_FULL_NAME +
+                        ".:item_id\" IN \\(\\$\\d+.\\$\\d+\\)\n" +
                 "    AFTER-JOIN SERVER FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
                 
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " [1]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME +
+                        "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL ANTI-JOIN TABLE 0 (SKIP MERGE)\n" +
@@ -250,11 +259,13 @@ public class SubqueryIT extends BaseJoinIT {
                 "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n" +
                 "        CLIENT MERGE SORT",
                 
-                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_TABLE_FULL_NAME + " \\[1\\]\n" +
+                "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_INDEX_FULL_NAME +
+                        "\\(" + JOIN_CUSTOMER_TABLE_FULL_NAME + "\\) \\[1\\]\n" +
                 "    SERVER FILTER BY FIRST KEY ONLY\n" +
                 "CLIENT MERGE SORT\n" +
                 "    PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n" +
-                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + " \\[1\\]\n" +
+                "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " +JOIN_ITEM_INDEX_FULL_NAME +
+                        "\\(" + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n" +
                 "            SERVER FILTER BY FIRST KEY ONLY\n" +
                 "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n" +
                 "        CLIENT MERGE SORT\n" +
@@ -266,7 +277,8 @@ public class SubqueryIT extends BaseJoinIT {
                 "                CLIENT MERGE SORT\n" +
                 "            DYNAMIC SERVER FILTER BY \"I.:item_id\" IN \\(\"O.item_id\"\\)\n" +
                 "            AFTER-JOIN SERVER FILTER BY \\(\"I.0:NAME\" = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n" +
-                "    DYNAMIC SERVER FILTER BY \"" + JOIN_SCHEMA + ".idx_customer.:customer_id\" IN \\(\\$\\d+.\\$\\d+\\)"
+                "    DYNAMIC SERVER FILTER BY \"" + JOIN_CUSTOMER_INDEX_FULL_NAME + ".:customer_id\" IN " +
+                        "\\(\\$\\d+.\\$\\d+\\)"
                 }});
         return testCases;
     }
