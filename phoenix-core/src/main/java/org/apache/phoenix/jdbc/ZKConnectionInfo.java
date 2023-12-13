@@ -75,9 +75,10 @@ public class ZKConnectionInfo extends ConnectionInfo {
         }
 
         Map<String, String> connectionProps = getCommonProps();
-        connectionProps.put(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
-            ZK_REGISTRY_NAME);
-
+        if (!DO_NOT_SET_REGISTRY) {
+            connectionProps.put(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+                ZK_REGISTRY_NAME);
+        }
         if (getZkHosts() != null) {
             //This has the highest priority
             connectionProps.put(HConstants.CLIENT_ZOOKEEPER_QUORUM, getZkHosts());
