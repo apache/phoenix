@@ -31,9 +31,9 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -46,7 +46,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -71,11 +70,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CDCGlobalIndexRegionScanner.class);
 
-    private Map<byte[], String> dataColQualNameMap;
-    private Map<byte[], PDataType> dataColQualTypeMap;
+    private Map<ImmutableBytesPtr, String> dataColQualNameMap;
+    private Map<ImmutableBytesPtr, PDataType> dataColQualTypeMap;
     // Map<dataRowKey: Map<TS: Map<qualifier: Cell>>>
-    private Map<byte[], Map<Long, Map<byte[], Cell>>> dataRowChanges =
-            Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+    private Map<ImmutableBytesPtr, Map<Long, Map<ImmutableBytesPtr, Cell>>> dataRowChanges =
+            new HashMap<>();
 
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
@@ -124,6 +123,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         EncodedColumnsUtil.getQualifierEncodingScheme(scan));
                 List<Cell> currentColumn = null;
                 Set<Long> uniqueTimeStamps = new HashSet<>();
+                // TODO: From CompactionScanner.formColumns(), see if this can be refactored.
                 for (Cell cell : resultCells) {
                     uniqueTimeStamps.add(cell.getTimestamp());
                     if (cell.getType() != Cell.Type.Put) {
@@ -151,22 +151,25 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 }
                 List<Long> sortedTimestamps = uniqueTimeStamps.stream().sorted().collect(
                         Collectors.toList());
-                Map<byte[], Cell> rollingRow = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+                // FIXME: Does this need to be Concurrent?
+                Map<ImmutableBytesPtr, Cell> rollingRow = new HashMap<>();
                 int[] columnPointers = new int[columns.size()];
-                Map<Long, Map<byte[], Cell>> changeTimeline = dataRowChanges.get(result.getRow());
+                ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(result.getRow());
+                Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
+                        dataRowKey);
                 if (changeTimeline == null) {
-                    changeTimeline = new TreeMap();
-                    dataRowChanges.put(result.getRow(), changeTimeline);
+                    changeTimeline = new TreeMap<>();
+                    dataRowChanges.put(dataRowKey, changeTimeline);
                 }
                 for (Long ts: sortedTimestamps) {
                     for (int i = 0; i < columns.size(); ++i) {
                         Cell cell = columns.get(i).get(columnPointers[i]);
                         if (cell.getTimestamp() == ts) {
-                            rollingRow.put(cell.getQualifierArray(), cell);
+                            rollingRow.put(new ImmutableBytesPtr(cell.getQualifierArray()), cell);
                             ++columnPointers[i];
                         }
                     }
-                    Map rowOfCells = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+                    Map<ImmutableBytesPtr, Cell> rowOfCells = new HashMap();
                     rowOfCells.putAll(rollingRow);
                     changeTimeline.put(ts, rowOfCells);
                 }
@@ -197,15 +200,18 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 }
             }
             try {
-                byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
+                byte[] indexRowKey = indexRow.get(0).getRowArray();
                 Long indexRowTs = result.get(0).getTimestamp();
-                Map<Long, Map<byte[], Cell>> changeTimeline = dataRowChanges.get(
+                ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                         indexToDataRowKeyMap.get(indexRowKey));
-                Map<byte[], Cell> mapOfCells = changeTimeline != null ? changeTimeline.get(indexRowTs) : null;
+                Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
+                        dataRowKey);
+                Map<ImmutableBytesPtr, Cell> mapOfCells = changeTimeline != null ?
+                        changeTimeline.get(indexRowTs) : null;
                 Result dataRow = null;
                 if (mapOfCells != null) {
                     Map <String, Object> rowValueMap = new HashMap<>(mapOfCells.size());
-                    for (Map.Entry<byte[], Cell> entry: mapOfCells.entrySet()) {
+                    for (Map.Entry<ImmutableBytesPtr, Cell> entry: mapOfCells.entrySet()) {
                         String colName = dataColQualNameMap.get(entry.getKey());
                         Object colVal = dataColQualTypeMap.get(entry.getKey()).toObject(
                                 entry.getValue().getValueArray());

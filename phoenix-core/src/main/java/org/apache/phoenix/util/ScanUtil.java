@@ -1368,18 +1368,19 @@ public class ScanUtil {
         }
     }
 
-    public static Map<byte[], String> deserializeColumnQualifierToNameMap(byte[] mapBytes) {
+    public static Map<ImmutableBytesPtr, String> deserializeColumnQualifierToNameMap(
+            byte[] mapBytes) {
         ByteArrayInputStream stream = new ByteArrayInputStream(mapBytes);
         DataInputStream input = new DataInputStream(stream);
         try {
-            Map<byte[], String> colQualNameMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+            Map<ImmutableBytesPtr, String> colQualNameMap = new HashMap<>();
             int size = input.readInt();
             for (int i = 0; i < size; ++i) {
                 int qualLength = input.readInt();
                 byte[] qualBytes = new byte[qualLength];
                 input.read(qualBytes);
                 String colName = WritableUtils.readString(input);
-                colQualNameMap.put(qualBytes, colName);
+                colQualNameMap.put(new ImmutableBytesPtr(qualBytes), colName);
             }
             return colQualNameMap;
         } catch (IOException e) {
@@ -1404,18 +1405,18 @@ public class ScanUtil {
         }
     }
 
-    public static Map<byte[], PDataType> deserializeColumnQualifierToTypeMap(
+    public static Map<ImmutableBytesPtr, PDataType> deserializeColumnQualifierToTypeMap(
             byte[] pkColInfoBytes) {
         ByteArrayInputStream stream = new ByteArrayInputStream(pkColInfoBytes);
         DataInputStream input = new DataInputStream(stream);
         try {
-            Map<byte[], PDataType> colQualTypeMap = Maps.newTreeMap(Bytes.BYTES_COMPARATOR);
+            Map<ImmutableBytesPtr, PDataType> colQualTypeMap = new HashMap<>();
             int colCnt = input.readInt();
             for (int i = 0; i < colCnt; ++i) {
                 int qualLength = input.readInt();
                 byte[] qualBytes = new byte[qualLength];
                 input.read(qualBytes);
-                colQualTypeMap.put(qualBytes,
+                colQualTypeMap.put(new ImmutableBytesPtr(qualBytes),
                         PDataType.fromSqlTypeName(WritableUtils.readString(input)));
             }
             return colQualTypeMap;
