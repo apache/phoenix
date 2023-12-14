@@ -121,7 +121,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     public void write(DataOutput output) throws IOException {
         super.write(output);
         byte[] b = extraFields.toByteArray();
-        output.writeByte((int)(b.length > 0 ? b[0] & 0xff  : 0));
+        output.writeByte((b.length > 0 ? b[0] & 0xff  : 0));
     }
     
     private void init() {
