@@ -711,9 +711,8 @@ public class TransformTool extends Configured implements Tool {
         byte[][] newSplitPoints = null;
         // TODO : if the rowkey changes via transform, we need to create new split points
         try (Table hDataTable =
-                     (Table) pConnection.getQueryServices()
-                             .getTable(oldTable.getPhysicalName().getBytes());
-             org.apache.hadoop.hbase.client.Connection connection =
+                pConnection.getQueryServices().getTable(oldTable.getPhysicalName().getBytes());
+                org.apache.hadoop.hbase.client.Connection connection =
                      HBaseFactoryProvider.getHConnectionFactory().createConnection(configuration)) {
             // Avoid duplicate split keys and remove the empty key
             oldSplitPoints = connection.getRegionLocator(hDataTable.getName()).getStartKeys();

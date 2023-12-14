@@ -128,7 +128,7 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet imp
                     boolean secondResult;
                     try {
                         secondResult =
-                                (boolean) ParallelPhoenixUtil.INSTANCE.getFutureNoRetry(
+                                ParallelPhoenixUtil.INSTANCE.getFutureNoRetry(
                                     candidateResultPair.getSecond().getCandidate(), context);
                     } catch (Exception e) {
                         LOG.warn(
