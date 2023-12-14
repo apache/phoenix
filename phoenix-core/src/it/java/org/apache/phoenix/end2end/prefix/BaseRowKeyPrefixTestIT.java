@@ -50,6 +50,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.prefix.table.TableTTLInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -1017,7 +1018,11 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
 
     @Test
     public void testGetViewInfo() {
-        ViewUtil.getRowKeyPrefixesForTable2("PHX_TTL.IMMUTABLE_ENTITY_DATA");
+        //ViewUtil.getRowKeyPrefixesForTable2("PHX_TTL.IMMUTABLE_ENTITY_DATA");
+        List<TableTTLInfo> tableTTLInfoList = ViewUtil.getRowKeyPrefixesForTable2("LRT.COREAPPLOGS");
+        for (TableTTLInfo ttlInfo : tableTTLInfoList) {
+            LOGGER.info(ttlInfo.toString());
+        }
     }
 
 
