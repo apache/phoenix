@@ -80,7 +80,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -100,14 +99,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
-import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
@@ -120,7 +117,6 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -1333,8 +1329,8 @@ public class ScanUtil {
 
             PColumn cdcJsonCol = table.getColumnForColumnName(CDC_JSON_COL_NAME);
             scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
-            scan.setAttribute(CDC_INCLUDE_SCOPES, CDCUtil.makeChangeScopeStringFromEnums(
-                    context.getCdcIncludeScopes()).getBytes(StandardCharsets.UTF_8));
+            scan.setAttribute(CDC_INCLUDE_SCOPES,
+                    context.getEncodedCdcIncludeScopes().getBytes(StandardCharsets.UTF_8));
             CDCUtil.initForRawScan(scan);
             List<PColumn> columns = dataTable.getColumns();
             Map<byte[], String> dataColQualNameMap = new HashMap<>(columns.size());
@@ -1378,7 +1374,11 @@ public class ScanUtil {
             for (int i = 0; i < size; ++i) {
                 int qualLength = input.readInt();
                 byte[] qualBytes = new byte[qualLength];
-                input.read(qualBytes);
+                int bytesRead = input.read(qualBytes);
+                if (bytesRead != qualLength) {
+                    throw new IOException("Expected number of bytes: " + qualLength + " but got " +
+                            "only: " + bytesRead);
+                }
                 String colName = WritableUtils.readString(input);
                 colQualNameMap.put(new ImmutableBytesPtr(qualBytes), colName);
             }
@@ -1415,7 +1415,11 @@ public class ScanUtil {
             for (int i = 0; i < colCnt; ++i) {
                 int qualLength = input.readInt();
                 byte[] qualBytes = new byte[qualLength];
-                input.read(qualBytes);
+                int bytesRead = input.read(qualBytes);
+                if (bytesRead != qualLength) {
+                    throw new IOException("Expected number of bytes: " + qualLength + " but got " +
+                            "only: " + bytesRead);
+                }
                 colQualTypeMap.put(new ImmutableBytesPtr(qualBytes),
                         PDataType.fromSqlTypeName(WritableUtils.readString(input)));
             }
