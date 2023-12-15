@@ -101,96 +101,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return CDCUtil.initForRawScan(prepareDataTableScan(dataRowKeys, true));
     }
 
-    protected void scanDataRows(Collection<byte[]> dataRowKeys, long startTime) throws IOException {
-        Scan dataScan = prepareDataTableScan(dataRowKeys);
-        if (dataScan == null) {
-            return;
-        }
-        try (ResultScanner resultScanner = dataHTable.getScanner(dataScan)) {
-            for (Result result = resultScanner.next(); (result != null);
-                 result = resultScanner.next()) {
-                if (ScanUtil.isDummy(result)) {
-                    state = State.SCANNING_DATA_INTERRUPTED;
-                    break;
-                }
-
-                List<Cell> resultCells = Arrays.asList(result.rawCells());
-                Collections.sort(resultCells, CellComparator.getInstance().reversed());
-                List<Cell> deleteMarkers = new ArrayList<>();
-                List<List<Cell>> columns = new LinkedList<>();
-                Cell currentColumnCell = null;
-                Pair<byte[], byte[]> emptyKV = EncodedColumnsUtil.getEmptyKeyValueInfo(
-                        EncodedColumnsUtil.getQualifierEncodingScheme(scan));
-                List<Cell> currentColumn = null;
-                Set<Long> uniqueTimeStamps = new HashSet<>();
-                // TODO: From CompactionScanner.formColumns(), see if this can be refactored.
-                for (Cell cell : resultCells) {
-                    uniqueTimeStamps.add(cell.getTimestamp());
-                    if (cell.getType() != Cell.Type.Put) {
-                        deleteMarkers.add(cell);
-                    }
-                    if (CellUtil.matchingColumn(cell, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                            emptyKV.getFirst())) {
-                        continue;
-                    }
-                    if (currentColumnCell == null) {
-                        currentColumn = new LinkedList<>();
-                        currentColumnCell = cell;
-                        currentColumn.add(cell);
-                    } else if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
-                        columns.add(currentColumn);
-                        currentColumn = new LinkedList<>();
-                        currentColumnCell = cell;
-                        currentColumn.add(cell);
-                    } else {
-                        currentColumn.add(cell);
-                    }
-                }
-                if (currentColumn != null) {
-                    columns.add(currentColumn);
-                }
-                List<Long> sortedTimestamps = uniqueTimeStamps.stream().sorted().collect(
-                        Collectors.toList());
-                // FIXME: Does this need to be Concurrent?
-                Map<ImmutableBytesPtr, Cell> rollingRow = new HashMap<>();
-                int[] columnPointers = new int[columns.size()];
-                ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(result.getRow());
-                Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
-                        dataRowKey);
-                if (changeTimeline == null) {
-                    changeTimeline = new TreeMap<>();
-                    dataRowChanges.put(dataRowKey, changeTimeline);
-                }
-                for (Long ts: sortedTimestamps) {
-                    for (int i = 0; i < columns.size(); ++i) {
-                        Cell cell = columns.get(i).get(columnPointers[i]);
-                        if (cell.getTimestamp() == ts) {
-                            rollingRow.put(new ImmutableBytesPtr(cell.getQualifierArray()), cell);
-                            ++columnPointers[i];
-                        }
-                    }
-                    Map<ImmutableBytesPtr, Cell> rowOfCells = new HashMap();
-                    rowOfCells.putAll(rollingRow);
-                    changeTimeline.put(ts, rowOfCells);
-                }
-
-                if ((EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
-                    state = State.SCANNING_DATA_INTERRUPTED;
-                    break;
-                }
-            }
-            if (state == State.SCANNING_DATA_INTERRUPTED) {
-                LOGGER.info("One of the scan tasks in UncoveredGlobalIndexRegionScanner"
-                        + " for region " + region.getRegionInfo().getRegionNameAsString()
-                        + " could not complete on time (in " + pageSizeMs + " ms) and"
-                        + " will be resubmitted");
-            }
-        } catch (Throwable t) {
-            exceptionMessage = "scanDataRows fails for at least one task";
-            ServerUtil.throwIOException(dataHTable.getName().toString(), t);
-        }
-    }
-
     protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
@@ -204,31 +114,89 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 Long indexRowTs = result.get(0).getTimestamp();
                 ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                         indexToDataRowKeyMap.get(indexRowKey));
-                Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
-                        dataRowKey);
-                Map<ImmutableBytesPtr, Cell> mapOfCells = changeTimeline != null ?
-                        changeTimeline.get(indexRowTs) : null;
-                Result dataRow = null;
-                if (mapOfCells != null) {
-                    Map <String, Object> rowValueMap = new HashMap<>(mapOfCells.size());
-                    for (Map.Entry<ImmutableBytesPtr, Cell> entry: mapOfCells.entrySet()) {
-                        String colName = dataColQualNameMap.get(entry.getKey());
-                        Object colVal = dataColQualTypeMap.get(entry.getKey()).toObject(
-                                entry.getValue().getValueArray());
-                        rowValueMap.put(colName, colVal);
+                Result dataRow = dataRows.get(dataRowKey);
+                if (dataRow != null) {
+                    Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
+                            dataRowKey);
+                    if (changeTimeline == null) {
+                        List<Cell> resultCells = Arrays.asList(dataRow.rawCells());
+                        Collections.sort(resultCells, CellComparator.getInstance().reversed());
+                        List<Cell> deleteMarkers = new ArrayList<>();
+                        List<List<Cell>> columns = new LinkedList<>();
+                        Cell currentColumnCell = null;
+                        Pair<byte[], byte[]> emptyKV = EncodedColumnsUtil.getEmptyKeyValueInfo(
+                                EncodedColumnsUtil.getQualifierEncodingScheme(scan));
+                        List<Cell> currentColumn = null;
+                        Set<Long> uniqueTimeStamps = new HashSet<>();
+                        // TODO: From CompactionScanner.formColumns(), see if this can be refactored.
+                        for (Cell cell : resultCells) {
+                            uniqueTimeStamps.add(cell.getTimestamp());
+                            if (cell.getType() != Cell.Type.Put) {
+                                deleteMarkers.add(cell);
+                            }
+                            if (CellUtil.matchingColumn(cell, QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                                    emptyKV.getFirst())) {
+                                continue;
+                            }
+                            if (currentColumnCell == null) {
+                                currentColumn = new LinkedList<>();
+                                currentColumnCell = cell;
+                                currentColumn.add(cell);
+                            } else if (!CellUtil.matchingColumn(cell, currentColumnCell)) {
+                                columns.add(currentColumn);
+                                currentColumn = new LinkedList<>();
+                                currentColumnCell = cell;
+                                currentColumn.add(cell);
+                            } else {
+                                currentColumn.add(cell);
+                            }
+                        }
+                        if (currentColumn != null) {
+                            columns.add(currentColumn);
+                        }
+                        List<Long> sortedTimestamps = uniqueTimeStamps.stream().sorted().collect(
+                                Collectors.toList());
+                        // FIXME: Does this need to be Concurrent?
+                        Map<ImmutableBytesPtr, Cell> rollingRow = new HashMap<>();
+                        int[] columnPointers = new int[columns.size()];
+                        changeTimeline = new TreeMap<>();
+                        dataRowChanges.put(dataRowKey, changeTimeline);
+                        for (Long ts : sortedTimestamps) {
+                            for (int i = 0; i < columns.size(); ++i) {
+                                Cell cell = columns.get(i).get(columnPointers[i]);
+                                if (cell.getTimestamp() == ts) {
+                                    rollingRow.put(new ImmutableBytesPtr(cell.getQualifierArray()), cell);
+                                    ++columnPointers[i];
+                                }
+                            }
+                            Map<ImmutableBytesPtr, Cell> rowOfCells = new HashMap();
+                            rowOfCells.putAll(rollingRow);
+                            changeTimeline.put(ts, rowOfCells);
+                        }
                     }
-                    Cell firstCell = result.get(0);
-                    byte[] value =
-                            new Gson().toJson(rowValueMap).getBytes(StandardCharsets.UTF_8);
-                    CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
-                    dataRow = Result.create(Arrays.asList(builder.
-                            setRow(indexToDataRowKeyMap.get(indexRowKey)).
-                            setFamily(firstCell.getFamilyArray()).
-                            setQualifier(scan.getAttribute((CDC_JSON_COL_QUALIFIER))).
-                            setTimestamp(indexRow.get(0).getTimestamp()).
-                            setValue(value).
-                            setType(Cell.Type.Put).
-                            build()));
+
+                    Map<ImmutableBytesPtr, Cell> mapOfCells = changeTimeline.get(indexRowTs);
+                    if (mapOfCells != null) {
+                        Map <String, Object> rowValueMap = new HashMap<>(mapOfCells.size());
+                        for (Map.Entry<ImmutableBytesPtr, Cell> entry: mapOfCells.entrySet()) {
+                            String colName = dataColQualNameMap.get(entry.getKey());
+                            Object colVal = dataColQualTypeMap.get(entry.getKey()).toObject(
+                                    entry.getValue().getValueArray());
+                            rowValueMap.put(colName, colVal);
+                        }
+                        Cell firstCell = result.get(0);
+                        byte[] value =
+                                new Gson().toJson(rowValueMap).getBytes(StandardCharsets.UTF_8);
+                        CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
+                        dataRow = Result.create(Arrays.asList(builder.
+                                setRow(indexToDataRowKeyMap.get(indexRowKey)).
+                                setFamily(firstCell.getFamilyArray()).
+                                setQualifier(scan.getAttribute((CDC_JSON_COL_QUALIFIER))).
+                                setTimestamp(indexRow.get(0).getTimestamp()).
+                                setValue(value).
+                                setType(Cell.Type.Put).
+                                build()));
+                    }
                 }
                 if (dataRow != null && tupleProjector != null) {
                     IndexUtil.addTupleAsOneCell(result, new ResultTuple(dataRow),
