@@ -162,7 +162,7 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
             ResultSet rs = stmt.executeQuery("EXPLAIN " + whereSql);
             assertEquals(
                     localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST."
-                            + dataTableName
+                            + indexName + "(" + fullDataTableName + ")"
                             + " [1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]\nCLIENT MERGE SORT"
                             : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName + " ['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]",
                     QueryUtil.getExplainPlan(rs));
@@ -183,8 +183,10 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
                     + "from "
                     + fullDataTableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + indexSelectSql);
-            assertEquals(localIndex ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullDataTableName
-                    + " [1]\nCLIENT MERGE SORT" : "CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST." + indexName,
+            assertEquals(localIndex ?
+                            "CLIENT PARALLEL 1-WAY RANGE SCAN OVER INDEX_TEST." + indexName +
+                                    "(" + fullDataTableName + ") [1]\nCLIENT MERGE SORT"
+                            : "CLIENT PARALLEL 1-WAY FULL SCAN OVER INDEX_TEST." + indexName,
                     QueryUtil.getExplainPlan(rs));
             rs = conn.createStatement().executeQuery(indexSelectSql);
             verifyResult(rs, 1);

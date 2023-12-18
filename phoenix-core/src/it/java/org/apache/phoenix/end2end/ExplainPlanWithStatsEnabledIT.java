@@ -47,6 +47,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ScanUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -1260,8 +1261,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
         PTable viewIndex = phxConn.getTable(new PTableKey(phxConn.getTenantId(), viewIndexName));
         assertEquals("USE_STATS_FOR_PARALLELIZATION property set incorrectly", useStats,
-                PhoenixConfigurationUtil
-                        .getStatsForParallelizationProp(tenantConn.unwrap(PhoenixConnection.class), viewIndex));
+                ScanUtil.getStatsForParallelizationProp(tenantConn.unwrap(PhoenixConnection.class), viewIndex));
     }
 
 }

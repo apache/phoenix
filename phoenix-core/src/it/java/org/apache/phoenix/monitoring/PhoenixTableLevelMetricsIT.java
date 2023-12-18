@@ -486,8 +486,6 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     private static void assertMetricValue(Metric m, MetricType checkType, long compareValue,
             CompareOp op) {
         if (m.getMetricType().equals(checkType)) {
-            System.out.println("THe Type:"+m.getMetricType().toString() + "expected value:"+m.getValue() +
-                    "\t compare value:"+compareValue);
             switch (op) {
             case EQ:
                 assertEquals(compareValue, m.getValue());
@@ -1215,6 +1213,75 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             conn.close();
             assertMutationTableMetrics(false, tableName, 1, 0, 0, true, numRows, 0, numRows, 0, 1,
                     writeMutMetrics, conn, false);
+        }
+    }
+
+    @Test
+    public void testMetricsWithIndexUsage() throws Exception {
+        // Generate unique names for the table and index
+        String dataTable = generateUniqueName();
+        String indexName = generateUniqueName() + "_IDX";
+
+
+        try (Connection conn = getConnFromTestDriver()) {
+            // Create a mutable table with one key and one column
+            String tableDdl = "CREATE TABLE "
+                    + dataTable
+                    + " (K VARCHAR NOT NULL, V INTEGER, CONSTRAINT PK PRIMARY KEY(K))" + " IMMUTABLE_ROWS = true";
+            conn.createStatement().execute(tableDdl);
+
+            // Create an index for the column 'V'
+            String indexDdl = "CREATE INDEX " + indexName + " ON " + dataTable + " (V)";
+            conn.createStatement().execute(indexDdl);
+        }
+
+        // Insert data into the table
+        String insertData = "UPSERT INTO " + dataTable + " VALUES (?, ?)";
+        try (Connection conn = getConnFromTestDriver();
+             PreparedStatement stmt = conn.prepareStatement(insertData)) {
+            for (int i = 1; i <= 10; i++) {
+                stmt.setString(1, "key" + i);
+                stmt.setInt(2, i);
+                stmt.executeUpdate();
+            }
+            conn.commit();
+        }
+
+        // Check if the index is being used
+        try (Connection conn = getConnFromTestDriver()) {
+            String query = "SELECT * FROM " + dataTable + " WHERE V = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(query)) {
+                // Set a parameter value that corresponds to the data inserted
+                stmt.setInt(1, 5);
+                clearTableLevelMetrics();
+                // Execute the query
+                try (ResultSet resultSet = stmt.executeQuery()) {
+                    while (resultSet.next()) {
+
+                    }
+                }
+                assertTrue(!getPhoenixTableClientMetrics().get(indexName).isEmpty());
+                // Assert that the index is used
+                boolean metricExists = false;
+                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(indexName)) {
+                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                        metricExists = true;
+                        assertMetricValue(metric, SELECT_SQL_COUNTER, 1, CompareOp.EQ);
+                        break;
+                    }
+                }
+                assertTrue(metricExists);
+                metricExists = false;
+                //assert BaseTable is not being queried
+                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
+                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                        metricExists = true;
+                        assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
+                        break;
+                    }
+                }
+                assertTrue(metricExists);
+            }
         }
     }
 

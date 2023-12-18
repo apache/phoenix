@@ -231,25 +231,25 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
     public void testInputClusterOverride() throws Exception {
         final Configuration configuration = new Configuration();
         configuration.set(HConstants.ZOOKEEPER_QUORUM, ORIGINAL_CLUSTER_QUORUM);
-        String zkQuorum = PhoenixConfigurationUtil.getInputCluster(configuration);
+        String zkQuorum = PhoenixConfigurationUtilHelper.getInputCluster(configuration);
         assertEquals(zkQuorum, ORIGINAL_CLUSTER_QUORUM);
 
-        configuration.set(PhoenixConfigurationUtil.MAPREDUCE_INPUT_CLUSTER_QUORUM,
+        configuration.set(PhoenixConfigurationUtilHelper.MAPREDUCE_INPUT_CLUSTER_QUORUM,
             OVERRIDE_CLUSTER_QUORUM);
-        String zkQuorumOverride = PhoenixConfigurationUtil.getInputCluster(configuration);
+        String zkQuorumOverride = PhoenixConfigurationUtilHelper.getInputCluster(configuration);
         assertEquals(zkQuorumOverride, OVERRIDE_CLUSTER_QUORUM);
 
         final Configuration configuration2 = new Configuration();
         PhoenixConfigurationUtil.setInputCluster(configuration2, OVERRIDE_CLUSTER_QUORUM);
         String zkQuorumOverride2 =
-                PhoenixConfigurationUtil.getInputCluster(configuration2);
+                PhoenixConfigurationUtilHelper.getInputCluster(configuration2);
         assertEquals(zkQuorumOverride2, OVERRIDE_CLUSTER_QUORUM);
 
         final Job job = Job.getInstance();
         PhoenixMapReduceUtil.setInputCluster(job, OVERRIDE_CLUSTER_QUORUM);
         Configuration configuration3 = job.getConfiguration();
         String zkQuorumOverride3 =
-                PhoenixConfigurationUtil.getInputCluster(configuration3);
+                PhoenixConfigurationUtilHelper.getInputCluster(configuration3);
         assertEquals(zkQuorumOverride3, OVERRIDE_CLUSTER_QUORUM);
 
     }
@@ -258,25 +258,25 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
     public void testOutputClusterOverride() throws Exception {
         final Configuration configuration = new Configuration();
         configuration.set(HConstants.ZOOKEEPER_QUORUM, ORIGINAL_CLUSTER_QUORUM);
-        String zkQuorum = PhoenixConfigurationUtil.getOutputCluster(configuration);
+        String zkQuorum = PhoenixConfigurationUtilHelper.getOutputCluster(configuration);
         assertEquals(zkQuorum, ORIGINAL_CLUSTER_QUORUM);
 
-        configuration.set(PhoenixConfigurationUtil.MAPREDUCE_OUTPUT_CLUSTER_QUORUM,
+        configuration.set(PhoenixConfigurationUtilHelper.MAPREDUCE_OUTPUT_CLUSTER_QUORUM,
             OVERRIDE_CLUSTER_QUORUM);
-        String zkQuorumOverride = PhoenixConfigurationUtil.getOutputCluster(configuration);
+        String zkQuorumOverride = PhoenixConfigurationUtilHelper.getOutputCluster(configuration);
         assertEquals(zkQuorumOverride, OVERRIDE_CLUSTER_QUORUM);
 
         final Configuration configuration2 = new Configuration();
         PhoenixConfigurationUtil.setOutputCluster(configuration2, OVERRIDE_CLUSTER_QUORUM);
         String zkQuorumOverride2 =
-                PhoenixConfigurationUtil.getOutputCluster(configuration2);
+                PhoenixConfigurationUtilHelper.getOutputCluster(configuration2);
         assertEquals(zkQuorumOverride2, OVERRIDE_CLUSTER_QUORUM);
 
         final Job job = Job.getInstance();
         PhoenixMapReduceUtil.setOutputCluster(job, OVERRIDE_CLUSTER_QUORUM);
         Configuration configuration3 = job.getConfiguration();
         String zkQuorumOverride3 =
-                PhoenixConfigurationUtil.getOutputCluster(configuration3);
+                PhoenixConfigurationUtilHelper.getOutputCluster(configuration3);
         assertEquals(zkQuorumOverride3, OVERRIDE_CLUSTER_QUORUM);
 
     }

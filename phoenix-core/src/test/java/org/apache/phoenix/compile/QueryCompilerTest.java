@@ -54,7 +54,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.AggregatePlan;
 import org.apache.phoenix.execute.ClientAggregatePlan;
@@ -559,7 +559,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
             QueryPlan plan = getQueryPlan(query, binds);
-            assertEquals(query, BaseScannerRegionObserver.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
+            assertEquals(query, BaseScannerRegionObserverConstants.KEY_ORDERED_GROUP_BY_EXPRESSIONS, plan.getGroupBy().getScanAttribName());
         }
     }
 
@@ -743,7 +743,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         List<Object> binds = Collections.emptyList();
         for (String query : queries) {
             QueryPlan plan = getQueryPlan(query, binds);
-            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserver.UNORDERED_GROUP_BY_EXPRESSIONS);
+            assertEquals(plan.getGroupBy().getScanAttribName(), BaseScannerRegionObserverConstants.UNORDERED_GROUP_BY_EXPRESSIONS);
         }
     }
     
@@ -780,7 +780,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             for (int i = 0; i < queries.length; i++) {
                 query = queries[i];
                 Scan scan = compileQuery(query, binds);
-                ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute(BaseScannerRegionObserver.AGGREGATORS), null, null);
+                ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute(BaseScannerRegionObserverConstants.AGGREGATORS), null, null);
                 Aggregator aggregator = aggregators.getAggregators()[0];
                 assertTrue(aggregator instanceof CountAggregator);
             }
@@ -2460,7 +2460,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             Scan scan = projectQuery("select A.i1 from X group by i1 order by avg(B.i2) " +
                     "desc");
             ServerAggregators aggregators = ServerAggregators.deserialize(scan.getAttribute
-                    (BaseScannerRegionObserver.AGGREGATORS), null, null);
+                    (BaseScannerRegionObserverConstants.AGGREGATORS), null, null);
             assertEquals(2,aggregators.getAggregatorCount());
         } finally {
             conn.close();

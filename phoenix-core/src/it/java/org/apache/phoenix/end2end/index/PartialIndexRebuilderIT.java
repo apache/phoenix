@@ -66,7 +66,6 @@ import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.Repeat;
@@ -971,13 +970,13 @@ public class PartialIndexRebuilderIT extends BaseTest {
             conn.commit();
             Configuration conf = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
             PTable table = metaCache.getTableRef(key).getTable();
-            assertTrue(MetaDataUtil.tableRegionsOnline(conf, table));
+            assertTrue(MetaDataRegionObserver.tableRegionsOnline(conf, table));
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
                 admin.disableTable(TableName.valueOf(fullTableName));
-                assertFalse(MetaDataUtil.tableRegionsOnline(conf, table));
+                assertFalse(MetaDataRegionObserver.tableRegionsOnline(conf, table));
                 admin.enableTable(TableName.valueOf(fullTableName));
             }
-            assertTrue(MetaDataUtil.tableRegionsOnline(conf, table));
+            assertTrue(MetaDataRegionObserver.tableRegionsOnline(conf, table));
         }
     }
 
