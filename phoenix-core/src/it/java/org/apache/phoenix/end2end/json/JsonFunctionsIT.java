@@ -442,10 +442,11 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private static String getJsonString(String jsonFilePath) throws IOException {
+    public static String getJsonString(String jsonFilePath) throws IOException {
         return getJsonString(jsonFilePath, "$");
     }
-    private static String getJsonString(String jsonFilePath, String jsonPath) throws IOException {
+
+    public static String getJsonString(String jsonFilePath, String jsonPath) throws IOException {
         URL fileUrl = JsonFunctionsIT.class.getClassLoader().getResource(jsonFilePath);
         String json = FileUtils.readFileToString(new File(fileUrl.getFile()));
         Configuration conf = Configuration.builder().jsonProvider(new GsonJsonProvider()).build();

@@ -46,14 +46,16 @@ public class BsonJsonProvider extends AbstractJsonProvider {
         JsonReader jsonReader = new JsonReader(json);
         BsonType bsonType = jsonReader.readBsonType();
         switch (bsonType) {
-            case ARRAY:
-                return BsonArray.parse(json);
-            case DOCUMENT:
-                return BsonDocument.parse(json);
-            case STRING:
-                return new BsonString(jsonReader.readString());
-            default:
-                throw new InvalidJsonException(String.format("Unsupported bson type %s", bsonType));
+        case ARRAY:
+            return BsonArray.parse(json);
+        case DOCUMENT:
+            return BsonDocument.parse(json);
+        case STRING:
+            return new BsonString(jsonReader.readString());
+        case INT32:
+            return new BsonInt32(jsonReader.readInt32());
+        default:
+            throw new InvalidJsonException(String.format("Unsupported bson type %s", bsonType));
         }
     }
 
