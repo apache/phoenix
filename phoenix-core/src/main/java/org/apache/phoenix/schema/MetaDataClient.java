@@ -157,6 +157,7 @@ import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.Objects;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Table;
@@ -2899,7 +2900,6 @@ public class MetaDataClient {
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
-                        .setMaxLookbackAge(DEFAULT_PHOENIX_MAX_LOOKBACK_AGE)
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
@@ -3158,7 +3158,12 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setNull(36, Types.VARCHAR);
             }
-            tableUpsert.setLong(37, maxLookbackAge);
+            if (maxLookbackAge == null) {
+                tableUpsert.setNull(37, Types.BIGINT);
+            }
+            else {
+                tableUpsert.setLong(37, maxLookbackAge);
+            }
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
@@ -5366,7 +5371,7 @@ public class MetaDataClient {
                     } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
                         metaProperties.setStreamingTopicName((String) value);
                     } else if (propName.equals(MAX_LOOKBACK_AGE)) {
-                        metaProperties.setMaxLookbackAge(((Number) value).longValue());
+                        metaProperties.setMaxLookbackAge((Long) value);
                     }
                 }
                 // if removeTableProps is true only add the property if it is not an HTable or Phoenix Table property
@@ -5575,7 +5580,7 @@ public class MetaDataClient {
             }
         }
 
-        if (metaProperties.getMaxLookbackAge() != null && metaProperties.getMaxLookbackAge().longValue() != table.getMaxLookbackAge()) {
+        if (! Objects.equals(metaProperties.getMaxLookbackAge(), table.getMaxLookbackAge())) {
             metaPropertiesEvaluated.setMaxLookbackAge(metaProperties.getMaxLookbackAge());
             changingPhoenixTableProperty = true;
         }

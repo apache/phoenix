@@ -426,7 +426,7 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public long getMaxLookbackAge() {
+    public Long getMaxLookbackAge() {
         return delegate.getMaxLookbackAge();
     }
 

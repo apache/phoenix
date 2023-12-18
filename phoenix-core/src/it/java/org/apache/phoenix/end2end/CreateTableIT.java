@@ -1281,7 +1281,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 .getColumnQualifierBytes()));
         assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
                 .getColumnQualifierBytes()));
-        assertEquals(DEFAULT_PHOENIX_MAX_LOOKBACK_AGE, table.getMaxLookbackAge());
+        assertNull(table.getMaxLookbackAge());
     }
 
     @Test
@@ -1706,18 +1706,19 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        long maxLookbackAge = 259200000;
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String createDdl = "CREATE TABLE " + fullTableName +
                     " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                     " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
-                    "MAX_LOOKBACK_AGE=259200000"; // Set table level max lookback age to 3 days in milli-seconds
+                    "MAX_LOOKBACK_AGE="+maxLookbackAge; // Set table level max lookback age to 3 days in milli-seconds
             conn.createStatement().execute(createDdl);
             ResultSet rs = conn.createStatement().executeQuery("SELECT MAX_LOOKBACK_AGE FROM \"SYSTEM\".\"CATALOG\"\n"
                     + "WHERE TENANT_ID IS NULL AND\n"
                     + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
                     + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
             assertTrue(rs.next());
-            assertEquals(259200000, rs.getLong(1));
+            assertEquals(maxLookbackAge, rs.getLong(1));
             assertFalse(rs.next());
         }
     }

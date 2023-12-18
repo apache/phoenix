@@ -221,7 +221,7 @@ public class PTableImpl implements PTable {
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
-    private long maxLookbackAge;
+    private Long maxLookbackAge;
 
     public static class Builder {
         private PTableKey key;
@@ -288,7 +288,7 @@ public class PTableImpl implements PTable {
         private String externalSchemaId;
         private String streamingTopicName;
         private String indexWhere;
-        private long maxLookbackAge;
+        private Long maxLookbackAge;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -716,7 +716,7 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setMaxLookbackAge(long maxLookbackAge) {
+        public Builder setMaxLookbackAge(Long maxLookbackAge) {
             this.maxLookbackAge = maxLookbackAge;
             return this;
         }
@@ -2040,7 +2040,7 @@ public class PTableImpl implements PTable {
             indexWhere =
                     (String) PVarchar.INSTANCE.toObject(table.getIndexWhere().toByteArray());
         }
-        long maxLookbackAge = DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
+        Long maxLookbackAge = null;
         if (table.hasMaxLookbackAge()) {
             maxLookbackAge = table.getMaxLookbackAge();
         }
@@ -2246,7 +2246,9 @@ public class PTableImpl implements PTable {
             builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
                     table.getIndexWhere())));
         }
-        builder.setMaxLookbackAge(table.getMaxLookbackAge());
+        if (table.getMaxLookbackAge() != null) {
+            builder.setMaxLookbackAge(table.getMaxLookbackAge());
+        }
         return builder.build();
     }
 
@@ -2395,7 +2397,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public long getMaxLookbackAge() {
+    public Long getMaxLookbackAge() {
         return maxLookbackAge;
     }
 

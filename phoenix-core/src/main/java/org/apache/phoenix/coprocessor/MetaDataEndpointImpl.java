@@ -1445,7 +1445,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 : oldTable != null ? oldTable.getIndexWhere() : null);
 
         Cell maxLookbackAgeKv = tableKeyValues[MAX_LOOKBACK_AGE_INDEX];
-        long maxLookbackAge = maxLookbackAgeKv == null ? DEFAULT_PHOENIX_MAX_LOOKBACK_AGE :
+        Long maxLookbackAge = maxLookbackAgeKv == null ? null :
                 PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
                         maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
         // Check the cell tag to see whether the view has modified this property
