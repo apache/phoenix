@@ -344,12 +344,11 @@ public enum TableProperty {
             if (value == null) {
                 return null;
             }
-            else if (value instanceof Integer || value instanceof Long) {
-                long maxLookbackAge = ((Number) value).longValue();
-                if (maxLookbackAge < 0L) {
-                    throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be non-negative value in milli-seconds");
-                }
-                return maxLookbackAge;
+            else if (value instanceof Integer) {
+                return Long.valueOf((Integer) value);
+            }
+            else if (value instanceof Long) {
+                return value;
             }
             else {
                 throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be a numeric value in milli-seconds");
