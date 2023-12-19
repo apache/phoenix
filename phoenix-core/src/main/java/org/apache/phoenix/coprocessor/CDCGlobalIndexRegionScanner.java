@@ -101,6 +101,15 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return CDCUtil.initForRawScan(prepareDataTableScan(dataRowKeys, true));
     }
 
+    private static byte[] cloneRowKeyIfRequred(Cell cell) {
+        int rowOffset = cell.getRowOffset();
+        short rowLength = cell.getRowLength();
+        byte[] rowArray = cell.getRowArray();
+        byte[] rowKey = rowOffset == 0 && rowLength == rowArray.length ? rowArray :
+                CellUtil.cloneRow(cell);
+        return rowKey;
+    }
+
     protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
@@ -110,12 +119,17 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 }
             }
             try {
-                byte[] indexRowKey = indexRow.get(0).getRowArray();
-                Long indexRowTs = result.get(0).getTimestamp();
-                ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
-                        indexToDataRowKeyMap.get(indexRowKey));
-                Result dataRow = dataRows.get(dataRowKey);
+                byte[] indexRowKey = null;
+                ImmutableBytesPtr dataRowKey = null;
+                Result dataRow = null;
+                if (! result.isEmpty()) {
+                    indexRowKey = cloneRowKeyIfRequred(indexRow.get(0));
+                    dataRowKey = new ImmutableBytesPtr(
+                            indexToDataRowKeyMap.get(indexRowKey));
+                    dataRow = dataRows.get(dataRowKey);
+                }
                 if (dataRow != null) {
+                    Long indexRowTs = result.get(0).getTimestamp();
                     Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
                             dataRowKey);
                     if (changeTimeline == null) {
@@ -201,6 +215,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 if (dataRow != null && tupleProjector != null) {
                     IndexUtil.addTupleAsOneCell(result, new ResultTuple(dataRow),
                             tupleProjector, ptr);
+                }
+                else {
+                    result.clear();
                 }
                 return true;
             } catch (Throwable e) {

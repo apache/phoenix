@@ -30,6 +30,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import javax.xml.transform.Result;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -272,6 +273,24 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         }
     }
 
+    private void assertResultSet(ResultSet rs) throws Exception{
+        Gson gson = new Gson();
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        assertEquals(new HashMap(){{put("V1", 100d);}}, gson.fromJson(rs.getString(3),
+                HashMap.class));
+        assertEquals(true, rs.next());
+        assertEquals(2, rs.getInt(2));
+        assertEquals(new HashMap(){{put("V1", 200d);}}, gson.fromJson(rs.getString(3),
+                HashMap.class));
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        assertEquals(new HashMap(){{put("V1", 101d);}}, gson.fromJson(rs.getString(3),
+                HashMap.class));
+        assertEquals(false, rs.next());
+        rs.close();
+    }
+
     @Test
     public void testSelectCDC() throws Exception {
         Properties props = new Properties();
@@ -300,22 +319,27 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
         //          "".isEmpty();
         //      }
-        Gson gson = new Gson();
-        ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT /*+ INCLUDE(PRE, POST) */ * FROM " + cdcName); // + " ORDER BY k"); // FIXME: causing InvalidQualifierBytesException
-        assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
-        assertEquals(new HashMap(){{put("V1", 100d);}}, gson.fromJson(rs.getString(3),
-                HashMap.class));
-        assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
-        assertEquals(new HashMap(){{put("V1", 200d);}}, gson.fromJson(rs.getString(3),
-                HashMap.class));
-        assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
-        assertEquals(new HashMap(){{put("V1", 101d);}}, gson.fromJson(rs.getString(3),
-                HashMap.class));
-        assertEquals(false, rs.next());
+        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName));
+        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
+                " WHERE PHOENIX_ROW_TIMESTAMP() < NOW()"));
+        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ INCLUDE(PRE, POST) */ * " +
+                "FROM " + cdcName));
+        assertResultSet(conn.createStatement().executeQuery("SELECT " +
+                "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName));
+        //assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
+        //        " ORDER BY k")); // FIXME: causing InvalidQualifierBytesException
+
+        try (ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
+            assertEquals(false, rs.next());
+        }
+        try (ResultSet rs = conn.createStatement().executeQuery("SELECT 'abc' FROM " + cdcName)) {
+            assertEquals(true, rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals(true, rs.next());
+            assertEquals("abc", rs.getString(1));
+            assertEquals(false, rs.next());
+        }
     }
 
     // Temporary test case used as a reference for debugging and comparing against the CDC query.
@@ -329,33 +353,29 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         props.put("hbase.rpc.timeout", "6000000");
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
-        String mockCdcJson = "\"This is a mock CDC JSON data\"";
         conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 VARCHAR)");
+                "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (1, '" + mockCdcJson + "')");
+                " (1, 100)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES" +
-                " (2, '" + mockCdcJson + "')");
+                " (2, 200)");
         conn.commit();
         String indexName = generateUniqueName();
         String index_sql = "CREATE UNCOVERED INDEX " + indexName
                 + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
         conn.createStatement().execute(index_sql);
         //ResultSet rs =
-        //        conn.createStatement().executeQuery("SELECT * FROM " + indexName);
-        //assertEquals(1, rs.getInt(2));
-        //assertEquals(true, rs.next())
-        //assertEquals(2, rs.getInt(2));
-        //assertEquals(false, rs.next());
+        //        conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName +
+        //                " " + indexName + ") */ * FROM " + tableName);
         ResultSet rs =
                 conn.createStatement().executeQuery("SELECT /*+ INDEX(" + tableName +
-                        " " + indexName + ") */ * FROM " + tableName);
+                        " " + indexName + ") */ K, V1, PHOENIX_ROW_TIMESTAMP() FROM " + tableName);
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1));
-        assertEquals(mockCdcJson, rs.getObject(2));
+        assertEquals(100, rs.getInt(2));
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(1));
-        assertEquals(mockCdcJson, rs.getObject(2));
+        assertEquals(200, rs.getInt(2));
         assertEquals(false, rs.next());
     }
 }
