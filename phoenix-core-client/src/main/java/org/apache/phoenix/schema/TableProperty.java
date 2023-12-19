@@ -25,7 +25,6 @@ import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
-import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE;
 
 import java.sql.SQLException;
 import java.util.Map;
