@@ -69,7 +69,7 @@ public class JsonQueryFunction extends ScalarFunction {
             return false;
         }
         if (ptr == null || ptr.getLength() == 0) {
-            return true;
+            return false;
         }
 
         // Column name or JSON string
@@ -80,14 +80,14 @@ public class JsonQueryFunction extends ScalarFunction {
         }
 
         if (ptr.getLength() == 0) {
-            return true;
+            return false;
         }
 
         String
                 jsonPathExprStr =
                 (String) PVarchar.INSTANCE.toObject(ptr, getJSONPathExpr().getSortOrder());
         if (jsonPathExprStr == null) {
-            return true;
+            return false;
         }
         Object value = jsonDataFormat.getValue(top, jsonPathExprStr);
         int valueType = jsonDataFormat.getValueType(top, jsonPathExprStr);

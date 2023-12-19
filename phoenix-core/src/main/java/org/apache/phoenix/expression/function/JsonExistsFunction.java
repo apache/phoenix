@@ -65,7 +65,7 @@ public class JsonExistsFunction extends ScalarFunction {
             return false;
         }
         if (ptr == null || ptr.getLength() == 0) {
-            return true;
+            return false;
         }
 
         // Column name or JSON string
@@ -76,14 +76,14 @@ public class JsonExistsFunction extends ScalarFunction {
         }
 
         if (ptr.getLength() == 0) {
-            return true;
+            return false;
         }
 
         String
                 jsonPathExprStr =
                 (String) PVarchar.INSTANCE.toObject(ptr, getJSONPathExpr().getSortOrder());
         if (jsonPathExprStr == null) {
-            return true;
+            return false;
         }
 
         boolean isPathValid = jsonDataFormat.isPathValid(top, jsonPathExprStr);

@@ -789,18 +789,17 @@ public class PartialIndexIT extends BaseTest {
             conn.createStatement().execute(
                     "upsert into " + dataTableName + " (id, A, D, jsoncol) values ('id2', 100, 'b','" + getJsonString(
                             partialIndexJson, "$[3]") + "')");
-            conn.commit();
             conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
-                    (local ? "LOCAL " : " ") +"INDEX "
-                    + indexTableName + " on " + dataTableName + " (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) " +
-                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 50 ASYNC");
+                    (local ? "LOCAL " : " ") + "INDEX "
+                    + indexTableName + " on " + dataTableName + " (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) " + (
+                    uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 50 ASYNC");
 
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
 
             String selectSql = "SELECT  D from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 60";
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             // Verify that the index table is used
-            assertPlan((PhoenixResultSet) rs,  "", indexTableName);
+            assertPlan((PhoenixResultSet) rs, "", indexTableName);
             assertTrue(rs.next());
             assertEquals("b", rs.getString(1));
             assertFalse(rs.next());
@@ -808,17 +807,15 @@ public class PartialIndexIT extends BaseTest {
             selectSql = "SELECT  D from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 50";
             rs = conn.createStatement().executeQuery(selectSql);
             // Verify that the index table is not used
-            assertPlan((PhoenixResultSet) rs,  "", dataTableName);
+            assertPlan((PhoenixResultSet) rs, "", dataTableName);
 
             // Add more rows to test the index write path
             conn.createStatement().execute(
                     "upsert into " + dataTableName + " values ('id3', 50, 2, 9.5, 'c','" + getJsonString(
                             partialIndexJson, "$[1]") + "')");
-            conn.commit();
             conn.createStatement().execute(
                     "upsert into " + dataTableName + " values ('id4', 75, 2, 9.5, 'd','" + getJsonString(
                             partialIndexJson, "$[2]") + "')");
-            conn.commit();
 
             // Verify that index table includes only the rows with A > 50
             selectSql = "SELECT * from " + indexTableName;
@@ -829,21 +826,20 @@ public class PartialIndexIT extends BaseTest {
             assertEquals(100, rs.getInt(1));
             assertFalse(rs.next());
 
-            // Overwrite an existing row that satisfies the index WHERE clause using an atomic
-            // upsert such that the new version of the row does not satisfy the index where clause
+            // Overwrite an existing row that satisfies the index WHERE clause
+            // such that the new version of the row does not satisfy the index where clause
             // anymore. This should result in deleting the index row.
             String dml = "UPSERT INTO " + dataTableName + " values ('id2', 0, 2, 9.5, 'd', JSON_MODIFY(jsoncol, '$.info.age', '0')) "; //, JSON_MODIFY(jsoncol, '$.info.age', '"0"')
             conn.createStatement().execute(dml);
-            conn.commit();
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
             assertEquals(75, rs.getInt(1));
             assertFalse(rs.next());
 
-            // Retrieve update row from the data table and verify that the index table is not used
+            // Retrieve the updated row from the data table and verify that the index table is not used
             selectSql = "SELECT  ID from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 0";
             rs = conn.createStatement().executeQuery(selectSql);
-            assertPlan((PhoenixResultSet) rs,  "", dataTableName);
+            assertPlan((PhoenixResultSet) rs, "", dataTableName);
             assertTrue(rs.next());
             assertEquals("id2", rs.getString(1));
 
@@ -852,7 +848,8 @@ public class PartialIndexIT extends BaseTest {
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
                 PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
-                assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere()).equals("CAST(TO_NUMBER(JSON_VALUE(JSONCOL,'$.info.age'))ASINTEGER)>50"));
+                assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere())
+                        .equals("CAST(TO_NUMBER(JSON_VALUE(JSONCOL,'$.info.age'))ASINTEGER)>50"));
             }
         }
     }
@@ -865,82 +862,79 @@ public class PartialIndexIT extends BaseTest {
             String dataTableName = generateUniqueName();
             conn.createStatement().execute("create table " + dataTableName +
                     " (id varchar not null primary key, " +
-                    "A integer, B integer, C double, D varchar, jsoncol json)");
+                    "A integer, B integer, C double, D varchar, jsoncol json)"
+                    + (salted ? " SALT_BUCKETS=4" : ""));
             String indexTableName = generateUniqueName();
             String partialIndexJson = "json/json_partialindex_tests.json";
             // Add rows to the data table before creating a partial index to test that the index
             // will be built correctly by IndexTool
             conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id1', 25, 2, 3.14, 'a','" + getJsonString(
+                    "upsert into " + dataTableName + " values ('id1', 70, 2, 3.14, 'a','" + getJsonString(
                             partialIndexJson, "$[0]") + "')");
-
             conn.createStatement().execute(
                     "upsert into " + dataTableName + " (id, A, D, jsoncol) values ('id2', 100, 'b','" + getJsonString(
-                            partialIndexJson, "$[3]") + "')");
-            conn.commit();
+                            partialIndexJson, "$[1]") + "')");
             conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
-                    (local ? "LOCAL " : " ") +"INDEX "
-                    + indexTableName + " on " + dataTableName + " (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) " +
-                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 50 ASYNC");
-
+                    (local ? "LOCAL " : " ") + "INDEX " + indexTableName + " on " + dataTableName + " (A) " +
+                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE JSON_EXISTS(JSONCOL, '$.info.address.exists') ASYNC");
             IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
 
-            String selectSql = "SELECT  D from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 60";
+            String selectSql = "SELECT " + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ") +
+                    " A, D from " + dataTableName + " WHERE A > 60 AND JSON_EXISTS(jsoncol, '$.info.address.exists')";
             ResultSet rs = conn.createStatement().executeQuery(selectSql);
             // Verify that the index table is used
-            assertPlan((PhoenixResultSet) rs,  "", indexTableName);
+            assertPlan((PhoenixResultSet) rs, "", indexTableName);
             assertTrue(rs.next());
-            assertEquals("b", rs.getString(1));
+            assertEquals(70, rs.getInt(1));
+            assertEquals("a", rs.getString(2));
             assertFalse(rs.next());
-
-            selectSql = "SELECT  D from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 50";
-            rs = conn.createStatement().executeQuery(selectSql);
-            // Verify that the index table is not used
-            assertPlan((PhoenixResultSet) rs,  "", dataTableName);
 
             // Add more rows to test the index write path
             conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id3', 50, 2, 9.5, 'c','" + getJsonString(
-                            partialIndexJson, "$[1]") + "')");
-            conn.commit();
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id4', 75, 2, 9.5, 'd','" + getJsonString(
+                    "upsert into " + dataTableName + " values ('id3', 20, 2, 3.14, 'a','" + getJsonString(
                             partialIndexJson, "$[2]") + "')");
-            conn.commit();
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " values ('id4', 90, 2, 3.14, 'a','" + getJsonString(
+                            partialIndexJson, "$[4]") + "')");
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (id, A, D, jsoncol) values ('id5', 150, 'b','" + getJsonString(
+                            partialIndexJson, "$[3]") + "')");
 
-            // Verify that index table includes only the rows with A > 50
-            selectSql = "SELECT * from " + indexTableName;
+            // Verify that index table includes only the rows where jsonPath Exists
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
-            assertEquals(75, rs.getInt(1));
+            assertEquals(70, rs.getInt(1));
+            assertEquals("a", rs.getString(2));
             assertTrue(rs.next());
-            assertEquals(100, rs.getInt(1));
+            assertEquals(90, rs.getInt(1));
+            assertEquals("a", rs.getString(2));
             assertFalse(rs.next());
 
-            // Overwrite an existing row that satisfies the index WHERE clause using an atomic
-            // upsert such that the new version of the row does not satisfy the index where clause
-            // anymore. This should result in deleting the index row.
-            String dml = "UPSERT INTO " + dataTableName + " values ('id2', 0, 2, 9.5, 'd', JSON_MODIFY(jsoncol, '$.info.age', '\"0\"')) "; //, JSON_MODIFY(jsoncol, '$.info.age', '"0"')
-            conn.createStatement().execute(dml);
-            conn.commit();
-            rs = conn.createStatement().executeQuery(selectSql);
+            rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
+            // Verify that the index table is not used
+            assertPlan((PhoenixResultSet) rs, "", dataTableName);
             assertTrue(rs.next());
-            assertEquals(75, rs.getInt(1));
-            assertFalse(rs.next());
+            assertEquals(5, rs.getInt(1));
 
-            // Retrieve update row from the data table and verify that the index table is not used
-            selectSql = "SELECT  ID from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 0";
+            // Overwrite an existing row that satisfies the index WHERE clause such that
+            // the new version of the row does not satisfy the index where clause anymore. This
+            // should result in deleting the index row.
+            conn.createStatement().execute(
+                    "upsert into " + dataTableName + " (ID, B, jsoncol) values ('id4', null, '" + getJsonString(
+                            partialIndexJson, "$[3]") + "')");
             rs = conn.createStatement().executeQuery(selectSql);
-            assertPlan((PhoenixResultSet) rs,  "", dataTableName);
             assertTrue(rs.next());
-            assertEquals("id2", rs.getString(1));
+            assertEquals(70, rs.getInt(1));
+            assertEquals("a", rs.getString(2));
+            assertFalse(rs.next());
 
             // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
             try (Connection newConn = DriverManager.getConnection(getUrl())) {
                 PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
-                assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere()).equals("CAST(TO_NUMBER(JSON_VALUE(JSONCOL,'$.info.age'))ASINTEGER)>50"));
+                assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere())
+                        .equals("JSON_EXISTS(JSONCOL,'$.info.address.exists')"));
             }
         }
     }

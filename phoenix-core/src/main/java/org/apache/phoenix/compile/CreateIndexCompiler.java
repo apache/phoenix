@@ -112,7 +112,7 @@ public class CreateIndexCompiler {
         } else if (type instanceof PArrayDataType) {
             return "ARRAY" + type.getSampleValue().toString();
         } else if (type instanceof PJson) {
-            return null;
+            return "'{a:1}'";
         } else {
             return "0123";
         }
