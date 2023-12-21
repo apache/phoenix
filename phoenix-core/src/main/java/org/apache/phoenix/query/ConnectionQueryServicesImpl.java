@@ -420,7 +420,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     // writes guarded by "liveRegionServersLock"
     private volatile List<ServerName> liveRegionServers;
     private final Object liveRegionServersLock = new Object();
+    // Writes guarded by invalidateMetadataCacheConnLock
     private Connection invalidateMetadataCacheConnection = null;
+    private final Object invalidateMetadataCacheConnLock = new Object();
     private MetricsMetadataCachingSource metricsMetadataCachingSource;
     public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
             "Cannot invalidate server metadata cache on a non-server connection";
@@ -590,11 +592,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (invalidateMetadataCacheConnection != null) {
             return invalidateMetadataCacheConnection;
         }
-        // TODO Do we need a double locking here?
-        Configuration clonedConfiguration = PropertiesUtil.cloneConfig(this.config);
-        clonedConfiguration.setClass(CUSTOM_CONTROLLER_CONF_KEY,
-                InvalidateMetadataCacheControllerFactory.class, RpcControllerFactory.class);
-        invalidateMetadataCacheConnection = openConnection(clonedConfiguration);
+
+        synchronized (invalidateMetadataCacheConnLock) {
+            Configuration clonedConfiguration = PropertiesUtil.cloneConfig(this.config);
+            clonedConfiguration.setClass(CUSTOM_CONTROLLER_CONF_KEY,
+                    InvalidateMetadataCacheControllerFactory.class, RpcControllerFactory.class);
+            invalidateMetadataCacheConnection = openConnection(clonedConfiguration);
+        }
         return invalidateMetadataCacheConnection;
     }
 
