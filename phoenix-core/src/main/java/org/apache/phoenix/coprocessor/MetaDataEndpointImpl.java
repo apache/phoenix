@@ -84,7 +84,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
-import static org.apache.phoenix.query.QueryServices.AUTO_UPGRADE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
@@ -3459,6 +3458,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
         Properties properties = new Properties();
+        // Skip checking of system table existence since the system tables should have created
+        // by now.
+        properties.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
                         env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
