@@ -326,8 +326,25 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 "FROM " + cdcName));
         assertResultSet(conn.createStatement().executeQuery("SELECT " +
                 "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName));
-        //assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
-        //        " ORDER BY k")); // FIXME: causing InvalidQualifierBytesException
+
+        HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
+            put("SELECT 'dummy', k FROM " + cdcName, new int [] {2, 1});
+            put("SELECT * FROM " + cdcName +
+                    " ORDER BY k ASC", new int [] {1, 1, 2});
+            put("SELECT * FROM " + cdcName +
+                    " ORDER BY k DESC", new int [] {2, 1, 1});
+            put("SELECT * FROM " + cdcName +
+                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1});
+        }};
+        for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
+            try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
+                for (int k:  testQuery.getValue()) {
+                    assertEquals(true, rs.next());
+                    assertEquals(k, rs.getInt(2));
+                }
+                assertEquals(false, rs.next());
+            }
+        }
 
         try (ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {

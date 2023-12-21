@@ -101,15 +101,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return CDCUtil.initForRawScan(prepareDataTableScan(dataRowKeys, true));
     }
 
-    private static byte[] cloneRowKeyIfRequred(Cell cell) {
-        int rowOffset = cell.getRowOffset();
-        short rowLength = cell.getRowLength();
-        byte[] rowArray = cell.getRowArray();
-        byte[] rowKey = rowOffset == 0 && rowLength == rowArray.length ? rowArray :
-                CellUtil.cloneRow(cell);
-        return rowKey;
-    }
-
     protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
@@ -119,16 +110,15 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 }
             }
             try {
-                byte[] indexRowKey = null;
-                ImmutableBytesPtr dataRowKey = null;
                 Result dataRow = null;
                 if (! result.isEmpty()) {
-                    indexRowKey = cloneRowKeyIfRequred(indexRow.get(0));
-                    dataRowKey = new ImmutableBytesPtr(
+                    Cell firstCell = result.get(0);
+                    byte[] indexRowKey = new ImmutableBytesPtr(firstCell.getRowArray(),
+                            firstCell.getRowOffset(), firstCell.getRowLength())
+                            .copyBytesIfNecessary();
+                    ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                             indexToDataRowKeyMap.get(indexRowKey));
                     dataRow = dataRows.get(dataRowKey);
-                }
-                if (dataRow != null) {
                     Long indexRowTs = result.get(0).getTimestamp();
                     Map<Long, Map<ImmutableBytesPtr, Cell>> changeTimeline = dataRowChanges.get(
                             dataRowKey);
@@ -179,7 +169,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             for (int i = 0; i < columns.size(); ++i) {
                                 Cell cell = columns.get(i).get(columnPointers[i]);
                                 if (cell.getTimestamp() == ts) {
-                                    rollingRow.put(new ImmutableBytesPtr(cell.getQualifierArray()), cell);
+                                    rollingRow.put(new ImmutableBytesPtr(
+                                                    cell.getQualifierArray(),
+                                                    cell.getQualifierOffset(),
+                                                    cell.getQualifierLength()),
+                                            cell);
                                     ++columnPointers[i];
                                 }
                             }
@@ -198,15 +192,16 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                     entry.getValue().getValueArray());
                             rowValueMap.put(colName, colVal);
                         }
-                        Cell firstCell = result.get(0);
                         byte[] value =
                                 new Gson().toJson(rowValueMap).getBytes(StandardCharsets.UTF_8);
                         CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
+                        ImmutableBytesPtr family = new ImmutableBytesPtr(firstCell.getFamilyArray(),
+                                firstCell.getFamilyOffset(), firstCell.getFamilyLength());
                         dataRow = Result.create(Arrays.asList(builder.
-                                setRow(indexToDataRowKeyMap.get(indexRowKey)).
-                                setFamily(firstCell.getFamilyArray()).
+                                setRow(dataRowKey.copyBytesIfNecessary()).
+                                setFamily(family.copyBytesIfNecessary()).
                                 setQualifier(scan.getAttribute((CDC_JSON_COL_QUALIFIER))).
-                                setTimestamp(indexRow.get(0).getTimestamp()).
+                                setTimestamp(firstCell.getTimestamp()).
                                 setValue(value).
                                 setType(Cell.Type.Put).
                                 build()));
