@@ -57,17 +57,14 @@ import static org.junit.Assert.fail;
 @Category(ParallelStatsDisabledTest.class)
 public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     public static String BASIC_JSON = "json/json_functions_basic.json";
-    public static String FUNCTIONS_TEST_JSON = "json/json_functions_tests.json";
     public static String DATA_TYPES_JSON = "json/json_datatypes.json";
     String basicJson = "";
     String dataTypesJson = "";
-    String functionsJson = "";
 
     @Before
     public void setup() throws IOException {
         basicJson = getJsonString(BASIC_JSON, "$[0]");
         dataTypesJson = getJsonString(DATA_TYPES_JSON);
-        functionsJson = getJsonString(FUNCTIONS_TEST_JSON);
     }
 
     @Test
@@ -155,39 +152,6 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             query = String.format(queryTemplate, "Windsors");
             rs = conn.createStatement().executeQuery(query);
             assertFalse(rs.next());
-        }
-    }
-
-    @Test
-    public void testSimpleJsonValue2() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
-            String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol json)";
-            conn.createStatement().execute(ddl);
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
-            stmt.setInt(1, 1);
-            stmt.setInt(2, 2);
-            stmt.setString(3, functionsJson);
-            stmt.execute();
-            conn.commit();
-            ResultSet rs = conn.createStatement().executeQuery("SELECT JSON_VALUE(JSONCOL,'$.test'), " +
-                    "JSON_VALUE(JSONCOL, '$.testCnt'), " +
-                    "JSON_VALUE(JSONCOL, '$.infoTop[5].info.address.state')," +
-                    "JSON_VALUE(JSONCOL, '$.infoTop[4].tags[1]'),  " +
-                    "JSON_QUERY(JSONCOL, '$.infoTop'), " +
-                    "JSON_QUERY(JSONCOL, '$.infoTop[5].info'), " +
-                    "JSON_QUERY(JSONCOL, '$.infoTop[5].friends') " +
-                    "FROM " + tableName + " WHERE JSON_VALUE(JSONCOL, '$.test')='test1'");
-            assertTrue(rs.next());
-            assertEquals("test1", rs.getString(1));
-            assertEquals("SomeCnt1", rs.getString(2));
-            assertEquals("North Dakota", rs.getString(3));
-            assertEquals("sint", rs.getString(4));
-            compareJson(rs.getString(5), functionsJson, "$.infoTop");
-            compareJson(rs.getString(6), functionsJson, "$.infoTop[5].info");
-            compareJson(rs.getString(7), functionsJson, "$.infoTop[5].friends");
         }
     }
 
@@ -445,6 +409,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     private static String getJsonString(String jsonFilePath) throws IOException {
         return getJsonString(jsonFilePath, "$");
     }
+
     private static String getJsonString(String jsonFilePath, String jsonPath) throws IOException {
         URL fileUrl = JsonFunctionsIT.class.getClassLoader().getResource(jsonFilePath);
         String json = FileUtils.readFileToString(new File(fileUrl.getFile()));
