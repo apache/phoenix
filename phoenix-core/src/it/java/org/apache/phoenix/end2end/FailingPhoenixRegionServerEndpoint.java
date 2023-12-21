@@ -27,8 +27,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
-import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS;
-import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT;
 
 public class FailingPhoenixRegionServerEndpoint extends PhoenixRegionServerEndpoint {
     private static final Logger LOGGER = LoggerFactory.getLogger(FailingPhoenixRegionServerEndpoint.class);
