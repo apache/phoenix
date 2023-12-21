@@ -3459,8 +3459,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
         Properties properties = new Properties();
-        // Set the phoenix auto upgrade property to false.
-        properties.setProperty(AUTO_UPGRADE_ENABLED, "false");
         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
                         env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
