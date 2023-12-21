@@ -1708,13 +1708,13 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         Long maxLookbackAge = 259200L;
         createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(schemaName, dataTableName));
+        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
         schemaName = generateUniqueName();
         dataTableName = generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         maxLookbackAge = 25920000000L;
         createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(schemaName, dataTableName));
+        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
     }
 
     @Test
@@ -1723,20 +1723,24 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String dataTableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         createTableWithTableLevelMaxLookbackAge(fullTableName, "NULL");
-        assertNull(queryTableLevelMaxLookbackAge(schemaName, dataTableName));
+        assertNull(queryTableLevelMaxLookbackAge(fullTableName));
         schemaName = generateUniqueName();
         dataTableName = generateUniqueName();
         fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         createTableWithTableLevelMaxLookbackAge(fullTableName, "null");
-        assertNull(queryTableLevelMaxLookbackAge(schemaName, dataTableName));
+        assertNull(queryTableLevelMaxLookbackAge(fullTableName));
     }
 
     @Test
     public void testCreateTableWithInvalidTableLevelMaxLookbackAge() {
-        assertThrows(IllegalArgumentException.class, () -> createTableWithTableLevelMaxLookbackAge(
-                SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "2.3"));
-        assertThrows(IllegalArgumentException.class, () -> createTableWithTableLevelMaxLookbackAge(
+        String errMsg = "Table level MAX_LOOKBACK_AGE should be a BIGINT value in milli-seconds";
+        IllegalArgumentException err = assertThrows(IllegalArgumentException.class,
+                () -> createTableWithTableLevelMaxLookbackAge(
+                        SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "2.3"));
+        assertEquals(errMsg, err.getMessage());
+        err = assertThrows(IllegalArgumentException.class, () -> createTableWithTableLevelMaxLookbackAge(
                 SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "three"));
+        assertEquals(errMsg, err.getMessage());
     }
 
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
@@ -1777,16 +1781,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private Long queryTableLevelMaxLookbackAge(String schemaName, String dataTableName) throws Exception {
+    private Long queryTableLevelMaxLookbackAge(String fullTableName) throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
-            ResultSet rs = conn.createStatement().executeQuery("SELECT MAX_LOOKBACK_AGE FROM \"SYSTEM\".\"CATALOG\"\n"
-                    + "WHERE TENANT_ID IS NULL AND\n"
-                    + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
-                    + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL");
-            assertTrue(rs.next());
-            Long maxLookbackAge = (Long) rs.getObject(1);
-            assertFalse(rs.next());
-            return maxLookbackAge;
+            return PhoenixRuntime.getTableNoCache(conn, fullTableName).getMaxLookbackAge();
         }
     }
 }

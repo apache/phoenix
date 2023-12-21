@@ -49,6 +49,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
+import java.time.Duration;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
@@ -111,6 +112,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     private String tableDDLOptions;
     private final boolean columnEncoded;
     private static final Logger LOGGER = LoggerFactory.getLogger(AlterTableIT.class);
+
+    private final long oneDayInMillis = Duration.ofDays(1).toMillis();
 
     public AlterTableIT(boolean columnEncoded) {
         this.columnEncoded = columnEncoded;
@@ -1802,23 +1805,22 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        long baseMaxLookbackAge = 86400000; // 1 day
-        Long maxLookbackAge = baseMaxLookbackAge;
+        Long maxLookbackAge = oneDayInMillis;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE  " + fullTableName +
-                    "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + "MAX_LOOKBACK_AGE=" + maxLookbackAge;
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer" +
+                    "  ) " + "MAX_LOOKBACK_AGE=" + maxLookbackAge;
             conn.createStatement().execute(ddl);
-            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
-            maxLookbackAge = 3L * baseMaxLookbackAge;
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
+            maxLookbackAge = 3L * oneDayInMillis;
             alterTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
-            maxLookbackAge = 2L * baseMaxLookbackAge;
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
+            maxLookbackAge = 2L * oneDayInMillis;
             alterTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
             maxLookbackAge = 0L;
             alterTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
-            assertMaxLookbackAge(schemaName, dataTableName, maxLookbackAge);
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
         }
     }
 
@@ -1827,27 +1829,19 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        long maxLookbackAge = 86400000L;
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE  " + fullTableName +
                     "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + "MAX_LOOKBACK_AGE=" + maxLookbackAge;
+                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + "MAX_LOOKBACK_AGE=" + oneDayInMillis;
             conn.createStatement().execute(ddl);
         }
         assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "2309.3"));
         assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "forty"));
     }
 
-    private void assertMaxLookbackAge(String schemaName, String dataTableName, long expectedMaxLookbackAge) throws Exception {
-        String query = "SELECT MAX_LOOKBACK_AGE FROM \"SYSTEM\".\"CATALOG\"\n"
-                + "WHERE TENANT_ID IS NULL AND\n"
-                + "(TABLE_SCHEM, TABLE_NAME) = ('" + schemaName + "','"+ dataTableName + "') AND\n"
-                + "COLUMN_FAMILY IS NULL AND COLUMN_NAME IS NULL";
+    private void assertMaxLookbackAge(String fullTableName, Long expectedMaxLookbackAge) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals(expectedMaxLookbackAge, rs.getLong(1));
-            assertFalse(rs.next());
+            assertEquals(expectedMaxLookbackAge, PhoenixRuntime.getTableNoCache(conn, fullTableName).getMaxLookbackAge());
         }
     }
 
