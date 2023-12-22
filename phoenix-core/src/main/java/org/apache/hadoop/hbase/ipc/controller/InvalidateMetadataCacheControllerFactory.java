@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,21 +18,24 @@
 package org.apache.hadoop.hbase.ipc.controller;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when
- * making server-server remote RPCs to the region servers hosting Phoenix SYSTEM tables.
+ * Factory to instantiate InvalidateMetadataCacheControllers
  */
-public class ServerSideRPCControllerFactory  {
-
-    protected final Configuration conf;
-
-    public ServerSideRPCControllerFactory(Configuration conf) {
-        this.conf = conf;
+public class InvalidateMetadataCacheControllerFactory extends RpcControllerFactory {
+    public InvalidateMetadataCacheControllerFactory(Configuration conf) {
+        super(conf);
     }
 
-    public ServerToServerRpcController newController() {
-        return new ServerToServerRpcControllerImpl(this.conf);
+    @Override
+    public HBaseRpcController newController() {
+        HBaseRpcController delegate = super.newController();
+        return getController(delegate);
+    }
+
+    private HBaseRpcController getController(HBaseRpcController delegate) {
+        return new InvalidateMetadataCacheController(delegate, conf);
     }
 }

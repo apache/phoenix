@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.coprocessor.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
@@ -823,5 +824,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public int getConnectionCount(boolean isInternal) {
         return 0;
+    }
+
+    @Override
+    public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
+            throws Throwable {
+        // No-op
     }
 }

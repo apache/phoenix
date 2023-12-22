@@ -186,6 +186,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_PRIOIRTY_ATTRIB = "phoenix.index.rpc.priority";
     public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.metadata.rpc.priority";
     public static final String SERVER_SIDE_PRIOIRTY_ATTRIB = "phoenix.serverside.rpc.priority";
+    String INVALIDATE_METADATA_CACHE_PRIORITY_ATTRIB =
+            "phoenix.invalidate.metadata.cache.rpc.priority";
+
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 
     // Retries when doing server side writes to SYSTEM.CATALOG
@@ -251,6 +254,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.rpc.index.handler.count";
     public static final String METADATA_HANDLER_COUNT_ATTRIB = "phoenix.rpc.metadata.handler.count";
     public static final String SERVER_SIDE_HANDLER_COUNT_ATTRIB = "phoenix.rpc.serverside.handler.count";
+    String INVALIDATE_CACHE_HANDLER_COUNT_ATTRIB = "phoenix.rpc.invalidate.cache.handler.count";
 
     public static final String FORCE_ROW_KEY_ORDER_ATTRIB = "phoenix.query.force.rowkeyorder";
     public static final String ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB = "phoenix.functions.allowUserDefinedFunctions";
@@ -438,7 +442,11 @@ public interface QueryServices extends SQLCloseable {
      *  Parameter to disable the server merges for hinted uncovered indexes
      */
     String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
-
+    String PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS =
+            "phoenix.metadata.cache.invalidation.timeoutMs";
+    // Default to 10 seconds.
+    long PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT = 10 * 1000;
+    String PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = "phoenix.metadata.invalidate.cache.enabled";
     /**
      * Param to determine whether client can disable validation to figure out if any of the
      * descendent views extend primary key of their parents. Since this is a bit of

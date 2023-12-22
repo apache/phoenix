@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
@@ -46,8 +47,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -58,12 +57,14 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
+import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
@@ -75,7 +76,6 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
     private final long NEVER = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
-    private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCacheTest.class);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -1422,8 +1422,24 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
-    //Helper methods
+    /*
+        Tests that invalidate server metadata cache fails on a non server connection.
+     */
+    @Test
+    public void testInvalidateMetadataCacheOnNonServerConnection() {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props)
+                .unwrap(PhoenixConnection.class)) {
+            ConnectionQueryServices cqs = conn.getQueryServices();
+            cqs.invalidateServerMetadataCache(null);
+            fail("Shouldn't come here");
+        } catch (Throwable t) {
+            assertNotNull(t);
+            assertTrue(t.getMessage().contains(INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE));
+        }
+    }
 
+    //Helper methods
     private long getLastDDLTimestamp(String tableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // Need to use different connection than what is used for creating table or indexes.

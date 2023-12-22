@@ -63,12 +63,16 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         validatePriority(serverSidePriority);
 
         // validate index and metadata priorities are not the same
-        Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
+        Preconditions.checkArgument(indexPriority != metadataPriority,
+                "Index and Metadata priority must not be same " + indexPriority);
         LOGGER.info("Using custom Phoenix Index RPC Handling with index rpc priority "
                 + indexPriority + " and metadata rpc priority " + metadataPriority);
 
-        PhoenixRpcScheduler scheduler =
-                new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority, serverSidePriority, priorityFunction,abortable);
+        int invalidateCachePriority = getInvalidateMetadataCachePriority(conf);
+        validatePriority(invalidateCachePriority);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, delegate, indexPriority,
+                metadataPriority, serverSidePriority, invalidateCachePriority, priorityFunction,
+                abortable);
         return scheduler;
     }
 
@@ -97,4 +101,8 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         return conf.getInt(QueryServices.SERVER_SIDE_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_SERVER_SIDE_PRIORITY);
     }
 
+    public static int getInvalidateMetadataCachePriority(Configuration conf) {
+        return conf.getInt(QueryServices.INVALIDATE_METADATA_CACHE_PRIORITY_ATTRIB,
+                QueryServicesOptions.DEFAULT_INVALIDATE_METADATA_CACHE_PRIORITY);
+    }
 }

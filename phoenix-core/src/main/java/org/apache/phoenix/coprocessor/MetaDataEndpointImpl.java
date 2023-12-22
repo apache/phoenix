@@ -101,23 +101,15 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
@@ -133,11 +125,9 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Tag;
 import org.apache.hadoop.hbase.TagUtil;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -154,12 +144,10 @@ import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
-import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.Region.RowLock;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.security.User;
-import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -187,9 +175,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
-import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
-import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -268,7 +253,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PhoenixStopWatch;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -285,7 +269,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
-import com.google.protobuf.ServiceException;
 
 /**
  * Endpoint co-processor through which all Phoenix metadata mutations flow.
@@ -328,12 +311,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     // Column to track tables that have been upgraded based on PHOENIX-2067
     public static final String ROW_KEY_ORDER_OPTIMIZABLE = "ROW_KEY_ORDER_OPTIMIZABLE";
     public static final byte[] ROW_KEY_ORDER_OPTIMIZABLE_BYTES = Bytes.toBytes(ROW_KEY_ORDER_OPTIMIZABLE);
-    public static final String PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS =
-            "phoenix.metadata.cache.invalidation.timeoutMs";
-    // Default to 10 seconds.
-    public static final long PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT = 10 * 1000;
-    public static final String PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED =
-            "phoenix.metadata.invalidate.cache.enabled";
+
     // KeyValues for Table
     private static final Cell TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
@@ -612,8 +590,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean allowSplittableSystemCatalogRollback;
 
     private MetricsMetadataSource metricsSource;
-    private MetricsMetadataCachingSource metricsMetadataCachingSource;
-    private long metadataCacheInvalidationTimeoutMs;
+
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
         failConcurrentMutateAddColumnOneTimeForTesting = fail;
     }
@@ -649,16 +626,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
-        this.metadataCacheInvalidationTimeoutMs = config.getLong(
-                PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS,
-                PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT);
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
-        metricsMetadataCachingSource
-                = MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     }
 
     @Override
@@ -3483,170 +3455,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
-    /**
-     * Invalidate metadata cache from all region servers for the given list of
-     * InvalidateServerMetadataCacheRequest.
-     * @throws Throwable
-     */
     private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
-        Configuration conf = env.getConfiguration();
-        boolean invalidateCacheEnabled = conf.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
-                false);
-        if (!invalidateCacheEnabled) {
-            LOGGER.info("Skip invalidating server metadata cache since conf property"
-                    + " phoenix.metadata.invalidate.cache.enabled is set to false");
-            return;
-        }
-        metricsMetadataCachingSource.incrementMetadataCacheInvalidationOperationsCount();
         Properties properties = new Properties();
         // Skip checking of system table existence since the system tables should have created
         // by now.
         properties.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
-                env.getConfiguration()).unwrap(PhoenixConnection.class);
-             Admin admin = connection.getQueryServices().getAdmin()) {
-            // This will incur an extra RPC to the master. This RPC is required since we want to
-            // get current list of regionservers.
-            Collection<ServerName> serverNames = admin.getRegionServers(true);
-            PhoenixStopWatch stopWatch = new PhoenixStopWatch().start();
-            try {
-                invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
-                metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
-            } catch (Throwable t) {
-                metricsMetadataCachingSource.incrementMetadataCacheInvalidationFailureCount();
-                throw t;
-            } finally {
-                metricsMetadataCachingSource
-                        .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
-            }
+                        env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+            ConnectionQueryServices queryServices = connection.getQueryServices();
+            queryServices.invalidateServerMetadataCache(requests);
         }
-    }
-
-    /**
-     * Invalidate metadata cache on all regionservers with retries for the given list of
-     * InvalidateServerMetadataCacheRequest. Each InvalidateServerMetadataCacheRequest contains
-     * tenantID, schema name and table name.
-     * We retry once before failing the operation.
-     *
-     * @param admin
-     * @param serverNames
-     * @param invalidateCacheRequests
-     * @param isRetry
-     * @throws Throwable
-     */
-    private void invalidateServerMetadataCacheWithRetries(Admin admin,
-            Collection<ServerName> serverNames,
-            List<InvalidateServerMetadataCacheRequest> invalidateCacheRequests,
-            boolean isRetry) throws Throwable {
-        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest protoRequest =
-                getRequest(invalidateCacheRequests);
-        // TODO Do I need my own executor or can I re-use QueryServices#Executor
-        //  since it is supposed to be used only for scans according to documentation?
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        Map<Future, ServerName> map = new HashMap<>();
-        for (ServerName serverName : serverNames) {
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
-                try {
-                    PhoenixStopWatch innerWatch = new PhoenixStopWatch().start();
-                    // TODO Using the same as ServerCacheClient but need to think if we need some
-                    // special controller for invalidating cache since this is in the path of
-                    // DDL operations. We also need to think of we need separate RPC handler
-                    // threads for this?
-                    ServerRpcController controller = new ServerRpcController();
-                    for (InvalidateServerMetadataCacheRequest invalidateCacheRequest
-                            : invalidateCacheRequests) {
-                        LOGGER.info("Sending invalidate metadata cache for {}  to region server:"
-                                + " {}", invalidateCacheRequest.toString(), serverName);
-                    }
-                    RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
-                            service = RegionServerEndpointProtos.RegionServerEndpointService
-                            .newBlockingStub(admin.coprocessorService(serverName));
-                    // The timeout for this particular request is managed by config parameter:
-                    // hbase.rpc.timeout. Even if the future times out, this runnable can be in
-                    // RUNNING state and will not be interrupted.
-                    service.invalidateServerMetadataCache(controller, protoRequest);
-                    long cacheInvalidationTime = innerWatch.stop().elapsedMillis();
-                    LOGGER.info("Invalidating metadata cache"
-                            + " on region server: {} completed successfully and it took {} ms",
-                            serverName, cacheInvalidationTime);
-                    metricsMetadataCachingSource
-                            .addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
-                } catch (ServiceException se) {
-                    LOGGER.error("Invalidating metadata cache failed for regionserver {}",
-                            serverName, se);
-                    IOException ioe = ServerUtil.parseServiceException(se);
-                    throw new CompletionException(ioe);
-                }
-            });
-            futures.add(future);
-            map.put(future, serverName);
-        }
-
-        // Here we create one master like future which tracks individual future
-        // for each region server.
-        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
-                futures.toArray(new CompletableFuture[0]));
-        try {
-            allFutures.get(metadataCacheInvalidationTimeoutMs, TimeUnit.MILLISECONDS);
-        } catch (Throwable t) {
-            List<ServerName> failedServers = getFailedServers(futures, map);
-            LOGGER.error("Invalidating metadata cache for failed for region servers: {}",
-                    failedServers, t);
-            if (isRetry) {
-                // If this is a retry attempt then just fail the operation.
-                if (allFutures.isCompletedExceptionally()) {
-                    if (t instanceof ExecutionException) {
-                        t = t.getCause();
-                    }
-                }
-                throw t;
-            } else {
-                // This is the first attempt, we can retry once.
-                // Indicate that this is a retry attempt.
-                invalidateServerMetadataCacheWithRetries(admin, failedServers,
-                        invalidateCacheRequests, true);
-            }
-        }
-    }
-
-    /*
-        Get the list of regionservers that failed the invalidateCache rpc.
-     */
-    private List<ServerName> getFailedServers(List<CompletableFuture<Void>> futures,
-                                              Map<Future, ServerName> map) {
-        List<ServerName> failedServers = new ArrayList<>();
-        for (CompletableFuture completedFuture : futures) {
-            if (completedFuture.isDone() == false) {
-                // If this task is still running, cancel it and keep in retry list.
-                ServerName sn = map.get(completedFuture);
-                failedServers.add(sn);
-                // Even though we cancel this future but it doesn't interrupt the executing thread.
-                completedFuture.cancel(true);
-            } else if (completedFuture.isCompletedExceptionally()
-                    || completedFuture.isCancelled()) {
-                // This means task is done but completed with exception
-                // or was canceled. Add it to retry list.
-                ServerName sn = map.get(completedFuture);
-                failedServers.add(sn);
-            }
-        }
-        return failedServers;
-    }
-
-    private RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest getRequest(
-            List<InvalidateServerMetadataCacheRequest> requests) {
-        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.Builder builder =
-                RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.newBuilder();
-        for (InvalidateServerMetadataCacheRequest request: requests) {
-            RegionServerEndpointProtos.InvalidateServerMetadataCache.Builder innerBuilder
-                    = RegionServerEndpointProtos.InvalidateServerMetadataCache.newBuilder();
-            innerBuilder.setTenantId(ByteStringer.wrap(request.getTenantId()));
-            innerBuilder.setSchemaName(ByteStringer.wrap(request.getSchemaName()));
-            innerBuilder.setTableName(ByteStringer.wrap(request.getTableName()));
-            builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
-        }
-        return builder.build();
     }
 
     /**
@@ -3830,7 +3649,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
             return table;
         } finally {
-            if (!wasLocked && rowLock != null) rowLock.release();
+            if (!wasLocked && rowLock != null) {
+                rowLock.release();
+            }
         }
     }
 

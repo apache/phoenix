@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,21 +18,34 @@
 package org.apache.hadoop.hbase.ipc.controller;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.ipc.DelegatingHBaseRpcController;
+import org.apache.hadoop.hbase.ipc.HBaseRpcController;
+import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when
- * making server-server remote RPCs to the region servers hosting Phoenix SYSTEM tables.
+ * Controller used to invalidate server side metadata cache RPCs.
  */
-public class ServerSideRPCControllerFactory  {
+public class InvalidateMetadataCacheController extends DelegatingHBaseRpcController {
+    private int priority;
 
-    protected final Configuration conf;
-
-    public ServerSideRPCControllerFactory(Configuration conf) {
-        this.conf = conf;
+    public InvalidateMetadataCacheController(HBaseRpcController delegate, Configuration conf) {
+        super(delegate);
+        this.priority = PhoenixRpcSchedulerFactory.getInvalidateMetadataCachePriority(conf);
     }
 
-    public ServerToServerRpcController newController() {
-        return new ServerToServerRpcControllerImpl(this.conf);
+    @Override
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    @Override
+    public void setPriority(TableName tn) {
+        // Nothing
+    }
+
+    @Override
+    public int getPriority() {
+        return this.priority;
     }
 }
