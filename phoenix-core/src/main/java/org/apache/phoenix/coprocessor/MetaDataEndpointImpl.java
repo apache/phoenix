@@ -86,6 +86,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG_TYPE;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
+import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
@@ -1465,8 +1466,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = Lists.newArrayList();
         List<PName> physicalTables = Lists.newArrayList();
-        PName parentTableName = tableType == INDEX ? dataTableName : null;
-        PName parentSchemaName = tableType == INDEX ? schemaName : null;
+        PName parentTableName = tableType == INDEX || tableType == CDC ? dataTableName : null;
+        PName parentSchemaName = tableType == INDEX || tableType == CDC ? schemaName : null;
         PName parentLogicalName = null;
         EncodedCQCounter cqCounter = null;
         if (oldTable != null) {

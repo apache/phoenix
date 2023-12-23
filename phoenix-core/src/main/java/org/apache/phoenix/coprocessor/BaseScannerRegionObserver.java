@@ -150,7 +150,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
-    
+    public static final String CDC_DATA_TABLE_NAME = "_CdcDataTableName";
+    public static final String CDC_JSON_COL_QUALIFIER = "_CdcJsonColumn_Qualifier";
+    public static final String CDC_INCLUDE_SCOPES = "_CdcIncludeScopes";
+    public static final String DATA_COL_QUALIFIER_TO_NAME_MAP = "_DataColQualToNameMap";
+    public static final String DATA_COL_QUALIFIER_TO_TYPE_MAP = "_DataColQualToTypeMap";
+
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
     // In case of Index Write failure, we need to determine that Index mutation

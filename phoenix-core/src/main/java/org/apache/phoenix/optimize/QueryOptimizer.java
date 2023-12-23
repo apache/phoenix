@@ -19,6 +19,7 @@
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -72,6 +73,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
@@ -216,6 +218,20 @@ public class QueryOptimizer {
                 && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
+
+        PTable table = dataPlan.getTableRef().getTable();
+        // TODO: Need to handle CDC hints.
+        if (table.getType() == PTableType.CDC) {
+            Set<PTable.CDCChangeScope> cdcIncludeScopes = table.getCDCIncludeScopes();
+            String cdcHint = select.getHint().getHint(Hint.INCLUDE);
+            if (cdcHint != null && cdcHint.startsWith(HintNode.PREFIX)) {
+                cdcIncludeScopes = CDCUtil.makeChangeScopeEnumsFromString(cdcHint.substring(1,
+                        cdcHint.length() - 1));
+            }
+            dataPlan.getContext().setCDCIncludeScopes(cdcIncludeScopes);
+            return Arrays.asList(dataPlan);
+        }
+
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
         if (dataPlan.isApplicable() && (indexes.isEmpty()
                 || dataPlan.isDegenerate()
@@ -236,8 +252,8 @@ public class QueryOptimizer {
             targetColumns = targetDatums;
         }
         
-        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         List<QueryPlan> plans = Lists.newArrayListWithExpectedSize(1 + indexes.size());
+        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
         plans.add(dataPlan);
         QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
         if (hintedPlan != null) {

@@ -28,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -82,6 +85,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
@@ -697,6 +701,14 @@ public class QueryCompiler {
             projectedTable = TupleProjectionCompiler.createProjectedTable(select, context);
             if (projectedTable != null) {
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), select.getUdfParseNodes()));
+            }
+
+            if (context.getCurrentTable().getTable().getType() == PTableType.CDC) {
+                // This will get the data column added to the context so that projection can get
+                // serialized..
+                context.getDataColumnPosition(
+                        context.getCurrentTable().getTable().getColumnForColumnName(
+                                QueryConstants.CDC_JSON_COL_NAME));
             }
         }
         

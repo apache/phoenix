@@ -1795,7 +1795,9 @@ public class PTableImpl implements PTable {
                 return SchemaUtil.getPhysicalHBaseTableName(schemaName,
                         physicalTableNameColumnInSyscat, isNamespaceMapped);
             }
-            return SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMapped);
+            return SchemaUtil.getPhysicalHBaseTableName(schemaName, getType() == PTableType.CDC ?
+                    PNameFactory.newName(CDCUtil.getCDCIndexName(tableName.getString())) :
+                    tableName, isNamespaceMapped);
         } else {
             return PNameFactory.newName(physicalNames.get(0).getBytes());
         }

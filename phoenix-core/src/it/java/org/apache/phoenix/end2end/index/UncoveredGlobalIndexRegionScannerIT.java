@@ -175,7 +175,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             String timeZoneID = Calendar.getInstance().getTimeZone().getID();
             // Write a query to get the val2 = 'bc' with a time range query
             String query = "SELECT"+ (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
-                    + "val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName
+                    + "val1, val2, PHOENIX_ROW_TIMESTAMP(), val3 from " + dataTableName
                     + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
                     + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '"
                     + timeZoneID + "') AND " + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after
@@ -186,8 +186,10 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals("bc", rs.getString(1));
             assertEquals("bcd", rs.getString(2));
+            assertEquals("bcd", rs.getString(2));
             assertTrue(rs.getTimestamp(3).after(before));
             assertTrue(rs.getTimestamp(3).before(after));
+            assertEquals("bcde", rs.getString(4));
             assertFalse(rs.next());
             // Count the number of index rows
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) from " + indexTableName);
@@ -206,10 +208,11 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertEquals("bcd", rs.getString(2));
             assertTrue(rs.getTimestamp(3).after(before));
             assertTrue(rs.getTimestamp(3).before(after));
+            assertEquals("bcde", rs.getString(4));
             assertFalse(rs.next());
             // Write a time range query to get the last row with val2 ='bc'
             query = "SELECT"+ (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
-                    +"val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName +
+                    +"val1, val2, PHOENIX_ROW_TIMESTAMP(), val3 from " + dataTableName +
                     " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
                     + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
             // Verify that we will read from the index table
@@ -219,6 +222,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertEquals("bc", rs.getString(1));
             assertEquals("ccc", rs.getString(2));
             assertTrue(rs.getTimestamp(3).after(after));
+            assertEquals("cccc", rs.getString(4));
             assertFalse(rs.next());
             // Verify that we can execute the same query without using the index
             String noIndexQuery = "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE val1 = 'bc' AND " +

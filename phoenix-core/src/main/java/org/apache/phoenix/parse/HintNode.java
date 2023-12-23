@@ -17,9 +17,14 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -36,9 +41,11 @@ public class HintNode {
     public static final char SEPARATOR = ' ';
     public static final String PREFIX = "(";
     public static final String SUFFIX = ")";
-    // Split on whitespace and parenthesis, keeping the parenthesis in the token array
-    private static final String SPLIT_REGEXP = "\\s+|((?<=\\" + PREFIX + ")|(?=\\" + PREFIX + "))|((?<=\\" + SUFFIX + ")|(?=\\" + SUFFIX + "))";
-    
+    // Each hint is of the generic syntax hintWord(hintArgs) where hintArgs in parent are optional.
+    private static final Pattern HINT_PATTERN = Pattern.compile(
+            "(?<hintWord>\\w+)\\s*(?:\\s*\\(\\s*(?<hintArgs>[^)]+)\\s*\\))?");
+    private static final Pattern HINT_ARG_PATTERN = Pattern.compile("(?<hintArg>\"[^\"]+\"|\\S+)");
+
     public enum Hint {
         /**
          * Forces a range scan to be used to process the query.
@@ -53,62 +60,62 @@ public class HintNode {
          */
         NO_CHILD_PARENT_JOIN_OPTIMIZATION,
         /**
-        * Prevents the usage of indexes, forcing usage
-        * of the data table for a query.
-        */
-       NO_INDEX,
-       /**
-       * Hint of the form {@code INDEX(<table_name> <index_name>...) }
-       * to suggest usage of the index if possible. The first
-       * usable index in the list of indexes will be choosen.
-       * Table and index names may be surrounded by double quotes
-       * if they are case sensitive.
-       */
-       INDEX,
-       /**
-        * All things being equal, use the data table instead of
-        * the index table when optimizing.
-        */
-       USE_DATA_OVER_INDEX_TABLE,
-       /**
-        * All things being equal, use the index table instead of
-        * the data table when optimizing.
-        */
-       USE_INDEX_OVER_DATA_TABLE,
-       /**
-        * Avoid caching any HBase blocks loaded by this query.
-        */
-       NO_CACHE,
-       /**
-        * Use sort-merge join algorithm instead of broadcast join (hash join) algorithm.
-        */
-       USE_SORT_MERGE_JOIN,
-       /**
-        * Persist the RHS results of a hash join.
-        */
-       USE_PERSISTENT_CACHE,
-       /**
-        * Avoid using star-join optimization. Used for broadcast join (hash join) only.
-        */
-       NO_STAR_JOIN,
-       /**
-        * Avoid using the no seek optimization. When there are many columns which are not selected coming in between 2
-        * selected columns and/or versions of columns, this should be used.
-        */
-      SEEK_TO_COLUMN,
-       /**
-        * Avoid seeks to select specified columns. When there are very less number of columns which are not selected in
-        * between 2 selected columns this will be give better performance.
-        */
-      NO_SEEK_TO_COLUMN,
-      /**
-       * Saves an RPC call on the scan. See Scan.setSmall(true) in HBase documentation.
-       */
-     SMALL,
-     /**
-      * Enforces a serial scan.
-      */
-     SERIAL,
+         * Prevents the usage of indexes, forcing usage
+         * of the data table for a query.
+         */
+        NO_INDEX,
+        /**
+         * Hint of the form {@code INDEX(<table_name> <index_name>...) }
+         * to suggest usage of the index if possible. The first
+         * usable index in the list of indexes will be choosen.
+         * Table and index names may be surrounded by double quotes
+         * if they are case sensitive.
+         */
+        INDEX,
+        /**
+         * All things being equal, use the data table instead of
+         * the index table when optimizing.
+         */
+        USE_DATA_OVER_INDEX_TABLE,
+        /**
+         * All things being equal, use the index table instead of
+         * the data table when optimizing.
+         */
+        USE_INDEX_OVER_DATA_TABLE,
+        /**
+         * Avoid caching any HBase blocks loaded by this query.
+         */
+        NO_CACHE,
+        /**
+         * Use sort-merge join algorithm instead of broadcast join (hash join) algorithm.
+         */
+        USE_SORT_MERGE_JOIN,
+        /**
+         * Persist the RHS results of a hash join.
+         */
+        USE_PERSISTENT_CACHE,
+        /**
+         * Avoid using star-join optimization. Used for broadcast join (hash join) only.
+         */
+        NO_STAR_JOIN,
+        /**
+         * Avoid using the no seek optimization. When there are many columns which are not selected coming in between 2
+         * selected columns and/or versions of columns, this should be used.
+         */
+        SEEK_TO_COLUMN,
+        /**
+         * Avoid seeks to select specified columns. When there are very less number of columns which are not selected in
+         * between 2 selected columns this will be give better performance.
+         */
+        NO_SEEK_TO_COLUMN,
+        /**
+         * Saves an RPC call on the scan. See Scan.setSmall(true) in HBase documentation.
+         */
+        SMALL,
+        /**
+         * Enforces a serial scan.
+         */
+        SERIAL,
         /**
          * Enforces a forward scan.
          */
@@ -121,7 +128,13 @@ public class HintNode {
         /**
          * Do not use server merge for hinted uncovered indexes
          */
-        NO_INDEX_SERVER_MERGE
+        NO_INDEX_SERVER_MERGE,
+
+        /**
+         * Override the default CDC include scopes.
+         */
+        INCLUDE,
+        ;
     };
 
     private final Map<Hint,String> hints;
@@ -160,41 +173,33 @@ public class HintNode {
 
     public HintNode(String hint) {
         Map<Hint,String> hints = new HashMap<Hint,String>();
-        // Split on whitespace or parenthesis. We do not need to handle escaped or
-        // embedded whitespace/parenthesis, since we are parsing what will be HBase
-        // table names which are not allowed to contain whitespace or parenthesis.
-        String[] hintWords = hint.split(SPLIT_REGEXP);
-        for (int i = 0; i < hintWords.length; i++) {
-            String hintWord = hintWords[i];
-            if (hintWord.isEmpty()) {
-                continue;
-            }
+        Matcher hintMatcher = HINT_PATTERN.matcher(hint);
+        while (hintMatcher.find()) {
             try {
-                Hint key = Hint.valueOf(hintWord.toUpperCase());
-                String hintValue = "";
-                if (i+1 < hintWords.length && PREFIX.equals(hintWords[i+1])) {
-                    StringBuffer hintValueBuf = new StringBuffer(hint.length());
-                    hintValueBuf.append(PREFIX);
-                    i+=2;
-                    while (i < hintWords.length && !SUFFIX.equals(hintWords[i])) {
-                        hintValueBuf.append(SchemaUtil.normalizeIdentifier(hintWords[i++]));
-                        hintValueBuf.append(SEPARATOR);
+                Hint hintWord = Hint.valueOf(hintMatcher.group("hintWord").toUpperCase());
+                String hintArgsStr = hintMatcher.group("hintArgs");
+                List<String> hintArgs = new ArrayList<>();
+                if (hintArgsStr != null) {
+                    Matcher hintArgMatcher = HINT_ARG_PATTERN.matcher(hintArgsStr);
+                    while (hintArgMatcher.find()) {
+                        hintArgs.add(SchemaUtil.normalizeIdentifier(hintArgMatcher.group()));
                     }
-                    // Replace trailing separator with suffix
-                    hintValueBuf.replace(hintValueBuf.length()-1, hintValueBuf.length(), SUFFIX);
-                    hintValue = hintValueBuf.toString();
                 }
-                String oldValue = hints.put(key, hintValue);
-                // Concatenate together any old value with the new value
-                if (oldValue != null) {
-                    hints.put(key, oldValue + hintValue);
+                hintArgsStr = String.join(" ", hintArgs);
+                hintArgsStr = hintArgsStr.equals("") ? "" : "(" + hintArgsStr + ")";
+                if (hints.containsKey(hintWord)) {
+                    // Concatenate together any old value with the new value
+                    hints.put(hintWord, hints.get(hintWord) + hintArgsStr);
+                }
+                else {
+                    hints.put(hintWord, hintArgsStr);
                 }
             } catch (IllegalArgumentException e) { // Ignore unknown/invalid hints
             }
         }
         this.hints = ImmutableMap.copyOf(hints);
     }
-    
+
     public boolean isEmpty() {
         return hints.isEmpty();
     }

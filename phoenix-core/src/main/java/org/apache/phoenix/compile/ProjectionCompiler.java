@@ -237,7 +237,7 @@ public class ProjectionCompiler {
             ColumnRef ref = null;
             try {
                 indexColumn = index.getColumnForColumnName(indexColName);
-                //TODO could should we do this more efficiently than catching the expcetion ?
+                // TODO: Should we do this more efficiently than catching the exception ?
             } catch (ColumnNotFoundException e) {
                 if (IndexUtil.shouldIndexBeUsedForUncoveredQuery(tableRef)) {
                     //Projected columns have the same name as in the data table

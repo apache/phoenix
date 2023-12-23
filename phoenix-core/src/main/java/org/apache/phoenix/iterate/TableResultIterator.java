@@ -152,7 +152,7 @@ public class TableResultIterator implements ResultIterator {
                 .getInt(QueryConstants.HASH_JOIN_CACHE_RETRIES, QueryConstants.DEFAULT_HASH_JOIN_CACHE_RETRIES);
         this.isMapReduceContext = isMapReduceContext;
         this.maxQueryEndTime = maxQueryEndTime;
-        ScanUtil.setScanAttributesForClient(scan, table, plan.getContext().getConnection());
+        ScanUtil.setScanAttributesForClient(scan, table, plan.getContext());
     }
 
     // Constructors without maxQueryEndTime to maintain API compatibility for phoenix-connectors

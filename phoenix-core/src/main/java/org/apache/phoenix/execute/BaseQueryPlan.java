@@ -22,6 +22,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -79,6 +80,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -314,30 +316,38 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ScanUtil.setCustomAnnotations(scan,
                 customAnnotations == null ? null : customAnnotations.getBytes());
         // Set index related scan attributes.
-        if (table.getType() == PTableType.INDEX) {
+        if (table.getType() == PTableType.INDEX || table.getType() == PTableType.CDC) {
             if (table.getIndexType() == IndexType.LOCAL) {
                 ScanUtil.setLocalIndex(scan);
             } else if (context.isUncoveredIndex()) {
                 ScanUtil.setUncoveredGlobalIndex(scan);
             }
 
+            PTable dataTable = null;
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes
             // 1. data columns to be projected and their key value schema.
-            // 2. index maintainer and view constants if exists to build data row key from index row key. 
+            // 2. index maintainer and view constants if exists to build data row key from index row key.
             // TODO: can have an hint to skip joining back to data table, in that case if any column to
             // project is not present in the index then we need to skip this plan.
             if (!dataColumns.isEmpty()) {
                 // Set data columns to be join back from data table.
                 PTable parentTable = context.getCurrentTable().getTable();
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
-                String parentTableName = parentTable.getParentTableName().getString();
-                final ParseNodeFactory FACTORY = new ParseNodeFactory();
-                TableRef dataTableRef =
-                        FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
-                            context.getConnection()).resolveTable(parentSchemaName, parentTableName);
-                PTable dataTable = dataTableRef.getTable();
+                if (parentTable.getType() == PTableType.CDC) {
+                    dataTable = parentTable;
+                }
+                else {
+                    String parentTableName = parentTable.getParentTableName().getString();
+                    final ParseNodeFactory FACTORY = new ParseNodeFactory();
+                    TableRef dataTableRef =
+                            FromCompiler.getResolver(
+                                    FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
+                                    context.getConnection()).resolveTable(parentSchemaName, parentTableName);
+                    dataTable = dataTableRef.getTable();
+                }
+            }
+            if (! dataColumns.isEmpty()) {
                 // Set data columns to be join back from data table.
                 serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);

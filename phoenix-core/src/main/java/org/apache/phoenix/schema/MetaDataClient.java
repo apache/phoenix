@@ -1770,14 +1770,17 @@ public class MetaDataClient {
                         new HashMap<>(), null);
         // TODO: Currently index can be dropped, leaving the CDC dangling, DROP INDEX needs to
         //  protect based on CDCUtil.isACDCIndex().
-        // TODO: Should we also allow PTimestamp here?
         MutationState indexMutationState;
         try {
+            // TODO: Should we also allow PTimestamp here, in fact PTimestamp is the right type,
+            // but we are forced to support PDate because of incorrect type for
+            // PHOENIX_ROW_TIMESTAMP (see PHOENIX-6807)?
             indexMutationState = createIndex(indexStatement, null, PDate.INSTANCE);
         } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
                 throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
-                        statement.getCdcObjName().getName()).build().buildException();
+                        statement.getCdcObjName().getName()).setRootCause(
+                                e).build().buildException();
             }
             // TODO: What about translating other index creation failures? E.g., bad TS column.
             throw e;
@@ -1791,8 +1794,8 @@ public class MetaDataClient {
         ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ?
                 statement.getTimeIdxColumn() :
                 FACTORY.columnName(statement.getTimeIdxFunc().toString());
-        columnDefs.add(FACTORY.columnDef(timeIdxCol, PTimestamp.INSTANCE.getSqlTypeName(), false, null, false,
-                PTimestamp.INSTANCE.getMaxLength(null), PTimestamp.INSTANCE.getScale(null), false,
+        columnDefs.add(FACTORY.columnDef(timeIdxCol, PDate.INSTANCE.getSqlTypeName(), false, null, false,
+                PDate.INSTANCE.getMaxLength(null), PDate.INSTANCE.getScale(null), false,
                 SortOrder.getDefault(), "", null, false));
         pkColumnDefs.add(FACTORY.columnDefInPkConstraint(timeIdxCol, SortOrder.getDefault(), false));
         for (PColumn pcol : pkColumns) {
