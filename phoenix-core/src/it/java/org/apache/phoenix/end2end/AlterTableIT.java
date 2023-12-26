@@ -1808,8 +1808,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         Long maxLookbackAge = oneDayInMillis;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE  " + fullTableName +
-                    "  (a_string varchar not null PRIMARY KEY, col1 integer" +
-                    "  ) " + "MAX_LOOKBACK_AGE=" + maxLookbackAge;
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer) MAX_LOOKBACK_AGE=" + maxLookbackAge;
             conn.createStatement().execute(ddl);
             assertMaxLookbackAge(fullTableName, maxLookbackAge);
             maxLookbackAge = 3L * oneDayInMillis;
@@ -1831,8 +1830,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE  " + fullTableName +
-                    "  (a_string varchar not null, a_binary VARCHAR not null, col1 integer" +
-                    "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary)) " + "MAX_LOOKBACK_AGE=" + oneDayInMillis;
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer) MAX_LOOKBACK_AGE=" + oneDayInMillis;
             conn.createStatement().execute(ddl);
         }
         assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "2309.3"));

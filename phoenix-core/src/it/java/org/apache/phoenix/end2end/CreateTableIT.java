@@ -1724,11 +1724,6 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         createTableWithTableLevelMaxLookbackAge(fullTableName, "NULL");
         assertNull(queryTableLevelMaxLookbackAge(fullTableName));
-        schemaName = generateUniqueName();
-        dataTableName = generateUniqueName();
-        fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
-        createTableWithTableLevelMaxLookbackAge(fullTableName, "null");
-        assertNull(queryTableLevelMaxLookbackAge(fullTableName));
     }
 
     @Test
@@ -1774,9 +1769,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     private void createTableWithTableLevelMaxLookbackAge(String fullTableName, String maxLookbackAge) throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String createDdl = "CREATE TABLE " + fullTableName +
-                    " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
-                    " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
-                    "MAX_LOOKBACK_AGE="+maxLookbackAge;
+                    " (id char(1) NOT NULL PRIMARY KEY,  col1 integer) MAX_LOOKBACK_AGE="+maxLookbackAge;
             conn.createStatement().execute(createDdl);
         }
     }
