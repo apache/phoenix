@@ -309,6 +309,7 @@ import com.google.protobuf.Service;
 @SuppressWarnings("deprecation")
 @CoreCoprocessor
 public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCoprocessor {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataEndpointImpl.class);
 
     private static final byte[] CHILD_TABLE_BYTES = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};

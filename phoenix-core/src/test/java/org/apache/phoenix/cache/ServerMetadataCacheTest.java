@@ -73,7 +73,6 @@ import static org.mockito.Mockito.verify;
 
 @Category(ParallelStatsDisabledIT.class)
 public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
-
     private final Random RANDOM = new Random(42);
     private final long NEVER = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
 
