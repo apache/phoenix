@@ -18,8 +18,8 @@
 package org.apache.phoenix.cache;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessor.metrics.MetricsMetadataCachingSource;
-import org.apache.phoenix.coprocessor.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;

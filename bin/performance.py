@@ -63,44 +63,13 @@ statements = ""
 
 phoenix_utils.setPath()
 
-# HBase configuration folder path (where hbase-site.xml reside) for
-# HBase/Phoenix client side property override
-hbase_config_path = phoenix_utils.hbase_conf_dir
+java_cmd = phoenix_utils.java
 
-java_home = os.getenv('JAVA_HOME')
-
-# load hbase-env.??? to extract JAVA_HOME, HBASE_PID_DIR, HBASE_LOG_DIR
-hbase_env_path = None
-hbase_env_cmd  = None
-if os.name == 'posix':
-    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.sh')
-    hbase_env_cmd = ['bash', '-c', 'source %s && env' % hbase_env_path]
-elif os.name == 'nt':
-    hbase_env_path = os.path.join(hbase_config_path, 'hbase-env.cmd')
-    hbase_env_cmd = ['cmd.exe', '/c', 'call %s & set' % hbase_env_path]
-if not hbase_env_path or not hbase_env_cmd:
-    sys.stderr.write("hbase-env file unknown on platform {}{}".format(os.name, os.linesep))
-    sys.exit(-1)
-
-hbase_env = {}
-if os.path.isfile(hbase_env_path):
-    p = subprocess.Popen(hbase_env_cmd, stdout = subprocess.PIPE)
-    for x in p.stdout:
-        (k, _, v) = x.decode().partition('=')
-        hbase_env[k.strip()] = v.strip()
-
-if 'JAVA_HOME' in hbase_env:
-    java_home = hbase_env['JAVA_HOME']
-
-if java_home:
-    java_cmd = os.path.join(java_home, 'bin', 'java')
-else:
-    java_cmd = 'java'
-
-execute = ('%s $PHOENIX_OPTS -cp "%s%s%s%s%s" -Dlog4j2.configurationFile=file:' +
+execute = ('%s %s $PHOENIX_OPTS -cp "%s%s%s%s%s"-Dlog4j2.configurationFile=file:' +
            os.path.join(phoenix_utils.current_dir, "log4j2.properties") +
            ' org.apache.phoenix.util.PhoenixRuntime -t %s %s ') % \
-    (java_cmd, hbase_config_path, os.pathsep, phoenix_utils.slf4j_backend_jar, os.pathsep,
+    (java_cmd, phoenix_utils.jvm_module_flags, hbase_config_path, os.pathsep,
+     phoenix_utils.slf4j_backend_jar, os.pathsep,
      phoenix_utils.logging_jar, os.pathsep, phoenix_utils.phoenix_client_embedded_jar,
      table, zookeeper)
 

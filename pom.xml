@@ -44,6 +44,8 @@
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
     <module>phoenix-hbase-compat-2.4.0</module>
+    <module>phoenix-core-client</module>
+    <module>phoenix-core-server</module>
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-tracing-webapp</module>
@@ -60,7 +62,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>23</version>
+    <version>30</version>
   </parent>
 
   <scm>
@@ -115,7 +117,6 @@
     <commons-compress.version>1.21</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
     <commons-configuration2.version>2.1.1</commons-configuration2.version>
-    <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
@@ -140,19 +141,22 @@
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
 
     <!-- Plugin versions -->
-    <maven-eclipse-plugin.version>2.9</maven-eclipse-plugin.version>
-    <maven-build-helper-plugin.version>1.9.1</maven-build-helper-plugin.version>
-    <maven-enforcer-plugin.version>3.0.0-M3</maven-enforcer-plugin.version>
-    <restrict-imports.enforcer.version>1.1.0</restrict-imports.enforcer.version>
-    <maven-shade-plugin.version>3.2.4</maven-shade-plugin.version>
+    <maven-eclipse-plugin.version>2.10</maven-eclipse-plugin.version>
+    <maven-build-helper-plugin.version>3.5.0</maven-build-helper-plugin.version>
+    <restrict-imports.enforcer.version>2.4.0</restrict-imports.enforcer.version>
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
-    <maven-project-info-reports-plugin.version>3.1.1</maven-project-info-reports-plugin.version>
-    <!-- Override property in ASF parent -->
-    <surefire.version>3.0.0</surefire.version>
-    <spotbugs-maven-plugin.version>4.4.1</spotbugs-maven-plugin.version>
-    <spotbugs.version>4.4.1</spotbugs.version>
-    <jacoco-maven-plugin.version>0.8.8</jacoco-maven-plugin.version>
-    <sonar-maven-plugin.version>3.9.1.2184</sonar-maven-plugin.version>
+    <spotbugs-maven-plugin.version>4.8.1.0</spotbugs-maven-plugin.version>
+    <spotbugs.version>4.8.1</spotbugs.version>
+    <jacoco-maven-plugin.version>0.8.11</jacoco-maven-plugin.version>
+    <sonar-maven-plugin.version>3.10.0.2594</sonar-maven-plugin.version>
+    <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
+    <maven-owasp-plugin.version>8.4.0</maven-owasp-plugin.version>
+    <os.maven.version>1.7.1</os.maven.version>
+    <jasmine-maven-plugin.version>2.2</jasmine-maven-plugin.version>
+    <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
+    <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
+    <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
+    <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
 
     <!-- Plugin options -->
     <numForkedUT>8</numForkedUT>
@@ -205,9 +209,7 @@
     <jacoco.instruction.coverage.percentage>0.700</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.600</jacoco.branch.coverage.percentage>
 
-    <maven-owasp-plugin.version>6.5.3</maven-owasp-plugin.version>
     <protobuf.plugin.version>0.6.1</protobuf.plugin.version>
-    <os.maven.version>1.5.0.Final</os.maven.version>
     <!-- PHOENIX-6806 - Default protoc architecture to the detected one,
       but allow for profile overrides -->
     <protoc.arch>${os.detected.classifier}</protoc.arch>
@@ -229,7 +231,6 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-project-info-reports-plugin</artifactId>
-          <version>${maven-project-info-reports-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -243,7 +244,7 @@
         <plugin>
           <groupId>com.github.searls</groupId>
           <artifactId>jasmine-maven-plugin</artifactId>
-          <version>2.2</version>
+          <version>${jasmine-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>com.github.spotbugs</groupId>
@@ -267,7 +268,7 @@
         <plugin>
           <groupId>org.eclipse.m2e</groupId>
           <artifactId>lifecycle-mapping</artifactId>
-          <version>1.0.0</version>
+          <version>${lifecycle-mapping.version}</version>
           <configuration>
             <lifecycleMappingMetadata>
               <pluginExecutions>
@@ -399,6 +400,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-dependency-plugin</artifactId>
+          <version>3.1.1</version>
           <configuration>
               <ignoredUnusedDeclaredDependencies>
                 <ignoredUnusedDeclaredDependency>
@@ -463,18 +465,17 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>${maven-shade-plugin.version}</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
           <groupId>org.apache.felix</groupId>
           <artifactId>maven-bundle-plugin</artifactId>
-          <version>2.5.3</version>
+          <version>${maven-bundle-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
-          <version>1.6.0</version>
+          <version>${exec-maven-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.xolstice.maven.plugins</groupId>
@@ -484,7 +485,6 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-enforcer-plugin</artifactId>
-          <version>${maven-enforcer-plugin.version}</version>
           <dependencies>
             <dependency>
               <groupId>de.skuzzle.enforcer</groupId>
@@ -501,42 +501,42 @@
               </goals>
               <configuration>
                 <rules>
-                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                  <RestrictImports>
                     <includeTestCode>true</includeTestCode>
                     <reason>Use SLF4j for logging</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.logging.Log</bannedImport>
                       <bannedImport>org.apache.commons.logging.LogFactory</bannedImport>
                     </bannedImports>
-                  </restrictImports>
-                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                  </RestrictImports>
+                  <RestrictImports>
                     <includeTestCode>true</includeTestCode>
                     <reason>Use shaded version in phoenix-thirdparty</reason>
                     <bannedImports>
                       <bannedImport>com.google.common.**</bannedImport>
                     </bannedImports>
-                  </restrictImports>
-                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                  </RestrictImports>
+                  <RestrictImports>
                     <includeTestCode>true</includeTestCode>
                     <reason>Use shaded version in phoenix-thirdparty</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.cli.**</bannedImport>
                     </bannedImports>
-                  </restrictImports>
-                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                  </RestrictImports>
+                  <RestrictImports>
                     <includeTestCode>true</includeTestCode>
                     <reason>Use commons lang 3</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.lang.**</bannedImport>
                     </bannedImports>
-                  </restrictImports>
-                  <restrictImports implementation="de.skuzzle.enforcer.restrictimports.rule.RestrictImports">
+                  </RestrictImports>
+                  <RestrictImports>
                     <includeTestCode>true</includeTestCode>
                     <reason>Use edu.umd.cs.findbugs.annotations</reason>
                     <bannedImports>
                       <bannedImport>com.sun.istack.**</bannedImport>
                     </bannedImports>
-                  </restrictImports>
+                  </RestrictImports>
                 </rules>
               </configuration>
             </execution>
@@ -549,7 +549,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.0</version>
+        <version>${maven-checkstyle-plugin.version}</version>
         <configuration>
           <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
           <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
@@ -674,6 +674,16 @@
   <dependencyManagement>
     <dependencies>
       <!-- Intra-project dependencies -->
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-core-client</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-core-server</artifactId>
+        <version>${project.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-core</artifactId>
