@@ -57,6 +57,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT_BYTES
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
@@ -131,6 +132,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
@@ -1442,6 +1444,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Long maxLookbackAge = maxLookbackAgeKv == null ? null :
                 PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
                         maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
+
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :
@@ -1600,6 +1603,33 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return builder.build();
+    }
+
+    private Long scanMaxLookbackAgeFromParent(byte[] key, long clientTimeStamp) throws IOException {
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
+        ResultScanner scanner = sysCat.getScanner(scan);
+        Result result = scanner.next();
+        boolean startCheckingForLink = false;
+        do {
+            if (result == null) {
+                return null;
+            }
+            else if (startCheckingForLink) {
+
+            }
+            else {
+                byte[] maxLookbackAgeInBytes = result.getValue(DEFAULT_COLUMN_FAMILY_NAME_BYTES,
+                        MAX_LOOKBACK_AGE_BYTES);
+                if (maxLookbackAgeInBytes != null) {
+                    return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
+                }
+            }
+            result = scanner.next();
+            startCheckingForLink = true;
+        } while (result != null);
+        return null;
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {

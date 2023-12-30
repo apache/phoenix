@@ -2116,6 +2116,15 @@ public class MetaDataClient {
             String streamingTopicName = (String) TableProperty.STREAMING_TOPIC_NAME.getValue(tableProps);
             Long maxLookbackAge = (Long) TableProperty.MAX_LOOKBACK_AGE.getValue(tableProps);
 
+            if (maxLookbackAge != null && tableType != TABLE) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                        MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY)
+                        .setSchemaName(schemaName)
+                        .setTableName(tableName)
+                        .build()
+                        .buildException();
+            }
+
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
                 isImmutableRows = parent.isImmutableRows();
@@ -5369,7 +5378,7 @@ public class MetaDataClient {
                         metaProperties.setSchemaVersion((String) value);
                     } else if (propName.equalsIgnoreCase(STREAMING_TOPIC_NAME)) {
                         metaProperties.setStreamingTopicName((String) value);
-                    } else if (propName.equals(MAX_LOOKBACK_AGE)) {
+                    } else if (propName.equalsIgnoreCase(MAX_LOOKBACK_AGE)) {
                         metaProperties.setMaxLookbackAge((Long) value);
                     }
                 }
@@ -5580,6 +5589,14 @@ public class MetaDataClient {
         }
 
         if (! Objects.equals(metaProperties.getMaxLookbackAge(), table.getMaxLookbackAge())) {
+            if (table.getType() != TABLE) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                        MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY)
+                        .setSchemaName(schemaName)
+                        .setTableName(tableName)
+                        .build()
+                        .buildException();
+            }
             metaPropertiesEvaluated.setMaxLookbackAge(metaProperties.getMaxLookbackAge());
             changingPhoenixTableProperty = true;
         }
