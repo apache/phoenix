@@ -85,6 +85,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
+import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
+import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -1444,6 +1446,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Long maxLookbackAge = maxLookbackAgeKv == null ? null :
                 PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
                         maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
+        if (tableType != PTableType.TABLE) {
+            byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                    schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
+            maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
+        }
+        builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
+                (oldTable != null ? oldTable.getMaxLookbackAge() : null));
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
@@ -1542,7 +1551,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         physicalTables.add(PNameFactory.newName(parentPhysicalTableName));
                         setPhysicalName = true;
                         parentLogicalName = SchemaUtil.getTableName(parentTable.getSchemaName(), parentTable.getTableName());
-                        maxLookbackAge = parentTable.getMaxLookbackAge();
                     }
                 } else if (linkType == LinkType.PARENT_TABLE) {
                     parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(famName.getBytes()));
@@ -1578,8 +1586,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setIndexes(indexes != null ? indexes : oldTable != null
             ? oldTable.getIndexes() : Collections.<PTable>emptyList());
 
-        builder.setMaxLookbackAge(maxLookbackAge);
-
         if (physicalTables == null || physicalTables.size() == 0) {
             builder.setPhysicalNames(oldTable != null ? oldTable.getPhysicalNames()
                 : ImmutableList.<PName>of());
@@ -1612,12 +1618,26 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         ResultScanner scanner = sysCat.getScanner(scan);
         Result result = scanner.next();
         boolean startCheckingForLink = false;
+        byte[] parentTableKey = null;
         do {
             if (result == null) {
                 return null;
             }
             else if (startCheckingForLink) {
-
+                byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+                if (linkTypeBytes != null) {
+                    LinkType linkType = LinkType.fromSerializedValue(linkTypeBytes[0]);
+                    int rowKeyColMetadataLength = 5;
+                    byte[][] rowKeyMetaData = new byte[rowKeyColMetadataLength][];
+                    getVarChars(result.getRow(), rowKeyColMetadataLength, rowKeyMetaData);
+                    if (linkType == VIEW_INDEX_PARENT_TABLE) {
+                        parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+                        return scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+                    }
+                    else if (linkType == PHYSICAL_TABLE) {
+                        parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+                    }
+                }
             }
             else {
                 byte[] maxLookbackAgeInBytes = result.getValue(DEFAULT_COLUMN_FAMILY_NAME_BYTES,
@@ -1629,7 +1649,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             result = scanner.next();
             startCheckingForLink = true;
         } while (result != null);
-        return null;
+        return parentTableKey == null ? null : scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+    }
+
+    private byte[] getParentTableKeyFromChildRowKeyMetaData(byte[][] rowKeyMetaData) {
+        byte[] parentTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+        String parentSchema = SchemaUtil.getSchemaNameFromFullName(
+                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+        byte[] parentSchemaName = parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
+        byte[] parentTableName = SchemaUtil.getTableNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes(StandardCharsets.UTF_8);
+        return SchemaUtil.getTableKey(parentTenantId, parentSchemaName, parentTableName);
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
