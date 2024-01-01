@@ -1715,6 +1715,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         maxLookbackAge = 25920000000L;
         createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
         assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+        String indexTableName = generateUniqueName();
+        createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName);
+        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(SchemaUtil.getTableName(schemaName, indexTableName)));
     }
 
     @Test
@@ -1724,6 +1727,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         createTableWithTableLevelMaxLookbackAge(fullTableName, "NULL");
         assertNull(queryTableLevelMaxLookbackAge(fullTableName));
+        String indexTableName = generateUniqueName();
+        createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName);
+        assertNull(queryTableLevelMaxLookbackAge(SchemaUtil.getTableName(schemaName, indexTableName)));
     }
 
     @Test
@@ -1736,6 +1742,11 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         err = assertThrows(IllegalArgumentException.class, () -> createTableWithTableLevelMaxLookbackAge(
                 SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "three"));
         assertEquals(errMsg, err.getMessage());
+    }
+
+    @Test
+    public void testCreateIndexWithTableLevelMaxLookbackAge() {
+
     }
 
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
@@ -1771,6 +1782,13 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             String createDdl = "CREATE TABLE " + fullTableName +
                     " (id char(1) NOT NULL PRIMARY KEY,  col1 integer) MAX_LOOKBACK_AGE="+maxLookbackAge;
             conn.createStatement().execute(createDdl);
+        }
+    }
+
+    private void createIndexOnTableWithMaxLookbackAge(String indexTableName, String fullTableName) throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String createIndexDdl = "CREATE INDEX " + indexTableName + " ON " + fullTableName + " (COL1)";
+            conn.createStatement().execute(createIndexDdl);
         }
     }
 
