@@ -5588,7 +5588,7 @@ public class MetaDataClient {
             }
         }
 
-        if (! Objects.equals(metaProperties.getMaxLookbackAge(), table.getMaxLookbackAge())) {
+        if (metaProperties.getMaxLookbackAge() != null) {
             if (table.getType() != TABLE) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.
                         MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY)
@@ -5597,8 +5597,10 @@ public class MetaDataClient {
                         .build()
                         .buildException();
             }
-            metaPropertiesEvaluated.setMaxLookbackAge(metaProperties.getMaxLookbackAge());
-            changingPhoenixTableProperty = true;
+            if (! Objects.equals(metaProperties.getMaxLookbackAge(), table.getMaxLookbackAge())) {
+                metaPropertiesEvaluated.setMaxLookbackAge(metaProperties.getMaxLookbackAge());
+                changingPhoenixTableProperty = true;
+            }
         }
 
         return changingPhoenixTableProperty;

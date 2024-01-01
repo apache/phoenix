@@ -1446,13 +1446,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Long maxLookbackAge = maxLookbackAgeKv == null ? null :
                 PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
                         maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
-        if (tableType != PTableType.TABLE) {
-            byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+        if (tableType == PTableType.VIEW) {
+            byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-            maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
+            maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
         }
-        builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
-                (oldTable != null ? oldTable.getMaxLookbackAge() : null));
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
@@ -1487,6 +1485,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         PTable transformingNewTable = null;
         boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
+        boolean isThisAViewIndex = false;
         for (List<Cell> columnCellList : allColumnCellList) {
 
             Cell colKv = columnCellList.get(LINK_TYPE_INDEX);
@@ -1570,6 +1569,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         }
                     }
                 }
+                else if (linkType == VIEW_INDEX_PARENT_TABLE) {
+                    isThisAViewIndex = true;
+                    byte[] indexKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                            schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
+                    maxLookbackAge = scanMaxLookbackAgeFromParent(indexKey, clientTimeStamp);
+                }
             } else {
                 long columnTimestamp =
                     columnCellList.get(0).getTimestamp() != HConstants.LATEST_TIMESTAMP ?
@@ -1581,6 +1586,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
+        if (tableType == INDEX && ! isThisAViewIndex) {
+            byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                    parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
+            maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
+        }
+        builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
+                (oldTable != null ? oldTable.getMaxLookbackAge() : null));
         builder.setEncodedCQCounter(cqCounter);
 
         builder.setIndexes(indexes != null ? indexes : oldTable != null
@@ -1640,8 +1652,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
             }
             else {
-                byte[] maxLookbackAgeInBytes = result.getValue(DEFAULT_COLUMN_FAMILY_NAME_BYTES,
-                        MAX_LOOKBACK_AGE_BYTES);
+                byte[] maxLookbackAgeInBytes = result.getValue(TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
                 if (maxLookbackAgeInBytes != null) {
                     return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
                 }
