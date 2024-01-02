@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.exception.SQLExceptionCode.MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -1745,8 +1746,16 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testCreateIndexWithTableLevelMaxLookbackAge() {
-
+    public void testCreateIndexWithTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        createTableWithTableLevelMaxLookbackAge(fullTableName, "NULL");
+        String indexOptions = "MAX_LOOKBACK_AGE=300";
+        SQLException err = assertThrows(SQLException.class,
+                () -> createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName, indexOptions));
+        assertTrue(err.getMessage().contains(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getMessage()));
     }
 
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
@@ -1785,16 +1794,15 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void createIndexOnTableWithMaxLookbackAge(String indexTableName, String fullTableName) throws Exception {
+    private void createIndexOnTableWithMaxLookbackAge(String indexTableName, String fullTableName, String indexOptions) throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
-            String createIndexDdl = "CREATE INDEX " + indexTableName + " ON " + fullTableName + " (COL1)";
+            String createIndexDdl = "CREATE INDEX " + indexTableName + " ON " + fullTableName + " (COL1) " +
+                    (indexOptions == null ? "" : indexOptions);
             conn.createStatement().execute(createIndexDdl);
         }
     }
 
-    private Long queryTableLevelMaxLookbackAge(String fullTableName) throws Exception {
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
-            return PhoenixRuntime.getTableNoCache(conn, fullTableName).getMaxLookbackAge();
-        }
+    private void createIndexOnTableWithMaxLookbackAge(String indexTableName, String fullTableName) throws Exception {
+        createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName, null);
     }
 }

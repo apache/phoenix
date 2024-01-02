@@ -1296,4 +1296,40 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
+    @Test
+    public void testCreateViewWithTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        Long maxLookbackAge = 300L;
+        String createDdl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL PRIMARY KEY,  col1 integer) MAX_LOOKBACK_AGE="+maxLookbackAge;
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(createDdl);
+            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+            String childViewName = generateUniqueName();
+            String fullChildViewName = SchemaUtil.getTableName(schemaName, childViewName);
+            createDdl = "CREATE VIEW " + fullChildViewName + " AS SELECT * FROM " + fullTableName;
+            stmt.execute(createDdl);
+            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullChildViewName));
+            String grandChildViewName = generateUniqueName();
+            String fullGrandChildViewName = SchemaUtil.getTableName(schemaName, grandChildViewName);
+            createDdl = "CREATE VIEW " + fullGrandChildViewName + " (col2 varchar) AS SELECT * FROM " + fullChildViewName;
+            stmt.execute(createDdl);
+            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullGrandChildViewName));
+            String childViewIndexName = generateUniqueName();
+            createDdl = "CREATE INDEX " + childViewIndexName + " ON " + fullChildViewName + " (COL1)";
+            stmt.execute(createDdl);
+            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(
+                    SchemaUtil.getTableName(schemaName, childViewIndexName)));
+            String grandChildViewIndexName = generateUniqueName();
+            createDdl = "CREATE INDEX " + grandChildViewIndexName + " ON " + fullGrandChildViewName + " (COL2)";
+            stmt.execute(createDdl);
+            assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(
+                    SchemaUtil.getTableName(schemaName, grandChildViewIndexName)));
+        }
+    }
+
+
 }
