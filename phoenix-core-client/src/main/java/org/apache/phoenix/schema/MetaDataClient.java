@@ -3552,7 +3552,7 @@ public class MetaDataClient {
         // Checking the parent table whether exists
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
-            PTable ptable = connection.getTable(new PTableKey(connection.getTenantId(), fullTableName));
+            PTable ptable = PhoenixRuntime.getTable(connection, fullTableName);
             if (parentTableName != null &&!parentTableName.equals(ptable.getParentTableName().getString())) {
                 throw new SQLExceptionInfo.Builder(PARENT_TABLE_NOT_FOUND)
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -4919,7 +4919,7 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    table = connection.getTable(new PTableKey(tenantId, fullTableName));
+                    table = PhoenixRuntime.getTable(connection, fullTableName);
                     retried = true;
                 } catch (Throwable e) {
                     TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
