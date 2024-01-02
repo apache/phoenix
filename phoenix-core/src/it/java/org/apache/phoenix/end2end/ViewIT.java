@@ -21,6 +21,7 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists
         .newArrayListWithExpectedSize;
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
         .PHOENIX_META_DATA_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.exception.SQLExceptionCode.MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
 import static org.junit.Assert.assertArrayEquals;
@@ -29,6 +30,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertThrows;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -51,6 +53,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -1331,5 +1334,51 @@ public class ViewIT extends SplitSystemCatalogIT {
         }
     }
 
+    @Test
+    public void testCreateInvalidViewWithTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        Long maxLookbackAge = 300L;
+        String createDdl = "CREATE TABLE " + fullTableName +
+                " (id char(1) NOT NULL PRIMARY KEY,  col1 integer)";
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            stmt.execute(createDdl);
+            String viewName = generateUniqueName();
+            String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+            createDdl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName;
+            String viewOptions = " MAX_LOOKBACK_AGE=" + maxLookbackAge;
+            String createDdlWithViewOptions = createDdl + viewOptions;
+            SQLException err = assertThrows(SQLException.class, () -> stmt.execute(createDdlWithViewOptions));
+            assertEquals(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), err.getErrorCode());
+            stmt.execute(createDdl);
+            String viewIndexName = generateUniqueName();
+            createDdl = "CREATE INDEX " + viewIndexName + " ON " + fullViewName + " (COL1)";
+            String createIndexDdlWithViewOptions = createDdl + viewOptions;
+            err = assertThrows(SQLException.class, () -> stmt.execute(createIndexDdlWithViewOptions));
+            assertEquals(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), err.getErrorCode());
+        }
+    }
 
+    @Test
+    public void testMappedViewForNullMaxLookbackAge() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+            byte[] cfA = Bytes.toBytes(SchemaUtil.normalizeIdentifier("a"));
+            String dataTableName = generateUniqueName();
+            byte[] hbaseDataTableName = SchemaUtil.getTableNameAsBytes("", dataTableName);
+            TableDescriptorBuilder builder = TableDescriptorBuilder.newBuilder(TableName.valueOf(hbaseDataTableName));
+            builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(cfA));
+            admin.createTable(builder.build());
+            String createDdl = "CREATE VIEW " + dataTableName + " (id varchar primary key, a.col1 varchar)";
+            stmt.execute(createDdl);
+            assertNull(queryTableLevelMaxLookbackAge(dataTableName));
+            String viewIndexName = generateUniqueName();
+            createDdl = "CREATE INDEX " + viewIndexName + " ON " + dataTableName + " (a.col1)";
+            stmt.execute(createDdl);
+            assertNull(queryTableLevelMaxLookbackAge(viewIndexName));
+        }
+    }
 }

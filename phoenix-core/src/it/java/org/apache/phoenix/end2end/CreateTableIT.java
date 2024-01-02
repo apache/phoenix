@@ -1755,7 +1755,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String indexOptions = "MAX_LOOKBACK_AGE=300";
         SQLException err = assertThrows(SQLException.class,
                 () -> createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName, indexOptions));
-        assertTrue(err.getMessage().contains(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getMessage()));
+        assertEquals(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), err.getErrorCode());
     }
 
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
