@@ -119,6 +119,7 @@ import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 import java.util.Map.Entry;
 
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -370,9 +371,11 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
     //default update cache frequency
-    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
+    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY
+            = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
-    public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = false;
+    public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = true;
+    public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = true;
 
     // default system task handling interval in milliseconds
     public static final long DEFAULT_TASK_HANDLING_INTERVAL_MS = 60*1000; // 1 min
