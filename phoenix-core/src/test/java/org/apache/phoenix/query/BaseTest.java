@@ -92,7 +92,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -105,7 +104,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -118,7 +116,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nonnull;
 
-import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -142,7 +139,6 @@ import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
-import org.apache.phoenix.end2end.FailingPhoenixRegionServerEndpoint;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
@@ -156,7 +152,6 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -650,16 +645,13 @@ public abstract class BaseTest {
     }
 
     /*
-        Set property  hbase.coprocessor.regionserver.classes to include PhoenixRegionServerEndpoint
-        by default. If some other regionserver coprocs are already present then append
-        PhoenixRegionServerEndpoint to the existing coprocs.
+        Set property hbase.coprocessor.regionserver.classes to include PhoenixRegionServerEndpoint
+        by default, if some other regionserver coprocs are not already present.
      */
     private static void setPhoenixRegionServerEndpoint(Configuration conf) {
         String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         if (value == null) {
             value = PhoenixRegionServerEndpoint.class.getName();
-        } else {
-            value = String.join(",", value, PhoenixRegionServerEndpoint.class.getName());
         }
         conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, value);
     }

@@ -39,7 +39,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{

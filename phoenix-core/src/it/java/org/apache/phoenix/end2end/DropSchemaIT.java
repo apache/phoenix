@@ -37,9 +37,9 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaNotFoundException;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -96,17 +96,17 @@ public class DropSchemaIT extends BaseTest {
             } catch (SQLException e) {
                 assertEquals(e.getErrorCode(), SQLExceptionCode.CANNOT_MUTATE_SCHEMA.getErrorCode());
             }
-            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
+            assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
 
             conn.createStatement().execute("DROP TABLE " + schema + "." + tableName);
             conn.createStatement().execute(ddl);
-            assertFalse(ServerUtil.isHBaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
+            assertFalse(ClientUtil.isHBaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
 
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
             
             admin.createNamespace(NamespaceDescriptor.create(normalizeSchemaIdentifier).build());
             conn.createStatement().execute("DROP SCHEMA IF EXISTS " + schema);
-            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
+            assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin, normalizeSchemaIdentifier));
             conn.createStatement().execute("CREATE SCHEMA " + schema);
             conn.createStatement().execute("DROP SCHEMA " + schema);
             try {

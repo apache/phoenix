@@ -38,7 +38,7 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.SortOrder;
@@ -139,7 +139,7 @@ public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
         assertNotNull(nestedScans);
         for (List<Scan> scans : nestedScans) {
             for (Scan scan : scans) {
-                byte[] serverNameBytes = scan.getAttribute(BaseScannerRegionObserver.SCAN_REGION_SERVER);
+                byte[] serverNameBytes = scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_REGION_SERVER);
                 assertNotNull(serverNameBytes);
                 ServerName serverName = ServerName.parseVersionedServerName(serverNameBytes);
                 assertNotNull(serverName.getHostname());

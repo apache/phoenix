@@ -28,6 +28,7 @@ import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -111,7 +112,7 @@ public class PhoenixRegionServerEndpointIT extends BaseTest {
             coprocessor.validateLastDDLTimestamp(controller, request, null);
             assertTrue(controller.failed());
             Exception exception = controller.getFailedOn();
-            Exception parsedException = ServerUtil.parseRemoteException(exception);
+            Exception parsedException = ClientUtil.parseRemoteException(exception);
             assertTrue(parsedException instanceof StaleMetadataCacheException);
         }
     }

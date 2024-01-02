@@ -25,8 +25,8 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -283,7 +283,7 @@ public final class BackwardCompatibilityTestUtil {
             // connection is set to be the phoenix version timestamp
             // (31 as of now: MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 / MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0)
             // Hence, keeping value: 15
-            props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+            props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                     Integer.toString(15));
         }
 
