@@ -787,30 +787,38 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
     /**
-     * https://issues.apache.org/jira/browse/PHOENIX-7167
      * Verify queries on system tables work as we will validate last ddl timestamps for them also.
-     * Use the default connection to confirm that the PTable object for SYSTEM tables is
-     * correctly bootstrapped.
      */
     @Test
     public void testSelectQueryOnSystemTables() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String url = QueryUtil.getConnectionUrl(props, config, "client");
-        String defaultUrl = QueryUtil.getConnectionUrl(props, config);
         ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
-        ConnectionQueryServices defaultCqs = driver.getConnectionQueryServices(defaultUrl, props);
 
-        try (Connection conn = cqs.connect(url, props);
-                Connection conn2 = defaultCqs.connect(defaultUrl, props)) {
+        try (Connection conn = cqs.connect(url, props)) {
             query(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
             query(conn, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
             query(conn, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
             query(conn, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
+        }
+    }
 
-            query(conn2, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-            query(conn2, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
-            query(conn2, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
-            query(conn2, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
+    /**
+     * https://issues.apache.org/jira/browse/PHOENIX-7167
+     * Use the default connection to query system tables to confirm
+     * that the PTable object for SYSTEM tables is correctly bootstrapped.
+     */
+    @Test
+    public void testSystemTablesBootstrap() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config);
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+
+        try (Connection conn = cqs.connect(url, props)) {
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
         }
     }
 
