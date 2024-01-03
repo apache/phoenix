@@ -372,7 +372,7 @@ public class QueryServicesOptions {
 
     //default update cache frequency
     public static final long DEFAULT_UPDATE_CACHE_FREQUENCY
-            = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
+                = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
     public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = true;
     public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = true;
