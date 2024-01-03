@@ -123,6 +123,7 @@ public class PDataTypeFactory {
     types.add(PVarbinaryArray.INSTANCE);
     types.add(PVarchar.INSTANCE);
     types.add(PVarcharArray.INSTANCE);
+    types.add(PJson.INSTANCE);
 
     classToInstance = new HashMap<>(types.size());
     for (PDataType t : types) {

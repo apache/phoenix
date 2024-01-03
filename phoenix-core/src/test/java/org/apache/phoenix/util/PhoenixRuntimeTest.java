@@ -165,6 +165,10 @@ public class PhoenixRuntimeTest extends BaseConnectionlessQueryTest {
                     // JIRA - https://issues.apache.org/jira/browse/PHOENIX-1329
                     continue;
                 }
+                // Condition to check if a type can be used as a primary key.
+                if (!pType.canBePrimaryKey()) {
+                    continue;
+                }
                 if (pType.isArrayType() && PDataType.arrayBaseType(pType).isFixedWidth() && PDataType.arrayBaseType(pType).getByteSize() == null) {
                     // Need to treat array type whose base type is of fixed width whose byte size is not known as a special case. 
                     // Cannot just use the sql type name returned by PDataType.getSqlTypeName().

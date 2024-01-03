@@ -132,7 +132,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
-        if(isLocalIndex) {
+        if (isLocalIndex) {
             ScanUtil.setupLocalIndexScan(scan);
         }
     }
