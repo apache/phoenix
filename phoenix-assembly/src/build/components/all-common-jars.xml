@@ -48,6 +48,14 @@
       </includes>
     </fileSet>
     <fileSet>
+      <directory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</directory>
+      <outputDirectory>/</outputDirectory>
+      <includes>
+        <include>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar</include>
+        <include>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar</include>
+      </includes>
+    </fileSet>
+    <fileSet>
       <directory>${project.basedir}/../phoenix-pherf/target</directory>
       <outputDirectory>/</outputDirectory>
       <includes>
