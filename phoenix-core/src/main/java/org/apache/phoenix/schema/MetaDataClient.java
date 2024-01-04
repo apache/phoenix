@@ -2203,6 +2203,8 @@ public class MetaDataClient {
                 }
 
                 ttl = ttlProp;
+            } else {
+                ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent);
             }
 
             Boolean isChangeDetectionEnabledProp =

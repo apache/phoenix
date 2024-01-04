@@ -52,9 +52,9 @@ import static org.junit.Assert.fail;
 @Category(ParallelStatsDisabledTest.class)
 public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
 
-    private static final long DEFAULT_TTL_FOR_TEST = 86400;
-    private static final long DEFAULT_TTL_FOR_CHILD = 10000;
-    public static final String TENANT_URL_FMT = "%s;%s=%s";
+    private static final int DEFAULT_TTL_FOR_TEST = 86400;
+    private static final int DEFAULT_TTL_FOR_CHILD = 10000;
+    private static final int DEFAULT_TTL_FOR_ALTER = 7000;
 
     /**
      * test TTL is being set as PhoenixTTL when PhoenixTTL is enabled.
@@ -150,9 +150,10 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             //Checking Default TTL in case of PhoenixTTLEnabled
             assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), PhoenixDatabaseMetaData.TTL_NOT_DEFINED, tableName);
             String ddl = "ALTER TABLE  " + tableName
-                    + " SET TTL=1000";
+                    + " SET TTL = " + DEFAULT_TTL_FOR_ALTER;
             conn.createStatement().execute(ddl);
-            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), 1000, tableName);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
+                    DEFAULT_TTL_FOR_ALTER, tableName);
             //Asserting TTL should not be stored as CF Descriptor properties when
             //phoenix.table.ttl.enabled is true
             Admin admin = driver.getConnectionQueryServices(getUrl(), new Properties()).getAdmin();
@@ -334,7 +335,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             }
 
             try {
-                ddl = "ALTER TABLE " + tableName + " SET TTL=" + DEFAULT_TTL_FOR_TEST;
+                ddl = "ALTER TABLE " + tableName + " SET TTL=" + DEFAULT_TTL_FOR_ALTER;
                 conn.createStatement().execute(ddl);
             } catch (SQLException sqe) {
                 assertEquals("Should fail with TTL already defined in hierarchy",
@@ -354,9 +355,9 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
                     TTL_NOT_DEFINED, childView);
 
-            ddl = "ALTER VIEW " + viewName + " SET TTL=" + DEFAULT_TTL_FOR_CHILD;
+            ddl = "ALTER VIEW " + viewName + " SET TTL=" + DEFAULT_TTL_FOR_ALTER;
             conn.createStatement().execute(ddl);
-            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_CHILD, viewName);
+            assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class), DEFAULT_TTL_FOR_ALTER, viewName);
 
         }
     }
@@ -393,7 +394,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             assertTTLValueOfTableOrView(tenantConn1.unwrap(PhoenixConnection.class),
                     DEFAULT_TTL_FOR_TEST, childView1);
 
-            String alter = "ALTER TABLE " + tableName + " SET TTL = " + DEFAULT_TTL_FOR_CHILD;
+            String alter = "ALTER TABLE " + tableName + " SET TTL = " + DEFAULT_TTL_FOR_ALTER;
             conn.createStatement().execute(alter);
 
             //Clear Cache for all Tables to reflect Alter TTL commands in hierarchy
@@ -404,11 +405,11 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
 
             //Assert TTL for each entity again with altered value
             assertTTLValueOfTableOrView(conn.unwrap(PhoenixConnection.class),
-                    DEFAULT_TTL_FOR_CHILD, viewName);
+                    DEFAULT_TTL_FOR_ALTER, viewName);
             assertTTLValueOfTableOrView(tenantConn.unwrap(PhoenixConnection.class),
-                    DEFAULT_TTL_FOR_CHILD, childView);
+                    DEFAULT_TTL_FOR_ALTER, childView);
             assertTTLValueOfTableOrView(tenantConn1.unwrap(PhoenixConnection.class),
-                    DEFAULT_TTL_FOR_CHILD, childView1);
+                    DEFAULT_TTL_FOR_ALTER, childView1);
         }
     }
 
@@ -430,8 +431,8 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                 + " COL2 bigint NOT NULL,"
                 + " CREATED_DATE DATE,"
                 + " CREATION_TIME BIGINT,"
-                + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2))"
-                + ( withTTL ? " TTL = " + DEFAULT_TTL_FOR_TEST : ""));
+                + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)) MULTI_TENANT=true "
+                + ( withTTL ? ", TTL = " + DEFAULT_TTL_FOR_TEST : ""));
         return tableName;
     }
 
@@ -441,13 +442,13 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             case LOCAL:
                 String localIndexName = baseTableOrViewName + "_Local_" + generateUniqueName();
                 conn.createStatement().execute("CREATE LOCAL INDEX " + localIndexName + " ON " +
-                        baseTableOrViewName + " (COL1) " + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
+                        baseTableOrViewName + " (COL2) " + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
                 return localIndexName;
 
             case GLOBAL:
                 String globalIndexName = baseTableOrViewName + "_Global_" + generateUniqueName();
                 conn.createStatement().execute("CREATE INDEX " + globalIndexName + " ON " +
-                        baseTableOrViewName + " (COL1) " + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
+                        baseTableOrViewName + " (COL2) " + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : ""));
                 return globalIndexName;
 
             default:
@@ -460,7 +461,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
         conn.createStatement().execute("CREATE VIEW " + viewName
                 + " (" + generateUniqueName() + " SMALLINT) as select * from "
-                + baseTableName + " where id > 1 "
+                + baseTableName + " where COL1 > 1 "
                 + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD  : "") );
         return viewName;
     }
@@ -470,7 +471,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
         String viewName = "VIEW_" + baseTableName + "_" + generateUniqueName();
         conn.createStatement().execute("CREATE VIEW " + viewName
                 + " (" + generateUniqueName() + " SMALLINT) as select * from "
-                + baseTableName + " where id = 1 "
+                + baseTableName + " where COL1 = 1 "
                 + (withTTL ? "TTL = " + DEFAULT_TTL_FOR_CHILD : "") );
         return viewName;
     }

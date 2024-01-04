@@ -1565,7 +1565,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 } else if (linkType == VIEW_INDEX_PARENT_TABLE) {
                     byte[] indexKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                             schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-                    ttl = scanTTLFromParent(indexKey, clientTimeStamp);
+                    byte[] viewKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                            parentSchemaName == null ? null : parentSchemaName.getBytes(),
+                            parentTableName.getBytes());
+                    ttl = scanTTLFromParent(viewKey, clientTimeStamp);
                     isThisAViewIndex = true;
                 }
             } else {
@@ -1584,7 +1587,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     parentSchemaName == null ? null : parentSchemaName.getBytes(),
                     parentTableName.getBytes());
-            ttl = scanTTLFromParent(tableKey, clientTimeStamp);
+            ttl = getTTLForTable(tableKey, clientTimeStamp);
         }
         builder.setTTL(ttl);
         builder.setEncodedCQCounter(cqCounter);
@@ -1617,6 +1620,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return builder.build();
     }
 
+    /**
+     * Method to return TTL value defined at current level ot up the Hierarchy of the view.
+     * @param viewKey Key of the view for which we have to find TTL
+     * @param clientTimeStamp Client TimeStamp
+     * @return TTL value for a given view, if nothing is defined anywhere then return
+     *         TTL_NOT_DEFINED(0).
+     * @throws IOException
+     * @throws SQLException
+     */
+
     private int scanTTLFromParent(byte[] viewKey, long clientTimeStamp) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
@@ -1624,59 +1637,81 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         env.getConfiguration()));
         ResultScanner scanner = sysCat.getScanner(scan);
         Result result = scanner.next();
-        boolean startCheckingForLink = false;
+
+        byte[] tableKey = null;
         do {
+
             if (result == null) {
                 return TTL_NOT_DEFINED;
             }
-            if (startCheckingForLink) {
-                byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-                if (linkTypeBytes != null) {
-                    byte[][] rowKeyMetaData = new byte[5][];
-                    getVarChars(result.getRow(), 5, rowKeyMetaData);
-                    byte[] parentViewTenantId = null;
-                    if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PARENT_TABLE) {
-                        parentViewTenantId = result.getValue(TABLE_FAMILY_BYTES,
-                                PARENT_TENANT_ID_BYTES);
-                        return getTTLFromAppropriateParent(parentViewTenantId, rowKeyMetaData, clientTimeStamp);
-                    } else if (LinkType.fromSerializedValue(linkTypeBytes[0]) ==
-                            VIEW_INDEX_PARENT_TABLE) {
-                        //We are calculating TTL for indexes on Views
-                        parentViewTenantId = rowKeyMetaData
-                                [PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-                        return getTTLFromAppropriateParent(parentViewTenantId, rowKeyMetaData, clientTimeStamp);
-                    } else if (LinkType.fromSerializedValue(linkTypeBytes[0]) ==
-                            PHYSICAL_TABLE) {
-                        return getTTLFromAppropriateParent(parentViewTenantId, rowKeyMetaData, clientTimeStamp);
-                    }
-                }
-            } else {
-                if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+
+            byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+            byte[][] rowKeyMetaData = new byte[5][];
+            getVarChars(result.getRow(), 5, rowKeyMetaData);
+            //Check if TTL is defined at the current given level
+            if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
                     return PInteger.INSTANCE.getCodec().decodeInt(
                             result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES),
                             0, SortOrder.getDefault());
+            } else if (linkTypeBytes != null ) {
+                String parentSchema =SchemaUtil.getSchemaNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+                byte[] parentViewSchemaName = parentSchema != null
+                        ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
+                byte[] parentViewName = SchemaUtil.getTableNameFromFullName(
+                                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
+                //Get TTL from up the hierarchy, Checking for Parent view link and getting TTL from it.
+                if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PARENT_TABLE) {
+                    byte[] parentViewTenantId = result.getValue(TABLE_FAMILY_BYTES,
+                            PARENT_TENANT_ID_BYTES);
+                    byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
+                            parentViewSchemaName, parentViewName);
+                    return scanTTLFromParent(parentViewKey, clientTimeStamp);
+                }
+
+                //Store tableKey to use if we don't find TTL at current level and from
+                //parent views above the hierarchy
+                if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PHYSICAL_TABLE) {
+                    tableKey = SchemaUtil.getTableKey(null, parentViewSchemaName,
+                            parentViewName);
                 }
             }
 
             result = scanner.next();
-            startCheckingForLink = true;
         } while (result != null);
 
-        return TTL_NOT_DEFINED;
+        //Return TTL defined at Table level for the given hierarchy as we didn't find TTL any of the views.
+        return getTTLForTable(tableKey, clientTimeStamp);
+
     }
 
-    private int getTTLFromAppropriateParent(byte[] parentViewTenantId, byte[][] rowKeyMetaData,
-                                            long clientTimeStamp) throws IOException, SQLException {
-        String parentSchema =SchemaUtil.getSchemaNameFromFullName(
-                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-        byte[] parentViewSchemaName = parentSchema != null
-                ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
-        byte[] parentViewName = SchemaUtil.getTableNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
-                .getBytes(StandardCharsets.UTF_8);
-        byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
-                parentViewSchemaName, parentViewName);
-        return scanTTLFromParent(parentViewKey, clientTimeStamp);
+    /***
+     * Get TTL Value stored in SYSCAT for a given table
+     * @param tableKey of table  for which we are fining TTL
+     * @param clientTimeStamp client TimeStamp value
+     * @return TTL defined for a given table if it is null then return TTL_NOT_DEFINED(0)
+     * @throws IOException
+     */
+    private int getTTLForTable(byte[] tableKey, long clientTimeStamp) throws IOException {
+        Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                        env.getConfiguration()));
+        ResultScanner scanner = sysCat.getScanner(scan);
+        Result result = scanner.next();
+        do {
+            if (result == null) {
+                return TTL_NOT_DEFINED;
+            }
+            if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+                return PInteger.INSTANCE.getCodec().decodeInt(
+                        result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES),
+                        0, SortOrder.getDefault());
+            }
+            result = scanner.next();
+        } while (result != null);
+        return TTL_NOT_DEFINED;
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
