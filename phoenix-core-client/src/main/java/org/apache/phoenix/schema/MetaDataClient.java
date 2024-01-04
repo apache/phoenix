@@ -3300,7 +3300,7 @@ public class MetaDataClient {
                                 parent != null && phoenixTTL != null &&
                                 parent.getPhoenixTTL() != phoenixTTL)
                         .setLastDDLTimestamp(result.getTable() != null ?
-                                result.getTable().getLastDDLTimestamp() : null)
+                                result.getTable().getLastDDLTimestamp() : 0L)
                         .setIsChangeDetectionEnabled(isChangeDetectionEnabledProp)
                         .setSchemaVersion(schemaVersion)
                         .setExternalSchemaId(result.getTable() != null ?
