@@ -2506,6 +2506,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setMutationTime(currentTimeStamp);
                 //send the newly built table back because we generated the DDL timestamp server
                 // side and the client doesn't have it.
+                if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
+                    // if a client uses a connection with currentSCN=t to create the table,
+                    // the table is created with timestamp 't' but the timestamp range in the scan
+                    // used by buildTable does not include 't' due to how SCN is implemented.
+                    clientTimeStamp += 1;
+                }
                 PTable newTable = buildTable(tableKey, cacheKey, region,
                     clientTimeStamp, clientVersion);
                 if (newTable != null) {
