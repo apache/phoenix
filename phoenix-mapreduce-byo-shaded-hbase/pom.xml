@@ -365,6 +365,8 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core-server</artifactId>
       <exclusions>
+        <!-- 5.2 no longer uses reload4j, but we still exclude in case something pulls these 
+        transitively -->
         <exclusion>
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-reload4j</artifactId>
@@ -575,6 +577,12 @@
 
     <!-- Other dependencies we don't want to shade in, but are not transitively excluded by the
     above for some reason -->
+    <dependency>
+      <!-- HBase-shaded already provides this -->
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
