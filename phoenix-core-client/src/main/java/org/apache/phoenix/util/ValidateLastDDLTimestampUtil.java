@@ -18,8 +18,10 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
@@ -48,6 +50,8 @@ public class ValidateLastDDLTimestampUtil {
 
     private static final Logger LOGGER = LoggerFactory
             .getLogger(ValidateLastDDLTimestampUtil.class);
+    private static final List<PTableType> ALLOWED_PTABLE_TYPES = Arrays.asList(new PTableType[]
+                        {PTableType.TABLE, PTableType.VIEW, PTableType.INDEX, PTableType.SYSTEM});
 
     public static String getInfoString(PName tenantId, List<TableRef> tableRefs) {
         StringBuilder sb = new StringBuilder();
@@ -75,15 +79,16 @@ public class ValidateLastDDLTimestampUtil {
      * Verifies that table metadata for given tables is up-to-date in client cache with server.
      * A random live region server is picked for invoking the RPC to validate LastDDLTimestamp.
      * Retry once if there was an error performing the RPC, otherwise throw the Exception.
-     * @param tableRefs
+     * @param allTableRefs
      * @param isWritePath
      * @param doRetry
      * @throws SQLException
      */
-    public static void validateLastDDLTimestamp(
-            PhoenixConnection conn, List<TableRef> tableRefs, boolean isWritePath, boolean doRetry)
-            throws SQLException {
-
+    public static void validateLastDDLTimestamp(PhoenixConnection conn,
+                                                List<TableRef> allTableRefs,
+                                                boolean isWritePath,
+                                                boolean doRetry) throws SQLException {
+        List<TableRef> tableRefs = filterTableRefs(allTableRefs);
         String infoString = getInfoString(conn.getTenantId(), tableRefs);
         try (Admin admin = conn.getQueryServices().getAdmin()) {
             // get all live region servers
@@ -205,5 +210,17 @@ public class ValidateLastDDLTimestampUtil {
         builder.setSchemaName(ByteStringer.wrap(schemaBytes));
         builder.setTableName(ByteStringer.wrap(pTable.getTableName().getBytes()));
         builder.setLastDDLTimestamp(pTable.getLastDDLTimestamp());
+    }
+
+    /**
+     * Filter out any TableRefs which are not tables, views or indexes.
+     * @param tableRefs
+     * @return
+     */
+    private static List<TableRef> filterTableRefs(List<TableRef> tableRefs) {
+        List<TableRef> filteredTableRefs = tableRefs.stream()
+                .filter(tableRef -> ALLOWED_PTABLE_TYPES.contains(tableRef.getTable().getType()))
+                .collect(Collectors.toList());
+        return filteredTableRefs;
     }
 }
