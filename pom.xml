@@ -100,6 +100,7 @@
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
+    <netty-bom.version>4.1.104.Final</netty-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
@@ -1464,6 +1465,16 @@
         <groupId>com.fasterxml.jackson</groupId>
         <artifactId>jackson-bom</artifactId>
         <version>${jackson-bom.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
+      <!-- We don't depend on netty directly, but we need this to avoid pulling in different
+      4.1.x versions of netty modules from the transitive dependencies
+      (ZK via Omid and ZK via Curator) -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty-bom.version}</version>
         <scope>import</scope>
         <type>pom</type>
       </dependency>
