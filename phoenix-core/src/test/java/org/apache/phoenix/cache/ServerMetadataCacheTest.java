@@ -804,6 +804,25 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
     /**
+     * https://issues.apache.org/jira/browse/PHOENIX-7167
+     * Use the default connection to query system tables to confirm
+     * that the PTable object for SYSTEM tables is correctly bootstrapped.
+     */
+    @Test
+    public void testSystemTablesBootstrap() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config);
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+
+        try (Connection conn = cqs.connect(url, props)) {
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
+            query(conn, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
+        }
+    }
+
+    /**
      * Test query on index with stale last ddl timestamp.
      * Client-1 creates a table and an index on it. Client-2 queries table to populate its cache.
      * Client-1 alters a property on the index. Client-2 queries the table again.
