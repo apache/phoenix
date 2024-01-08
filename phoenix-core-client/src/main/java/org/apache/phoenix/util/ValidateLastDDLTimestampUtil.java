@@ -169,9 +169,18 @@ public class ValidateLastDDLTimestampUtil {
             if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
                 PTable pTable = tableRef.getTable();
                 while (pTable.getParentName() != null) {
-                    PTableKey key = new PTableKey(conn.getTenantId(),
-                            pTable.getParentName().getString());
-                    PTable parentTable = conn.getTable(key);
+                    PTableKey key;
+                    PTable parentTable;
+                    // retry with tenantId=null in case parent was created with global connection
+                    try {
+                        key = new PTableKey(conn.getTenantId(),
+                                pTable.getParentName().getString());
+                        parentTable = conn.getTable(key);
+                    } catch (TableNotFoundException e) {
+                        key = new PTableKey(null,
+                                pTable.getParentName().getString());
+                        parentTable = conn.getTable(key);
+                    }
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                     setLastDDLTimestampRequestParameters(
                             innerBuilder, conn.getTenantId(), parentTable);
