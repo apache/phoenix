@@ -164,6 +164,9 @@
     <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
 
     <!-- Plugin options -->
+    <skipParallelStatsEnabledTests>false</skipParallelStatsEnabledTests>
+    <skipParallelStatsDisabledTests>false</skipParallelStatsDisabledTests>
+    <skipNeedsOwnMiniClusterTests>false</skipNeedsOwnMiniClusterTests>
     <numForkedUT>8</numForkedUT>
     <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
@@ -369,6 +372,7 @@
             <execution>
               <id>ParallelStatsEnabledTest</id>
               <configuration>
+                <skip>${skipParallelStatsEnabledTests}</skip>
                 <reuseForks>true</reuseForks>
                 <groups>org.apache.phoenix.end2end.ParallelStatsEnabledTest</groups>
               </configuration>
@@ -381,6 +385,7 @@
               <id>ParallelStatsDisabledTest</id>
               <configuration>
                 <reuseForks>true</reuseForks>
+                <skip>${skipParallelStatsDisabledTests}</skip>
                 <groups>org.apache.phoenix.end2end.ParallelStatsDisabledTest</groups>
               </configuration>
               <goals>
@@ -392,6 +397,7 @@
               <id>NeedTheirOwnClusterTests</id>
               <configuration>
                  <reuseForks>false</reuseForks>
+                 <skip>${skipNeedsOwnMiniClusterTests}</skip>
                  <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
               <goals>
