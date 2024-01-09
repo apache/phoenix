@@ -51,8 +51,8 @@ public class ValidateLastDDLTimestampUtil {
 
     private static final Logger LOGGER = LoggerFactory
             .getLogger(ValidateLastDDLTimestampUtil.class);
-    private static final List<PTableType> ALLOWED_PTABLE_TYPES = Arrays.asList(new PTableType[]
-                        {PTableType.TABLE, PTableType.VIEW, PTableType.INDEX, PTableType.SYSTEM});
+    private static final List<PTableType> ALLOWED_PTABLE_TYPES =
+            Arrays.asList(PTableType.TABLE, PTableType.VIEW, PTableType.INDEX, PTableType.SYSTEM);
 
     public static String getInfoString(PName tenantId, List<TableRef> tableRefs) {
         StringBuilder sb = new StringBuilder();
