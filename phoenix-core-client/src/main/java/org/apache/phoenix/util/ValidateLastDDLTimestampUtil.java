@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
@@ -152,9 +153,9 @@ public class ValidateLastDDLTimestampUtil {
             //in case the index was dropped
             if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                PTableKey key = new PTableKey(conn.getTenantId(),
-                        tableRef.getTable().getParentName().getString());
-                PTable parentTable = conn.getTable(key);
+                PTable parentTable
+                        = getPTableFromCache(conn, conn.getTenantId(),
+                                             tableRef.getTable().getParentName().getString());
                 setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), parentTable);
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
@@ -169,18 +170,8 @@ public class ValidateLastDDLTimestampUtil {
             if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
                 PTable pTable = tableRef.getTable();
                 while (pTable.getParentName() != null) {
-                    PTableKey key;
-                    PTable parentTable;
-                    // retry with tenantId=null in case parent was created with global connection
-                    try {
-                        key = new PTableKey(conn.getTenantId(),
-                                pTable.getParentName().getString());
-                        parentTable = conn.getTable(key);
-                    } catch (TableNotFoundException e) {
-                        key = new PTableKey(null,
-                                pTable.getParentName().getString());
-                        parentTable = conn.getTable(key);
-                    }
+                    PTable parentTable = getPTableFromCache(conn, conn.getTenantId(),
+                                                            pTable.getParentName().getString());
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                     setLastDDLTimestampRequestParameters(
                             innerBuilder, conn.getTenantId(), parentTable);
@@ -231,5 +222,32 @@ public class ValidateLastDDLTimestampUtil {
                 .filter(tableRef -> ALLOWED_PTABLE_TYPES.contains(tableRef.getTable().getType()))
                 .collect(Collectors.toList());
         return filteredTableRefs;
+    }
+
+    /**
+     * Return the PTable object from this client's cache.
+     * For tenant specific connection, also look up the global table without using tenantId.
+     * @param conn
+     * @param tenantId
+     * @param tableName
+     * @return PTable object from the cache for the given tableName
+     * @throws TableNotFoundException
+     */
+    private static PTable getPTableFromCache(PhoenixConnection conn,
+                                             PName tenantId,
+                                             String tableName) throws TableNotFoundException {
+        PTableKey key = new PTableKey(tenantId, tableName);
+        PTable table;
+        try {
+            table = conn.getTable(key);
+        }
+        catch (TableNotFoundException e) {
+            if (tenantId != null) {
+                table = getPTableFromCache(conn, null, tableName);
+            } else {
+                throw e;
+            }
+        }
+        return table;
     }
 }
