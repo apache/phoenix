@@ -1347,6 +1347,24 @@
         <groupId>org.apache.zookeeper</groupId>
         <artifactId>zookeeper</artifactId>
         <version>${zookeeper.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -1711,7 +1729,7 @@
         <hbase.profile>2.4.0</hbase.profile>
         <hbase.compat.version>2.4.0</hbase.compat.version>
         <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
+        <zookeeper.version>3.8.3</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1728,7 +1746,7 @@
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.1</hbase.compat.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
+        <zookeeper.version>3.8.3</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1746,7 +1764,7 @@
         <hbase.compat.version>2.5.0</hbase.compat.version>
         <hadoop.version>3.2.3</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
+        <zookeeper.version>3.8.3</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1764,7 +1782,7 @@
         <hbase.compat.version>2.5.4</hbase.compat.version>
         <hadoop.version>3.2.3</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
+        <zookeeper.version>3.8.3</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
