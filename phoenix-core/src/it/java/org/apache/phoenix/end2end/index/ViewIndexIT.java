@@ -755,16 +755,16 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         String tenantViewName = "TV_" + generateUniqueName();
         String globalViewIndexName = "GV_" + generateUniqueName();
         String tenantViewIndexName = "TV_" + generateUniqueName();
-        try(Connection globalConn = getConnection();
-            Connection tenantConn = getTenantConnection(TENANT1)) {
+        try(PhoenixConnection globalConn = getConnection();
+                PhoenixConnection tenantConn = (PhoenixConnection) getTenantConnection(TENANT1)) {
             createBaseTable(globalConn, SCHEMA1, tableName, true, 0, null, true);
             createView(globalConn, SCHEMA1, globalViewName, tableName);
             createViewIndex(globalConn, SCHEMA1, globalViewIndexName, globalViewName, "v1");
             createView(tenantConn, SCHEMA1, tenantViewName, tableName);
             createViewIndex(tenantConn, SCHEMA1, tenantViewIndexName, tenantViewName, "v2");
 
-            PTable globalViewIndexTable = PhoenixRuntime.getTable(globalConn, SCHEMA1 + "." + globalViewIndexName);
-            PTable tenantViewIndexTable = PhoenixRuntime.getTable(tenantConn, SCHEMA1 + "." + tenantViewIndexName);
+            PTable globalViewIndexTable = globalConn.getTable(SCHEMA1 + "." + globalViewIndexName);
+            PTable tenantViewIndexTable = tenantConn.getTable(SCHEMA1 + "." + tenantViewIndexName);
             Assert.assertNotNull(globalViewIndexTable);
             Assert.assertNotNull(tenantViewIndexName);
             Assert.assertNotEquals(globalViewIndexTable.getViewIndexId(), tenantViewIndexTable.getViewIndexId());
@@ -839,7 +839,8 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
         final String viewIndexFullName = SchemaUtil.getTableName(schemaName, viewIndexName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                props)) {
             String version = "V1.0";
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
@@ -848,7 +849,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
             String createViewIndexSql = "CREATE INDEX " + viewIndexName + " ON "
                     + viewFullName + " (ID2) INCLUDE (ID1) SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(createViewIndexSql);
-            PTable viewIndex = PhoenixRuntime.getTableNoCache(conn, viewIndexFullName);
+            PTable viewIndex = conn.getTableNoCache(viewIndexFullName);
             assertEquals(version, viewIndex.getSchemaVersion());
         }
     }

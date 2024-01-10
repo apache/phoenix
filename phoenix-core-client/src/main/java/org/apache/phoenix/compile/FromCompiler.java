@@ -805,7 +805,7 @@ public class FromCompiler {
                     }
                 } else {
                     try {
-                        theTable = PhoenixRuntime.getTable(connection, fullTableName);
+                        theTable = connection.getTable(fullTableName);
                     } catch (Throwable e) {
                         error = true;
                         throw e;

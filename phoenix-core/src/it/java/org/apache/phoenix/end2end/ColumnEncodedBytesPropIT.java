@@ -124,7 +124,7 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
         String dataTableFullName = SchemaUtil.getTableName("", generateUniqueName());
         String view1 = SchemaUtil.getTableName("", generateUniqueName());
         String view2 = SchemaUtil.getTableName("", generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl(), props);) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);) {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE IMMUTABLE TABLE  " + dataTableFullName +
                     "  (id varchar not null, v1 varchar " + 
@@ -135,8 +135,8 @@ public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
                     "  AS SELECT * FROM " + dataTableFullName + " WHERE v1='a'");
             stmt.execute("CREATE VIEW  " + view2 + "(v3 bigint, v4 integer)" +
                     "  AS SELECT * FROM " + dataTableFullName + " WHERE v1='b'");
-            PTable v1 = PhoenixRuntime.getTable(conn, view1);
-            PTable v2 = PhoenixRuntime.getTable(conn, view1);
+            PTable v1 = conn.getTable(view1);
+            PTable v2 = conn.getTable(view1);
             assertEquals(v1.getColumns().size(), v2.getColumns().size());
             for (int i = 1; i < v1.getColumns().size(); i++) {
                 PColumn c1 = v1.getColumns().get(i);

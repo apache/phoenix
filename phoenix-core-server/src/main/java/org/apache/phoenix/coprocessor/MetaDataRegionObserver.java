@@ -375,10 +375,10 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                         conn = getRebuildIndexConnection(env.getConfiguration());
                         dataTableToIndexesMap = Maps.newHashMap();
                     }
-                    PTable dataPTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+                    PTable dataPTable = conn.getTableNoCache(dataTableFullName);
 
                     String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTable);
-                    PTable indexPTable = PhoenixRuntime.getTableNoCache(conn, indexTableFullName);
+                    PTable indexPTable = conn.getTableNoCache(indexTableFullName);
                     // Sanity check in case index was removed from table
                     if (!dataPTable.getIndexes().contains(indexPTable)) {
                         LOGGER.debug(dataTableFullName + " does not contain " +

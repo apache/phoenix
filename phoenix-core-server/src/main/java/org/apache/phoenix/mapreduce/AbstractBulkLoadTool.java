@@ -253,7 +253,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         }
 
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
-        PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+        PTable table = conn.unwrap(PhoenixConnection.class).getTable(qualifiedTableName);
         tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
         boolean hasLocalIndexes = false;
         boolean hasGlobalIndexes = false;
@@ -449,7 +449,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
      */
     private List<TargetTableRef> getIndexTables(Connection conn, String qualifiedTableName)
             throws SQLException {
-        PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+        PTable table = conn.unwrap(PhoenixConnection.class).getTable(qualifiedTableName);
         List<TargetTableRef> indexTables = new ArrayList<TargetTableRef>();
         for(PTable indexTable : table.getIndexes()){
             indexTables.add(new TargetTableRef(indexTable.getName().getString(), indexTable

@@ -83,7 +83,7 @@ public class Transform extends TransformClient {
             // New table will behave like an index
             PName newTableNameWithoutSchema = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(transformRecord.getNewPhysicalTableName()));
             if (!newTableNameWithoutSchema.equals(oldTable.getPhysicalName(true))) {
-                transformingNewTable = PhoenixRuntime.getTableNoCache(connection, transformRecord.getNewPhysicalTableName());
+                transformingNewTable = connection.getTableNoCache(transformRecord.getNewPhysicalTableName());
             }
         }
         return transformingNewTable;
@@ -170,8 +170,8 @@ public class Transform extends TransformClient {
                 stmt.execute();
             }
             // Update column qualifiers
-            PTable pNewTable = PhoenixRuntime.getTable(connection, systemTransformRecord.getNewPhysicalTableName());
-            PTable pOldTable = PhoenixRuntime.getTable(connection, SchemaUtil.getTableName(schema, tableName));
+            PTable pNewTable = connection.getTable(systemTransformRecord.getNewPhysicalTableName());
+            PTable pOldTable = connection.getTable(SchemaUtil.getTableName(schema, tableName));
             if (pOldTable.getImmutableStorageScheme() != pNewTable.getImmutableStorageScheme() ||
                     pOldTable.getEncodingScheme() != pNewTable.getEncodingScheme()) {
                 MetaDataClient.mutateTransformProperties(connection, tenantId, schema, tableName, newTableName,
@@ -186,7 +186,7 @@ public class Transform extends TransformClient {
 
                 // Also update view column qualifiers
                 for (TableInfo view : childViewsResult.getLinks()) {
-                    PTable pView = PhoenixRuntime.getTable(connection, view.getTenantId()==null? null: Bytes.toString(view.getTenantId())
+                    PTable pView = connection.getTable(view.getTenantId()==null? null: Bytes.toString(view.getTenantId())
                             , SchemaUtil.getTableName(view.getSchemaName(), view.getTableName()));
                     mutateViewColumns(connection.unwrap(PhoenixConnection.class), pView, pNewTable, columnMap);
                 }
@@ -254,9 +254,12 @@ public class Transform extends TransformClient {
     }
 
     private static void getMetadataDifference(PhoenixConnection connection, SystemTransformRecord systemTransformRecord, List<String> columnNames, List<String> columnValues) throws SQLException {
-        PTable pOldTable = PhoenixRuntime.getTable(connection, SchemaUtil.getQualifiedTableName(systemTransformRecord.getSchemaName(),systemTransformRecord.getLogicalTableName()));
-        PTable pNewTable = PhoenixRuntime.getTable(connection, SchemaUtil.getQualifiedTableName(SchemaUtil.getSchemaNameFromFullName(systemTransformRecord.getNewPhysicalTableName()),
-                SchemaUtil.getTableNameFromFullName(systemTransformRecord.getNewPhysicalTableName())));
+        PTable pOldTable = connection.getTable(SchemaUtil.getQualifiedTableName(
+                systemTransformRecord.getSchemaName(),systemTransformRecord.getLogicalTableName()));
+        PTable pNewTable = connection.getTable(SchemaUtil.getQualifiedTableName(SchemaUtil
+                        .getSchemaNameFromFullName(systemTransformRecord.getNewPhysicalTableName()),
+                SchemaUtil.getTableNameFromFullName(
+                        systemTransformRecord.getNewPhysicalTableName())));
 
         Map<String, String> map = pOldTable.getPropertyValues();
         for(Map.Entry<String, String> entry : map.entrySet()) {

@@ -95,7 +95,7 @@ public class FormatToKeyValueReducer
         columnIndexes = new HashMap<>();
         int columnIndex = 0;
         for (int index = 0; index < logicalNames.size(); index++) {
-            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
+            PTable table = conn.getTable(logicalNames.get(index));
             if (!table.getImmutableStorageScheme().equals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)) {
                 List<PColumnFamily> cfs = table.getColumnFamilies();
                 for (int i = 0; i < cfs.size(); i++) {

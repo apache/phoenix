@@ -158,7 +158,7 @@ public class ViewUtil {
                     QueryUtil.getConnectionOnServer(props, serverSideConfig)
                             .unwrap(PhoenixConnection.class)) {
                 try {
-                    view = PhoenixRuntime.getTableNoCache(connection,
+                    view = connection.getTableNoCache(
                             SchemaUtil.getTableName(viewSchemaName, viewName));
                 } catch (TableNotFoundException ex) {
                     logger.error("Found an orphan parent->child link keyed by this parent."
@@ -377,7 +377,7 @@ public class ViewUtil {
 
             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(conf).
                     unwrap(PhoenixConnection.class)) {
-                PhoenixRuntime.getTableNoCache(connection, SYSTEM_CHILD_LINK_NAME);
+                connection.getTableNoCache(SYSTEM_CHILD_LINK_NAME);
             } catch (TableNotFoundException e) {
                 // If this is an old client and the CHILD_LINK table doesn't exist i.e. metadata
                 // hasn't been updated since there was never a connection from a 4.15 client
@@ -504,10 +504,10 @@ public class ViewUtil {
                 currentTable.getParentTableName()).getString();
             PTable parentTable;
             try {
-                parentTable = PhoenixRuntime.getTable(connection, parentTableName);
+                parentTable = connection.getTable(parentTableName);
             } catch (TableNotFoundException tnfe) {
                 //check to see if there's a tenant-owned parent
-                parentTable = PhoenixRuntime.getTable(connection, table.getTenantId().getString(), parentTableName);
+                parentTable = connection.getTable(table.getTenantId().getString(), parentTableName);
             }
             ancestorList.add(parentTable);
             parentName = parentTable.getParentName();

@@ -42,6 +42,7 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -182,7 +183,7 @@ public class DefaultStatisticsCollector implements StatisticsCollector {
                  */
                 try (Connection conn =
                              QueryUtil.getConnectionOnServer(configuration)) {
-                    PTable table = PhoenixRuntime.getTable(conn, tableName);
+                    PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
                     if (table.getType() == PTableType.INDEX
                             && IndexUtil.isGlobalIndex(table)) {
                         /*

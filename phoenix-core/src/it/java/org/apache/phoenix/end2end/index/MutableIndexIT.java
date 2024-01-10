@@ -947,13 +947,13 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
         final String indexName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         final String indexFullName = SchemaUtil.getTableName(schemaName, indexName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
             String version = "V1.0";
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, version, null);
             String createIndexSql = "CREATE INDEX " + indexName + " ON " + dataTableFullName +
                     " (ID2) INCLUDE (ID1) SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(createIndexSql);
-            PTable index = PhoenixRuntime.getTableNoCache(conn, indexFullName);
+            PTable index = conn.getTableNoCache( indexFullName);
             assertEquals(version, index.getSchemaVersion());
         }
     }

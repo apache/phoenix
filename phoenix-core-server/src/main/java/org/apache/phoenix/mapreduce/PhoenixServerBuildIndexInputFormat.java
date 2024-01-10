@@ -93,7 +93,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         @Override
         public QueryPlan getQueryPlan(PhoenixConnection phoenixConnection, String oldTableFullName,
                                       String newTableFullName) throws SQLException {
-            PTable newTable = PhoenixRuntime.getTableNoCache(phoenixConnection, newTableFullName);
+            PTable newTable = phoenixConnection.getTableNoCache(newTableFullName);
             ServerBuildTransformingTableCompiler compiler = new ServerBuildTransformingTableCompiler(phoenixConnection, oldTableFullName);
             MutationPlan plan = compiler.compile(newTable);
             return plan.getQueryPlan();
@@ -104,7 +104,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
         @Override
         public QueryPlan getQueryPlan(PhoenixConnection phoenixConnection, String dataTableFullName,
             String indexTableFullName) throws SQLException {
-            PTable indexTable = PhoenixRuntime.getTableNoCache(phoenixConnection, indexTableFullName);
+            PTable indexTable = phoenixConnection.getTableNoCache(indexTableFullName);
             ServerBuildIndexCompiler compiler = new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
             MutationPlan plan = compiler.compile(indexTable);
             return plan.getQueryPlan();
@@ -123,7 +123,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                 Scan scan = plan.getContext().getScan();
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 PTable pIndexTable = tableRef.getTable();
-                PTable pDataTable = PhoenixRuntime.getTable(phoenixConnection, dataTableFullName);
+                PTable pDataTable = phoenixConnection.getTable(dataTableFullName);
                 IndexMaintainer.serialize(pDataTable, ptr, Collections.singletonList(pIndexTable), phoenixConnection);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,
                         pIndexTable.getTableName().getBytes());

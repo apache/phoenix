@@ -419,7 +419,7 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
 
 	private void validateTenantViewIsDropped(Connection connTenant)	throws SQLException {
         try {
-            PhoenixRuntime.getTableNoCache(connTenant, TENANT_TABLE_NAME);
+            connTenant.unwrap(PhoenixConnection.class).getTableNoCache(TENANT_TABLE_NAME);
             fail("Tenant specific view " + TENANT_TABLE_NAME
                     + " should have been dropped when parent was dropped");
         } catch (TableNotFoundException e) {

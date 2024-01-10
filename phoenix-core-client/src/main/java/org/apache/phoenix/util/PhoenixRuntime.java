@@ -497,17 +497,8 @@ public class PhoenixRuntime {
     }
 
     public static PTable getTableNoCache(Connection conn, String name) throws SQLException {
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-        String tableName = SchemaUtil.getTableNameFromFullName(name);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
-                schemaName, tableName, true);
-        if(result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-            throw new TableNotFoundException(schemaName, tableName);
-        }
-
-        return result.getTable();
-
+        return pconn.getTableNoCache(name);
     }
     
     /**
@@ -524,22 +515,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
-        PTable table;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        try {
-            table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
-        } catch (TableNotFoundException e) {
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-            String tableName = SchemaUtil.getTableNameFromFullName(name);
-            MetaDataMutationResult result =
-                    new MetaDataClient(pconn).updateCache(schemaName, tableName);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(name, NUM_METADATA_LOOKUP_FAILURES, 1);
-                throw e;
-            }
-            table = result.getTable();
-        }
-        return table;
+        return pconn.getTable(name);
     }
 
     /**
@@ -568,33 +545,8 @@ public class PhoenixRuntime {
     public static PTable getTable(Connection conn, @Nullable String tenantId, String fullTableName,
             @Nullable Long timestamp) throws SQLException {
         checkNotNull(conn);
-        checkNotNull(fullTableName);
-        if (timestamp != null) {
-            checkArgument(timestamp >= 0);
-        }
-        PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PName pTenantId = (tenantId == null) ? null : PNameFactory.newName(tenantId);
-        try {
-            PTableRef tableref = pconn.getTableRef(new PTableKey(pTenantId, fullTableName));
-            if (timestamp == null
-                    || (tableref != null && tableref.getResolvedTimeStamp() == timestamp)) {
-                table = tableref.getTable();
-            } else {
-                throw new TableNotFoundException(fullTableName);
-            }
-        } catch (TableNotFoundException e) {
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
-            String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
-            MetaDataMutationResult result =
-                    new MetaDataClient(pconn).updateCache(pTenantId, schemaName, tableName, false,
-                        timestamp);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                throw e;
-            }
-            table = result.getTable();
-        }
-        return table;
+        return pconn.getTable(tenantId, fullTableName, timestamp);
     }
 
     /**

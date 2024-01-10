@@ -114,6 +114,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             overrideProps.put(PhoenixRuntime.CURRENT_SCN_ATTRIB, scn);
             scnTimestamp = Long.parseLong(scn);
             connection = ConnectionUtil.getOutputConnection(configuration, overrideProps);
+            PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
             connection.setAutoCommit(false);
             batchSize = PhoenixConfigurationUtil.getScrutinyBatchSize(configuration);
             outputInvalidRows =
@@ -122,10 +123,10 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             executeTimestamp = PhoenixConfigurationUtil.getScrutinyExecuteTimestamp(configuration);
             // get the index table and column names
             String qDataTable = PhoenixConfigurationUtil.getScrutinyDataTableName(configuration);
-            final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
+            final PTable pdataTable = phoenixConnection.getTable(qDataTable);
             final String qIndexTable =
                     PhoenixConfigurationUtil.getScrutinyIndexTableName(configuration);
-            final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
+            final PTable pindexTable = phoenixConnection.getTable(qIndexTable);
             // set the target table based on whether we're running the MR over the data or index
             // table
             SourceTable sourceTable =
@@ -161,9 +162,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                     QueryUtil.constructSelectStatement(qTargetTable, columnNames.getCastedTargetColNames(), targetPksCsv,
                         Hint.NO_INDEX, false) + " IN ";
             targetTblColumnMetadata =
-                    PhoenixRuntime.generateColumnInfo(connection, qTargetTable, targetColNames);
+                    PhoenixRuntime.generateColumnInfo(phoenixConnection, qTargetTable, targetColNames);
             sourceTblColumnMetadata =
-                    PhoenixRuntime.generateColumnInfo(connection, qSourceTable, sourceColNames);
+                    PhoenixRuntime.generateColumnInfo(phoenixConnection, qSourceTable, sourceColNames);
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
             ttl = getTableTtl();
@@ -324,7 +325,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
     }
 
     private int getTableTtl() throws SQLException, IOException {
-        PTable pSourceTable = PhoenixRuntime.getTable(connection, qSourceTable);
+        PTable pSourceTable = connection.unwrap(PhoenixConnection.class).getTable(qSourceTable);
         if (pSourceTable.getType() == PTableType.INDEX
                 && pSourceTable.getIndexType() == PTable.IndexType.LOCAL) {
             return Integer.MAX_VALUE;

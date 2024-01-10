@@ -99,13 +99,13 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
 
         PTable globalView = null;
         PTable alteredGlobalView = null;
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
                 "MULTI_TENANT=true, CHANGE_DETECTION_ENABLED=true";
             conn.createStatement().execute(ddl);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             assertTrue(table.isChangeDetectionEnabled());
             AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
 
@@ -114,7 +114,7 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
                 " AS SELECT * FROM " + fullTableName + " CHANGE_DETECTION_ENABLED=true";
 
             conn.createStatement().execute(globalViewDdl);
-            globalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
+            globalView = conn.getTableNoCache(fullGlobalViewName);
             assertTrue(globalView.isChangeDetectionEnabled());
             //   base column count doesn't get set properly
             PTableImpl.Builder builder = PTableImpl.builderFromExisting(globalView);
@@ -125,7 +125,7 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
             String alterViewDdl = "ALTER VIEW " + fullGlobalViewName + " ADD id3 VARCHAR(12) NULL "
                 + "PRIMARY KEY, " + " col4 BIGINT NULL";
             conn.createStatement().execute(alterViewDdl);
-            alteredGlobalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
+            alteredGlobalView = conn.getTableNoCache(fullGlobalViewName);
 
             assertTrue(alteredGlobalView.isChangeDetectionEnabled());
             AlterTableIT.verifySchemaExport(alteredGlobalView, getUtility().getConfiguration());
@@ -138,7 +138,7 @@ public class AlterMultiTenantTableWithViewsIT extends SplitSystemCatalogIT {
                 " (col5 VARCHAR NULL) " +
                 " AS SELECT * FROM " + fullGlobalViewName + " CHANGE_DETECTION_ENABLED=true";
             tenantConn.createStatement().execute(tenantViewDdl);
-            PTable tenantView = PhoenixRuntime.getTableNoCache(tenantConn, fullTenantViewName);
+            PTable tenantView = tenantConn.getTableNoCache(fullTenantViewName);
             assertTrue(tenantView.isChangeDetectionEnabled());
             PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantConn,
                 tenantView, alteredGlobalView);

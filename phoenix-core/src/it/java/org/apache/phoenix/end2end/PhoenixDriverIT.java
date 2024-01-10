@@ -137,7 +137,7 @@ public class PhoenixDriverIT extends BaseTest {
         final String viewName = generateUniqueName();
         try (Connection globalConn = createConnection(null, false);
                 Connection conn1 = createConnection("tenant1", false);
-                Connection conn2 = createConnection("tenant1", false)) {
+                PhoenixConnection conn2 = (PhoenixConnection) createConnection("tenant1", false)) {
             // create base table
             String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
                     ( isMultiTenant ? "TENANT_ID VARCHAR(1) NOT NULL," : "") +
@@ -166,7 +166,7 @@ public class PhoenixDriverIT extends BaseTest {
             assertEquals("Parent Index table is not used ", expectedTableName, tableName);
             
             // verify that we can look up the index using PhoenixRuntime from a different client
-            PTable table = PhoenixRuntime.getTable(conn2, tableName);
+            PTable table = conn2.getTable(tableName);
             assertEquals(indexTable, table);
         }
     }

@@ -787,7 +787,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
                 String tableName = rs.getString(TABLE_NAME);
                 String tenantId = rs.getString(TABLE_CAT);
                 String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-                PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+                PTable table = connection.getTableNoCache(fullTableName);
                 boolean isSalted = table.getBucketNum()!=null;
                 boolean tenantColSkipped = false;
                 List<PColumn> columns = table.getColumns();
@@ -1183,7 +1183,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
             return getEmptyResultSet();
         }
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        PTable table = PhoenixRuntime.getTableNoCache(connection, fullTableName);
+        PTable table = connection.getTableNoCache(fullTableName);
         boolean isSalted = table.getBucketNum() != null;
         boolean tenantColSkipped = false;
         List<PColumn> pkColumns = table.getPKColumns();

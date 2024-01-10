@@ -4685,7 +4685,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Cannot go through DriverManager or you end up in an infinite loop because it'll call init again
         PhoenixConnection metaConnection = new PhoenixConnection(oldMetaConnection, this, props);
         metaConnection.setAutoCommit(false);
-        PTable sysCatalogPTable = PhoenixRuntime.getTable(metaConnection, SYSTEM_CATALOG_NAME);
+        PTable sysCatalogPTable = metaConnection.getTable(SYSTEM_CATALOG_NAME);
         int numColumns = sysCatalogPTable.getColumns().size();
         try (PreparedStatement mutateTable = metaConnection.prepareStatement(MetaDataClient.MUTATE_TABLE)) {
             mutateTable.setString(1, null);

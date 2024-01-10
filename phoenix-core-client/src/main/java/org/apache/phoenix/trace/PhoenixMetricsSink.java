@@ -152,7 +152,7 @@ public class PhoenixMetricsSink implements MetricsSink {
     
     private boolean traceTableExists(Connection conn, String traceTableName) throws SQLException {
         try {
-            PhoenixRuntime.getTable(conn, traceTableName);
+            conn.unwrap(PhoenixConnection.class).getTable(traceTableName);
             return true;
         } catch (TableNotFoundException e) {
             return false;

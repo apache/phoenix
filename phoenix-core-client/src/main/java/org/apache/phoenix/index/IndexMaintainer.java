@@ -500,8 +500,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             try {
                 String tenantId = (index.getTenantId() != null) ? 
                         index.getTenantId().getString() : null;
-                parentTable = PhoenixRuntime.getTable(connection, 
-                        tenantId, index.getParentName().getString());
+                parentTable = connection.getTable(tenantId, index.getParentName().getString());
                 this.indexDataColumnCount = parentTable.getPKColumns().size();
             } catch (SQLException e) {
                 throw new RuntimeException(e);

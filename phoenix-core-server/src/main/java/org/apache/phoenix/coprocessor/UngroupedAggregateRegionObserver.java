@@ -592,7 +592,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         PTable table = null;
                         try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                 compactionConfig).unwrap(PhoenixConnection.class)) {
-                            table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+                            table = conn.getTableNoCache(fullTableName);
                         } catch (Exception e) {
                             if (e instanceof TableNotFoundException) {
                                 LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "

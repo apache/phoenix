@@ -129,12 +129,12 @@ public class PhoenixTTLDeleteJobMapper extends Mapper<NullWritable, ViewInfoTrac
                                    Configuration config, Context context) throws Exception {
         try (PhoenixStatement pstmt =
                      new PhoenixStatement(connection).unwrap(PhoenixStatement.class)) {
-            PTable pTable = PhoenixRuntime.getTable(connection, viewInfoTracker.getViewName());
+            PTable pTable = connection.getTable(viewInfoTracker.getViewName());
             String deleteIfExpiredStatement = "SELECT /*+ NO_INDEX */ count(*) FROM " +
                     viewInfoTracker.getViewName();
 
             if (viewInfoTracker.isIndexRelation()) {
-                pTable = PhoenixRuntime.getTable(connection, viewInfoTracker.getRelationName());
+                pTable = connection.getTable(viewInfoTracker.getRelationName());
                 deleteIfExpiredStatement = "SELECT count(*) FROM " +
                         viewInfoTracker.getRelationName();
             }

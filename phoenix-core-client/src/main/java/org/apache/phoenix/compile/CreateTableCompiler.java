@@ -240,8 +240,7 @@ public class CreateTableCompiler {
                 String schemaName = table.getParentSchemaName().getString();
                 String tableName = table.getParentTableName().getString();
                 try {
-                    table = PhoenixRuntime.getTable(
-                            statement.getConnection(),
+                    table = statement.getConnection().getTable(
                             SchemaUtil.getTableName(schemaName, tableName));
                 } catch (TableNotFoundException e) {
                     table = null;

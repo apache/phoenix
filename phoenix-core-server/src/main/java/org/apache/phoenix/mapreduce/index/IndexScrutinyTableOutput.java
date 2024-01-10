@@ -29,6 +29,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixJobCounters;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColNames;
@@ -249,7 +250,8 @@ public class IndexScrutinyTableOutput {
      */
     public static ResultSet queryAllMetadata(Connection conn, String qSourceTableName,
             String qTargetTableName, long scrutinyTimeMillis) throws SQLException {
-        PTable pMetadata = PhoenixRuntime.getTable(conn, OUTPUT_METADATA_TABLE_NAME);
+        PTable pMetadata = conn.unwrap(PhoenixConnection.class).getTable(
+                OUTPUT_METADATA_TABLE_NAME);
         List<String> metadataCols = SchemaUtil.getColumnNames(pMetadata.getColumns());
         return queryMetadata(conn, metadataCols, qSourceTableName, qTargetTableName,
             scrutinyTimeMillis);
@@ -268,9 +270,10 @@ public class IndexScrutinyTableOutput {
         for (Job job : completedJobs) {
             Configuration conf = job.getConfiguration();
             String qDataTable = PhoenixConfigurationUtil.getScrutinyDataTableName(conf);
-            final PTable pdataTable = PhoenixRuntime.getTable(conn, qDataTable);
+            PhoenixConnection phoenixConnection = conn.unwrap(PhoenixConnection.class);
+            final PTable pdataTable = phoenixConnection.getTable(qDataTable);
             final String qIndexTable = PhoenixConfigurationUtil.getScrutinyIndexTableName(conf);
-            final PTable pindexTable = PhoenixRuntime.getTable(conn, qIndexTable);
+            final PTable pindexTable = phoenixConnection.getTable(qIndexTable);
             SourceTable sourceTable = PhoenixConfigurationUtil.getScrutinySourceTable(conf);
             long scrutinyExecuteTime =
                     PhoenixConfigurationUtil.getScrutinyExecuteTimestamp(conf);
@@ -364,7 +367,8 @@ public class IndexScrutinyTableOutput {
 
     private static String constructOutputTableQuery(Connection connection,
             SourceTargetColumnNames columnNames, String conditions) throws SQLException {
-        PTable pOutputTable = PhoenixRuntime.getTable(connection, OUTPUT_TABLE_NAME);
+        PTable pOutputTable = connection.unwrap(PhoenixConnection.class).getTable(
+                OUTPUT_TABLE_NAME);
         List<String> outputTableColumns = SchemaUtil.getColumnNames(pOutputTable.getColumns());
         List<String> selectCols =
                 Lists.newArrayList(
@@ -381,7 +385,7 @@ public class IndexScrutinyTableOutput {
 
     private static List<String> getOutputTableColumns(Connection connection) throws SQLException {
         PTable pOutputTable =
-                PhoenixRuntime.getTable(connection, IndexScrutinyTableOutput.OUTPUT_TABLE_NAME);
+                connection.unwrap(PhoenixConnection.class).getTable(OUTPUT_TABLE_NAME);
         List<String> outputTableColumns = SchemaUtil.getColumnNames(pOutputTable.getColumns());
         return outputTableColumns;
     }

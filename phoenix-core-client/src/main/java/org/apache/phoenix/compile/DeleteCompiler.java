@@ -205,8 +205,9 @@ public class DeleteCompiler {
                     if (!isMaintainedOnClient(table)) {
                         // dataTable is a projected table and may not include all the indexed columns and so we need to get
                         // the actual data table
-                        dataTable = PhoenixRuntime.getTable(connection,
-                                SchemaUtil.getTableName(dataTable.getSchemaName().getString(), dataTable.getTableName().getString()));
+                        dataTable = connection.getTable(SchemaUtil
+                                .getTableName(dataTable.getSchemaName().getString(),
+                                        dataTable.getTableName().getString()));
                     }
                     scannedIndexMaintainer = IndexMaintainer.create(dataTable, table, connection);
                 }

@@ -195,7 +195,7 @@ public class ProjectionCompiler {
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
         String dataTableName = index.getParentName().getString();
-        PTable dataTable = PhoenixRuntime.getTable(conn, dataTableName);
+        PTable dataTable = conn.getTable(dataTableName);
         int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
         int minTablePKOffset = getMinPKOffset(dataTable, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
@@ -297,7 +297,7 @@ public class ProjectionCompiler {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String dataTableName = index.getParentName().getString();
-        PTable dataTable = PhoenixRuntime.getTable(conn, dataTableName);
+        PTable dataTable = conn.getTable(dataTableName);
         PColumnFamily pfamily = dataTable.getColumnFamily(cfName);
         TableRef projectedTableRef =
                 new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());

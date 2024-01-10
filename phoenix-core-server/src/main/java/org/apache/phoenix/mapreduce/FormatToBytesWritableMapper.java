@@ -217,7 +217,7 @@ public abstract class FormatToBytesWritableMapper<RECORD> extends Mapper<LongWri
         indexStatusUpdaters = new IndexStatusUpdater[logicalNames.size()];
         int columnIndex = 0;
         for (int index = 0; index < logicalNames.size(); index++) {
-            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
+            PTable table = conn.getTable(logicalNames.get(index));
             if (!table.getImmutableStorageScheme().equals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)) {
                 List<PColumnFamily> cfs = table.getColumnFamilies();
                 for (int i = 0; i < cfs.size(); i++) {
