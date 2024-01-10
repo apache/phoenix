@@ -653,7 +653,8 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
             }
             final List<ColumnInfo> columnMetadataList =
-                    PhoenixRuntime.generateColumnInfo(pConnection, indexTableWithSchema, indexColumns);
+                    PhoenixRuntime.generateColumnInfo(pConnection, indexTableWithSchema,
+                            indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
             if (outputPath != null) {

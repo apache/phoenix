@@ -1473,8 +1473,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     /**
      * Returns true if this connection is being used to upgrade the data due to
      * PHOENIX-2067 and false otherwise.
-     *
-     * @return
      */
     public boolean isDescVarLengthRowKeyUpgrade() {
         return isDescVarLengthRowKeyUpgrade;

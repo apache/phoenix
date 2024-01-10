@@ -36,7 +36,6 @@ import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.DataSourceColN
 import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames.IndexSourceColNames;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 

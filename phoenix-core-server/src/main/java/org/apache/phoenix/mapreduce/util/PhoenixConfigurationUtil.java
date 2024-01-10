@@ -418,7 +418,7 @@ public final class PhoenixConfigurationUtil {
         }
         final String tableName = getOutputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        try (final PhoenixConnection connection = ConnectionUtil.getOutputConnection(configuration).
+        try (PhoenixConnection connection = ConnectionUtil.getOutputConnection(configuration).
                 unwrap(PhoenixConnection.class)) {
             List<String> upsertColumnList =
                     PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
@@ -496,8 +496,8 @@ public final class PhoenixConfigurationUtil {
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
-        try (final PhoenixConnection connection = ConnectionUtil.
-                getInputConnection(configuration, props).unwrap(PhoenixConnection.class)){
+        try (PhoenixConnection connection = ConnectionUtil.
+                getInputConnection(configuration, props).unwrap(PhoenixConnection.class)) {
             final List<String> selectColumnList = getSelectColumnList(configuration);
             columnMetadataList =
                     PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);
