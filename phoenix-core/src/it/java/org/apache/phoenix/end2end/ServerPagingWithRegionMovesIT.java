@@ -17,35 +17,13 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-
-import java.io.IOException;
-import java.sql.Connection;
-import java.sql.Date;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.iterate.ScanningResultPostDummyResultCaller;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDate;
@@ -55,10 +33,34 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * ServerPagingIT tests that include some region moves while performing rs#next.
@@ -66,9 +68,33 @@ import org.junit.experimental.categories.Category;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 
-    private static final ExecutorService EXECUTOR_SERVICE =
-            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true)
-                    .setNameFormat("server-paging-with-region-moves-%d").build());
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(ServerPagingWithRegionMovesIT.class);
+
+    private static boolean hasTestStarted = false;
+    private static int countOfDummyResults = 0;
+    private static final List<String> TABLE_NAMES = Collections.synchronizedList(new ArrayList<>());
+
+    private static class TestScanningResultPostDummyResultCaller extends
+            ScanningResultPostDummyResultCaller {
+
+        @Override
+        public void postDummyProcess() {
+            if (hasTestStarted && (countOfDummyResults++ % 3) == 0 &&
+                    (countOfDummyResults < 17 ||
+                            countOfDummyResults > 28 && countOfDummyResults < 40)) {
+                LOGGER.info("Moving regions of tables {}. current count of dummy results: {}",
+                        TABLE_NAMES, countOfDummyResults);
+                TABLE_NAMES.forEach(table -> {
+                    try {
+                        moveRegionsOfTable(table);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            }
+        }
+    }
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -76,7 +102,17 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(0));
         props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         props.put(QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, String.valueOf(2));
+        props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
+        props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
+                TestScanningResultPostDummyResultCaller.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        TABLE_NAMES.clear();
+        hasTestStarted = false;
+        countOfDummyResults = 0;
     }
 
     private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isPaged)
@@ -98,6 +134,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testOrderByNonAggregation() throws Exception {
+        hasTestStarted = true;
         final String tablename = generateUniqueName();
         final String tenantId = getOrganizationId();
 
@@ -127,6 +164,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                     "    transactions bigint,\n" +
                     "    region varchar,\n" +
                     "    CONSTRAINT pk PRIMARY KEY (organization_id, \"DATE\", feature, unique_users))";
+            TABLE_NAMES.add(tablename);
             StringBuilder buf = new StringBuilder(ddl);
             if (splits != null) {
                 buf.append(" SPLIT ON (");
@@ -202,6 +240,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 " WHERE organization_id=? AND unique_users <= 30 ORDER BY t DESC LIMIT 2";
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
              PreparedStatement statement = conn.prepareStatement(query)) {
+            TestUtil.dumpTable(conn, TableName.valueOf(tablename));
             statement.setString(1, tenantId);
             try (ResultSet rs = statement.executeQuery()) {
                 moveRegionsOfTable(tablename);
@@ -224,42 +263,75 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 new ArrayList<>(admin.getRegionServers());
         ServerName server1 = servers.get(0);
         ServerName server2 = servers.get(1);
-        EXECUTOR_SERVICE.execute(() -> {
-            List<RegionInfo> regionsOnServer1;
+        List<RegionInfo> regionsOnServer1;
+        try {
+            regionsOnServer1 = admin.getRegions(server1);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        List<RegionInfo> regionsOnServer2;
+        try {
+            regionsOnServer2 = admin.getRegions(server2);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        regionsOnServer1.forEach(regionInfo -> {
+            if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                try {
+                    admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        regionsOnServer2.forEach(regionInfo -> {
+            if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                try {
+                    admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+    }
+
+    private static void moveAllRegions() throws IOException {
+        Admin admin = getUtility().getAdmin();
+        List<ServerName> servers =
+                new ArrayList<>(admin.getRegionServers());
+        ServerName server1 = servers.get(0);
+        ServerName server2 = servers.get(1);
+        List<RegionInfo> regionsOnServer1;
+        try {
+            regionsOnServer1 = admin.getRegions(server1);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        List<RegionInfo> regionsOnServer2;
+        try {
+            regionsOnServer2 = admin.getRegions(server2);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        regionsOnServer1.forEach(regionInfo -> {
             try {
-                regionsOnServer1 = admin.getRegions(server1);
+                admin.move(regionInfo.getEncodedNameAsBytes(), server2);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            List<RegionInfo> regionsOnServer2;
+        });
+        regionsOnServer2.forEach(regionInfo -> {
             try {
-                regionsOnServer2 = admin.getRegions(server2);
+                admin.move(regionInfo.getEncodedNameAsBytes(), server1);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-            regionsOnServer1.forEach(regionInfo -> {
-                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
-                    try {
-                        admin.move(regionInfo.getEncodedNameAsBytes(), server2);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            });
-            regionsOnServer2.forEach(regionInfo -> {
-                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
-                    try {
-                        admin.move(regionInfo.getEncodedNameAsBytes(), server1);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-            });
         });
     }
 
     @Test
     public void testLimitOffset() throws Exception {
+        hasTestStarted = true;
         final String tablename = generateUniqueName();
         final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
                 "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
@@ -267,6 +339,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                 + "k1 INTEGER NOT NULL,\n" + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n"
                 + "C2.v1 VARCHAR,\n" + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) "
                 + "SPLIT ON ('e','i','o')";
+        TABLE_NAMES.add(tablename);
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             createTestTable(getUrl(), ddl);
@@ -346,16 +419,86 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals(25, rs.getInt(1));
             assertFalse(rs.next());
-            // because of descending order the offset is implemented on client
-            // so this generates a parallel scan and paging happens
             assertServerPagingMetric(tablename, rs, true);
         }
     }
 
     @Test
     public void testGroupBy() throws Exception {
+        hasTestStarted = true;
+        final String tablename = generateUniqueName();
+        TABLE_NAMES.add(tablename);
+        String ddl = "CREATE TABLE " + tablename + " (t_id VARCHAR NOT NULL,\n"
+                + "k1 INTEGER NOT NULL,\n"
+                + "k2 INTEGER CONSTRAINT pk PRIMARY KEY (t_id, k1)) ";
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTestTable(getUrl(), ddl);
+            for (int i = 0; i < 8; i++) {
+                conn.createStatement().execute("UPSERT INTO " + tablename
+                        + " values('tenant1'," + i + ","
+                        + (i + 1) + ")");
+            }
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 10, 2)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 11, 2)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 12, 3)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 13, 3)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 14, 4)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 15, 4)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 16, 4)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 17, 5)");
+            conn.createStatement()
+                    .execute("UPSERT INTO " + tablename + " values('tenant1', 18, 5)");
+            conn.commit();
+            TestUtil.dumpTable(conn, TableName.valueOf(tablename));
+            ResultSet rs =
+                    conn.createStatement().executeQuery("SELECT k2, count(*) FROM " + tablename
+                    + " where t_id = 'tenant1' group by k2");
+            moveRegionsOfTable(tablename);
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(1, rs.getInt(1));
+            Assert.assertEquals(1, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(2, rs.getInt(1));
+            Assert.assertEquals(3, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(3, rs.getInt(1));
+            Assert.assertEquals(3, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(4, rs.getInt(1));
+            Assert.assertEquals(4, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(5, rs.getInt(1));
+            Assert.assertEquals(3, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(6, rs.getInt(1));
+            Assert.assertEquals(1, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(7, rs.getInt(1));
+            Assert.assertEquals(1, rs.getInt(2));
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(8, rs.getInt(1));
+            Assert.assertEquals(1, rs.getInt(2));
+            Assert.assertFalse(rs.next());
+            assertServerPagingMetric(tablename, rs, true);
+        }
+    }
+
+    @Test
+    public void testGroupByWithIndex() throws Exception {
+        hasTestStarted = true;
         final String tablename = generateUniqueName();
         final String indexName = generateUniqueName();
+        TABLE_NAMES.add(tablename);
+        TABLE_NAMES.add(indexName);
 
         String ddl = "CREATE TABLE " + tablename + " (t_id VARCHAR NOT NULL,\n"
                 + "k1 INTEGER NOT NULL,\n"
@@ -393,89 +536,4 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         }
     }
 
-    @Test
-    public void testUncoveredQuery() throws Exception {
-        String dataTableName = generateUniqueName();
-        populateTable(dataTableName); // with two rows ('a', 'ab', 'abc', 'abcd') and ('b', 'bc', 'bcd', 'bcde')
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String indexTableName = generateUniqueName();
-            conn.createStatement().execute("CREATE UNCOVERED INDEX "
-                    + indexTableName + " on " + dataTableName + " (val1) ");
-            String selectSql;
-            int limit = 10;
-            // Verify that an index hint is not necessary for an uncovered index
-            selectSql = "SELECT  val2, val3 from " + dataTableName +
-                    " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde') LIMIT " + limit;
-            assertExplainPlanWithLimit(conn, selectSql, dataTableName, indexTableName, limit);
-
-            ResultSet rs = conn.createStatement().executeQuery(selectSql);
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
-            assertTrue(rs.next());
-            assertEquals("bcd", rs.getString(1));
-            assertEquals("bcde", rs.getString(2));
-            assertFalse(rs.next());
-            assertServerPagingMetric(indexTableName, rs, true);
-
-            // Add another row and run a group by query where the uncovered index should be used
-            conn.createStatement().execute("upsert into " + dataTableName
-                    + " (id, val1, val2, val3) values ('c', 'ab','cde', 'cdef')");
-            conn.commit();
-
-            selectSql = "SELECT count(val3) from " + dataTableName
-                    + " where val1 > '0' GROUP BY val1";
-            // Verify that we will read from the index table
-            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
-            rs = conn.createStatement().executeQuery(selectSql);
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
-            assertTrue(rs.next());
-            assertEquals(2, rs.getInt(1));
-            assertTrue(rs.next());
-            assertEquals(1, rs.getInt(1));
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
-            assertFalse(rs.next());
-
-            selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0'";
-            // Verify that we will read from the index table
-            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
-            rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals(3, rs.getInt(1));
-
-            // Run an order by query where the uncovered index should be used
-            selectSql = "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
-            // Verify that we will read from the index table
-            assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
-            rs = conn.createStatement().executeQuery(selectSql);
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
-            assertTrue(rs.next());
-            assertEquals("abcd", rs.getString(1));
-            assertTrue(rs.next());
-            assertEquals("cdef", rs.getString(1));
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
-            assertTrue(rs.next());
-            assertEquals("bcde", rs.getString(1));
-            moveRegionsOfTable(dataTableName);
-            moveRegionsOfTable(indexTableName);
-            assertFalse(rs.next());
-        }
-    }
-
-    private void populateTable(String tableName) throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
-        conn.createStatement().execute("create table " + tableName +
-                " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10)," +
-                " val3 varchar(10))");
-        conn.createStatement().execute("upsert into " + tableName
-                + " values ('a', 'ab', 'abc', 'abcd')");
-        conn.commit();
-        conn.createStatement().execute("upsert into " + tableName
-                + " values ('b', 'bc', 'bcd', 'bcde')");
-        conn.commit();
-        conn.close();
-    }
 }

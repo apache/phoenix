@@ -292,8 +292,18 @@ public class TableResultIterator implements ResultIterator {
             ResultIterator delegate = this.scanIterator;
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
+                    // It is important to update the scan boundaries for the reverse scan
+                    // and set the scan as reverse at the client side rather than update it
+                    // at the server side. Updating reverse scan boundaries at the server side
+                    // can lead to incorrect results if the region moves in the middle of the
+                    // ongoing scans.
+                    if (ScanUtil.isReversed(scan)) {
+                        ScanUtil.setupReverseScan(scan);
+                    }
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder, plan.getContext(), isMapReduceContext, maxQueryEndTime);
+                            new ScanningResultIterator(htable.getScanner(scan), scan,
+                                    scanMetricsHolder, plan.getContext(), isMapReduceContext,
+                                    maxQueryEndTime);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ServerUtil.parseServerException(e);

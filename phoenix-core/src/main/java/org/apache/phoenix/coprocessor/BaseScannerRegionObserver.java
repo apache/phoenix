@@ -229,9 +229,21 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0) || 
                     (actualStartRow != null && Bytes.compareTo(actualStartRow, lowerInclusiveRegionKey) < 0);
         } else {
-            isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
-                    (upperExclusiveRegionKey.length != 0 && upperExclusiveScanKey.length == 0);
+            if (scan.isReversed()) {
+                isStaleRegionBoundaries =
+                        Bytes.compareTo(upperExclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                                (Bytes.compareTo(lowerInclusiveScanKey, upperExclusiveRegionKey) >
+                                        0 && upperExclusiveRegionKey.length != 0) ||
+                                (upperExclusiveRegionKey.length != 0 &&
+                                        lowerInclusiveScanKey.length == 0);
+            } else {
+                isStaleRegionBoundaries =
+                        Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                                (Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) >
+                                        0 && upperExclusiveRegionKey.length != 0) ||
+                                (upperExclusiveRegionKey.length != 0 &&
+                                        upperExclusiveScanKey.length == 0);
+            }
         }
         if (isStaleRegionBoundaries) {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());

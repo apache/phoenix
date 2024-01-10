@@ -19,7 +19,6 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkPositionIndex;
-import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
@@ -29,18 +28,25 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 
@@ -48,6 +54,8 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Collections2;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Ordering;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Result scanner that sorts aggregated rows by columns specified in the ORDER BY clause.
@@ -58,6 +66,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Ordering;
  * @since 0.1
  */
 public class OrderedResultIterator implements PeekingResultIterator {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(OrderedResultIterator.class);
 
     /** A container that holds pointers to a {@link Result} and its sort keys. */
     protected static class ResultEntry {
@@ -151,6 +161,14 @@ public class OrderedResultIterator implements PeekingResultIterator {
     private Tuple dummyTuple = null;
     private long byteSize;
     private long pageSizeMs;
+    private Scan scan;
+    private byte[] scanStartRowKey;
+    private byte[] prevScanStartRowKey;
+    private Boolean prevScanIncludeStartRowKey;
+    private boolean includeStartRowKey;
+    private boolean serverSideIterator = false;
+    private boolean firstScan = true;
+    private boolean updateScannerBasedOnPrevRowKey = false;
 
     protected ResultIterator getDelegate() {
         return delegate;
@@ -170,6 +188,28 @@ public class OrderedResultIterator implements PeekingResultIterator {
                                  List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
                                  long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize) {
         this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, estimatedRowSize, Long.MAX_VALUE);
+    }
+
+    public OrderedResultIterator(ResultIterator delegate,
+                                 List<OrderByExpression> orderByExpressions,
+                                 boolean spoolingEnabled,
+                                 long thresholdBytes, Integer limit, Integer offset,
+                                 int estimatedRowSize, long pageSizeMs, Scan scan,
+                                 RegionInfo regionInfo) {
+        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset,
+                estimatedRowSize, pageSizeMs);
+        this.scan = scan;
+        // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
+        // for reverse scan.
+        this.scanStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                (scan.isReversed() ? regionInfo.getEndKey() : regionInfo.getStartKey());
+        // Retrieve start rowkey of the previous scan. This would be different than
+        // current scan start rowkey if the region has recently moved or split or merged.
+        this.prevScanStartRowKey =
+                scan.getAttribute(BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW);
+        this.prevScanIncludeStartRowKey = true;
+        this.includeStartRowKey = scan.includeStartRow();
+        this.serverSideIterator = true;
     }
 
     public OrderedResultIterator(ResultIterator delegate,
@@ -257,11 +297,88 @@ public class OrderedResultIterator implements PeekingResultIterator {
     
     @Override
     public Tuple next() throws SQLException {
-        getResultIterator();
-        if (!resultIteratorReady) {
-            return dummyTuple;
+        try {
+            if (firstScan && serverSideIterator && prevScanStartRowKey != null &&
+                    prevScanIncludeStartRowKey != null) {
+                firstScan = false;
+                if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
+                    if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) != 0 ||
+                            prevScanIncludeStartRowKey != includeStartRowKey) {
+                        LOGGER.info("Region has moved. Prev scan start rowkey {} is not same as" +
+                                        " current scan start rowkey  {}",
+                                Bytes.toStringBinary(prevScanStartRowKey),
+                                Bytes.toStringBinary(scanStartRowKey));
+                        // If region has moved in the middle of the scan operation, after resetting
+                        // the scanner, hbase client uses (latest received rowkey + \x00) as new
+                        // start rowkey for resuming the scan operation on the new scanner.
+                        if (Bytes.compareTo(
+                                ByteUtil.concat(prevScanStartRowKey, Bytes.toBytesBinary("\\x00")),
+                                scanStartRowKey) == 0) {
+                            scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
+                                    prevScanStartRowKey);
+                            scan.setAttribute(
+                                    QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
+                                    Bytes.toBytes(prevScanIncludeStartRowKey));
+                        } else {
+                            // This happens when the server side scanner has already sent some
+                            // rows back to the client and region has moved, so now we need to
+                            // use updateScannerBasedOnPrevRowKey flag and also reset the scanner
+                            // at paging region scanner level to re-read the previously sent
+                            // values in order to re-compute the aggregation and then return
+                            // only the next rowkey that was not yet sent back to the client.
+                            updateScannerBasedOnPrevRowKey = true;
+                            scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
+                                    prevScanStartRowKey);
+                            scan.setAttribute(
+                                    QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
+                                    Bytes.toBytes(prevScanIncludeStartRowKey));
+                        }
+                    }
+                }
+            }
+            getResultIterator();
+            if (!resultIteratorReady) {
+                return dummyTuple;
+            }
+            Tuple result = resultIterator.next();
+            if (updateScannerBasedOnPrevRowKey) {
+                while (true) {
+                    if (result == null) {
+                        updateScannerBasedOnPrevRowKey = false;
+                        return null;
+                    }
+                    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+                    result.getKey(ptr);
+                    byte[] resultRowKey = new byte[ptr.getLength()];
+                    System.arraycopy(ptr.get(), ptr.getOffset(), resultRowKey, 0,
+                            resultRowKey.length);
+                    if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
+                        updateScannerBasedOnPrevRowKey = false;
+                        if (includeStartRowKey) {
+                            return result;
+                        }
+                        return resultIterator.next();
+                    } else if (
+                            Bytes.compareTo(
+                                    ByteUtil.concat(resultRowKey, Bytes.toBytesBinary("\\x00")),
+                                    scanStartRowKey) == 0) {
+                        updateScannerBasedOnPrevRowKey = false;
+                        if (includeStartRowKey) {
+                            return resultIterator.next();
+                        }
+                    }
+                    result = resultIterator.next();
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            LOGGER.error("Ordered result iterator next encountered error.", e);
+            if (e instanceof SQLException) {
+                throw e;
+            } else {
+                throw new PhoenixIOException(e);
+            }
         }
-        return resultIterator.next();
     }
     
     private PeekingResultIterator getResultIterator() throws SQLException {
@@ -288,8 +405,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 }
 
                 if (isDummy(result)) {
-                    dummyTuple = result;
-                    return resultIterator;
+                    return getDummyResult();
                 }
                 int pos = 0;
                 ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[numSortKeys];
@@ -301,18 +417,48 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 }
                 queueEntries.add(new ResultEntry(sortKeys, result));
                 if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
-                    dummyTuple = getDummyTuple(result);
-                    return resultIterator;
+                    return getDummyResult();
                 }
             }
             resultIteratorReady = true;
             this.byteSize = queueEntries.getByteSize();
         } catch (IOException e) {
+            LOGGER.error("Error while getting result iterator from OrderedResultIterator.", e);
             ServerUtil.createIOException(e.getMessage(), e);
+            throw new SQLException(e);
         } finally {
             delegate.close();
         }
         
+        return resultIterator;
+    }
+
+    /**
+     * Retrieve dummy rowkey and return to the client.
+     *
+     * @return the result iterator.
+     */
+    private PeekingResultIterator getDummyResult() {
+        if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
+            if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) != 0 ||
+                    prevScanIncludeStartRowKey != includeStartRowKey) {
+                byte[] lastByte =
+                        new byte[]{scanStartRowKey[scanStartRowKey.length - 1]};
+                if (scanStartRowKey.length > 1 && Bytes.compareTo(lastByte,
+                        Bytes.toBytesBinary("\\x00")) == 0) {
+                    byte[] prevKey = new byte[scanStartRowKey.length - 1];
+                    System.arraycopy(scanStartRowKey, 0, prevKey, 0,
+                            prevKey.length);
+                    dummyTuple = ScanUtil.getDummyTuple(prevKey);
+                } else {
+                    dummyTuple = ScanUtil.getDummyTuple(scanStartRowKey);
+                }
+            } else {
+                dummyTuple = ScanUtil.getDummyTuple(scanStartRowKey);
+            }
+        } else {
+            dummyTuple = ScanUtil.getDummyTuple(scanStartRowKey);
+        }
         return resultIterator;
     }
 

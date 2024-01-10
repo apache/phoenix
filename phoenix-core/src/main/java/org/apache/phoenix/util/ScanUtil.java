@@ -1611,7 +1611,11 @@ public class ScanUtil {
                                             Scan scan)
             throws ResultSetOutOfScanRangeException {
         try {
-            verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            if (scan.isReversed()) {
+                verifyScanRangesForReverseScan(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            } else {
+                verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            }
         } catch (ResultSetOutOfScanRangeException e) {
             if (isLocalIndex(scan)) {
                 verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_START_ROW_SUFFIX),
@@ -1651,6 +1655,37 @@ public class ScanUtil {
                 }
             } else {
                 if (Bytes.compareTo(stopRow, ptr.get()) <= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            }
+        }
+    }
+
+    private static void verifyScanRangesForReverseScan(ImmutableBytesWritable ptr,
+                                                       Scan scan,
+                                                       byte[] startRow,
+                                                       byte[] stopRow)
+            throws ResultSetOutOfScanRangeException {
+        if (stopRow != null
+                && Bytes.compareTo(stopRow, HConstants.EMPTY_START_ROW) != 0) {
+            if (scan.includeStopRow()) {
+                if (Bytes.compareTo(stopRow, ptr.get()) > 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(stopRow, ptr.get()) >= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            }
+        }
+        if (startRow != null
+                && Bytes.compareTo(startRow, HConstants.EMPTY_END_ROW) != 0) {
+            if (scan.includeStartRow()) {
+                if (Bytes.compareTo(startRow, ptr.get()) < 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(startRow, ptr.get()) <= 0) {
                     throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
                 }
             }

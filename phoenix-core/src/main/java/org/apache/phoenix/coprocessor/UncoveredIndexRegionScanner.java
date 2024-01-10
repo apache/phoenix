@@ -44,6 +44,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -93,6 +94,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected int indexRowCount = 0;
     protected final long pageSizeMs;
     protected byte[] lastIndexRowKey = null;
+    private byte[] previousResultRowKey = null;
+    private final byte[] initStartRowKey;
+    private final boolean includeInitStartRowKey;
 
     public UncoveredIndexRegionScanner(final RegionScanner innerScanner,
                                              final Region region,
@@ -136,6 +140,12 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         this.ptr = ptr;
         this.tupleProjector = tupleProjector;
         this.pageSizeMs = pageSizeMs;
+        // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
+        // for reverse scan.
+        this.initStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                (scan.isReversed() ? region.getRegionInfo().getEndKey() :
+                        region.getRegionInfo().getStartKey());
+        this.includeInitStartRowKey = scan.includeStartRow();
     }
 
     @Override
@@ -376,6 +386,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 if (state == State.SCANNING_INDEX) {
                     hasMore = scanIndexTableRows(result, startTime);
                     if (isDummy(result)) {
+                        updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey,
+                                scan);
                         return hasMore;
                     }
                     state = State.SCANNING_DATA;
@@ -385,9 +397,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     indexRowIterator = indexRows.iterator();
                 }
                 if (state == State.READY) {
-                    return getNextCoveredIndexRow(result);
+                    boolean moreRows = getNextCoveredIndexRow(result);
+                    if (!result.isEmpty()) {
+                        previousResultRowKey = CellUtil.cloneRow(result.get(0));
+                    }
+                    return moreRows;
                 } else {
-                    getDummyResult(lastIndexRowKey, result);
+                    updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey,
+                            scan);
                     return true;
                 }
             }
@@ -399,4 +416,37 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             region.closeRegionOperation();
         }
     }
+
+    /**
+     * Add dummy cell to the result list based on either the previous rowkey returned to the
+     * client or the start rowkey and start rowkey include params.
+     *
+     * @param result result to add the dummy cell to.
+     * @param initStartRowKey scan start rowkey.
+     * @param includeInitStartRowKey scan start rowkey included.
+     * @param scan scan object.
+     */
+    private void updateDummyWithPrevRowKey(List<Cell> result, byte[] initStartRowKey,
+                                           boolean includeInitStartRowKey, Scan scan) {
+        result.clear();
+        if (previousResultRowKey != null) {
+            getDummyResult(previousResultRowKey, result);
+        } else {
+            if (includeInitStartRowKey && initStartRowKey.length > 0) {
+                byte[] prevKey;
+                if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
+                        1, Bytes.toBytesBinary("\\x00"), 0, 1) == 0) {
+                    prevKey = new byte[initStartRowKey.length - 1];
+                    System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
+                } else {
+                    prevKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(initStartRowKey,
+                            new byte[10]), initStartRowKey.length + 10);
+                }
+                getDummyResult(prevKey, result);
+            } else {
+                getDummyResult(initStartRowKey, result);
+            }
+        }
+    }
+
 }

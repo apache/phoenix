@@ -230,10 +230,13 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 orderByExpression.readFields(input);
                 orderByExpressions.add(orderByExpression);
             }
-            PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-            ResultIterator inner = new RegionScannerResultIterator(s, EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
+            PTable.QualifierEncodingScheme encodingScheme =
+                    EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+            ResultIterator inner = new RegionScannerResultIterator(s,
+                    EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
             return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
-                    thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan));
+                    thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
+                    getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
