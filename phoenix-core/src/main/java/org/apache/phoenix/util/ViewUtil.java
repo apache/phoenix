@@ -1104,7 +1104,7 @@ public class ViewUtil {
         }
     }
 
-    public static List<TableTTLInfo> getRowKeyPrefixesForTable(String fullTableName, RegionCoprocessorEnvironment env) {
+    public static List<TableTTLInfo> getRowKeyPrefixesForTableOld(String fullTableName, RegionCoprocessorEnvironment env) {
         List<TableTTLInfo> tableList = new ArrayList<TableTTLInfo>();
         Pair<Boolean, Boolean> scanSysCatForTTLDefinedOnAnyChildPair = new Pair<>(true, false);
         final List<PTable> childViews = new ArrayList<>();
@@ -1144,11 +1144,11 @@ public class ViewUtil {
 
     }
 
-    public static List<TableTTLInfo> getRowKeyPrefixesForTable2(String fullTableName) {
-        return getRowKeyPrefixesForTable2(fullTableName, HBaseConfiguration.create());
+    public static List<TableTTLInfo> getRowKeyPrefixesForPartitionedTables(String fullTableName, boolean isPartitionedIndexTable) {
+        return getRowKeyPrefixesForPartitionedTables(fullTableName, HBaseConfiguration.create(), isPartitionedIndexTable);
     }
 
-    public static List<TableTTLInfo> getRowKeyPrefixesForTable2(String fullTableName, Configuration configuration) {
+    public static List<TableTTLInfo> getRowKeyPrefixesForPartitionedTables(String fullTableName, Configuration configuration, boolean isPartitionedIndexTable) {
         List<TableTTLInfo> tableList = new ArrayList<TableTTLInfo>();
 
         try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
@@ -1189,7 +1189,7 @@ public class ViewUtil {
                                 "WHERE TABLE_TYPE = 'v' AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
                                 "(" + globalViewsClause.toString() + ")";
                         logger.info(String.format("globalViewsWithTTLSQL : %s", globalViewsWithTTLSQL));
-                        getTableTTLInfo(globalViewsWithTTLSQL, configuration, false, tableList);
+                        getTableTTLInfo(globalViewsWithTTLSQL, configuration, isPartitionedIndexTable, tableList);
                     }
                 }
             }
@@ -1229,7 +1229,7 @@ public class ViewUtil {
                                 "WHERE TABLE_TYPE = 'v' AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
                                 "(" + tenantViewsClause.toString() + ")";
                         logger.info(String.format("tenantViewsWithTTLSQL : %s", tenantViewsWithTTLSQL));
-                        getTableTTLInfo(tenantViewsWithTTLSQL, configuration, false, tableList);
+                        getTableTTLInfo(tenantViewsWithTTLSQL, configuration, isPartitionedIndexTable, tableList);
                     }
                 }
             }
@@ -1324,7 +1324,7 @@ public class ViewUtil {
 
     }
 
-    public static void getTableTTLInfo(String viewsWithTTLSQL, Configuration configuration, boolean indexesOnly, List<TableTTLInfo> tableTTLInfoList)
+    public static void getTableTTLInfo(String viewsWithTTLSQL, Configuration configuration, boolean isPartitionedIndexTable, List<TableTTLInfo> tableTTLInfoList)
             throws SQLException {
 
         try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
@@ -1348,7 +1348,7 @@ public class ViewUtil {
                         }
                         Connection tableConnection = QueryUtil.getConnectionOnServer(tenantProps, configuration);
                         PTable pTable = PhoenixRuntime.getTableNoCache(tableConnection, fullTableName);
-                        if (indexesOnly) {
+                        if (isPartitionedIndexTable) {
                             for (PTable index : pTable.getIndexes()) {
                                 logger.info(String.format("index-name = %s, ttl = %d, row-key-prefix = %d", index.getName(), index.getTTL(), index.getViewIndexId()));
                                 byte[] viewIndexIdBytes = PSmallint.INSTANCE.toBytes(index.getViewIndexId());

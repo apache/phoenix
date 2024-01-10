@@ -46,6 +46,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -498,6 +499,9 @@ public class WhereOptimizer {
         }
         KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, parentTable);
         KeyExpressionVisitor.KeySlots keySlots = viewWhereExpression.accept(visitor);
+        if (keySlots == null) {
+            return ByteUtil.EMPTY_BYTE_ARRAY;
+        }
 
         for (KeyExpressionVisitor.KeySlot slot : keySlots.getSlots()) {
             if (slot != null) {
@@ -690,6 +694,24 @@ public class WhereOptimizer {
         return count == candidates.size()
                 && (context.getScanRanges().isPointLookup() || context.getScanRanges().useSkipScanFilter())
                 && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
+    }
+
+    public static List<Integer> getKeySlotPositions(StatementContext context, FilterableStatement statement) throws SQLException {
+        final List<Integer> pkPositions = Lists.newArrayList();
+        PTable table = context.getCurrentTable().getTable();
+        ParseNode whereNode = statement.getWhere();
+        Expression whereExpression = whereNode.accept(new WhereCompiler.WhereExpressionCompiler(context));
+
+        KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, table);
+        KeyExpressionVisitor.KeySlots keySlots = whereExpression.accept(visitor);
+        if (keySlots != null) {
+            Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.getSlots().iterator();
+            while (iterator.hasNext()) {
+                KeyExpressionVisitor.KeySlot slot = iterator.next();
+                pkPositions.add(slot.getPKPosition());
+            }
+        }
+        return pkPositions;
     }
 
     private static class RemoveExtractedNodesVisitor extends StatelessTraverseNoExpressionVisitor<Expression> {

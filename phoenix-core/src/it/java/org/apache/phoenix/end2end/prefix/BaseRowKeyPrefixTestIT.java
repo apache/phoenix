@@ -1019,7 +1019,7 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
     @Test
     public void testGetViewInfo() {
         //ViewUtil.getRowKeyPrefixesForTable2("PHX_TTL.IMMUTABLE_ENTITY_DATA");
-        List<TableTTLInfo> tableTTLInfoList = ViewUtil.getRowKeyPrefixesForTable2("LRT.COREAPPLOGS");
+        List<TableTTLInfo> tableTTLInfoList = ViewUtil.getRowKeyPrefixesForPartitionedTables("LRT.COREAPPLOGS", false);
         for (TableTTLInfo ttlInfo : tableTTLInfoList) {
             LOGGER.info(ttlInfo.toString());
         }
@@ -1028,7 +1028,10 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
 
     @Test
     public void testGetViewIndexInfo() {
-        ViewUtil.getRowKeyPrefixesForIndexes2("_IDX_PHX_TTL.IMMUTABLE_ENTITY_DATA");
+        List<TableTTLInfo> tableTTLInfoList = ViewUtil.getRowKeyPrefixesForPartitionedTables("_IDX_PHX_TTL.IMMUTABLE_ENTITY_DATA", true);
+        for (TableTTLInfo ttlInfo : tableTTLInfoList) {
+            LOGGER.info(ttlInfo.toString());
+        }
     }
 
     @Test
