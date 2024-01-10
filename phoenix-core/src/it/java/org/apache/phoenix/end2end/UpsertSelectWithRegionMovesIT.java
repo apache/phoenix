@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -84,7 +85,7 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // An hour - inherited from ParallelStatsDisabledIT
         props.put(
-                BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(60 * 60));
         // Postpone scans of SYSTEM.TASK indefinitely so as to prevent
         // any addition to GLOBAL_OPEN_PHOENIX_CONNECTIONS

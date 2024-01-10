@@ -23,7 +23,7 @@ import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtilHelper;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
@@ -59,7 +59,7 @@ public class TransformIT extends ParallelStatsDisabledIT {
     public TransformIT() {
         testProps.put(QueryServices.DEFAULT_IMMUTABLE_STORAGE_SCHEME_ATTRIB, "ONE_CELL_PER_COLUMN");
         testProps.put(QueryServices.DEFAULT_COLUMN_ENCODED_BYTES_ATRRIB, "0");
-        testProps.put(PhoenixConfigurationUtil.TRANSFORM_MONITOR_ENABLED, Boolean.toString(false));
+        testProps.put(PhoenixConfigurationUtilHelper.TRANSFORM_MONITOR_ENABLED, Boolean.toString(false));
     }
 
     @Before

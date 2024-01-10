@@ -30,8 +30,8 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.task.ServerTask;
 import org.apache.phoenix.schema.task.SystemTaskParams;
-import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -150,7 +150,7 @@ public class IndexRebuildTaskIT extends BaseTest {
                             TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
 
             Timestamp startTs = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-            Task.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+            ServerTask.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
                 .setConn(conn.unwrap(PhoenixConnection.class))
                 .setTaskType(PTable.TaskType.INDEX_REBUILD)
                 .setTenantId(TENANT1)

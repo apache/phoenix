@@ -14,9 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#Omid TSO connection
+# Omid TSO connection
+# The default port from 54758 has changed to 24758 since Omid 1.1.1
 connectionType: !!org.apache.omid.tso.client.OmidClientConfiguration$ConnType DIRECT
-connectionString: "localhost:54758"
+connectionString: "localhost:24758"
 
 # When Omid is working in High Availability mode, two or more replicas of the TSO server are running in primary/backup
 # mode. When a TSO server replica is elected as master, it publishes its address through ZK. In order to configure
