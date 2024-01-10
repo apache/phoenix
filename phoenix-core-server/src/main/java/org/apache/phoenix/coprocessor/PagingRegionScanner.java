@@ -72,7 +72,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
             // include it.
             // If they are set as the scan attributes, close the scanner, reopen it with
             // updated start rowkey and whether to include it. Update mvcc read point from the
-            // previouse scanner and set it back to the new scanner to maintain the read
+            // previous scanner and set it back to the new scanner to maintain the read
             // consistency for the given region.
             // Once done, continue the scan operation and reset the attributes.
             if (adjustedStartRowKey != null && adjustedStartRowKeyIncludeBytes != null) {
