@@ -92,8 +92,8 @@ public class PrefixIndex {
 			convertedIndex = 128 + (128 + index);
 			index = convertedIndex;
 		}
-		if (LOGGER.isDebugEnabled()) {
-			LOGGER.debug(String.format("%d, %d, %d", depth, originalIndex, convertedIndex));
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace(String.format("%d, %d, %d", depth, originalIndex, convertedIndex));
 		}
 
 		return get(node.tryOptimisticGet(index), key, depth + 1);
