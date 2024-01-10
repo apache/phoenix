@@ -54,7 +54,7 @@ package org.apache.phoenix.jdbc;
  * Test failover basics for {@link FailoverPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class FailoverPhoenixConnectionWithZKClusterIT {
+public class FailoverPhoenixConnection2IT {
     private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnectionIT.class);
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
