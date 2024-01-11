@@ -18,8 +18,7 @@
 
 package org.apache.hadoop.hbase.regionserver.wal;
 
-import java.io.IOException;
-
+import org.apache.phoenix.compat.hbase.CompatIndexedHLogReader;
 
 
 /**
@@ -39,11 +38,6 @@ import java.io.IOException;
  * we need to track which of the regions were on the server when it crashed only only split those
  * edits out into their respective regions.
  */
-public class IndexedHLogReader extends ProtobufLogReader {
+public class IndexedHLogReader extends CompatIndexedHLogReader {
 
-  @Override
-  protected void initAfterCompression() throws IOException {
-      conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY, IndexedWALEditCodec.class.getName());
-      super.initAfterCompression();
-  }
 }

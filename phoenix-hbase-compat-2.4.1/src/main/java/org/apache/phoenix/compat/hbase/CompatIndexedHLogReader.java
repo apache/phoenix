@@ -18,26 +18,14 @@ package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 
-import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
+import org.apache.hadoop.hbase.regionserver.wal.ProtobufLogReader;
+import org.apache.hadoop.hbase.regionserver.wal.WALCellCodec;
 
-/**
- * {@link RpcScheduler} that first checks to see if this is an index or metadata update before
- * passing off the call to the delegate {@link RpcScheduler}.
- */
-public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
-    protected RpcScheduler delegate;
-
+public abstract class CompatIndexedHLogReader extends ProtobufLogReader {
     @Override
-    public boolean dispatch(CallRunner task) {
-        try {
-            return compatDispatch(task);
-        } catch (Exception e) {
-            //This never happens with Hbase 2.5
-            throw new RuntimeException(e);
-        }
+    protected void initAfterCompression() throws IOException {
+        conf.set(WALCellCodec.WAL_CELL_CODEC_CLASS_KEY,
+                 "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
+        super.initAfterCompression();
     }
-
-    public abstract boolean compatDispatch(CallRunner task)
-            throws IOException, InterruptedException;
 }
