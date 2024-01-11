@@ -70,6 +70,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -223,6 +224,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -474,6 +476,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view
+                                // remove cached PTable to ensure latest PTable is always retrieved
+                                connection.removeTable(connection.getTenantId(),
+                                        SchemaUtil.getTableName(schemaN, tableN),
+                                        null, HConstants.LATEST_TIMESTAMP);
                                 new MetaDataClient(connection)
                                         .updateCache(tenantId, schemaN, tableN, true);
                                 // skip last ddl timestamp validation in the retry
