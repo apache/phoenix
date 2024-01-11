@@ -194,21 +194,8 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     @Override
-    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
-            CompareOp compareOp, byte[] value, Put put) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
             byte[] value, Delete delete) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
-            CompareOp compareOp, byte[] value, Delete delete)
-            throws IOException {
         throw new UnsupportedOperationException();
     }
 
@@ -271,13 +258,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     @Override
-    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier,
-            CompareOp compareOp, byte[] value, RowMutations mutation)
-            throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public int getOperationTimeout() {
         throw new UnsupportedOperationException();
     }
@@ -336,11 +316,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     @Override
     public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
             Delete delete) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
         throw new UnsupportedOperationException();
     }
 
