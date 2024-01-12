@@ -5,6 +5,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
+/**
+ * Simple POJO class to hold TTL info
+ */
 public class TableTTLInfo implements Comparable {
 	private final byte[] physicalTableName;
 	private final byte[] tenantId;

@@ -7,7 +7,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 
 /**
- * This class holds the index mapping row-key prefixes to tableIds.
+ * This class holds the index, mapping row-key prefixes to tableIds.
  * Assumes byte[] are UTF-8 encoded.
  * This class is thread safe.
  */
@@ -17,6 +17,8 @@ public class PrefixIndex {
 	public static final int R = 255;
 	private TrieNode root = new TrieNode();
 	private final AtomicInteger validPrefixes = new AtomicInteger(0);
+
+	// Basic Trie node implementation
 	class TrieNode {
 		private Integer tableId = null;
 		TrieNode[] next = new TrieNode[R];
@@ -60,9 +62,12 @@ public class PrefixIndex {
 		}
 	}
 
+	// return the number of prefixes that this index has.
 	public int getValidPrefixes() {
 		return validPrefixes.get();
 	}
+
+	// return the Id associated with the prefix.
 	public Integer getTableIdWithPrefix(byte[] prefix, int offset) {
 		return get(prefix, offset);
 	}
@@ -99,10 +104,12 @@ public class PrefixIndex {
 		return get(node.tryOptimisticGet(index), key, depth + 1);
 	}
 
+	// Associate prefix key with the supplied Id.
 	public void put(byte[] key, int tableId) {
 		root = put(root, key, tableId, 0, false);
 	}
 
+	// helper method to recursively add the key to trie.
 	private TrieNode put(TrieNode node, byte[] key, int tableId, int depth, boolean isLocked) {
 
 		if (node == null) {
@@ -121,7 +128,6 @@ public class PrefixIndex {
 			convertedIndex = 128 + (128 + index);
 			index = convertedIndex;
 		}
-		//System.out.println(String.format("%d, %d, %d, %d", tableId, depth, originalIndex, convertedIndex));
 		if (!isLocked && node.next[index] == null) {
 			node.put(index, key, tableId, depth + 1);
 		}
