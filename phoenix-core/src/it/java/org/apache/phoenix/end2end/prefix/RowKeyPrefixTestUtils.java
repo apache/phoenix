@@ -1,9 +1,14 @@
-package org.apache.phoenix.compile;
+package org.apache.phoenix.end2end.prefix;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.WhereCompiler;
+import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.coprocessor.TableInfo;
 import org.apache.phoenix.prefix.table.TableTTLInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -31,7 +36,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LINK_HBASE_
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
-public class RowKeyPrefixUtils {
+public class RowKeyPrefixTestUtils {
     public static final String ORG_ID_FMT = "00D0x0000";
 
     public static List<TableTTLInfo> getRowKeyPrefixesForTable(String url, String parentSchemaName, String parentTableName) {
@@ -62,7 +67,8 @@ public class RowKeyPrefixUtils {
                             String.format("%s;%s=%s", url, TENANT_ID_ATTRIB, tenantId.getString()), tenantProps);
 
 
-                    StatementContext viewStatementContext =  getViewStatementContext(stmtConnection, viewStatement, viewSelectStatement);
+                    StatementContext
+                            viewStatementContext =  getViewStatementContext(stmtConnection, viewStatement, viewSelectStatement);
                     PTable viewStatementTable = viewStatementContext.getCurrentTable().getTable();
                     // Where clause with INs and ORs
                     ParseNode whereNode = viewSelectStatement.getWhere();

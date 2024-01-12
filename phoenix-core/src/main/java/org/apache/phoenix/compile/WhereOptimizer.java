@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -43,10 +44,13 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -71,6 +75,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -79,6 +85,7 @@ import org.slf4j.LoggerFactory;
 import java.math.BigInteger;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -91,6 +98,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Properties;
 import java.util.Set;
 
 /**
@@ -703,6 +711,46 @@ public class WhereOptimizer {
         Expression whereExpression = whereNode.accept(new WhereCompiler.WhereExpressionCompiler(context));
 
         KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, table);
+        KeyExpressionVisitor.KeySlots keySlots = whereExpression.accept(visitor);
+        if (keySlots != null) {
+            Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.getSlots().iterator();
+            while (iterator.hasNext()) {
+                KeyExpressionVisitor.KeySlot slot = iterator.next();
+                pkPositions.add(slot.getPKPosition());
+            }
+        }
+        return pkPositions;
+    }
+
+    public static List<Integer> getKeySlotPositionsForView(PTable view, Configuration conf) throws SQLException {
+        String physicalTableName = view.getPhysicalName().getString();
+        PName tenantId = view.getTenantId();
+        String viewName = view.getName().getString();
+        String viewStatement = view.getViewStatement();
+        byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+        SelectStatement viewSelectStatement = new SQLParser(viewStatement).parseQuery();
+
+        Properties tenantProps = new Properties();
+        if (tenantId != null) {
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId.getString());
+        }
+
+        Connection stmtConnection = QueryUtil.getConnectionOnServer(tenantProps, conf)
+                .unwrap(PhoenixConnection.class);
+
+        PhoenixPreparedStatement preparedViewStatement =
+                stmtConnection.prepareStatement(viewStatement).unwrap(PhoenixPreparedStatement.class);
+
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(viewSelectStatement,
+                stmtConnection.unwrap(PhoenixConnection.class));
+        StatementContext viewStatementContext = new StatementContext(preparedViewStatement, resolver);
+
+        final List<Integer> pkPositions = Lists.newArrayList();
+        PTable table = viewStatementContext.getCurrentTable().getTable();
+        ParseNode whereNode = viewSelectStatement.getWhere();
+        Expression whereExpression = whereNode.accept(new WhereCompiler.WhereExpressionCompiler(viewStatementContext));
+
+        KeyExpressionVisitor visitor = new KeyExpressionVisitor(viewStatementContext, table);
         KeyExpressionVisitor.KeySlots keySlots = whereExpression.accept(visitor);
         if (keySlots != null) {
             Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.getSlots().iterator();
@@ -1964,7 +2012,7 @@ public class WhereOptimizer {
          * to produce the start and stop scan range.
          *
          */
-        static final class KeySlot {
+        public static final class KeySlot {
             private final int pkPosition; // Position in primary key
             private final int pkSpan; // Will be > 1 for RVC
             private final KeyPart keyPart; // Used to produce the KeyRanges below

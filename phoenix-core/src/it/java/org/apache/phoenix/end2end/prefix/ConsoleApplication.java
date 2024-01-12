@@ -1,4 +1,4 @@
-package org.apache.phoenix.prefix;
+package org.apache.phoenix.end2end.prefix;
 
 
 import org.apache.hadoop.conf.Configuration;
@@ -22,7 +22,7 @@ public class ConsoleApplication  {
 
 	public static void run(String... args) {
 		
-		TableSearchService tableSearchService = new TableSearchService();
+		TableTTLInfoTestHelper tableTTLInfoTestHelper = new TableTTLInfoTestHelper();
 		Scanner in = new Scanner(System.in);
 		try {
 			registerDriver();
@@ -47,11 +47,11 @@ public class ConsoleApplication  {
 						String parentSchemaName = tableNameParts.length == 2 ? tableNameParts[0] : "";
 						String parentTableName = tableNameParts.length == 2 ? tableNameParts[1] : tableNameParts[0];
 						System.out.println(String.format("Indexing %s.%s", parentSchemaName, parentTableName));
-						tableSearchService.indexTableInfoFromCatalog("jdbc:phoenix:localhost:2181", parentSchemaName, parentTableName);
+						tableTTLInfoTestHelper.indexTableInfoFromCatalog("jdbc:phoenix:localhost:2181", parentSchemaName, parentTableName);
 						break;
 					}
 					case "test" :
-						tableSearchService.indexTableInfoFromSampleData(getSampleData());
+						tableTTLInfoTestHelper.indexTableInfoFromSampleData(getSampleData());
 						break;
 					case "find" :
 						System.out.print("search-str > ");
@@ -59,7 +59,7 @@ public class ConsoleApplication  {
 						System.out.print("offset > ");
 						int searchOffset = in.nextInt();
 						TableTTLInfo
-                                t = tableSearchService.findTable(searchPrefixStr, searchOffset, binaryMode);
+                                t = tableTTLInfoTestHelper.findTable(searchPrefixStr, searchOffset, binaryMode);
 						if (t != null) {
 							System.out.println(String.format("Matched table with info : %d\t%s\t%s", t.getTTL(),
 									Bytes.toStringBinary(t.getTenantId()),
@@ -74,9 +74,9 @@ public class ConsoleApplication  {
 						String[] tableNameParts = fullTableName.split("\\.");
 						String parentSchemaName = tableNameParts.length == 2 ? tableNameParts[0] : "";
 						String parentTableName = tableNameParts.length == 2 ? tableNameParts[1] : tableNameParts[0];
-						System.out.println("num-tables = " + tableSearchService.getTtlInfoCache().getNumTablesInCache());
-						System.out.println("num-prefixes = " + tableSearchService.getIndex().getValidPrefixes());
-						List<TableTTLInfo> tableInfoList = tableSearchService.getTableInfoFromCatalog("jdbc:phoenix:localhost:2181", parentSchemaName, parentTableName);
+						System.out.println("num-tables = " + tableTTLInfoTestHelper.getTtlInfoCache().getNumTablesInCache());
+						System.out.println("num-prefixes = " + tableTTLInfoTestHelper.getIndex().getValidPrefixes());
+						List<TableTTLInfo> tableInfoList = tableTTLInfoTestHelper.getTableInfoFromCatalog("jdbc:phoenix:localhost:2181", parentSchemaName, parentTableName);
 						tableInfoList.forEach(m -> {
 							System.out.println("table : " + m);
 						});

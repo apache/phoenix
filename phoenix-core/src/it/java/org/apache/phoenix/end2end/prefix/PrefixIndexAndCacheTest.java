@@ -1,10 +1,14 @@
-package org.apache.phoenix.prefix;
+package org.apache.phoenix.end2end.prefix;
 
 
 import org.apache.phoenix.prefix.search.PrefixIndex;
 import org.apache.phoenix.prefix.table.TableTTLInfo;
 import org.apache.phoenix.prefix.table.TableTTLInfoCache;
-import org.junit.*;
+import org.junit.After;
+import org.junit.AfterClass;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashSet;

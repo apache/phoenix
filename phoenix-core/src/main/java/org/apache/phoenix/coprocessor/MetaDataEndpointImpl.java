@@ -1426,9 +1426,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             //Scan SysCat to get TTL from Parent View/Table
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-            LOGGER.info(String.format("*****TTL(start scanTTLFromParent) for view %s = %d", Bytes.toString(viewKey), ttl));
             ttl = scanTTLFromParent(viewKey, clientTimeStamp);
-            LOGGER.info(String.format("*****TTL(end scanTTLFromParent) for view %s = %d", Bytes.toString(viewKey), ttl));
 
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }

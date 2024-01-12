@@ -292,7 +292,6 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
         String tenantConnectionUrl = String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
         String tenantViewName = String.format(TENANT_VIEW_NAME_FMT, partitionName, tenantViewNum);
         String tenantViewOptions = (partition % 2 != 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
-        //String tenantViewOptions = "";
         try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
             tenantConnection.setAutoCommit(true);
             try (Statement cstmt = tenantConnection.createStatement()) {
@@ -1014,66 +1013,5 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
             // assert that we get 3 rows while querying via the second child view and that we use the base table
             //assertQueryUsesBaseTable(baseTableName, childViewName2, conn);
         }
-    }
-
-    @Test
-    public void testGetViewInfo() {
-        //ViewUtil.getRowKeyPrefixesForTable2("PHX_TTL.IMMUTABLE_ENTITY_DATA");
-        List<TableTTLInfo> tableTTLInfoList = ViewUtil.getRowKeyPrefixesForPartitionedTables("LRT.COREAPPLOGS", false);
-        for (TableTTLInfo ttlInfo : tableTTLInfoList) {
-            LOGGER.info(ttlInfo.toString());
-        }
-    }
-
-
-    @Test
-    public void testGetViewIndexInfo() {
-        List<TableTTLInfo> tableTTLInfoList = ViewUtil.getRowKeyPrefixesForPartitionedTables("_IDX_PHX_TTL.IMMUTABLE_ENTITY_DATA", true);
-        for (TableTTLInfo ttlInfo : tableTTLInfoList) {
-            LOGGER.info(ttlInfo.toString());
-        }
-    }
-
-    @Test
-    public void testResetServerCache() {
-        try {
-            clearCache(true, true, Arrays.asList(new String[] {"T0000m400000000", "T0000m400000001", "T0000m400000002"}));
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    private void clearCache(boolean globalFixNeeded, boolean tenantFixNeeded, List<String> allTenants)
-            throws SQLException {
-
-        if (globalFixNeeded) {
-            try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
-                clearCache(globalConnection, "PHX_TTL", "IMM_VISITOR_INFO");
-            }
-        }
-        if (tenantFixNeeded || globalFixNeeded) {
-            for (String tenantId : allTenants) {
-                String tenantConnectionUrl = String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
-                try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
-                    clearCache(tenantConnection, "PHX_TTL", "IV1");
-                }
-            }
-        }
-    }
-
-    private static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
-
-        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
-        PName tenantIdName = currentConnection.getTenantId();
-        String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
-
-        // Clear server side cache
-        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
-                Bytes.toBytes(tenantId), Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
-
-        // Clear connection cache
-        currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
-                String.format("%s.%s", schemaName, tableName), null, 0);
     }
 }
