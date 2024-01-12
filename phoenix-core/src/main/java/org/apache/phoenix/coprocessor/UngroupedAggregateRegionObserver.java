@@ -210,8 +210,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         isPhoenixTableTTLEnabled =
                 e.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
-        LOGGER.info(QueryServices.PHOENIX_TABLE_TTL_ENABLED + "is enabled " + isPhoenixTableTTLEnabled);
-
     }
 
     Configuration getUpsertSelectConfig() {
@@ -587,9 +585,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                       CompactionRequest request) throws IOException {
         if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
             final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
-            LOGGER.info("In preCompact to use phoenix-compactions: "
-                    + tableName.getNameAsString());
-
             // Compaction and split upcalls run with the effective user context of the requesting user.
             // This will lead to failure of cross cluster RPC if the effective user is not
             // the login user. Switch to the login user context to ensure we have the expected

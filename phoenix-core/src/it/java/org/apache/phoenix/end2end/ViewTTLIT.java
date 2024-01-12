@@ -105,10 +105,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-/**
- * Disabling this test as this works on TTL being set on View which is removed and will be added in future.
- * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
- */
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
@@ -144,7 +140,9 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     public static final void doSetup() throws Exception {
         // Turn on the TTL feature
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
+            //put(QueryServices.AUTO_UPGRADE_ENABLED, String.valueOf(false));
             put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
+            put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
             put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0)); // An hour
         }};
 
@@ -161,6 +159,12 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     @After
     public synchronized void afterTest() throws Exception {
         EnvironmentEdgeManager.reset();
+    }
+
+    private void resetEnvironmentEdgeManager(){
+        EnvironmentEdgeManager.reset();
+        injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
     }
 
     // Scans the HBase rows directly and asserts
@@ -1458,7 +1462,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore
     public void testWithTenantViewAndGlobalViewAndVariousOptions() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
@@ -1479,10 +1482,11 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
 
         TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
+        // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, Tenant vs Global views, various column family options.
-        for (boolean isGlobalViewLocal : Lists.newArrayList(true, false)) {
-            for (boolean isTenantViewLocal : Lists.newArrayList(true, false)) {
+        for (boolean isGlobalViewLocal : Lists.newArrayList(/* true, */false)) {
+            for (boolean isTenantViewLocal : Lists.newArrayList(/* true, */ false)) {
                 for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
                     /**
@@ -1490,8 +1494,9 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                      * Need to revisit indexing code path,
                      * as there are some left over rows after delete in these cases.
                      */
-                    if (!isGlobalViewLocal && !isTenantViewLocal) continue;
+                    //if (!isGlobalViewLocal && !isTenantViewLocal) continue;
 
+                    resetEnvironmentEdgeManager();
                     globalViewIndexOptions.setLocal(isGlobalViewLocal);
                     tenantViewIndexOptions.setLocal(isTenantViewLocal);
 
@@ -1526,7 +1531,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         }
                     };
 
-                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     // Create a test data reader/writer for the above schema.
                     DataWriter dataWriter = new BasicDataWriter();
                     DataReader dataReader = new BasicDataReader();
@@ -1564,6 +1568,25 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     String schemaName = table.getSchemaName().getString();
                     String tableName = table.getTableName().getString();
 
+                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + (phoenixTTL * 1000);
+                    String fullTableName = String.format("%s.%s",
+                            schemaBuilder.getDataOptions().getSchemaName(),
+                            schemaBuilder.getDataOptions().getTableName());
+
+
+                    String hbaseBaseTableName = SchemaUtil.getTableName(
+                            schemaName,tableName);
+                    String viewIndexSchemaName = String
+                            .format("_IDX_%s", table.getSchemaName().getString());
+                    String hbaseViewIndexTableName =
+                            SchemaUtil.getTableName(viewIndexSchemaName, tableName);
+
+                    // Compact expired rows.
+                    majorCompact(TableName.valueOf(hbaseBaseTableName), scnTimestamp, false);
+                    majorCompact(TableName.valueOf(hbaseViewIndexTableName), scnTimestamp, false);
+
+                    /*
                     long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
                             (phoenixTTL * 1000);
                     // Delete expired data rows using global connection.
@@ -1600,6 +1623,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                                 viewIndexName,
                                 scnTimestamp);
                     }
+
+                    */
                     // Verify after deleting TTL expired data.
                     Properties props = new Properties();
                     props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
@@ -1615,15 +1640,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                                 fetchedData.rowKeySet().size() == 0);
                     }
 
-                    byte[] hbaseBaseTableName = SchemaUtil.getTableNameAsBytes(
+                    byte[] hbaseBaseTableNameBytes = SchemaUtil.getTableNameAsBytes(
                             schemaName,tableName);
-                    String viewIndexSchemaName = String
-                            .format("_IDX_%s", table.getSchemaName().getString());
-                    byte[] hbaseViewIndexTableName =
+                    byte[] hbaseViewIndexTableNameBytes =
                             SchemaUtil.getTableNameAsBytes(viewIndexSchemaName, tableName);
+
                     // Validate deletes using hbase
-                    assertUsingHBaseRows(hbaseBaseTableName, earliestTimestamp, 0);
-                    assertUsingHBaseRows(hbaseViewIndexTableName, earliestTimestamp, 0);
+                    assertUsingHBaseRows(hbaseBaseTableNameBytes, earliestTimestamp, 0);
+                    assertUsingHBaseRows(hbaseViewIndexTableNameBytes, earliestTimestamp, 0);
                 }
             }
         }
@@ -2041,7 +2065,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore
     public void testDeleteFromMultipleGlobalIndexes() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
@@ -2059,11 +2082,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
         tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
 
+        // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
-        for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
-            for (boolean isIndex2Local : Lists.newArrayList(true, false)) {
+        for (boolean isIndex1Local : Lists.newArrayList(/*true,*/ false)) {
+            for (boolean isIndex2Local : Lists.newArrayList(/*true, */false)) {
                 for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
+
+                    resetEnvironmentEdgeManager();
                     // Define the test schema.
                     final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
 
@@ -2157,60 +2183,39 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         }
                     }
 
+                    // Compact data and index rows
+                    long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
+                            (phoenixTTL * 1000);
                     PTable table = schemaBuilder.getBaseTable();
                     String schemaName = table.getSchemaName().getString();
                     String tableName = table.getTableName().getString();
-                    byte[] hbaseBaseTableName = SchemaUtil.getTableNameAsBytes(schemaName,tableName);
 
-                    // Delete data and index rows
-                    long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
-                            (phoenixTTL * 1000);
-
-                    // Delete expired data rows using global connection.
-                    deleteData(true,
-                            null,
-                            schemaBuilder.getEntityGlobalViewName(),
-                            scnTimestamp);
-
-                    String defaultViewIndexName = String
-                            .format("%s.IDX_%s",
-                                    schemaName,
-                                    SchemaUtil.getTableNameFromFullName(
-                                            schemaBuilder.getEntityGlobalViewName()));
-                    // Delete expired index (default) rows using global connection.
-                    deleteIndexData(true,
-                            null,
-                            defaultViewIndexName,
-                            scnTimestamp);
-
-                    // Delete expired index(1) rows using global connection.
-                    String viewIndex1Name = String.format("%s.%s", schemaName, index1Name);
-                    deleteIndexData(true,
-                            null,
-                            viewIndex1Name,
-                            scnTimestamp);
-
-                    // Delete expired index(2) rows using global connection.
-                    String viewIndex2Name = String.format("%s.%s", schemaName, index2Name);
-                    deleteIndexData(true,
-                            null,
-                            viewIndex2Name,
-                            scnTimestamp);
-
+                    String hbaseBaseTableName = SchemaUtil.getTableName(
+                            schemaName,tableName);
                     String viewIndexSchemaName = String
-                            .format("_IDX_%s", schemaName);
-                    byte[] hbaseViewIndexTableName =
+                            .format("_IDX_%s", table.getSchemaName().getString());
+                    String hbaseViewIndexTableName =
+                            SchemaUtil.getTableName(viewIndexSchemaName, tableName);
+
+
+                    // Compact expired rows.
+                    LOGGER.info(String.format("########## compacting table = %s", tableName));
+                    majorCompact(TableName.valueOf(hbaseBaseTableName), scnTimestamp, false);
+                    LOGGER.info(String.format("########## compacting table = %s", hbaseViewIndexTableName));
+                    majorCompact(TableName.valueOf(hbaseViewIndexTableName), scnTimestamp, false);
+
+                    byte[] hbaseBaseTableNameBytes = SchemaUtil.getTableNameAsBytes(schemaName,tableName);
+                    byte[] hbaseViewIndexTableNameBytes =
                             SchemaUtil.getTableNameAsBytes(viewIndexSchemaName, tableName);
 
-                    assertUsingHBaseRows(hbaseBaseTableName, earliestTimestamp, 0);
-                    assertUsingHBaseRows(hbaseViewIndexTableName, earliestTimestamp, 0);
+                    assertUsingHBaseRows(hbaseBaseTableNameBytes, earliestTimestamp, 0);
+                    assertUsingHBaseRows(hbaseViewIndexTableNameBytes, earliestTimestamp, 0);
                 }
             }
         }
     }
 
     @Test
-    @Ignore
     public void testDeleteFromMultipleTenantIndexes() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
@@ -2228,11 +2233,14 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
         TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
 
+        // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
-        for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
-            for (boolean isIndex2Local : Lists.newArrayList(true, false)) {
+        for (boolean isIndex1Local : Lists.newArrayList(/*true, */ false)) {
+            for (boolean isIndex2Local : Lists.newArrayList(/* true, */ false)) {
                 for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
+
+                    resetEnvironmentEdgeManager();
                     // Define the test schema.
                     final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
                     schemaBuilder.withTableOptions(tableOptions)
@@ -2245,7 +2253,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     String schemaName = table.getSchemaName().getString();
                     String tableName = table.getTableName().getString();
 
-                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     Map<String, List<String>> mapOfTenantIndexes = Maps.newHashMap();
                     // Create multiple tenants, add data and run validations
                     for (int tenant : Arrays.asList(new Integer[] { 1, 2, 3 })) {
@@ -2340,6 +2347,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                                     schemaBuilder);
                         }
                     }
+                    /*
                     // Delete data and index rows
                     long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + (phoenixTTL
                             * 1000);
@@ -2355,14 +2363,34 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         }
                     }
 
-                    byte[] hbaseBaseTableName = SchemaUtil
+                     */
+
+                    // Compact data and index rows
+                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
+                            (phoenixTTL * 1000);
+
+                    String hbaseBaseTableName = SchemaUtil.getTableName(
+                            schemaName,tableName);
+                    String viewIndexSchemaName = String
+                            .format("_IDX_%s", table.getSchemaName().getString());
+                    String hbaseViewIndexTableName =
+                            SchemaUtil.getTableName(viewIndexSchemaName, tableName);
+
+
+                    // Compact expired rows.
+                    LOGGER.info(String.format("########## compacting table = %s", tableName));
+                    majorCompact(TableName.valueOf(hbaseBaseTableName), scnTimestamp, false);
+                    LOGGER.info(String.format("########## compacting table = %s", hbaseViewIndexTableName));
+                    majorCompact(TableName.valueOf(hbaseViewIndexTableName), scnTimestamp, false);
+
+                    byte[] hbaseBaseTableNameBytes = SchemaUtil
                             .getTableNameAsBytes(schemaName, tableName);
-                    String viewIndexSchemaName = String.format("_IDX_%s", schemaName);
-                    byte[] hbaseViewIndexTableName = SchemaUtil
+                    byte[] hbaseViewIndexTableNameBytes = SchemaUtil
                             .getTableNameAsBytes(viewIndexSchemaName, tableName);
 
-                    assertUsingHBaseRows(hbaseBaseTableName, earliestTimestamp, 0);
-                    assertUsingHBaseRows(hbaseViewIndexTableName, earliestTimestamp, 0);
+                    assertUsingHBaseRows(hbaseBaseTableNameBytes, earliestTimestamp, 0);
+                    assertUsingHBaseRows(hbaseViewIndexTableNameBytes, earliestTimestamp, 0);
                 }
             }
         }
@@ -2529,6 +2557,10 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     private long majorCompact(TableName table, long scnTimestamp, boolean flushOnly) throws Exception {
         try (org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(getUtility().getConfiguration())) {
             Admin admin = connection.getAdmin();
+            if (!admin.tableExists(table)) {
+                return 0;
+            }
+
             admin.flush(table);
             if (flushOnly) {
                 return 0;
