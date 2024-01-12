@@ -169,7 +169,9 @@ public class ValidateLastDDLTimestampUtil {
             //when querying a view, we need to validate last ddl timestamps for all its ancestors
             if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
                 PTable pTable = tableRef.getTable();
-                while (pTable.getParentName() != null) {
+                // view name and parent name can be same for a mapped view
+                while (pTable.getParentName() != null &&
+                            !pTable.getName().equals(pTable.getParentName())) {
                     PTable parentTable = getPTableFromCache(conn, conn.getTenantId(),
                                                             pTable.getParentName().getString());
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
