@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -437,7 +438,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         if (previousResultRowKey != null) {
             getDummyResult(previousResultRowKey, result);
         } else {
-            if (includeInitStartRowKey && initStartRowKey.length > 0) {
+            if (includeInitStartRowKey && initStartRowKey.length > 0 &&
+                    initStartRowKey.length < (HConstants.MAX_ROW_LENGTH - 1)) {
                 byte[] prevKey;
                 if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
                         1, Bytes.toBytesBinary("\\x00"), 0, 1) == 0) {
@@ -445,7 +447,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
                 } else {
                     prevKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(initStartRowKey,
-                            new byte[10]), initStartRowKey.length + 10);
+                                    new byte[HConstants.MAX_ROW_LENGTH
+                                            - initStartRowKey.length - 1]),
+                            HConstants.MAX_ROW_LENGTH - 1);
                 }
                 getDummyResult(prevKey, result);
             } else {
