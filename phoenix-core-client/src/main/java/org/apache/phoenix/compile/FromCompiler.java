@@ -89,7 +89,6 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.monitoring.TableMetricsManager;

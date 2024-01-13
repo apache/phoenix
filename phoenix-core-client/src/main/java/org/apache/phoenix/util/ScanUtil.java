@@ -994,7 +994,7 @@ public class ScanUtil {
     }
 
     public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table)
-    throws SQLException {
+            throws SQLException {
         Boolean useStats = table.useStatsForParallelization();
         if (useStats != null) {
             return useStats;

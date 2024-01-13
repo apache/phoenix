@@ -31,7 +31,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -653,7 +652,7 @@ public class IndexUtil {
         return MetaDataMutationResult.constructFromProto(tmpResponse);
     }
 
-    public static boolean matchingSplitKeys(byte[][] splitKeys1, byte[][] splitKeys2) throws IOException {
+    public static boolean matchingSplitKeys(byte[][] splitKeys1, byte[][] splitKeys2) {
         if (splitKeys1 != null && splitKeys2 != null && splitKeys1.length == splitKeys2.length) {
             for (int i = 0; i < splitKeys1.length; i++) {
                 if (Bytes.compareTo(splitKeys1[i], splitKeys2[i]) != 0) { return false; }
@@ -664,7 +663,8 @@ public class IndexUtil {
         return true;
     }
 
-    public static PTable getPDataTable(PhoenixConnection conn, TableDescriptor tableDesc) throws SQLException {
+    public static PTable getPDataTable(PhoenixConnection conn, TableDescriptor tableDesc)
+            throws SQLException {
         String dataTableName = Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
         String physicalTableName = tableDesc.getTableName().getNameAsString();
         PTable pDataTable = null;

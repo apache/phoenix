@@ -77,7 +77,6 @@ import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class QueryOptimizer {
