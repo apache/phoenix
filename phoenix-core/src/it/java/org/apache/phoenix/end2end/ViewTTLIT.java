@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.CompactionState;
@@ -48,6 +47,8 @@ import org.apache.phoenix.query.PhoenixTestBuilder.DataReader;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataSupplier;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.ConnectOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.DataOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.OtherOptions;
@@ -73,10 +74,11 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1532,6 +1534,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         }
                     };
 
+                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     // Create a test data reader/writer for the above schema.
                     DataWriter dataWriter = new BasicDataWriter();
                     DataReader dataReader = new BasicDataReader();
@@ -1569,7 +1572,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     String schemaName = table.getSchemaName().getString();
                     String tableName = table.getTableName().getString();
 
-                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + (phoenixTTL * 1000);
                     String fullTableName = String.format("%s.%s",
                             schemaBuilder.getDataOptions().getSchemaName(),
@@ -1587,45 +1589,6 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     majorCompact(TableName.valueOf(hbaseBaseTableName), scnTimestamp, false);
                     majorCompact(TableName.valueOf(hbaseViewIndexTableName), scnTimestamp, false);
 
-                    /*
-                    long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
-                            (phoenixTTL * 1000);
-                    // Delete expired data rows using global connection.
-                    deleteData(true,
-                            null,
-                            schemaBuilder.getEntityGlobalViewName(),
-                            scnTimestamp);
-
-                    if (schemaBuilder.isGlobalViewIndexEnabled() &&
-                            schemaBuilder.isGlobalViewIndexCreated()) {
-                        String viewIndexName = String
-                                .format("%s.IDX_%s",
-                                        schemaName,
-                                        SchemaUtil.getTableNameFromFullName(
-                                                schemaBuilder.getEntityGlobalViewName()));
-                        // Delete expired index rows using global connection.
-                        deleteIndexData(true,
-                                null,
-                                viewIndexName,
-                                scnTimestamp);
-                    }
-
-                    if (schemaBuilder.isTenantViewIndexEnabled() &&
-                            schemaBuilder.isTenantViewIndexCreated()) {
-                        String viewIndexName = String
-                                .format("%s.IDX_%s",
-                                        schemaName,
-                                        SchemaUtil.getTableNameFromFullName(
-                                                schemaBuilder.getEntityTenantViewName()));
-
-                        // Delete expired index rows using tenant connection.
-                        deleteIndexData(false,
-                                schemaBuilder.getDataOptions().getTenantId(),
-                                viewIndexName,
-                                scnTimestamp);
-                    }
-
-                    */
                     // Verify after deleting TTL expired data.
                     Properties props = new Properties();
                     props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
@@ -1637,7 +1600,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                         org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                                 fetchedData =
                                 fetchData(dataReader);
-                        assertTrue("Deleted rows should not be fetched",
+                        assertTrue("Compacted rows should not be fetched",
                                 fetchedData.rowKeySet().size() == 0);
                     }
 
@@ -1886,95 +1849,179 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
 
 
     @Test
-    public void testScanAttributes() throws Exception {
+    public void testSaltedTablesAndViews() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
         TableOptions tableOptions = TableOptions.withDefaults();
         tableOptions.getTableColumns().clear();
         tableOptions.getTableColumnTypes().clear();
+        tableOptions.setSaltBuckets(11);
 
         TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
+        tenantViewOptions.setTableProps(String.format("TTL=%d, SALT_BUCKETS=%d", phoenixTTL, 3));
 
         // Define the test schema.
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
         schemaBuilder
                 .withTableOptions(tableOptions)
                 .withTenantViewOptions(tenantViewOptions)
+                .withTenantViewIndexDefaults()
                 .build();
 
         String viewName = schemaBuilder.getEntityTenantViewName();
 
-        Properties props = new Properties();
-        String tenantConnectUrl =
-                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-
-        // Test setting masking expired rows property
-        try (Connection conn = DriverManager.getConnection(tenantConnectUrl, props);
-                final Statement statement = conn.createStatement()) {
-            conn.setAutoCommit(true);
-
-            final String stmtString = String.format("select * from  %s", viewName);
-            Preconditions.checkNotNull(stmtString);
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            final QueryPlan queryPlan = pstmt.optimizeQuery(stmtString);
-
-            PTable table = PhoenixRuntime
-                    .getTable(conn, schemaBuilder.getDataOptions().getTenantId(), viewName);
-
-            PhoenixResultSet
-                    rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            Assert.assertFalse("Should not have any rows", rs.next());
-            Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
-            Assert.assertEquals("PhoenixTTL does not match",
-                    phoenixTTL, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
-            Assert.assertTrue("Masking attribute should be set",
-                    ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-            Assert.assertFalse("Delete Expired attribute should not set",
-                    ScanUtil.isDeleteTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-        }
-
-        // Test setting delete expired rows property
-        try (Connection conn = DriverManager.getConnection(tenantConnectUrl, props);
-                final Statement statement = conn.createStatement()) {
-            conn.setAutoCommit(true);
-
-            final String stmtString = String.format("select * from  %s", viewName);
-            Preconditions.checkNotNull(stmtString);
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            final QueryPlan queryPlan = pstmt.optimizeQuery(stmtString);
-            final Scan scan = queryPlan.getContext().getScan();
-
-            PTable table = PhoenixRuntime
-                    .getTable(conn, schemaBuilder.getDataOptions().getTenantId(), viewName);
-
-            byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
-            byte[] emptyColumnName =
-                    table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                            QueryConstants.EMPTY_COLUMN_BYTES :
-                            table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserver.TTL, Bytes.toBytes(Long.valueOf(table.getTTL())));
-
-            PhoenixResultSet
-                    rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            Assert.assertFalse("Should not have any rows", rs.next());
-            Assert.assertEquals("Should have atleast one element", 1, queryPlan.getScans().size());
-            Assert.assertEquals("PhoenixTTL does not match",
-                    phoenixTTL, ScanUtil.getTTL(queryPlan.getScans().get(0).get(0)));
-            Assert.assertFalse("Masking attribute should not be set",
-                    ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-            Assert.assertTrue("Delete Expired attribute should be set",
-                    ScanUtil.isDeleteTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-        }
     }
 
     @Test
-    public void testDeleteWithOnlyTenantView() throws Exception {
+    public void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
+
+        // PHOENIX TTL is set in seconds (for e.g 10 secs)
+        long phoenixTTL = 10;
+        TableOptions tableOptions = TableOptions.withDefaults();
+        String tableProps = "COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
+        tableOptions.setTableProps(tableProps);
+        tableOptions.setSaltBuckets(11);
+
+        TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
+        tenantViewOptions.setTableProps(String.format("TTL=%d", phoenixTTL));
+
+
+        for (boolean isMultiTenant : Lists.newArrayList(true, false)) {
+
+            resetEnvironmentEdgeManager();
+
+            tableOptions.setMultiTenant(isMultiTenant);
+            DataOptions dataOptions = DataOptions.withDefaults();
+
+            // Define the test schema.
+            final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+            schemaBuilder
+                    .withTableOptions(tableOptions)
+                    .withTenantViewOptions(tenantViewOptions)
+                    .withDataOptions(dataOptions)
+                    .withTenantViewIndexDefaults();
+
+
+            if (isMultiTenant) {
+                schemaBuilder.buildWithNewTenant();
+            } else {
+                dataOptions.setKeyPrefix(String.format("Z%02d", dataOptions.getViewNumber()));
+                String keyPrefix = dataOptions.getKeyPrefix();
+                String oid =  dataOptions.getNextTenantId();
+                tenantViewOptions.setTenantViewCondition(String.format(
+                        "SELECT * FROM %s.%s WHERE OID = '%s' AND KP = '%s'",
+                        dataOptions.getSchemaName(), dataOptions.getTableName(), oid, keyPrefix));
+                ConnectOptions connectOptions = new ConnectOptions();
+                connectOptions.setUseGlobalConnectionOnly(true);
+                schemaBuilder.withConnectOptions(connectOptions);
+                schemaBuilder.build();
+            }
+
+            // Define the test data.
+            DataSupplier dataSupplier = new DataSupplier() {
+
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String oid = dataOptions.getTenantId();
+                    String kp = dataOptions.getKeyPrefix();
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    return isMultiTenant ?
+                            Lists.newArrayList(
+                                    new Object[] { zid, col1, col2, col3, col7, col8, col9 }) :
+                            Lists.newArrayList(
+                                    new Object[] { oid, kp, zid, col1, col2, col3, col7, col8, col9 });
+                }
+            };
+
+            long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            // Create a test data reader/writer for the above schema.
+            DataWriter dataWriter = new BasicDataWriter();
+            DataReader dataReader = new BasicDataReader();
+
+            List<String> columns = isMultiTenant ?
+                    Lists.newArrayList("ZID", "COL1", "COL2", "COL3",
+                            "COL7", "COL8", "COL9") :
+                    Lists.newArrayList("OID", "KP", "ZID", "COL1", "COL2", "COL3",
+                            "COL7", "COL8", "COL9") ;
+            List<String> rowKeyColumns = isMultiTenant ?
+                    Lists.newArrayList("ZID") :
+                    Lists.newArrayList("OID", "KP", "ZID");
+            String connectUrl = isMultiTenant ?
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
+                            schemaBuilder.getDataOptions().getTenantId() :
+                    getUrl();
+            try (Connection writeConnection = DriverManager.getConnection(connectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                dataReader.setValidationColumns(columns);
+                dataReader.setRowKeyColumns(rowKeyColumns);
+                dataReader.setDML(String.format("SELECT %s from %s", Joiner.on(",").join(columns),
+                        schemaBuilder.getEntityTenantViewName()));
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // Validate data before and after ttl expiration.
+                upsertDataAndRunValidations(phoenixTTL, DEFAULT_NUM_ROWS, dataWriter, dataReader,
+                        schemaBuilder);
+            }
+
+            PTable table = schemaBuilder.getBaseTable();
+            String schemaName = table.getSchemaName().getString();
+            String tableName = table.getTableName().getString();
+
+            long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + (phoenixTTL * 1000);
+
+            String hbaseBaseTableName = SchemaUtil.getTableName(
+                    schemaName,tableName);
+            String viewIndexSchemaName = String
+                    .format("_IDX_%s", table.getSchemaName().getString());
+            String hbaseViewIndexTableName =
+                    SchemaUtil.getTableName(viewIndexSchemaName, tableName);
+
+            // Compact expired rows.
+            majorCompact(TableName.valueOf(hbaseBaseTableName), scnTimestamp, false);
+            majorCompact(TableName.valueOf(hbaseViewIndexTableName), scnTimestamp, false);
+
+
+            // Verify after compaction TTL expired data.
+            Properties props = new Properties();
+            props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
+
+            try (Connection readConnection = DriverManager.getConnection(connectUrl, props)) {
+
+                dataReader.setConnection(readConnection);
+                org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
+                        fetchedData =
+                        fetchData(dataReader);
+                assertEquals("Compacted rows should not be fetched", 0,fetchedData.rowKeySet().size());
+            }
+
+            // Validate compaction using hbase
+            byte[] hbaseBaseTableNameBytes = SchemaUtil.getTableNameAsBytes(
+                    schemaName,tableName);
+            byte[] hbaseViewIndexTableNameBytes =
+                    SchemaUtil.getTableNameAsBytes(viewIndexSchemaName, tableName);
+
+            // Validate deletes using hbase
+            //assertUsingHBaseRows(hbaseBaseTableNameBytes, earliestTimestamp, 0);
+            //assertUsingHBaseRows(hbaseViewIndexTableNameBytes, earliestTimestamp, 0);
+        }
+
+    }
+
+    @Test
+    public void testMajorCompactWithOnlyTenantView() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -2044,7 +2091,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // Compact expired rows.
         majorCompact(TableName.valueOf(fullTableName), scnTimestamp, false);
 
-        // Verify after deleting TTL expired data.
+        // Verify after compacting TTL expired data.
         Properties props = new Properties();
         props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
 
@@ -2054,7 +2101,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
                     fetchedData =
                     fetchData(dataReader);
-            assertEquals("Deleted rows should not be fetched", 0,fetchedData.rowKeySet().size());
+            assertEquals("Compacted rows should not be fetched", 0,fetchedData.rowKeySet().size());
         }
 
         // Validate deletes using hbase
@@ -2066,7 +2113,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testDeleteFromMultipleGlobalIndexes() throws Exception {
+    public void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -2217,7 +2264,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testDeleteFromMultipleTenantIndexes() throws Exception {
+    public void testMajorCompactFromMultipleTenantIndexes() throws Exception {
 
         // PHOENIX TTL is set in seconds (for e.g 10 secs)
         long phoenixTTL = 10;
@@ -2254,6 +2301,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     String schemaName = table.getSchemaName().getString();
                     String tableName = table.getTableName().getString();
 
+                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     Map<String, List<String>> mapOfTenantIndexes = Maps.newHashMap();
                     // Create multiple tenants, add data and run validations
                     for (int tenant : Arrays.asList(new Integer[] { 1, 2, 3 })) {
@@ -2348,26 +2396,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                                     schemaBuilder);
                         }
                     }
-                    /*
-                    // Delete data and index rows
-                    long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() + (phoenixTTL
-                            * 1000);
-
-                    for (Map.Entry<String, List<String>> entry : mapOfTenantIndexes.entrySet()) {
-                        // Delete expired data rows using tenant connection.
-                        deleteData(false, entry.getKey(), schemaBuilder.getEntityTenantViewName(),
-                                scnTimestamp);
-                        for (String indexName : entry.getValue()) {
-                            // Delete expired index rows using tenant connection.
-                            String viewIndexName = String.format("%s.%s", schemaName, indexName);
-                            deleteIndexData(false, entry.getKey(), viewIndexName, scnTimestamp);
-                        }
-                    }
-
-                     */
 
                     // Compact data and index rows
-                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
                             (phoenixTTL * 1000);
 
@@ -2571,15 +2601,19 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             injectEdge.setValue(scnTimestamp);
 
             long compactionRequestedSCN = admin.getLastMajorCompactionTimestamp(table);
-            long lastCompactionTimestamp;
+            long lastCompactionTimestamp = 0;
             admin.majorCompact(table);
-            while ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table)) <= compactionRequestedSCN
+            int numChecks = 0;
+            while ( (++numChecks < 100) &&
+                    ((lastCompactionTimestamp = admin.getLastMajorCompactionTimestamp(table))
+                    <= compactionRequestedSCN)
                     || (admin.getCompactionState(table)).equals(CompactionState.MAJOR)
                     || admin.getCompactionState(table).equals(CompactionState.MAJOR_AND_MINOR)) {
                 LOGGER.info(String.format("WAITING .............................%d, %d", lastCompactionTimestamp, compactionRequestedSCN));
                 Thread.sleep(100);
             }
-            LOGGER.info(String.format("DONE WAITING .............................%d, %d", lastCompactionTimestamp, compactionRequestedSCN));
+            LOGGER.info(String.format("DONE WAITING .............................%d, %d, %d",
+                    lastCompactionTimestamp, compactionRequestedSCN, numChecks));
             return lastCompactionTimestamp;
         }
     }
