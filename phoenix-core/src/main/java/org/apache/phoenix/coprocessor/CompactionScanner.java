@@ -166,25 +166,23 @@ public class CompactionScanner implements InternalScanner {
      * i.e views, view indexes ...
      * @param env
      * @param store
-     * @param pTable
+     * @param baseTable
      * @return
      */
     private TTLTracker createTTLTrackerFor(RegionCoprocessorEnvironment env,
-            Store store,  PTable pTable) throws IOException {
+            Store store,  PTable baseTable) throws IOException {
 
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         String compactionTableName = env.getRegion().getRegionInfo().getTable().getNameAsString();
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(pTable.getName().toString());
-        String tableName = SchemaUtil.getTableNameFromFullName(pTable.getName().toString());
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(baseTable.getName().toString());
+        String tableName = SchemaUtil.getTableNameFromFullName(baseTable.getName().toString());
 
         boolean isPartitionedIndexTable = false;
         if (compactionTableName.startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
             isPartitionedIndexTable = true;
         }
 
-        // if table is salted then start PK position to match is the position after the salt byte
-        boolean isSalted = pTable.getBucketNum() != null;
-        int startPKPosition = isSalted ? 1 : 0;
+        boolean isSalted = baseTable.getBucketNum() != null;
         try {
             PhoenixConnection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
                     env.getConfiguration()).unwrap(PhoenixConnection.class);
@@ -197,6 +195,7 @@ public class CompactionScanner implements InternalScanner {
                     Bytes.toBytes(tableName),
                     currentTime);
 
+            /*
             if (isPartitioned) {
                 Pair<List<PTable>, List<TableInfo>> firstDescendant =
                         ViewUtil.findAllDescendantViews(childLinkHTable, env.getConfiguration(),
@@ -207,35 +206,15 @@ public class CompactionScanner implements InternalScanner {
 
                 // If descendant view exists
                 if (firstDescendant.getFirst().size() > 0) {
-                    PTable view =  firstDescendant.getFirst().get(0);
-                    List<Integer> pkPositions = WhereOptimizer.getKeySlotPositionsForView(view,
-                            env.getConfiguration());
-                    startPKPosition = isPartitionedIndexTable ?
-                            0 : (pTable.isMultiTenant() ?
-                            startPKPosition + 1 : (pkPositions.size() > 0 ?
-                                            pkPositions.get(0) : startPKPosition));
-
-                    LOGGER.info(String.format("PartitionedTableTTLTracker params:- " +
-                                    "region-name = %s, " +
-                                    "table-name = %s, physical-name = %s, view-name = %s, " +
-                                    "multi-tenant = %s, index-table = %s, salted = %s, " +
-                                    "default-ttl = %d, tenantId = %s, startingPKPosition = %d",
-                            store.getRegionInfo().getEncodedName(),
-                            compactionTableName,
-                            view.getPhysicalName().getString(),
-                            view.getName().getString(),
-                            pTable.isMultiTenant(),
-                            isPartitionedIndexTable,
-                            isSalted,
-                            pTable.getTTL() != TTL_NOT_DEFINED ? pTable.getTTL() : DEFAULT_TTL,
-                            view.getTenantId() == null ? "" : view.getTenantId().getString(),
-                            startPKPosition));
+                    view =  firstDescendant.getFirst().get(0);
                 }
             }
 
+             */
+
             return isPartitioned ?
-                    new PartitionedTableTTLTracker(pTable, env, isSalted, isPartitionedIndexTable, startPKPosition) :
-                    new NonPartitionedTableTTLTracker(pTable, env, store);
+                    new PartitionedTableTTLTracker(baseTable, env, isSalted, isPartitionedIndexTable) :
+                    new NonPartitionedTableTTLTracker(baseTable, env, store);
 
         } catch (SQLException e) {
             throw new IOException(e);
@@ -318,7 +297,7 @@ public class CompactionScanner implements InternalScanner {
     private class PartitionedTableTTLTracker implements TTLTracker {
         private final Logger LOGGER = LoggerFactory.getLogger(
                 PartitionedTableTTLTracker.class);
-        private PTable basePTable;
+        private PTable baseTable;
         private TableTTLInfoCache ttlCache;
         private PrefixIndex index;
 
@@ -326,31 +305,82 @@ public class CompactionScanner implements InternalScanner {
         private long ttl;
         private RowContext rowContext;
 
-        private boolean isPartitionedIndexTable = false;
-
+        private boolean isIndexTable = false;
+        private boolean isMultiTenant = false;
         private boolean isSalted = false;
         private int startingPKPosition;
         private RowKeyParser rowKeyParser;
 
-        public PartitionedTableTTLTracker(PTable pTable, RegionCoprocessorEnvironment env,
-                boolean isSalted, boolean isPartitionedIndexTable,
-                int startingPKPosition) {
+        public PartitionedTableTTLTracker(PTable table, RegionCoprocessorEnvironment env,
+                boolean isSalted, boolean isIndexTable) {
 
             try {
-                this.basePTable = pTable;
+                this.baseTable = table;
                 this.ttlCache = new TableTTLInfoCache();
                 this.index  = new PrefixIndex();
-                this.rowKeyParser = new RowKeyParser(basePTable);
-                this.ttl = pTable.getTTL() != TTL_NOT_DEFINED ? pTable.getTTL() : DEFAULT_TTL;
-                this.isPartitionedIndexTable = isPartitionedIndexTable;
+                this.rowKeyParser = new RowKeyParser(baseTable);
+                this.ttl = table.getTTL() != TTL_NOT_DEFINED ? table.getTTL() : DEFAULT_TTL;
+                this.isIndexTable = isIndexTable;
                 this.isSalted = isSalted;
+                this.isMultiTenant = table.isMultiTenant();
+
+                int startingPKPosition = 0;
+                if (this.isMultiTenant && this.isSalted && this.isIndexTable) {
+                    // case multi-tenant + salted + index-table =>
+                    // startingPKPosition = 1 after the salt-byte and starting at the viewIndexId
+                    startingPKPosition = 1;
+                } else if (this.isMultiTenant && this.isSalted) {
+                    // case multi-tenant + salted =>
+                    // startingPKPosition = 2 after tenant-id to search the global space
+                    // startingPKPosition = 1 after salt-byte to search the tenant space
+                    startingPKPosition = 2;
+                } else if (this.isMultiTenant && this.isIndexTable) {
+                    // case multi-tenant + index-table =>
+                    // startingPKPosition = 0, the first key will the viewIndexId
+                    startingPKPosition = 0;
+                } else if (this.isSalted && this.isIndexTable) {
+                    // case salted + index-table =>
+                    // startingPKPosition = 1 after salt-byte using the viewIndexId
+                    startingPKPosition = 1;
+                } else if (this.isSalted) {
+                    // case salted =>
+                    // startingPKPosition = 1 after salt-byte
+                    startingPKPosition = 1;
+                } else if (this.isIndexTable) {
+                    // case index-table =>
+                    // startingPKPosition = 0 the first key will the viewIndexId
+                    startingPKPosition = 0;
+                } else if (this.isMultiTenant) {
+                    // case multi-tenant =>
+                    // startingPKPosition = 1 after tenant-id to search the global space
+                    // startingPKPosition = 0 to search the tenant space
+                    startingPKPosition = 1;
+                } else {
+                    // case not multi-tenant + not salted + not index-table  =>
+                    // startingPKPosition = 0
+                    startingPKPosition = 0;
+                }
+
                 this.startingPKPosition = startingPKPosition;
+
+                LOGGER.info(String.format("PartitionedTableTTLTracker params:- " +
+                                "region-name = %s, table-name = %s,  " +
+                                "multi-tenant = %s, index-table = %s, salted = %s, " +
+                                "default-ttl = %d, startingPKPosition = %d",
+                        region.getRegionInfo().getEncodedName(),
+                        region.getRegionInfo().getTable().getNameAsString(),
+                        this.isMultiTenant,
+                        this.isIndexTable,
+                        this.isSalted,
+                        this.ttl,
+                        this.startingPKPosition));
 
                 List<TableTTLInfo> tableList;
                 tableList = ViewUtil.getRowKeyPrefixesForPartitionedTables(
-                        pTable.getName().getString(),
+                        table.getName().getString(),
                         env.getConfiguration(),
-                        isPartitionedIndexTable);
+                        isIndexTable);
+
                 tableList.forEach(m -> {
                     if (m.getTTL() != TTL_NOT_DEFINED) {
                         int tableId = ttlCache.addTable(m);
@@ -367,7 +397,6 @@ public class CompactionScanner implements InternalScanner {
             }
 
         }
-
         @Override
         public void visit(List<Cell> result) {
 
@@ -376,7 +405,15 @@ public class CompactionScanner implements InternalScanner {
             List<Integer> pkPositions = null;
             long rowTTL = ttl;
             long searchOffset = -1;
+            int pkPosition = startingPKPosition;
             try {
+                if (ttlCache.getNumTablesInCache() == 0) {
+                    // case: no views in the hierarchy had TTL set
+                    // Use the default TTL
+                    this.rowContext = new RowContext();
+                    this.rowContext.setTtl(rowTTL);
+                    return;
+                }
                 pkPositions = rowKeyParser.parsePKPositions(result);
                 // The startingPKPosition is initialized in the following manner
                 // case multi-tenant => startingPKPosition = 1, 0
@@ -386,13 +423,18 @@ public class CompactionScanner implements InternalScanner {
                 // case multi-tenant + index-table => startingPKPosition = 0
                 // case multi-tenant + salted + index-table  => startingPKPosition = ?
                 // case salted + index-table => startingPKPosition = 1
-                int offset = pkPositions.get(startingPKPosition);
+                int offset = pkPositions.get(pkPosition);
                 byte[] rowkey = CellUtil.cloneRow(result.get(0));
                 // Search the global view space first
                 Integer tableId = index.getTableIdWithPrefix(rowkey, offset);
-                if (tableId == null && basePTable.isMultiTenant()) {
+                if ((tableId == null) && (!isIndexTable) && (isMultiTenant || isSalted)) {
                     // Search the tenant space
-                    offset = isSalted ? pkPositions.get(1) : /* mt + idx, idx */ pkPositions.get(0);
+                    if (this.isMultiTenant && this.isSalted) {
+                        pkPosition = 1;
+                    } else if (isMultiTenant) {
+                        pkPosition = 0;
+                    }
+                    offset = pkPositions.get(pkPosition);
                     tableId = index.getTableIdWithPrefix(rowkey, offset);
                 }
                 tableTTLInfo = ttlCache.getTableById(tableId);
@@ -406,7 +448,7 @@ public class CompactionScanner implements InternalScanner {
             } finally {
                 LOGGER.info(String.format("visiting row-key = %s, region = %s, table-info=%s, " +
                                 "matched = %s, prefix-key = %s, " +
-                                "ttl = %d, offset = %d, start-pk-pos = %d, pk-pos = %s",
+                                "ttl = %d, offset = %d, pk-pos = %d, pk-pos-list = %s",
                         Bytes.toStringBinary(Result.create(result).getRow()),
                         CompactionScanner.this.store.getRegionInfo().getEncodedName(),
                         matched ? tableTTLInfo : "UNKNOWN",
@@ -414,7 +456,7 @@ public class CompactionScanner implements InternalScanner {
                         matched ? Bytes.toStringBinary(tableTTLInfo.getPrefix()) : "UNKNOWN",
                         rowTTL,
                         searchOffset,
-                        pkPositions.get(startingPKPosition),
+                        pkPosition,
                         pkPositions != null ? pkPositions.stream()
                                 .map((p) -> String.valueOf(p))
                                 .collect(Collectors.joining(",")) : ""));
