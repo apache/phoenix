@@ -1084,7 +1084,11 @@ public class PhoenixTestBuilder {
 
             String tenantViewName = SchemaUtil.normalizeIdentifier(entityKeyPrefix);
             entityTenantViewName = SchemaUtil.getTableName(tenantViewSchemaName, tenantViewName);
-            String globalViewCondition = String.format("KP = '%s'", entityKeyPrefix);
+            String globalViewCondition = globalViewOptions.globalViewCondition != null &&
+                    !globalViewOptions.globalViewCondition.isEmpty() ?
+                    globalViewOptions.getGlobalViewCondition() :
+                    String.format("SELECT * FROM %s WHERE KP = '%s'",
+                            entityTableName, entityKeyPrefix);
             String schemaName = SchemaUtil.getSchemaNameFromFullName(entityTableName);
 
             // Table and Table Index creation.
@@ -1119,8 +1123,7 @@ public class PhoenixTestBuilder {
             try (Connection globalViewConnection = getGlobalViewConnection()) {
                 if (globalViewEnabled && !globalViewCreated) {
                     globalViewConnection.createStatement().execute(
-                            buildCreateGlobalViewStmt(entityGlobalViewName, entityTableName,
-                                    globalViewCondition));
+                            buildCreateGlobalViewStmt(entityGlobalViewName, globalViewCondition));
                     globalViewCreated = true;
                 }
                 // Index on GlobalView
@@ -1144,12 +1147,17 @@ public class PhoenixTestBuilder {
             try (Connection tenantConnection = getTenantConnection()) {
                 // Build tenant related views if any
                 if (tenantViewEnabled && !tenantViewCreated) {
+                    boolean hasTenantViewCondition =
+                            tenantViewOptions.getTenantViewCondition() != null &&
+                                    !tenantViewOptions.getTenantViewCondition().isEmpty();
                     String tenantViewCondition;
                     if (globalViewEnabled) {
-                        tenantViewCondition =
+                        tenantViewCondition = hasTenantViewCondition ?
+                                tenantViewOptions.getTenantViewCondition() :
                                 String.format("SELECT * FROM %s", entityGlobalViewName);
                     } else if (tableEnabled) {
-                        tenantViewCondition =
+                        tenantViewCondition = hasTenantViewCondition ?
+                                tenantViewOptions.getTenantViewCondition() :
                                 String.format("SELECT * FROM %s WHERE KP = '%s'", entityTableName,
                                         entityKeyPrefix);
                     } else {
@@ -1254,8 +1262,7 @@ public class PhoenixTestBuilder {
         }
 
         // Helper method for CREATE VIEW (GLOBAL) stmt builder.
-        private String buildCreateGlobalViewStmt(String fullGlobalViewName, String fullTableName,
-                String globalViewCondition) {
+        private String buildCreateGlobalViewStmt(String fullGlobalViewName, String globalViewCondition) {
             StringBuilder statement = new StringBuilder();
             StringBuilder viewDefinition = new StringBuilder();
 
@@ -1283,8 +1290,8 @@ public class PhoenixTestBuilder {
             }
 
             statement.append("CREATE VIEW IF NOT EXISTS ").append(fullGlobalViewName)
-                    .append(viewDefinition.toString()).append(" AS SELECT * FROM ")
-                    .append(fullTableName).append(" WHERE ").append(globalViewCondition).append(" ")
+                    .append(viewDefinition.toString()).append(" AS ")
+                    .append(globalViewCondition).append(" ")
                     .append((globalViewOptions.tableProps.isEmpty() ?
                             "" :
                             globalViewOptions.tableProps));
@@ -1653,6 +1660,7 @@ public class PhoenixTestBuilder {
             List<String> tenantViewPKColumns = Lists.newArrayList();
             List<String> tenantViewPKColumnTypes = Lists.newArrayList();
             List<String> tenantViewPKColumnSort;
+            String tenantViewCondition;
             String tableProps = DDLDefaults.DEFAULT_TENANT_VIEW_PROPS;
             boolean isChangeDetectionEnabled = false;
 
@@ -1672,6 +1680,7 @@ public class PhoenixTestBuilder {
                 options.tenantViewPKColumnTypes =
                         Lists.newArrayList(DDLDefaults.TENANT_VIEW_PK_TYPES);
                 options.tableProps = DDLDefaults.DEFAULT_TENANT_VIEW_PROPS;
+                options.tenantViewCondition = "";
                 return options;
             }
 
@@ -1729,6 +1738,13 @@ public class PhoenixTestBuilder {
 
             public void setTableProps(String tableProps) {
                 this.tableProps = tableProps;
+            }
+
+            public String getTenantViewCondition() {
+                return tenantViewCondition;
+            }
+            public void setTenantViewCondition(String tenantViewCondition) {
+                this.tenantViewCondition = tenantViewCondition;
             }
 
             public boolean isChangeDetectionEnabled() {
@@ -1997,6 +2013,11 @@ public class PhoenixTestBuilder {
 
             public int getNextViewNumber() {
                 return viewNumber = viewCounter.incrementAndGet();
+            }
+
+            public String getNextTenantId() {
+                return tenantId = String.format(
+                        tenantIdFormat, TENANT_COUNTER.incrementAndGet(), uniqueName);
             }
 
             public int getViewNumber() {

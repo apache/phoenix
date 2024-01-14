@@ -1106,57 +1106,68 @@ public class ViewUtil {
 
     /// TODO : Needs optimization
     public static List<TableTTLInfo> getRowKeyPrefixesForPartitionedTables(String fullTableName,
-            Configuration configuration, boolean isPartitionedIndexTable) {
-        List<TableTTLInfo> tableList = new ArrayList<TableTTLInfo>();
+            Configuration configuration, boolean isIndexTable) throws SQLException {
 
+        List<TableTTLInfo> tableTTLInfoList = Lists.newArrayList();
+        Set<TableInfo> globalViewSet = getGlobalViews(fullTableName, configuration);
+        if (globalViewSet.size() > 0) {
+            getTTLInfo(globalViewSet, configuration, isIndexTable, tableTTLInfoList);
+        }
+
+        Set<TableInfo> tenantViewSet = getTenantViews(fullTableName, configuration);
+        if (tenantViewSet.size() > 0) {
+            getTTLInfo(tenantViewSet, configuration, isIndexTable, tableTTLInfoList);
+        }
+        return tableTTLInfoList;
+    }
+
+    private static Set<TableInfo> getGlobalViews(String fullTableName, Configuration configuration)
+            throws SQLException {
+
+        Set<TableInfo> globalViewSet = new HashSet<>();
         try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
                 configuration)) {
-            ConnectionQueryServices
-                    cqs =
-                    serverConnection.unwrap(PhoenixConnection.class).getQueryServices();
             String
                     globalViewsSQLFormat =
-                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " + "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " + "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " + "FROM SYSTEM.CATALOG " + "WHERE " + "LINK_TYPE = 2 " + "AND TABLE_TYPE IS NULL " + "AND COLUMN_FAMILY = '%s' " + "AND TENANT_ID IS NULL";
+                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " +
+                            "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " +
+                            "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " +
+                    "FROM SYSTEM.CATALOG " +
+                    "WHERE " + "LINK_TYPE = 2 " +
+                            "AND TABLE_TYPE IS NULL " +
+                            "AND COLUMN_FAMILY = '%s' " +
+                            "AND TENANT_ID IS NULL";
             String globalViewSQL = String.format(globalViewsSQLFormat, fullTableName);
             logger.info("globalViewSQL:" + globalViewSQL);
             try (PhoenixPreparedStatement globalViewStmt = serverConnection.prepareStatement(
                     globalViewSQL).unwrap(PhoenixPreparedStatement.class)) {
                 try (ResultSet globalViewRS = globalViewStmt.executeQuery()) {
-                    Set<TableInfo> globalViewSet = new HashSet<>();
                     while (globalViewRS.next()) {
                         String tid = globalViewRS.getString("TENANT_ID");
                         String schem = globalViewRS.getString("TABLE_SCHEM");
                         String tName = globalViewRS.getString("TABLE_NAME");
                         String tenantId = tid == null || tid.isEmpty() ? "NULL" : "'" + tid + "'";
-                        String schemCol = schem == null || schem.isEmpty() ? "NULL" : "'" + schem + "'";
+                        String
+                                schemCol =
+                                schem == null || schem.isEmpty() ? "NULL" : "'" + schem + "'";
                         TableInfo
                                 tableInfo =
                                 new TableInfo(tenantId.getBytes(), schemCol.getBytes(),
                                         tName.getBytes());
                         globalViewSet.add(tableInfo);
                     }
-                    StringBuilder globalViewsClause = null;
-                    if (globalViewSet.size() > 0) {
-                        globalViewsClause =
-                                new StringBuilder(globalViewSet.stream()
-                                        .map((v) -> String.format("(%s, %s,'%s')",
-                                                Bytes.toString(v.getTenantId()),
-                                                Bytes.toString(v.getSchemaName()),
-                                                Bytes.toString(v.getTableName())))
-                                        .collect(Collectors.joining(",")));
-                    }
-                    if (globalViewsClause != null && globalViewsClause.length() > 0) {
-                        String
-                                globalViewsWithTTLSQL =
-                                "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " + "table_type, ttl, row_key_prefix " + "FROM SYSTEM.CATALOG " + "WHERE TABLE_TYPE = 'v' AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + "(" + globalViewsClause.toString() + ")";
-                        logger.info(
-                                String.format("globalViewsWithTTLSQL : %s", globalViewsWithTTLSQL));
-                        getTableTTLInfo(globalViewsWithTTLSQL, configuration,
-                                isPartitionedIndexTable, tableList);
-                    }
                 }
             }
+        }
+        return globalViewSet;
+    }
 
+    private static Set<TableInfo> getTenantViews(String fullTableName, Configuration configuration)
+            throws SQLException {
+
+        Set<TableInfo> tenantViewSet = new HashSet<>();
+        try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
+                configuration)) {
             String
                     tenantViewsSQLFormat =
                     "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME," + "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " + "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " + "FROM SYSTEM.CATALOG " + "WHERE LINK_TYPE = 2 " + "AND COLUMN_FAMILY = '%s' " + "AND TENANT_ID IS NOT NULL";
@@ -1166,7 +1177,6 @@ public class ViewUtil {
             try (PhoenixPreparedStatement tenantViewStmt = serverConnection.prepareStatement(
                     tenantViewSQL).unwrap(PhoenixPreparedStatement.class)) {
                 try (ResultSet tenantViewRS = tenantViewStmt.executeQuery()) {
-                    Set<TableInfo> tenantViewSet = new HashSet<>();
                     while (tenantViewRS.next()) {
                         String tid = tenantViewRS.getString("TENANT_ID");
                         String schem = tenantViewRS.getString("TABLE_SCHEM");
@@ -1179,49 +1189,48 @@ public class ViewUtil {
                                         tName.getBytes());
                         tenantViewSet.add(tableInfo);
                     }
-                    StringBuilder tenantViewsClause = null;
-                    if (tenantViewSet.size() > 0) {
-                        tenantViewsClause =
-                                new StringBuilder(tenantViewSet.stream()
-                                        .map((v) -> String.format("(%s, %s,'%s')",
-                                                Bytes.toString(v.getTenantId()),
-                                                Bytes.toString(v.getSchemaName()),
-                                                Bytes.toString(v.getTableName())))
-                                        .collect(Collectors.joining(",")));
-                    }
-                    if (tenantViewsClause != null && tenantViewsClause.length() > 0) {
-                        String
-                                tenantViewsWithTTLSQL =
-                                "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " + "TABLE_TYPE, TTL, ROW_KEY_PREFIX " + "FROM SYSTEM.CATALOG " + "WHERE TABLE_TYPE = 'v' AND (TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " + "(" + tenantViewsClause.toString() + ")";
-                        logger.info(
-                                String.format("tenantViewsWithTTLSQL : %s", tenantViewsWithTTLSQL));
-                        getTableTTLInfo(tenantViewsWithTTLSQL, configuration,
-                                isPartitionedIndexTable, tableList);
-                    }
                 }
             }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
         }
-        return tableList;
-
+        return tenantViewSet;
     }
 
-    private static void getTableTTLInfo(String viewsWithTTLSQL, Configuration configuration,
-            boolean isPartitionedIndexTable, List<TableTTLInfo> tableTTLInfoList)
+    private static void getTTLInfo(Set<TableInfo> viewSet, Configuration configuration,
+            boolean isIndexTable, List<TableTTLInfo> tableTTLInfoList)
             throws SQLException {
+
+        if (viewSet.size() == 0) {
+            return;
+        }
+        String
+        viewsClause =
+                new StringBuilder(viewSet.stream()
+                        .map((v) -> String.format("(%s, %s,'%s')",
+                                Bytes.toString(v.getTenantId()),
+                                Bytes.toString(v.getSchemaName()),
+                                Bytes.toString(v.getTableName())))
+                        .collect(Collectors.joining(","))).toString();
+        String
+                viewsWithTTLSQL =
+                "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " +
+                        "TABLE_TYPE, TTL, ROW_KEY_PREFIX " +
+                        "FROM SYSTEM.CATALOG " +
+                        "WHERE TABLE_TYPE = 'v' AND " +
+                        "(TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
+                        "(" + viewsClause.toString() + ")";
+        logger.info(
+                String.format("ViewsWithTTLSQL : %s", viewsWithTTLSQL));
 
         try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
                 configuration)) {
-            ConnectionQueryServices
-                    cqs =
-                    serverConnection.unwrap(PhoenixConnection.class).getQueryServices();
 
-            try (PhoenixPreparedStatement viewTTLStmt = serverConnection.prepareStatement(
-                    viewsWithTTLSQL).unwrap(PhoenixPreparedStatement.class)) {
+            try (
+                    PhoenixPreparedStatement
+                    viewTTLStmt =
+                    serverConnection.prepareStatement(viewsWithTTLSQL)
+                            .unwrap(PhoenixPreparedStatement.class)) {
+
                 try (ResultSet viewTTLRS = viewTTLStmt.executeQuery()) {
-                    Set<TableInfo> tenantViewSet = new HashSet<>();
                     while (viewTTLRS.next()) {
                         String tid = viewTTLRS.getString("TENANT_ID");
                         String schem = viewTTLRS.getString("TABLE_SCHEM");
@@ -1241,7 +1250,8 @@ public class ViewUtil {
                         PTable
                                 pTable =
                                 PhoenixRuntime.getTableNoCache(tableConnection, fullTableName);
-                        if (isPartitionedIndexTable) {
+
+                        if (isIndexTable) {
                             for (PTable index : pTable.getIndexes()) {
                                 logger.info(String.format(
                                         "index-name = %s, ttl = %d, row-key-prefix = %d",
@@ -1269,6 +1279,4 @@ public class ViewUtil {
             }
         }
     }
-
-
 }
