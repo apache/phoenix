@@ -1637,9 +1637,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         byte[] tableKey = null;
         do {
-
             if (result == null) {
-                LOGGER.info(String.format("*****TTL(2) for view %s = %d", Bytes.toString(viewKey), TTL_NOT_DEFINED));
                 return TTL_NOT_DEFINED;
             }
 
