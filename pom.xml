@@ -121,7 +121,6 @@
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.21</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
-    <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
@@ -449,6 +448,13 @@
                 <ignoredUsedUndeclaredDependency>
                   <!-- These change too frequently, so we just rely on the hbase transitive deps -->
                   org.apache.hbase.thirdparty:*
+                </ignoredUsedUndeclaredDependency>
+                <ignoredUsedUndeclaredDependency>
+                  <!-- We only need this because the Hadoop Metrics API leak.
+                  By not declaring the dependency, we can pick up the CVE fixed version from Hadoop
+                  without having to also declare a dependency on commons-text dependency
+                  (which we do not use directly at all)-->
+                  org.apache.commons:commons-configuration2
                 </ignoredUsedUndeclaredDependency>
               </ignoredUsedUndeclaredDependencies>
             </configuration>
@@ -1433,11 +1439,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
         <version>${commons-lang.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.commons</groupId>
-        <artifactId>commons-configuration2</artifactId>
-        <version>${commons-configuration2.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>
