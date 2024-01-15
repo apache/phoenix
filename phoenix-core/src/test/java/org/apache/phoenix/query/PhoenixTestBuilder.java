@@ -325,7 +325,8 @@ public class PhoenixTestBuilder {
                     values.clear();
                     rowKeyParts.clear();
                 }
-                LOGGER.info(String.format("########## rows: %d", dataTable.rowKeySet().size()));
+                LOGGER.info(String.format("########## sql: %s => rows: %d",
+                        sql, dataTable.rowKeySet().size()));
 
             } catch (SQLException e) {
                 LOGGER.error(String.format(" Error [%s] initializing Reader. ",
@@ -612,8 +613,11 @@ public class PhoenixTestBuilder {
         public static final String DEFAULT_KP = "ECZ";
         public static final String DEFAULT_SCHEMA_NAME = "TEST_ENTITY";
         public static final String DEFAULT_TENANT_ID_FMT = "00D0t%04d%s";
-        public static final String DEFAULT_UNIQUE_TABLE_NAME_FMT = "T_%s_%s";
-        public static final String DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT = "GV_%s_%s";
+        public static final String DEFAULT_ALT_TENANT_ID_FMT = "00T0t%04d%s";
+        public static final String DEFAULT_UNIQUE_PREFIX_TABLE_NAME_FMT = "T_%s_%s";
+        public static final String DEFAULT_UNIQUE_PREFIX_GLOBAL_VIEW_NAME_FMT = "GV_%s_%s";
+        public static final String DEFAULT_UNIQUE_TABLE_NAME_FMT = "T_%s";
+        public static final String DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT = "GV_%s";
 
         public static final String DEFAULT_CONNECT_URL = "jdbc:phoenix:localhost";
 
@@ -1992,6 +1996,25 @@ public class PhoenixTestBuilder {
              * Setters and Getters
              *****************************
              */
+            public static DataOptions withPrefix(String prefix) {
+                DataOptions options = new DataOptions();
+                options.uniqueNamePrefix = prefix;
+                options.uniqueName = generateUniqueName().substring(1);
+                options.viewCounter = new AtomicInteger(0);
+                options.tenantId =
+                        String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
+                                options.uniqueName);
+                options.tableName =
+                        String.format(DDLDefaults.DEFAULT_UNIQUE_PREFIX_TABLE_NAME_FMT,
+                                options.uniqueNamePrefix,
+                                options.uniqueName);
+
+                options.globalViewName =
+                        String.format(DDLDefaults.DEFAULT_UNIQUE_PREFIX_GLOBAL_VIEW_NAME_FMT,
+                                options.uniqueNamePrefix,
+                                options.uniqueName);
+                return options;
+            }
 
             public static DataOptions withDefaults() {
                 DataOptions options = new DataOptions();
@@ -2001,12 +2024,11 @@ public class PhoenixTestBuilder {
                         String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
                                 options.uniqueName);
                 options.tableName =
-                        String.format("%s%s",
-                                options.uniqueNamePrefix.isEmpty() ? "T_" : options.uniqueNamePrefix,
+                        String.format(DDLDefaults.DEFAULT_UNIQUE_TABLE_NAME_FMT,
                                 options.uniqueName);
+
                 options.globalViewName =
-                        String.format("%s%s",
-                                options.uniqueNamePrefix.isEmpty() ? "GV_" : options.uniqueNamePrefix,
+                        String.format(DDLDefaults.DEFAULT_UNIQUE_GLOBAL_VIEW_NAME_FMT,
                                 options.uniqueName);
                 return options;
             }
