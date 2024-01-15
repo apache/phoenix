@@ -148,7 +148,7 @@ public class CompactionScanner implements InternalScanner {
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor(ttlTracker);
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor(ttlTracker);
         LOGGER.info(String.format("CompactionScanner params:- (" +
-                        "physical-name = %s, compaction-table-name = %s, " +
+                        "physical-data-tablename = %s, compaction-tablename = %s, " +
                         "emptyCF = %s, emptyCQ = %s, " +
                         "minVersion = %d, maxVersion = %d, keepDeletedCells = %s, " +
                         "familyCount = %d, localIndex = %s, emptyCFStore = %s, " +
@@ -446,7 +446,7 @@ public class CompactionScanner implements InternalScanner {
             } catch (Exception e) {
                 LOGGER.error(String.format("Exception when visiting table: " + e.getMessage()));
             } finally {
-                LOGGER.info(String.format("visiting row-key = %s, region = %s, table-info=%s, " +
+                LOGGER.info(String.format("visiting row-key = %s, region = %s, table-ttl-info=%s, " +
                                 "matched = %s, prefix-key = %s, " +
                                 "ttl = %d, offset = %d, pk-pos = %d, pk-pos-list = %s",
                         Bytes.toStringBinary(Result.create(result).getRow()),
