@@ -41,7 +41,7 @@ public class TableTTLInfoTestHelper {
 			try {
 				tableList.forEach(m -> {
 					addTabletoIndex(m);
-					System.out.println("Adding table :" + Bytes.toStringBinary(m.getTableName()));
+					System.out.println("Adding table :" + Bytes.toStringBinary(m.getEntityName()));
 				});
 				indexStatus.complete(true);
 			} catch (Exception e) {

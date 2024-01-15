@@ -1626,42 +1626,33 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Result result = scanner.next();
         boolean startCheckingForLink = false;
         do {
-
             if (result == null) {
-                LOGGER.info(String.format("*****TTL(2) for view %s = %d", Bytes.toString(viewKey), TTL_NOT_DEFINED));
                 return TTL_NOT_DEFINED;
             }
             if (startCheckingForLink) {
                 byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
                 if (linkTypeBytes != null) {
-                    LOGGER.info(String.format("*****Processing LINK_TYPE view %s", Bytes.toString(viewKey)));
                     byte[][] rowKeyMetaData = new byte[5][];
                     getVarChars(result.getRow(), 5, rowKeyMetaData);
                     byte[] parentViewTenantId = null;
                     if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PARENT_TABLE) {
                         parentViewTenantId = result.getValue(TABLE_FAMILY_BYTES,
                                 PARENT_TENANT_ID_BYTES);
-                        LOGGER.info(String.format("*****Processing LINK_TYPE(%s) for view %s", PARENT_TABLE, Bytes.toString(viewKey) ));
                         return getTTLFromAppropriateParent(parentViewTenantId, rowKeyMetaData, clientTimeStamp);
                     } else if (LinkType.fromSerializedValue(linkTypeBytes[0]) ==
                             VIEW_INDEX_PARENT_TABLE) {
                         //We are calculating TTL for indexes on Views
                         parentViewTenantId = rowKeyMetaData
                                 [PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-                        LOGGER.info(String.format("*****Processing LINK_TYPE(%s) for view %s", VIEW_INDEX_PARENT_TABLE, Bytes.toString(viewKey)));
                         return getTTLFromAppropriateParent(parentViewTenantId, rowKeyMetaData, clientTimeStamp);
                     } else if (LinkType.fromSerializedValue(linkTypeBytes[0]) ==
                             PHYSICAL_TABLE) {
-                        LOGGER.info(String.format("*****Processing LINK_TYPE(%s) for view %s", PHYSICAL_TABLE, Bytes.toString(viewKey)));
+                        // TODO : fix this as an addendum to PHOENIX-7040
                         //return getTTLFromAppropriateParent(parentViewTenantId, rowKeyMetaData, clientTimeStamp);
                     }
                 }
             } else {
                 if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
-                    LOGGER.info(String.format("*****Found TTL for view %s = %d", Bytes.toString(viewKey), PInteger.INSTANCE.getCodec().decodeInt(
-                            result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES),
-                            0, SortOrder.getDefault())));
-
                     return PInteger.INSTANCE.getCodec().decodeInt(
                             result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES),
                             0, SortOrder.getDefault());
@@ -1671,8 +1662,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             result = scanner.next();
             startCheckingForLink = true;
         } while (result != null);
-
-        LOGGER.info(String.format("*****TTL(4) for view %s = %d", Bytes.toString(viewKey), TTL_NOT_DEFINED));
 
         return TTL_NOT_DEFINED;
     }
@@ -1688,7 +1677,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 .getBytes(StandardCharsets.UTF_8);
         byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
                 parentViewSchemaName, parentViewName);
-        LOGGER.info(String.format("*****TTL(5) for view %s = %d", Bytes.toString(parentViewKey), clientTimeStamp));
         return scanTTLFromParent(parentViewKey, clientTimeStamp);
     }
 

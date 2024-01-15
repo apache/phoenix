@@ -11,25 +11,25 @@ import java.util.Arrays;
 public class TableTTLInfo implements Comparable {
 	private final byte[] physicalTableName;
 	private final byte[] tenantId;
-	private final byte[] tableName;
+	private final byte[] entityName;
 	private final byte[] prefix;
 	private final int ttl;
 
-	public TableTTLInfo(String physicalTableName, String tenantId, String tableName, String prefix, int ttl) {
+	public TableTTLInfo(String physicalTableName, String tenantId, String entityName, String prefix, int ttl) {
 		super();
 		this.physicalTableName = physicalTableName.getBytes(StandardCharsets.UTF_8);
 		this.tenantId = tenantId.getBytes(StandardCharsets.UTF_8);
-		this.tableName = tableName.getBytes(StandardCharsets.UTF_8);
+		this.entityName = entityName.getBytes(StandardCharsets.UTF_8);
 		this.prefix = prefix.getBytes(StandardCharsets.UTF_8);
 		this.ttl = ttl;
 	}
 
-	public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] tableName, byte[] prefix, int ttl) {
+	public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] entityName, byte[] prefix, int ttl) {
 		super();
 		this.physicalTableName = physicalTableName;
 		this.tenantId = tenantId;
 		this.prefix = prefix;
-		this.tableName = tableName;
+		this.entityName = entityName;
 		this.ttl = ttl;
 	}
 
@@ -40,8 +40,8 @@ public class TableTTLInfo implements Comparable {
 		return tenantId;
 	}
 
-	public byte[] getTableName() {
-		return tableName;
+	public byte[] getEntityName() {
+		return entityName;
 	}
 
 	public byte[] getPrefix() {
@@ -59,12 +59,12 @@ public class TableTTLInfo implements Comparable {
 		TableTTLInfo that = (TableTTLInfo) o;
 		return Arrays.equals(physicalTableName, that.physicalTableName) &&
 				Arrays.equals(tenantId, that.tenantId) &&
-				Arrays.equals(tableName, that.tableName);
+				Arrays.equals(entityName, that.entityName);
 	}
 
 	@Override
 	public int hashCode() {
-		return Arrays.hashCode(tenantId) +  Arrays.hashCode(tableName);
+		return Arrays.hashCode(tenantId) +  Arrays.hashCode(entityName);
 	}
 	@Override
 	public int compareTo(Object obj) {
@@ -75,7 +75,7 @@ public class TableTTLInfo implements Comparable {
 		TableTTLInfo other = (TableTTLInfo) obj;
 		int result = Bytes.BYTES_COMPARATOR.compare(this.physicalTableName,other.physicalTableName);
 		if (result == 0) {
-			result = Bytes.BYTES_COMPARATOR.compare(this.tableName,other.tableName);
+			result = Bytes.BYTES_COMPARATOR.compare(this.entityName,other.entityName);
 		}
 		if (result == 0)  {
 			result = Bytes.BYTES_COMPARATOR.compare(this.tenantId, other.tenantId);
@@ -85,13 +85,13 @@ public class TableTTLInfo implements Comparable {
 
 	@Override
 	public String toString() {
-		return "TableTTLInfo {" +
+		return "TableTTLInfo { " +
 				"physicalTableName=" + Bytes.toString(physicalTableName) +
 				", tenantId=" + Bytes.toString(tenantId) +
-				", tableName=" + Bytes.toString(tableName) +
+				", entityName=" + Bytes.toString(entityName) +
 				", prefix=" + Bytes.toStringBinary(prefix) +
 				", ttl=" + ttl +
-				'}';
+				" }";
 	}
 
 }

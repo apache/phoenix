@@ -1104,7 +1104,7 @@ public class ViewUtil {
         }
     }
 
-    /// TODO : Needs optimization
+    /// TODO : Needs optimization and remove logging
     public static List<TableTTLInfo> getRowKeyPrefixesForPartitionedTables(String fullTableName,
             Configuration configuration, boolean isIndexTable) throws SQLException {
 
@@ -1138,7 +1138,7 @@ public class ViewUtil {
                             "AND COLUMN_FAMILY = '%s' " +
                             "AND TENANT_ID IS NULL";
             String globalViewSQL = String.format(globalViewsSQLFormat, fullTableName);
-            logger.info("globalViewSQL:" + globalViewSQL);
+            logger.debug("globalViewSQL:" + globalViewSQL);
             try (PhoenixPreparedStatement globalViewStmt = serverConnection.prepareStatement(
                     globalViewSQL).unwrap(PhoenixPreparedStatement.class)) {
                 try (ResultSet globalViewRS = globalViewStmt.executeQuery()) {
@@ -1172,7 +1172,7 @@ public class ViewUtil {
                     tenantViewsSQLFormat =
                     "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME," + "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " + "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " + "FROM SYSTEM.CATALOG " + "WHERE LINK_TYPE = 2 " + "AND COLUMN_FAMILY = '%s' " + "AND TENANT_ID IS NOT NULL";
             String tenantViewSQL = String.format(tenantViewsSQLFormat, fullTableName);
-            logger.info("tenantViewSQL:" + tenantViewSQL);
+            logger.debug("tenantViewSQL:" + tenantViewSQL);
 
             try (PhoenixPreparedStatement tenantViewStmt = serverConnection.prepareStatement(
                     tenantViewSQL).unwrap(PhoenixPreparedStatement.class)) {
@@ -1218,7 +1218,7 @@ public class ViewUtil {
                         "WHERE TABLE_TYPE = 'v' AND " +
                         "(TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
                         "(" + viewsClause.toString() + ")";
-        logger.info(
+        logger.debug(
                 String.format("ViewsWithTTLSQL : %s", viewsWithTTLSQL));
 
         try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
@@ -1253,7 +1253,7 @@ public class ViewUtil {
 
                         if (isIndexTable) {
                             for (PTable index : pTable.getIndexes()) {
-                                logger.info(String.format(
+                                logger.debug(String.format(
                                         "index-name = %s, ttl = %d, row-key-prefix = %d",
                                         index.getName(), index.getTTL(), index.getViewIndexId()));
                                 byte[]
@@ -1265,7 +1265,7 @@ public class ViewUtil {
                                                 viewIndexIdBytes, index.getTTL()));
                             }
                         } else {
-                            logger.info(
+                            logger.debug(
                                     String.format("table-name = %s, ttl = %d, row-key-prefix = %s",
                                             pTable.getName(), pTable.getTTL(),
                                             Bytes.toStringBinary(pTable.getRowKeyPrefix())));

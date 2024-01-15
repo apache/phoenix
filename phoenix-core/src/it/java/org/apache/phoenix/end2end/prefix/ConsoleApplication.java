@@ -63,7 +63,7 @@ public class ConsoleApplication  {
 						if (t != null) {
 							System.out.println(String.format("Matched table with info : %d\t%s\t%s", t.getTTL(),
 									Bytes.toStringBinary(t.getTenantId()),
-									Bytes.toStringBinary(t.getTableName())));
+									Bytes.toStringBinary(t.getEntityName())));
 						} else {
 							System.out.println("Did not find any matching table");
 						}
