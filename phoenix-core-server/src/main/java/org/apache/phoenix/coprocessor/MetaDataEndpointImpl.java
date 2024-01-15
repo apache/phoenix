@@ -113,6 +113,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -3476,8 +3477,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 } else {
+                    PTable oldTable = table;
                     table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP,
                             clientVersion);
+                    if (table != null && hasInheritableTablePropertyChanged(table, oldTable)) {
+                        invalidateAllChildTablesAndIndexes(table, childViews);
+                    }
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
                         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
                                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
@@ -3506,6 +3511,32 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         } catch (Throwable t) {
             ClientUtil.throwIOException(fullTableName, t);
             return null; // impossible
+        }
+    }
+
+    private boolean hasInheritableTablePropertyChanged(PTable newTable, PTable oldTable) {
+        return ! Objects.equals(newTable.getMaxLookbackAge(), oldTable.getMaxLookbackAge());
+    }
+
+    private void invalidateAllChildTablesAndIndexes(PTable table, List<PTable> childViews) {
+        List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
+        if (table.getIndexes() != null) {
+            for(PTable index: table.getIndexes()) {
+                invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(index)));
+            }
+        }
+        for(PTable childView: childViews) {
+            invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(childView)));
+            if (childView.getIndexes() != null) {
+                for(PTable viewIndex: childView.getIndexes()) {
+                    invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(viewIndex)));
+                }
+            }
+        }
+        Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
+                GlobalCache.getInstance(this.env).getMetaDataCache();
+        for(ImmutableBytesPtr invalidateKey: invalidateList) {
+            metaDataCache.invalidate(invalidateKey);
         }
     }
 

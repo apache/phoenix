@@ -27,9 +27,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.apache.phoenix.util.TestUtil.closeConnection;
-import static org.apache.phoenix.util.TestUtil.closeStatement;
+import static org.apache.phoenix.util.TestUtil.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -1835,6 +1833,31 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         }
         assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "2309.3"));
         assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "forty"));
+    }
+
+    @Test
+    public void testMaxLookbackAgeOfIndexWithAlterTable() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        Long maxLookbackAge = oneDayInMillis;
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String ddl = "CREATE TABLE  " + fullDataTableName +
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer) MAX_LOOKBACK_AGE=" + maxLookbackAge;
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullDataTableName, maxLookbackAge);
+            String indexName = generateUniqueName();
+            String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+            ddl = "CREATE INDEX " + indexName + " ON " + fullDataTableName + " (COL1)";
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullIndexName, maxLookbackAge);
+            Long oldMaxLookbackAge = maxLookbackAge;
+            maxLookbackAge = 2 * oneDayInMillis;
+            alterTableLevelMaxLookbackAge(fullDataTableName, maxLookbackAge.toString());
+            assertMaxLookbackAge(fullDataTableName, maxLookbackAge);
+            assertMaxLookbackAge(fullIndexName, maxLookbackAge);
+        }
     }
 
     private void assertMaxLookbackAge(String fullTableName, Long expectedMaxLookbackAge) throws Exception {
