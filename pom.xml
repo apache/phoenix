@@ -121,7 +121,7 @@
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.21</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
-    <commons-configuration2.version>2.8.0</commons-configuration2.version>
+    <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
