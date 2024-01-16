@@ -916,18 +916,19 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             if (previousResultRowKey != null) {
                 getDummyResult(previousResultRowKey, result);
             } else {
-                if (includeInitStartRowKey && initStartRowKey.length > 0 &&
-                        initStartRowKey.length < (HConstants.MAX_ROW_LENGTH - 1)) {
+                if (includeInitStartRowKey && initStartRowKey.length > 0) {
                     byte[] prevKey;
                     if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
                             1, Bytes.toBytesBinary("\\x00"), 0, 1) == 0) {
                         prevKey = new byte[initStartRowKey.length - 1];
                         System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
-                    } else {
+                    } else if (initStartRowKey.length < (HConstants.MAX_ROW_LENGTH - 1)) {
                         prevKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(initStartRowKey,
                                         new byte[HConstants.MAX_ROW_LENGTH
                                                 - initStartRowKey.length - 1]),
                                 HConstants.MAX_ROW_LENGTH - 1);
+                    } else {
+                        prevKey = initStartRowKey;
                     }
                     getDummyResult(prevKey, result);
                 } else {
