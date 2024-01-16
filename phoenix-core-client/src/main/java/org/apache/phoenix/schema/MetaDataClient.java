@@ -3311,9 +3311,7 @@ public class MetaDataClient {
                                 : statement.getWhereClause().toString())
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
-                // update ancestors in the cache in case something changed about them
-                // e.g. creating a view can increase the sequence number on the table
-                addTableToCache(result, true);
+                addTableToCache(result, false);
                 return table;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNameNode.toString(),
