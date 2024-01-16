@@ -27,6 +27,8 @@ import static org.apache.phoenix.exception.SQLExceptionCode
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode
         .NOT_NULLABLE_COLUMN_IN_ROW_KEY;
+import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
+import static org.apache.phoenix.exception.SQLExceptionCode.MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData
         .SYSTEM_LINK_HBASE_TABLE_NAME;
@@ -49,6 +51,8 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -1369,6 +1373,36 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
         assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+
+    @Test
+    public void testAlterViewAndViewIndexMaxLookbackAgeFails() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String ddl = "CREATE TABLE " + fullDataTableName + " (ID VARCHAR NOT NULL PRIMARY KEY, COL1 INTEGER)";
+            stmt.execute(ddl);
+            assertNull(queryTableLevelMaxLookbackAge(fullDataTableName));
+            String viewName = generateUniqueName();
+            String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+            ddl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullDataTableName;
+            stmt.execute(ddl);
+            assertNull(queryTableLevelMaxLookbackAge(fullViewName));
+            String alterViewDdl = "ALTER VIEW " + fullViewName + " SET MAX_LOOKBACK_AGE = 300";
+            SQLException err = assertThrows(SQLException.class, () -> stmt.execute(alterViewDdl));
+            assertEquals(VIEW_WITH_PROPERTIES.getErrorCode(), err.getErrorCode());
+            String viewIndexName = generateUniqueName();
+            String fullViewIndexName = SchemaUtil.getTableName(schemaName, viewIndexName);
+            ddl = "CREATE INDEX " + viewIndexName + " ON " + fullViewName + " (COL1)";
+            stmt.execute(ddl);
+            assertNull(queryTableLevelMaxLookbackAge(fullViewIndexName));
+            String alterViewIndexDdl = "ALTER INDEX " + viewIndexName + " ON " + fullViewName +
+                    " ACTIVE SET MAX_LOOKBACK_AGE = 300";
+            err = assertThrows(SQLException.class, () -> stmt.execute(alterViewIndexDdl));
+            assertEquals(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), err.getErrorCode());
+        }
     }
 
     private void assertPKs(ResultSet rs, String[] expectedPKs)

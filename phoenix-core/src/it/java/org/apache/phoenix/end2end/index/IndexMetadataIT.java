@@ -21,12 +21,14 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX;
+import static org.apache.phoenix.exception.SQLExceptionCode.MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertThrows;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -946,6 +948,28 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         asssertIsWALDisabled(conn,indexName,true);
         conn.createStatement().execute("ALTER INDEX "+indexName+" ON " + testTable +" ACTIVE SET DISABLE_WAL=false");
         asssertIsWALDisabled(conn,indexName,false);
+    }
+
+    @Test
+    public void testAlterIndexMaxLookbackAgeFails() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String ddl = "CREATE TABLE " + fullDataTableName + " (id varchar not null primary key, col1 integer)";
+            stmt.execute(ddl);
+            assertNull(queryTableLevelMaxLookbackAge(fullDataTableName));
+            String indexName = generateUniqueName();
+            String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+            ddl = "CREATE INDEX " + indexName + " ON " + fullDataTableName + " (COL1)";
+            stmt.execute(ddl);
+            assertNull(queryTableLevelMaxLookbackAge(fullIndexName));
+            String alterIndexDdl = "ALTER INDEX " + indexName + " ON " + fullDataTableName +
+                    " ACTIVE SET MAX_LOOKBACK_AGE = 300";
+            SQLException err = assertThrows(SQLException.class, () -> stmt.execute(alterIndexDdl));
+            assertEquals(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), err.getErrorCode());
+        }
     }
 
     private static void asssertIsWALDisabled(Connection conn, String fullTableName, boolean expectedValue) throws SQLException {
