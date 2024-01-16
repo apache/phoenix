@@ -37,6 +37,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -98,8 +99,8 @@ public class MutableIndexReplicationIT extends BaseTest {
 
     protected static Admin admin;
 
-    protected static HBaseTestingUtility utility1;
-    protected static HBaseTestingUtility utility2;
+    protected static IntegrationTestingUtility utility1;
+    protected static IntegrationTestingUtility utility2;
     protected static final int REPLICATION_RETRIES = 100;
 
     protected static final byte[] tableName = Bytes.toBytes("test");
@@ -129,7 +130,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         conf1.setInt("replication.stats.thread.period.seconds", 5);
         conf1.setBoolean("hbase.tests.use.shortcircuit.reads", false);
 
-        utility1 = new HBaseTestingUtility(conf1);
+        utility1 = new IntegrationTestingUtility(conf1);
         utility1.startMiniZKCluster();
         MiniZooKeeperCluster miniZK = utility1.getZkCluster();
         // Have to reset conf1 in case zk cluster location different
@@ -146,7 +147,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         conf2.setBoolean("dfs.support.append", true);
         conf2.setBoolean("hbase.tests.use.shortcircuit.reads", false);
 
-        utility2 = new HBaseTestingUtility(conf2);
+        utility2 = new IntegrationTestingUtility(conf2);
         utility2.setZkCluster(miniZK);
         zkw2 = new ZKWatcher(conf2, "cluster2", null, true);
 

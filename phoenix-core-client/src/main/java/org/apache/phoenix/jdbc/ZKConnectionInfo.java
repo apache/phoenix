@@ -125,7 +125,6 @@ public class ZKConnectionInfo extends ConnectionInfo {
         return true;
     }
 
-    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(zkHosts.replaceAll(":", "\\\\:"));

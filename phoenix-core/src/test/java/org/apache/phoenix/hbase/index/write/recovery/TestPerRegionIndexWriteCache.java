@@ -110,7 +110,7 @@ public class TestPerRegionIndexWriteCache {
         TableDescriptor htd =
                 TableDescriptorBuilder
                         .newBuilder(tableName)
-                        .addColumnFamily(
+                        .setColumnFamily(
                             ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("a")).build())
                         .build();
       

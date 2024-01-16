@@ -19,6 +19,7 @@ package org.apache.phoenix.compat.hbase;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFileInfo;
 import org.apache.hadoop.hbase.io.hfile.ReaderContext;
@@ -30,7 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CompatIndexHalfStoreFileReader extends StoreFileReader {
 
     public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf, final Configuration conf,
-                                          final ReaderContext readerContext, final HFileInfo hFileInfo) throws IOException {
+                                          final ReaderContext readerContext, final HFileInfo hFileInfo, Path p) throws IOException {
         super(readerContext, hFileInfo, cacheConf, new AtomicInteger(0), conf);
     }
 

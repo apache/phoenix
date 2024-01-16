@@ -18,10 +18,10 @@
 package org.apache.phoenix.jdbc;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.apache.hadoop.hbase.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_REPAIR_FOUND_INCONSISTENCIES;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SUCCESS;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SYNC_ERROR;
+import static org.apache.phoenix.util.TestUtil.waitFor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 

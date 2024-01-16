@@ -28,7 +28,6 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import com.google.protobuf.RpcController;
 
 /**
  * {@link RpcController} that sets the appropriate priority of RPC calls destined for Phoenix SYSTEM

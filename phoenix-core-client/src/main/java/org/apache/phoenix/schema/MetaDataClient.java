@@ -165,7 +165,6 @@ import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
@@ -5897,7 +5896,7 @@ public class MetaDataClient {
         LOGGER.info(changePermsStatement.toString());
 
         try(Admin admin = connection.getQueryServices().getAdmin()) {
-            ClusterConnection clusterConnection = (ClusterConnection) admin.getConnection();
+            org.apache.hadoop.hbase.client.Connection hConnection = admin.getConnection();
 
             if (changePermsStatement.getSchemaName() != null) {
                 // SYSTEM.CATALOG doesn't have any entry for "default" HBase namespace, hence we will bypass the check
@@ -5907,7 +5906,7 @@ public class MetaDataClient {
                             connection);
                 }
 
-                changePermsOnSchema(clusterConnection, changePermsStatement);
+                changePermsOnSchema(hConnection, changePermsStatement);
             } else if (changePermsStatement.getTableName() != null) {
                 PTable inputTable = connection.getTable(SchemaUtil.
                         normalizeFullTableName(changePermsStatement.getTableName().toString()));
@@ -5917,11 +5916,11 @@ public class MetaDataClient {
 
                 // Changing perms on base table and update the perms for global and view indexes
                 // Views and local indexes are not physical tables and hence update perms is not needed
-                changePermsOnTables(clusterConnection, admin, changePermsStatement, inputTable);
+                changePermsOnTables(hConnection, admin, changePermsStatement, inputTable);
             } else {
 
                 // User can be given perms at the global level
-                changePermsOnUser(clusterConnection, changePermsStatement);
+                changePermsOnUser(hConnection, changePermsStatement);
             }
 
         } catch (SQLException e) {
@@ -5936,20 +5935,20 @@ public class MetaDataClient {
         return new MutationState(0, 0, connection);
     }
 
-    private void changePermsOnSchema(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement) throws Throwable {
+    private void changePermsOnSchema(org.apache.hadoop.hbase.client.Connection hConnection, ChangePermsStatement changePermsStatement) throws Throwable {
         if (changePermsStatement.isGrantStatement()) {
-            AccessControlClient.grant(clusterConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), changePermsStatement.getPermsList());
+            AccessControlClient.grant(hConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), changePermsStatement.getPermsList());
         } else {
-            AccessControlClient.revoke(clusterConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), Permission.Action.values());
+            AccessControlClient.revoke(hConnection, changePermsStatement.getSchemaName(), changePermsStatement.getName(), Permission.Action.values());
         }
     }
 
-    private void changePermsOnTables(ClusterConnection clusterConnection, Admin admin, ChangePermsStatement changePermsStatement, PTable inputTable) throws Throwable {
+    private void changePermsOnTables(org.apache.hadoop.hbase.client.Connection hConnection, Admin admin, ChangePermsStatement changePermsStatement, PTable inputTable) throws Throwable {
 
         org.apache.hadoop.hbase.TableName tableName = SchemaUtil.getPhysicalTableName
                 (inputTable.getPhysicalName().getBytes(), inputTable.isNamespaceMapped());
 
-        changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+        changePermsOnTable(hConnection, changePermsStatement, tableName);
 
         boolean schemaInconsistency = false;
         List<PTable> inconsistentTables = null;
@@ -5970,7 +5969,7 @@ public class MetaDataClient {
             LOGGER.info("Updating permissions for Index Table: " +
                     indexTable.getName() + " Base Table: " + inputTable.getName());
             tableName = SchemaUtil.getPhysicalTableName(indexTable.getPhysicalName().getBytes(), indexTable.isNamespaceMapped());
-            changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+            changePermsOnTable(hConnection, changePermsStatement, tableName);
         }
 
         if (schemaInconsistency) {
@@ -5988,7 +5987,7 @@ public class MetaDataClient {
         if (viewIndexTableExists) {
             LOGGER.info("Updating permissions for View Index Table: " +
                     Bytes.toString(viewIndexTableBytes) + " Base Table: " + inputTable.getName());
-            changePermsOnTable(clusterConnection, changePermsStatement, tableName);
+            changePermsOnTable(hConnection, changePermsStatement, tableName);
         } else {
             if (inputTable.isMultiTenant()) {
                 LOGGER.error("View Index Table not found for MultiTenant Table: " + inputTable.getName());
@@ -5999,23 +5998,23 @@ public class MetaDataClient {
         }
     }
 
-    private void changePermsOnTable(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement, org.apache.hadoop.hbase.TableName tableName)
+    private void changePermsOnTable(org.apache.hadoop.hbase.client.Connection hConnection, ChangePermsStatement changePermsStatement, org.apache.hadoop.hbase.TableName tableName)
             throws Throwable {
         if (changePermsStatement.isGrantStatement()) {
-            AccessControlClient.grant(clusterConnection, tableName, changePermsStatement.getName(),
+            AccessControlClient.grant(hConnection, tableName, changePermsStatement.getName(),
                     null, null, changePermsStatement.getPermsList());
         } else {
-            AccessControlClient.revoke(clusterConnection, tableName, changePermsStatement.getName(),
+            AccessControlClient.revoke(hConnection, tableName, changePermsStatement.getName(),
                     null, null, Permission.Action.values());
         }
     }
 
-    private void changePermsOnUser(ClusterConnection clusterConnection, ChangePermsStatement changePermsStatement)
+    private void changePermsOnUser(org.apache.hadoop.hbase.client.Connection hConnection, ChangePermsStatement changePermsStatement)
             throws Throwable {
         if (changePermsStatement.isGrantStatement()) {
-            AccessControlClient.grant(clusterConnection, changePermsStatement.getName(), changePermsStatement.getPermsList());
+            AccessControlClient.grant(hConnection, changePermsStatement.getName(), changePermsStatement.getPermsList());
         } else {
-            AccessControlClient.revoke(clusterConnection, changePermsStatement.getName(), Permission.Action.values());
+            AccessControlClient.revoke(hConnection, changePermsStatement.getName(), Permission.Action.values());
         }
     }
 }

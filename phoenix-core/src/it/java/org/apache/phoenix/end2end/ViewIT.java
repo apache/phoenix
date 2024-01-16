@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -291,7 +292,7 @@ public class ViewIT extends SplitSystemCatalogIT {
         Connection conn1 = DriverManager.getConnection(getUrl(), props);
         conn1.setAutoCommit(true);
 
-        HBaseTestingUtility testUtil = getUtility();
+        IntegrationTestingUtility testUtil = getUtility();
         Admin admin = testUtil.getAdmin();
 
         String nameSpace = generateUniqueName();

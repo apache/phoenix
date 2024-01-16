@@ -39,7 +39,6 @@ import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -1195,7 +1194,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             // scan the physical table and verify there is a single row for the second local index
             Scan scan = new Scan();
-            HTable table = (HTable) conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
+            Table table = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(viewIndexPhysicalTable);
             ResultScanner results = table.getScanner(scan);
             Result result = results.next();
             assertNotNull(result);

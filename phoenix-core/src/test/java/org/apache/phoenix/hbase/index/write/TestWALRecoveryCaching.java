@@ -169,7 +169,7 @@ public class TestWALRecoveryCaching {
     // start the cluster with 2 rs
     util.startMiniCluster(2);
 
-    Admin admin = util.getHBaseAdmin();
+    Admin admin = util.getAdmin();
     // setup the index
     byte[] family = Bytes.toBytes("family");
     byte[] qual = Bytes.toBytes("qualifier");
@@ -182,8 +182,8 @@ public class TestWALRecoveryCaching {
 
     // create the primary table w/ indexing enabled
     TableDescriptor primaryTable = TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
-                .addColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
+                .setColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
+                .setColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
     builder.addArbitraryConfigForTesting(Indexer.RecoveryFailurePolicyKeyForTesting,
       ReleaseLatchOnFailurePolicy.class.getName());
     builder.build(primaryTable);
@@ -192,7 +192,7 @@ public class TestWALRecoveryCaching {
     // create the index table
     TableDescriptorBuilder indexTableBuilder = TableDescriptorBuilder
                 .newBuilder(TableName.valueOf(Bytes.toBytes(getIndexTableName())))
-                .addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
+                .setCoprocessor(IndexTableBlockingReplayObserver.class.getName());
     TestIndexManagementUtil.createIndexTable(admin, indexTableBuilder);
 
     // figure out where our tables live

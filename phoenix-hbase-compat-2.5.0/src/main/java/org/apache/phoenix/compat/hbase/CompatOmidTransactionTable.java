@@ -20,10 +20,14 @@ package org.apache.phoenix.compat.hbase;
 import java.io.IOException;
 
 import org.apache.hadoop.hbase.HTableDescriptor;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.Table.CheckAndMutateBuilder;
+import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
 public abstract class CompatOmidTransactionTable implements Table {
 
@@ -45,6 +49,31 @@ public abstract class CompatOmidTransactionTable implements Table {
 
     @Override
     public Result mutateRow(RowMutations rm) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
+            CompareOp compareOp, byte[] value, Put put) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
+            CompareOp compareOp, byte[] value, Delete delete)
+            throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier,
+            CompareOp compareOp, byte[] value, RowMutations mutation)
+            throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public CheckAndMutateBuilder checkAndMutate(byte[] row, byte[] family) {
         throw new UnsupportedOperationException();
     }
 }

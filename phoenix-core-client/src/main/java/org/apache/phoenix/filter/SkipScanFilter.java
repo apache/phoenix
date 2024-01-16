@@ -138,7 +138,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return isDone;
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell kv) {
         return filterCell(kv);
     }

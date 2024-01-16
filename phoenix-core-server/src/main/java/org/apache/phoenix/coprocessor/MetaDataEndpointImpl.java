@@ -122,6 +122,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
+import org.apache.hadoop.hbase.RawCell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.TagUtil;
 import org.apache.hadoop.hbase.client.Delete;
@@ -796,7 +797,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
         Scan scan = new Scan();
         if (clientTimeStamp != HConstants.LATEST_TIMESTAMP
-                && clientTimeStamp != HConstants.OLDEST_TIMESTAMP) {
+                && clientTimeStamp != Long.MIN_VALUE) {
             scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp + 1);
         } else {
             scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
@@ -1379,7 +1380,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagPhoenixTTL = (phoenixTTLKv == null) ?
-                HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(phoenixTTLKv);
+                HConstants.EMPTY_BYTE_ARRAY : ((RawCell)phoenixTTLKv).cloneTags();
         boolean viewModifiedPhoenixTTL = (PTableType.VIEW.equals(tableType)) &&
                 Bytes.contains(tagPhoenixTTL, MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
         builder.setViewModifiedPhoenixTTL(oldTable != null ?

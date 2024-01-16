@@ -33,7 +33,7 @@ public class AllVersionsIndexRebuildFilter extends DelegateFilter {
         super(originalFilter);
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell v) throws IOException {
         return filterCell(v);
     }

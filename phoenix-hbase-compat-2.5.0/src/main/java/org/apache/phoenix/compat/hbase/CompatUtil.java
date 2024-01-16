@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -32,6 +33,11 @@ import org.apache.hadoop.hbase.io.compress.Compression.Algorithm;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.io.hfile.HFileContext;
 import org.apache.hadoop.hbase.io.hfile.HFileContextBuilder;
+import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
+import org.apache.hadoop.hbase.protobuf.generated.TableProtos;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
+import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.regionserver.StoreUtils;
 import org.apache.hadoop.hbase.util.ChecksumType;
 import org.slf4j.Logger;
@@ -75,5 +81,30 @@ public class CompatUtil {
     public static Connection createShortCircuitConnection(final Configuration configuration,
             final RegionCoprocessorEnvironment env) throws IOException {
         return env.createConnection(configuration);
+    }
+
+    public static Mutation toMutation(MutationProto mProto) throws IOException {
+        return ProtobufUtil.toMutation(mProto);
+    }
+
+    public static MutationProto toMutation(MutationType type, Mutation mutation) throws IOException {
+        return ProtobufUtil.toMutation(type, mutation);
+    }
+
+    public static Scan toScan(final ClientProtos.Scan proto) throws IOException {
+        return ProtobufUtil.toScan(proto);
+    }
+
+    public static ClientProtos.Scan toScan(Scan scan) throws IOException {
+        return ProtobufUtil.toScan(scan);
+    }
+
+    public static TableProtos.TableName toProtoTableName(TableName tableName) {
+        return ProtobufUtil.toProtoTableName(tableName);
+    }
+
+    public static TableName toTableName(TableProtos.TableName tableNamePB) {
+        return TableName.valueOf(tableNamePB.getNamespace().asReadOnlyByteBuffer(),
+            tableNamePB.getQualifier().asReadOnlyByteBuffer());
     }
 }

@@ -185,7 +185,7 @@ public class ColumnProjectionFilter extends FilterBase implements Writable {
         return "";
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell ignored) throws IOException {
         return filterCell(ignored);
     }

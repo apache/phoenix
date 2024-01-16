@@ -19,8 +19,8 @@ package org.apache.phoenix.end2end.index;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -105,8 +105,8 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
     protected static ZKWatcher zkw1;
     protected static ZKWatcher zkw2;
 
-    protected static HBaseTestingUtility utility1;
-    protected static HBaseTestingUtility utility2;
+    protected static IntegrationTestingUtility utility1;
+    protected static IntegrationTestingUtility utility2;
     protected static final int REPLICATION_RETRIES = 10;
 
     protected static final byte[] tableName = Bytes.toBytes("test");
@@ -146,7 +146,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         conf1.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/1");
         setUpConfigForMiniCluster(conf1);
 
-        utility1 = new HBaseTestingUtility(conf1);
+        utility1 = new IntegrationTestingUtility(conf1);
         utility1.startMiniZKCluster();
 
         conf1 = utility1.getConfiguration();
@@ -159,7 +159,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         conf2.setBoolean("dfs.support.append", true);
         conf2.setBoolean("hbase.tests.use.shortcircuit.reads", false);
 
-        utility2 = new HBaseTestingUtility(conf2);
+        utility2 = new IntegrationTestingUtility(conf2);
         utility2.startMiniZKCluster();
         zkw2 = new ZKWatcher(conf2, "cluster2", null, true);
 

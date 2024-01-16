@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.LocalHBaseCluster;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
@@ -34,7 +35,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter.Predicate;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -249,9 +250,6 @@ public abstract class BasePermissionsIT extends BaseTest {
         conf.set(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         conf.set(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         conf.set(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
-    }
-    public static HBaseTestingUtility getUtility(){
-        return testUtil;
     }
 
     // Utility functions to grant permissions with HBase API
@@ -1669,7 +1667,7 @@ public abstract class BasePermissionsIT extends BaseTest {
                 final List<UserPermission> perms = new ArrayList<>();
                 if(request.getType() == AccessControlProtos.Permission.Type.Table) {
                     final TableName table =
-                            request.hasTableName() ? ProtobufUtil.toTableName(request.getTableName()) : null;
+                            request.hasTableName() ? CompatUtil.toTableName(request.getTableName()) : null;
                     perms.addAll(AccessControlClient.getUserPermissions(connection, table.getNameAsString()));
                 } else if(request.getType() == AccessControlProtos.Permission.Type.Namespace) {
                     final String namespace =
@@ -1693,9 +1691,9 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     // Copied from org.apache.hadoop.hbase.security.access.SecureTestUtil because it's not visible
     // there
-    private static List<AccessController> getAccessControllers(MiniHBaseCluster cluster) {
+    private static List<AccessController> getAccessControllers(IntegrationTestingUtility util) {
         List<AccessController> result = Lists.newArrayList();
-        for (RegionServerThread t: cluster.getLiveRegionServerThreads()) {
+        for (RegionServerThread t: util.getHBaseCluster().getLiveRegionServerThreads()) {
           for (HRegion region: t.getRegionServer().getOnlineRegionsLocalContext()) {
             Coprocessor cp = region.getCoprocessorHost()
               .findCoprocessor(AccessController.class.getName());
@@ -1709,9 +1707,9 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     // Copied from org.apache.hadoop.hbase.security.access.SecureTestUtil because it's not visible
     // there
-    private static Map<AccessController,Long> getAuthManagerMTimes(MiniHBaseCluster cluster) {
+    private static Map<AccessController,Long> getAuthManagerMTimes(IntegrationTestingUtility util) {
         Map<AccessController,Long> result = Maps.newHashMap();
-        for (AccessController ac: getAccessControllers(cluster)) {
+        for (AccessController ac: getAccessControllers(util)) {
           result.put(ac, ac.getAuthManager().getMTime());
         }
         return result;
@@ -1720,9 +1718,9 @@ public abstract class BasePermissionsIT extends BaseTest {
     // Copied from org.apache.hadoop.hbase.security.access.SecureTestUtil because it's not visible
     // there
     @SuppressWarnings("rawtypes")
-    public static void updateACLs(final HBaseTestingUtility util, Callable c) throws Exception {
+    public static void updateACLs(final IntegrationTestingUtility util, Callable c) throws Exception {
       // Get the current mtimes for all access controllers
-      final Map<AccessController,Long> oldMTimes = getAuthManagerMTimes(util.getHBaseCluster());
+      final Map<AccessController,Long> oldMTimes = getAuthManagerMTimes(util);
 
       // Run the update action
       c.call();
@@ -1731,7 +1729,7 @@ public abstract class BasePermissionsIT extends BaseTest {
       util.waitFor(WAIT_TIME, 100, new Predicate<IOException>() {
         @Override
         public boolean evaluate() {
-          Map<AccessController,Long> mtimes = getAuthManagerMTimes(util.getHBaseCluster());
+          Map<AccessController,Long> mtimes = getAuthManagerMTimes(util);
           for (Map.Entry<AccessController,Long> e: mtimes.entrySet()) {
             if (!oldMTimes.containsKey(e.getKey())) {
               LOGGER.error("Snapshot of AccessController state does not include instance on region " +

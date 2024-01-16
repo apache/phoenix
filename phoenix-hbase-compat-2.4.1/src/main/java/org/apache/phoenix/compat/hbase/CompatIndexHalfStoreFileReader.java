@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class CompatIndexHalfStoreFileReader extends StoreFileReader {
 
     public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf, final Configuration conf,
-                                          final ReaderContext readerContext, final HFileInfo hFileInfo) throws IOException {
+                                          final ReaderContext readerContext, final HFileInfo hFileInfo, Path p) throws IOException {
         super(readerContext, hFileInfo, cacheConf, new AtomicInteger(0), conf);
     }
 

@@ -38,7 +38,6 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -108,8 +107,8 @@ public class AggregateQueryIT extends BaseQueryIT {
             admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
             Configuration configuration = conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration();
             org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(configuration);
-            ((ClusterConnection)hbaseConn).clearRegionCache(TableName.valueOf(tableName));
             RegionLocator regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
+            regionLocator.clearRegionLocationCache();
             int nRegions = regionLocator.getAllRegionLocations().size();
             admin.split(tn, ByteUtil.concat(Bytes.toBytes(tenantId), Bytes.toBytes("00A3")));
             int retryCount = 0;

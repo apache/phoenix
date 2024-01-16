@@ -23,11 +23,11 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.query.KeyRange;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -88,7 +88,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
             byte[] protoScanBytes = new byte[WritableUtils.readVInt(input)];
             input.readFully(protoScanBytes);
             ClientProtos.Scan protoScan = ClientProtos.Scan.parseFrom(protoScanBytes);
-            Scan scan = ProtobufUtil.toScan(protoScan);
+            Scan scan = CompatUtil.toScan(protoScan);
             scans.add(scan);
         }
         init();
@@ -102,7 +102,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
         Preconditions.checkNotNull(scans);
         WritableUtils.writeVInt(output, scans.size());
         for (Scan scan : scans) {
-            ClientProtos.Scan protoScan = ProtobufUtil.toScan(scan);
+            ClientProtos.Scan protoScan = CompatUtil.toScan(scan);
             byte[] protoScanBytes = protoScan.toByteArray();
             WritableUtils.writeVInt(output, protoScanBytes.length);
             output.write(protoScanBytes);

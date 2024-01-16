@@ -24,7 +24,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;

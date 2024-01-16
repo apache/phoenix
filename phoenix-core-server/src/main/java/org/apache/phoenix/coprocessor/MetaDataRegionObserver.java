@@ -40,12 +40,16 @@ import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -307,7 +311,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                 Scan scan = new Scan();
                 SingleColumnValueFilter filter = new SingleColumnValueFilter(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
                     PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES,
-                    CompareFilter.CompareOp.NOT_EQUAL, PLong.INSTANCE.toBytes(0L));
+                    CompareOperator.NOT_EQUAL, PLong.INSTANCE.toBytes(0L));
                 filter.setFilterIfMissing(true);
                 scan.setFilter(filter);
                 scan.addColumn(PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES,
@@ -677,22 +681,24 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
     }
 
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
-        try (ClusterConnection hcon =
-                     (ClusterConnection) ConnectionFactory.createConnection(conf)) {
-            List<HRegionLocation> locations = hcon.locateRegions(
-                    org.apache.hadoop.hbase.TableName.valueOf(table.getPhysicalName().getBytes()));
-
-            for (HRegionLocation loc : locations) {
+        try (Connection hcon = ConnectionFactory.createConnection(conf)) {
+            Admin admin = hcon.getAdmin();
+            List<RegionInfo> regionInfos = admin.getRegions(TableName.valueOf(table.getPhysicalName().getBytes()));
+            // This makes Number of Regions RPC calls sequentially.
+            // For large tables this can be slow.
+            for (RegionInfo regionInfo : regionInfos) {
                 try {
-                    ServerName sn = loc.getServerName();
-                    if (sn == null) continue;
-
-                    AdminProtos.AdminService.BlockingInterface admin = hcon.getAdmin(sn);
-                    HBaseRpcController controller = hcon.getRpcControllerFactory().newController();
-                    org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil.getRegionInfo(controller,
-                            admin, loc.getRegion().getRegionName());
-                } catch (RemoteException e) {
-                    LOGGER.debug("Cannot get region " + loc.getRegion().getEncodedName() + " info due to error:" + e);
+                    // We don't actually care about the compaction state, we are only calling this
+                    // because this will trigger a call to the RS (from master), and we want to make
+                    // sure that all RSs are available
+                    // There are only a few methods in HBase 3.0 that are directly calling the RS,
+                    // this is one of them.
+                    admin.getCompactionStateForRegion(regionInfo.getRegionName());
+                    // This used to make a direct RPC call to the region, but HBase 3 makes that
+                    // very hard (needs reflection, or a bridge class in the same package),
+                    // and it's not necessary for checking the RS liveness
+                } catch (IOException e) {
+                    LOGGER.debug("Cannot get region " + regionInfo.getEncodedName() + " info due to error:" + e);
                     return false;
                 }
             }

@@ -96,7 +96,7 @@ public class IndexHalfStoreFileReader extends CompatIndexHalfStoreFileReader {
         super(fs, cacheConf, conf, new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
             ReaderType.STREAM),
             new HFileInfo(new ReaderContext(p, in, size, new HFileSystem(fs),
-                    primaryReplicaStoreFile, ReaderType.STREAM), conf));
+                    primaryReplicaStoreFile, ReaderType.STREAM), conf), p);
         getHFileReader().getHFileInfo().initMetaAndIndex(getHFileReader());
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?

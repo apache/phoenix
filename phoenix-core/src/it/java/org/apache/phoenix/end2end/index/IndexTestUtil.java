@@ -40,7 +40,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.GenericTestUtils;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
@@ -208,7 +207,6 @@ public class IndexTestUtil {
 
             TableDescriptorBuilder indexDescBuilder =
                     TableDescriptorBuilder.newBuilder(indexDescriptor);
-            removeCoproc(IndexRegionObserver.class, indexDescBuilder, admin);
             removeCoproc(GlobalIndexChecker.class, indexDescBuilder, admin);
         }
 

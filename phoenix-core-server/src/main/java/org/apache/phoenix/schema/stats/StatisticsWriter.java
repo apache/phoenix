@@ -45,13 +45,13 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcChannel;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MultiRowMutationService;
 import org.apache.hadoop.hbase.protobuf.generated.MultiRowMutationProtos.MutateRowsRequest;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -253,7 +253,7 @@ public class StatisticsWriter implements Closeable {
                     byte[] row = mutations.get(0).getRow();
                     MutateRowsRequest.Builder mrmBuilder = MutateRowsRequest.newBuilder();
                     for (Mutation m : mutations) {
-                        mrmBuilder.addMutationRequest(ProtobufUtil.toMutation(getMutationType(m), m));
+                        mrmBuilder.addMutationRequest(CompatUtil.toMutation(getMutationType(m), m));
                     }
                     MutateRowsRequest mrm = mrmBuilder.build();
                     CoprocessorRpcChannel channel = statsWriterTable.coprocessorService(row);
@@ -262,12 +262,31 @@ public class StatisticsWriter implements Closeable {
                     try {
                         service.mutateRows(null, mrm);
                     } catch (ServiceException ex) {
-                        ProtobufUtil.toIOException(ex);
+                        toIOException(ex);
                     }
                 }
                 return null;
             }
         });
+    }
+
+    /**
+     * Copied from Hbase 2 ProtobufUtil, as it is only used here
+     * 
+     * Unwraps an exception from a protobuf service into the underlying (expected) IOException. This
+     * method will <strong>always</strong> throw an exception.
+     * @param se the {@code ServiceException} instance to convert into an {@code IOException}
+     */
+    public static void toIOException(ServiceException se) throws IOException {
+      if (se == null) {
+        throw new NullPointerException("Null service exception passed!");
+      }
+
+      Throwable cause = se.getCause();
+      if (cause != null && cause instanceof IOException) {
+        throw (IOException) cause;
+      }
+      throw new IOException(se);
     }
 
     private Put getLastStatsUpdatedTimePut(long timeStamp) {

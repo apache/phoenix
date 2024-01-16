@@ -22,9 +22,11 @@ import java.util.List;
 import java.util.Map.Entry;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
+//TODO Does this really need to Extend Mutation ?
 public class MultiMutation extends Mutation {
 
     private ImmutableBytesPtr rowKey;
@@ -59,6 +61,11 @@ public class MultiMutation extends Mutation {
         list = new ArrayList<Cell>(hint);
       }
       return list;
+    }
+
+    //No @Override for HBase 2 compatibility
+    public CellBuilder getCellBuilder(org.apache.hadoop.hbase.CellBuilderType builderType) {
+        throw new UnsupportedOperationException();
     }
 
     @Override

@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -103,29 +104,20 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                 Scan scan =
                         MetaTableAccessor.getScanForTableName(hbaseConn.getConfiguration(),
                             tableName);
-                SingleColumnValueFilter scvf = null;
-                if (Reference.isTopFileRegion(r.getFileRegion())) {
-                    scvf =
-                            new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                                    HConstants.SPLITB_QUALIFIER, CompareOperator.EQUAL,
-                                    RegionInfoUtil.toByteArray(region.getRegionInfo()));
-                    scvf.setFilterIfMissing(true);
-                } else {
-                    scvf =
-                            new SingleColumnValueFilter(HConstants.CATALOG_FAMILY,
-                                    HConstants.SPLITA_QUALIFIER, CompareOperator.EQUAL,
-                                    RegionInfoUtil.toByteArray(region.getRegionInfo()));
-                    scvf.setFilterIfMissing(true);
-                }
-                if (scvf != null) {
-                    scan.setFilter(scvf);
-                }
                 metaTable = hbaseConn.getTable(TableName.META_TABLE_NAME);
                 Result result = null;
                 try (ResultScanner scanner = metaTable.getScanner(scan)) {
                     result = scanner.next();
                 }
-                if (result == null || result.isEmpty()) {
+                PairOfSameType<RegionInfo> daughters = MetaTableAccessor.getDaughterRegions(result);
+                RegionInfo daughter;
+                if (Reference.isTopFileRegion(r.getFileRegion())) {
+                    daughter = daughters.getSecond();
+                } else {
+                    daughter = daughters.getFirst();
+                }
+                if (daughter == null) {
+                    //No split case
                     List<RegionInfo> mergeRegions =
                             CompatUtil.getMergeRegions(ctx.getEnvironment().getConnection(),
                                 region.getRegionInfo());
@@ -149,6 +141,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                             return reader;
                         }
                     } else {
+                        // Non-first merge region
                         for (RegionInfo mergeRegion : mergeRegions.subList(1,
                             mergeRegions.size())) {
                             if (Bytes.compareTo(mergeRegion.getStartKey(), splitRow) == 0) {
@@ -165,11 +158,11 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
                                         : region.getRegionInfo().getStartKey())
                                     .getKey();
                 } else {
-                    RegionInfo parentRegion = MetaTableAccessor.getRegionInfo(result);
+                    // Split case
                     regionStartKeyInHFile =
-                            parentRegion.getStartKey().length == 0
-                                    ? new byte[parentRegion.getEndKey().length]
-                                    : parentRegion.getStartKey();
+                            daughter.getStartKey().length == 0
+                                    ? new byte[daughter.getEndKey().length]
+                                    : daughter.getStartKey();
                 }
 
                 PTable dataTable =

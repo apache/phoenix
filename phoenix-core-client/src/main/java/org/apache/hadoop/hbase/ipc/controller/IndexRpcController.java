@@ -24,7 +24,6 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 
-import com.google.protobuf.RpcController;
 import org.apache.phoenix.util.IndexUtil;
 
 /**

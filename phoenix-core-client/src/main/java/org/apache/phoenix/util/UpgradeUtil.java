@@ -368,8 +368,11 @@ public class UpgradeUtil {
             } finally {
                 try {
                     admin.close();
-                } catch (IOException e) {
-                    LOGGER.warn("Exception while closing admin during pre-split", e);
+                } catch (Throwable e) {
+                    // This hacks around the issue of close() not throwing IOException in Hbase 3. 
+                    if (e instanceof IOException) {
+                        LOGGER.warn("Exception while closing admin during pre-split", e);
+                    }
                 }
             }
         }
@@ -2134,8 +2137,11 @@ public class UpgradeUtil {
                         if (admin != null) {
                             admin.close();
                         }
-                    } catch (IOException e) {
-                        LOGGER.warn("Unable to close admin after upgrade:", e);
+                    } catch (Throwable e) {
+                        // This hacks around the issue of close() not throwing IOException in Hbase 3. 
+                        if (e instanceof IOException) {
+                            LOGGER.warn("Unable to close admin after upgrade:", e);
+                        }
                     }
                 }
             }

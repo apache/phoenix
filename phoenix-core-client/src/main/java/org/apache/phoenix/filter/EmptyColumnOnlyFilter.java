@@ -56,8 +56,8 @@ public class EmptyColumnOnlyFilter extends FilterBase implements Writable {
         found = false;
         first = true;
     }
-    @Deprecated
-    @Override
+
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(final Cell c) throws IOException {
         return filterCell(c);
     }

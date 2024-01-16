@@ -646,7 +646,7 @@ public class SkipScanFilterTest extends TestCase {
             KeyValue kv = KeyValueUtil.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
-            assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
+            assertFalse(skipper.filterRowKey(kv));
 
             assertEquals(ReturnCode.SEEK_NEXT_USING_HINT, skipper.filterCell(kv));
             assertEquals(KeyValueUtil.createFirstOnRow(hint), skipper.getNextCellHint(kv));
@@ -672,7 +672,7 @@ public class SkipScanFilterTest extends TestCase {
             KeyValue kv = KeyValueUtil.createFirstOnRow(rowkey);
             skipper.reset();
             assertFalse(skipper.filterAllRemaining());
-            assertFalse(skipper.filterRowKey(kv.getBuffer(), kv.getRowOffset(), kv.getRowLength()));
+            assertFalse(skipper.filterRowKey(kv));
             assertEquals(kv.toString(), ReturnCode.INCLUDE_AND_NEXT_COL, skipper.filterCell(kv));
         }
 

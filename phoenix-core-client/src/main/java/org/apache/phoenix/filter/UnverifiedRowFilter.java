@@ -68,7 +68,7 @@ public class UnverifiedRowFilter extends DelegateFilter {
         delegate.reset();
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell v) throws IOException {
         return filterCell(v);
     }
