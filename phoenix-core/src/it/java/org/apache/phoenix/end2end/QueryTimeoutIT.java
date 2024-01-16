@@ -130,7 +130,8 @@ public class QueryTimeoutIT extends BaseTest {
         } catch (SQLTimeoutException e) {
             long elapsedTimeMillis = System.currentTimeMillis() - startTime;
             assertEquals(SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
-            assertTrue(elapsedTimeMillis > 1000);
+            assertTrue("Total time of query was " + elapsedTimeMillis + " ms, but expected to be greater or equal to 1000",
+                    elapsedTimeMillis >= 1000);
         }
         conn.close();
     }
