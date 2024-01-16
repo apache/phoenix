@@ -1836,7 +1836,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testMaxLookbackAgeOfIndexWithAlterTable() throws Exception {
+    public void testMaxLookbackAgeOfChildViewsAndIndexesWithAlterTable() throws Exception {
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
@@ -1852,11 +1852,34 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             ddl = "CREATE INDEX " + indexName + " ON " + fullDataTableName + " (COL1)";
             stmt.execute(ddl);
             assertMaxLookbackAge(fullIndexName, maxLookbackAge);
-            Long oldMaxLookbackAge = maxLookbackAge;
+            String childViewName = generateUniqueName();
+            String fullChildViewName = SchemaUtil.getTableName(schemaName, childViewName);
+            ddl = "CREATE VIEW " + fullChildViewName + " AS SELECT * FROM " + fullDataTableName;
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullChildViewName, maxLookbackAge);
+            String childViewIndexName = generateUniqueName();
+            String fullChildViewIndexName = SchemaUtil.getTableName(schemaName, childViewIndexName);
+            ddl = "CREATE INDEX " + childViewIndexName + " ON " + fullChildViewName + " (COL1)";
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullChildViewIndexName, maxLookbackAge);
+            String grandChildViewName = generateUniqueName();
+            String fullGrandChildViewName = SchemaUtil.getTableName(schemaName, grandChildViewName);
+            ddl = "CREATE VIEW " + fullGrandChildViewName + " (col2 varchar) AS SELECT * FROM " + fullChildViewName;
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullGrandChildViewName, maxLookbackAge);
+            String grandChildViewIndexName = generateUniqueName();
+            String fullGrandChildViewIndexName = SchemaUtil.getTableName(schemaName, grandChildViewIndexName);
+            ddl = "CREATE INDEX " + grandChildViewIndexName + " ON " + fullGrandChildViewName + " (COL2)";
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullGrandChildViewIndexName, maxLookbackAge);
             maxLookbackAge = 2 * oneDayInMillis;
             alterTableLevelMaxLookbackAge(fullDataTableName, maxLookbackAge.toString());
             assertMaxLookbackAge(fullDataTableName, maxLookbackAge);
             assertMaxLookbackAge(fullIndexName, maxLookbackAge);
+            assertMaxLookbackAge(fullChildViewName, maxLookbackAge);
+            assertMaxLookbackAge(fullChildViewIndexName, maxLookbackAge);
+            assertMaxLookbackAge(fullGrandChildViewName, maxLookbackAge);
+            assertMaxLookbackAge(fullGrandChildViewIndexName, maxLookbackAge);
         }
     }
 
