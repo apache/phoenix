@@ -45,6 +45,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
@@ -918,15 +919,32 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             } else {
                 if (includeInitStartRowKey && initStartRowKey.length > 0) {
                     byte[] prevKey;
+                    // In order to generate largest possible rowkey that is less than
+                    // initStartRowKey, we need to check size of the region name that can be
+                    // used by hbase client for meta lookup, in case meta has moved.
+                    // Once we know regionLookupInMetaLen, use it to generate largest possible
+                    // rowkey that is lower than initStartRowKey by using
+                    // ByteUtil#previousKeyWithLength function, which appends "\\xFF" bytes to
+                    // prev rowkey upto the length provided. e.g. for the given key
+                    // "\\x01\\xC1\\x06", the previous key with length 5 would be
+                    // "\\x01\\xC1\\x05\\xFF\\xFF" by padding 2 bytes "\\xFF".
+                    // The length of the largest scan start rowkey should not exceed
+                    // HConstants#MAX_ROW_LENGTH.
+                    int regionLookupInMetaLen =
+                            RegionInfo.createRegionName(region.getTableDescriptor().getTableName(),
+                                    new byte[1], HConstants.NINES, false).length;
                     if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
                             1, Bytes.toBytesBinary("\\x00"), 0, 1) == 0) {
+                        // If initStartRowKey has last byte as "\\x00", we can discard the last
+                        // byte and send the key as dummy rowkey.
                         prevKey = new byte[initStartRowKey.length - 1];
                         System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
-                    } else if (initStartRowKey.length < (HConstants.MAX_ROW_LENGTH - 1)) {
+                    } else if (initStartRowKey.length <
+                            (HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen)) {
                         prevKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(initStartRowKey,
-                                        new byte[HConstants.MAX_ROW_LENGTH
-                                                - initStartRowKey.length - 1]),
-                                HConstants.MAX_ROW_LENGTH - 1);
+                                        new byte[HConstants.MAX_ROW_LENGTH - initStartRowKey.length
+                                                - 1 - regionLookupInMetaLen]),
+                                HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen);
                     } else {
                         prevKey = initStartRowKey;
                     }

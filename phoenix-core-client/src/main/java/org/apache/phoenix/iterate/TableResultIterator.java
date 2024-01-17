@@ -232,6 +232,7 @@ public class TableResultIterator implements ResultIterator {
                     }
                 }
             } catch (SQLException e) {
+                LOGGER.error("Error while scanning table {} , scan {}", htable, scan);
                 try {
                     throw ClientUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {
