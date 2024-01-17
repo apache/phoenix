@@ -308,6 +308,13 @@ public interface QueryConstants {
 
     String CDC_JSON_COL_NAME = "CDC JSON";
 
+    String EVENT_TYPE = "event_type";
+    String PRE_IMAGE = "pre_image";
+    String POST_IMAGE = "post_image";
+    String CHANGE_IMAGE = "change_image";
+    String UPSERT_EVENT_TYPE = "upsert";
+    String DELETE_EVENT_TYPE = "delete";
+
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
      * {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10

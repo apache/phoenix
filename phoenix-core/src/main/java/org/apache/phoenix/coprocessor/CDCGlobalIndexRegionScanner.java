@@ -43,9 +43,26 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.*;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_NAME_MAP;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_TYPE_MAP;
+import static org.apache.phoenix.query.QueryConstants.CHANGE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.UPSERT_EVENT_TYPE;
 
 public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScanner {
     private static final Logger LOGGER =
@@ -55,14 +72,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private Map<ImmutableBytesPtr, PDataType> dataColQualTypeMap;
     // Map<dataRowKey: Map<TS: Map<qualifier: Cell>>>
     private Set<PTable.CDCChangeScope> cdcChangeScopeSet;
-
-
-    private final static String EVENT_TYPE = "event_type";
-    private final static String PRE_IMAGE = "pre_image";
-    private final static String POST_IMAGE = "post_image";
-    private final static String CHANGE_IMAGE = "change_image";
-    private final static String UPSERT_EVENT_TYPE = "upsert";
-    private final static String DELETE_EVENT_TYPE = "delete";
 
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
