@@ -135,7 +135,7 @@
     <icu4j.version>72.1</icu4j.version>
     <guice.version>5.1.0</guice.version>
     <zookeeper.version>3.4.14</zookeeper.version>
-    <curator.version>4.0.0</curator.version>
+    <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
     <thrift.version>0.9.3-1</thrift.version>
     <jetty.version>9.4.53.v20231009</jetty.version>
