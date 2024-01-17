@@ -97,6 +97,7 @@
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
+    <test.tmp.dir>${project.build.directory}</test.tmp.dir>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
@@ -365,6 +366,9 @@
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
             <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+            <systemPropertyVariables>
+              <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+            </systemPropertyVariables>
           </configuration>
           <executions>
             <execution>
@@ -627,6 +631,9 @@
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
           <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+          <systemPropertyVariables>
+            <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
