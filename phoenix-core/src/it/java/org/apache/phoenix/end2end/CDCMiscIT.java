@@ -40,6 +40,12 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static org.apache.phoenix.query.QueryConstants.CHANGE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.UPSERT_EVENT_TYPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -275,22 +281,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row1 = new HashMap<String, Object>(){{
-            put("event_type", "upsert");
+            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row1.put("post_image", new HashMap<String, Double>() {{
+            row1.put(POST_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 100d);
                 put("V2", 1000d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row1.put("change_image", new HashMap<String, Double>() {{
+            row1.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 100d);
                 put("V2", 1000d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row1.put("pre_image", new HashMap<String, Double>() {{
+            row1.put(PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         assertEquals(row1, gson.fromJson(rs.getString(3),
@@ -299,22 +305,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
         Map<String, Object> row2 = new HashMap<String, Object>(){{
-            put("event_type", "upsert");
+            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row2.put("post_image", new HashMap<String, Double>() {{
+            row2.put(POST_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 200d);
                 put("V2", 2000d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row2.put("change_image", new HashMap<String, Double>() {{
+            row2.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 200d);
                 put("V2", 2000d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row2.put("pre_image", new HashMap<String, Double>() {{
+            row2.put(PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         assertEquals(row2, gson.fromJson(rs.getString(3),
@@ -322,21 +328,21 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row3 = new HashMap<String, Object>(){{
-            put("event_type", "upsert");
+            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row3.put("post_image", new HashMap<String, Double>() {{
+            row3.put(POST_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 101d);
                 put("V2", 1000d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row3.put("change_image", new HashMap<String, Double>() {{
+            row3.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 101d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row3.put("pre_image", new HashMap<String, Double>() {{
+            row3.put(PRE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 100d);
                 put("V2", 1000d);
             }});
@@ -347,18 +353,18 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row4 = new HashMap<String, Object>(){{
-            put("event_type", "delete");
+            put(EVENT_TYPE, DELETE_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row4.put("post_image", new HashMap<String, Double>() {{
+            row4.put(POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row4.put("change_image", new HashMap<String, Double>() {{
+            row4.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row4.put("pre_image", new HashMap<String, Double>() {{
+            row4.put(PRE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 101d);
                 put("V2", 1000d);
             }});
@@ -369,22 +375,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row5 = new HashMap<String, Object>(){{
-            put("event_type", "upsert");
+            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row5.put("post_image", new HashMap<String, Double>() {{
+            row5.put(POST_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 102d);
                 put("V2", 1002d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row5.put("change_image", new HashMap<String, Double>() {{
+            row5.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 102d);
                 put("V2", 1002d);
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row5.put("pre_image", new HashMap<String, Double>() {{
+            row5.put(PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         assertEquals(row5, gson.fromJson(rs.getString(3),
@@ -393,18 +399,18 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row6 = new HashMap<String, Object>(){{
-            put("event_type", "delete");
+            put(EVENT_TYPE, DELETE_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row6.put("post_image", new HashMap<String, Double>() {{
+            row6.put(POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row6.put("change_image", new HashMap<String, Double>() {{
+            row6.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row6.put("pre_image", new HashMap<String, Double>() {{
+            row6.put(PRE_IMAGE, new HashMap<String, Double>() {{
                 put("V1", 102d);
                 put("V2", 1002d);
             }});
