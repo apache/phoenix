@@ -67,11 +67,11 @@ public class OffsetResultIterator extends DelegateResultIterator {
                 continue;
             }
             rowCount++;
+            // No page timeout check at this level because we cannot correctly resume
+            // scans for OFFSET queries until the offset is reached.
+            // getOffsetScanner() has detailed explanation.
             lastScannedTuple = tuple;
         }
-        // Do not return dummy result until row count reaches offset as it can lead to data
-        // correctness issues.
-        // getOffsetScanner() has detailed explanation.
         if (rowsScannedForOffset && !isIncompatibleClient) {
             if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
                 return getDummyTuple(lastScannedTuple);
