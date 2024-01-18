@@ -40,7 +40,6 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.coprocessor.TableInfo;
-import org.apache.phoenix.end2end.LocalHBaseIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -50,7 +49,6 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
-import org.apache.phoenix.prefix.table.TableTTLInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -106,7 +104,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
+public abstract class BaseRowKeyPrefixTestIT extends ParallelStatsDisabledIT {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseRowKeyPrefixTestIT.class);
 
     public static final String TENANT_URL_FMT = "%s;%s=%s";
@@ -255,14 +254,12 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
         String globalViewName = String.format(GLOBAL_VIEW_NAME_FMT, partitionName);
         try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             try (Statement cstmt = globalConnection.createStatement()) {
-                String globalViewOptions = (partition % 2 == 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
-                //String tenantViewOptions = "";
                 String VIEW_TEMPLATE = "CREATE VIEW IF NOT EXISTS %s(ID1 %s not null,ID2 %s not null,ID3 %s not null, ROW_ID CHAR(15) not null, COL2 VARCHAR " +
                         "CONSTRAINT pk PRIMARY KEY (ID1 %s, ID2 %s, ID3 %s, ROW_ID)) " +
-                        "AS SELECT * FROM %s WHERE KP = '%s' %s";
+                        "AS SELECT * FROM %s WHERE KP = '%s'";
 
                 cstmt.execute(String.format(VIEW_TEMPLATE, globalViewName, pkType1Str, pkType2Str, pkType3Str,
-                        pkOrders[0].name(),pkOrders[1].name(),pkOrders[2].name(), baseTableName, partitionName, globalViewOptions));
+                        pkOrders[0].name(),pkOrders[1].name(),pkOrders[2].name(), baseTableName, partitionName));
                 if (hasGlobalViewIndexes) {
                     String indexNamePrefix = String.format("G%s", partition);
                     String GLOBAL_INDEX_TEMPLATE = "CREATE INDEX IF NOT EXISTS %s_COL2_INDEX ON %s (COL2) INCLUDE(SYSTEM_MODSTAMP)";
@@ -291,7 +288,8 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
         String tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
         String tenantConnectionUrl = String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
         String tenantViewName = String.format(TENANT_VIEW_NAME_FMT, partitionName, tenantViewNum);
-        String tenantViewOptions = (partition % 2 != 0) ? String.format("TTL=%d", new Random().nextInt(3600)) : "";
+        //String tenantViewOptions = (partition % 2 != 0) ? String.format("TTL=%d", new Random().nextInt(300)) : "";
+        String tenantViewOptions = "";
         try (Connection tenantConnection = DriverManager.getConnection(tenantConnectionUrl)) {
             tenantConnection.setAutoCommit(true);
             try (Statement cstmt = tenantConnection.createStatement()) {
@@ -789,69 +787,6 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
 
     }
 
-
-
-    //TODO: remove
-    // Only for local testing
-    @Test
-    public void testVariousViews() {
-        try {
-            List<PDataType[]> testCases = new ArrayList<>();
-            // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
-            testCases.add(new PDataType[] {PInteger.INSTANCE, PInteger.INSTANCE, PInteger.INSTANCE});
-
-            SortOrder[][] sortOrders = new SortOrder[][] {
-                    {SortOrder.ASC, SortOrder.ASC, SortOrder.ASC}
-            };
-            String tableName = "";
-            tableName = createViewHierarchy(testCases, sortOrders, 900,9000,3,true, true, false);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 910,9100,3,true, false, false);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 920,9200,3,false, true, false);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 930,9300,3,false, false, false);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 940,9400,3,true, false, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 950,9500,3,true, false, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 960,9600,3,false, false, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-            tableName = createViewHierarchy(testCases, sortOrders, 970,9700,3,false, false, true);
-            assertRowKeyPrefixesForTable(
-                    getUrl(),
-                    SchemaUtil.getSchemaNameFromFullName(tableName),
-                    SchemaUtil.getTableNameFromFullName(tableName));
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            LOGGER.error(e.getMessage());
-        }
-
-    }
-
     private String createViewHierarchy(List<PDataType[]> testCases, SortOrder[][] sortOrders, int startPartition, int startRowId, int numTenants, boolean isMultiTenant, boolean extendPK, boolean hasGlobalViewIndexes) throws Exception {
 
         Map<String, byte[]> actualViewToRowKeyMap = Maps.newHashMap();
@@ -939,79 +874,5 @@ public abstract class BaseRowKeyPrefixTestIT extends LocalHBaseIT {
             }
         }
         return baseTableName;
-    }
-
-    @Test
-    public void testParentViewIndexWithSpecializedChildViews() throws Exception {
-
-        final String baseTableName = generateUniqueName();
-        final String parentViewName = generateUniqueName();
-        final String parentViewIdxName = generateUniqueName();
-        final String childViewName1 = generateUniqueName();
-        final String childViewName2 = generateUniqueName();
-
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            // create base table
-            String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
-                    "A0 CHAR(1) NOT NULL," +
-                    "A1 CHAR(1) NOT NULL," +
-                    "A2 CHAR(1) NOT NULL," +
-                    "A3 CHAR(1) NOT NULL," +
-                    "A4 CHAR(1)" +
-                    " CONSTRAINT PK PRIMARY KEY (A0, A1, A2, A3)) MULTI_TENANT=false";
-            conn.createStatement().execute(baseTableDdl);
-
-            // create the parent view on the base table for a value of A
-            String globalViewDdl = "CREATE VIEW " + parentViewName + " AS SELECT * FROM " + baseTableName + " WHERE A0 = 'X1'";
-            conn.createStatement().execute(globalViewDdl);
-
-            // create index on parent view
-            conn.createStatement().execute("CREATE INDEX " + parentViewIdxName + " ON " + parentViewName + "(A4, A2)");
-
-            // create child of parent view that should be able to use the parent's index
-            String childViewDdl = "CREATE VIEW " + childViewName1 + " AS SELECT * FROM " + parentViewName + " WHERE A1 = 'Y'";
-            conn.createStatement().execute(childViewDdl);
-
-            PTable childViewPTable = PhoenixRuntime.getTableNoCache(conn, childViewName1);
-            // create child of parent view that should *not* be able to use the parent's index
-            String grandChildViewDdl1 = "CREATE VIEW " + childViewName2 + " AS SELECT * FROM " + childViewName1 + " WHERE A2 = 'Z'";
-            conn.createStatement().execute(grandChildViewDdl1);
-
-            // upsert row using parent view
-            //PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + parentViewName + " (A0, A2, A3, A4) VALUES(?,?,?,?)");
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + parentViewName + " (A2, A3, A4) VALUES(?,?,?)");
-            //stmt.setString(1, "");
-            stmt.setString(1, "Y");
-            stmt.setString(2, "Z");
-            stmt.setString(3, "1");
-            stmt.execute();
-            conn.commit();
-
-            // upsert row using first child view
-            //stmt = conn.prepareStatement("UPSERT INTO " + childViewName1 + " (A0, A3, A4) VALUES(?,?,?)");
-            stmt = conn.prepareStatement("UPSERT INTO " + childViewName1 + " (A3, A4) VALUES(?,?)");
-            //stmt.setString(1, "2");
-            stmt.setString(1, "Z");
-            stmt.setString(2, "2");
-            stmt.execute();
-            conn.commit();
-
-            // upsert row using second child view
-            //stmt = conn.prepareStatement("UPSERT INTO " + childViewName2 + " (A0, A4) VALUES(?,?)");
-            stmt = conn.prepareStatement("UPSERT INTO " + childViewName2 + " (A4) VALUES(?)");
-            //stmt.setString(1, "3");
-            stmt.setString(1, "3");
-            stmt.execute();
-            conn.commit();
-
-            // assert that we get 2 rows while querying via parent views and that we use the index
-            //assertQueryUsesIndex(baseTableName, parentViewName, conn, false);
-
-            // assert that we get 2 rows while querying via the first child view and that we use the index
-            //assertQueryUsesIndex(baseTableName, childViewName1, conn, true);
-
-            // assert that we get 3 rows while querying via the second child view and that we use the base table
-            //assertQueryUsesBaseTable(baseTableName, childViewName2, conn);
-        }
     }
 }
