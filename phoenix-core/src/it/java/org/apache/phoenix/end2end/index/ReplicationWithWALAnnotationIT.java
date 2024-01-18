@@ -69,6 +69,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -168,6 +169,8 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
 
         admin.addReplicationPeer("1",
                 ReplicationPeerConfig.newBuilder().setClusterKey(utility2.getClusterKey()).build());
+        System.out.println("conf1.get() = " + conf1.get(REGIONSERVER_COPROCESSOR_CONF_KEY));
+        System.out.println("conf2.get() = " + conf2.get(REGIONSERVER_COPROCESSOR_CONF_KEY));
     }
 
     private boolean isReplicationSinkEndpointEnabled() {
