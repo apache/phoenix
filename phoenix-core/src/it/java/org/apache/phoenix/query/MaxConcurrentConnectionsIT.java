@@ -18,10 +18,13 @@
 
 package org.apache.phoenix.query;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.util.DelayedRegionServer;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.AfterClass;
@@ -56,7 +59,9 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        hbaseTestUtil = new HBaseTestingUtility();
+        final Configuration conf = HBaseConfiguration.create();
+        setUpConfigForMiniCluster(conf);
+        hbaseTestUtil = new HBaseTestingUtility(conf);
 
         hbaseTestUtil.startMiniCluster(1,1,null,null,DelayedRegionServer.class);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
@@ -64,6 +69,7 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
         url = PhoenixRuntime.JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + zkQuorum +
                 JDBC_PROTOCOL_SEPARATOR + "uniqueConn=A";
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        DriverManager.registerDriver(new PhoenixTestDriver());
     }
 
     private String getUniqueUrl() {

@@ -152,6 +152,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     @BeforeClass public static void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
+        setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.TABLE_LEVEL_METRICS_ENABLED, String.valueOf(true));
         conf.set(QueryServices.METRIC_PUBLISHER_ENABLED, String.valueOf(true));
         conf.set(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
@@ -170,7 +171,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 return copy;
             }
         });
-        hbaseTestUtil = new HBaseTestingUtility();
+        hbaseTestUtil = new HBaseTestingUtility(conf);
         hbaseTestUtil.startMiniCluster(1, 1, null, null, DelayedOrFailingRegionServer.class);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();

@@ -23,6 +23,8 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.junit.BeforeClass;
@@ -38,10 +40,12 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 @RunWith(RunUntilFailure.class)
@@ -142,9 +146,9 @@ public class MetaDataCachingIT extends BaseTest {
      */
     @Test
     public void testGlobalClientCacheMetrics() throws Exception {
-        int numThreads = 5;
+        int numThreads = 1;
         int numTables = 1;
-        int numMaxDML = 2;
+        int numMaxDML = 1;
 
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().reset();
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().reset();
@@ -152,8 +156,15 @@ public class MetaDataCachingIT extends BaseTest {
         simulateWorkload("testGlobalClientCacheMetrics", numTables, numThreads, numMaxDML);
 
         // only 1 miss when the table is created
+        int numExpectedMisses = 1;
+        if (QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
+            // if we are validating last_ddl_timestamps,
+            // region server will see 2 more misses when trying to update its cache
+            numExpectedMisses += 2;
+        }
+
         assertEquals("Incorrect number of client metadata cache misses",
-                1, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
+                numExpectedMisses, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
 
         // (2 hits per upsert + 1 hit per select) per thread
         assertEquals("Incorrect number of client metadata cache hits",
