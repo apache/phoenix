@@ -418,6 +418,32 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(row6, gson.fromJson(rs.getString(3),
                 HashMap.class));
 
+        assertEquals(true, rs.next());
+        assertEquals(2, rs.getInt(2));
+        Map<String, Object> row7 = new HashMap<String, Object>(){{
+            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            row7.put(POST_IMAGE, new HashMap<String, Double>() {{
+                put("V1", 201d);
+                put("V2", null);
+            }});
+        }
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row7.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
+                put("V1", 201d);
+                put("V2", null);
+            }});
+        }
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            row7.put(PRE_IMAGE, new HashMap<String, Double>() {{
+                put("V1", 200d);
+                put("V2", 2000d);
+            }});
+        }
+        assertEquals(row7, gson.fromJson(rs.getString(3),
+                HashMap.class));
+
         assertEquals(false, rs.next());
         rs.close();
     }
@@ -448,6 +474,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
         conn.commit();
         // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
         //      if (<table>.getTableName().getString().equals("N000002") ||
@@ -508,6 +536,99 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 //            assertEquals(false, rs.next());
 //        }
     }
+
+    @Test
+    public void testSelect2CDC() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.put("hbase.client.scanner.timeout.period", "6000000");
+        props.put("phoenix.query.timeoutMs", "6000000");
+        props.put("zookeeper.session.timeout", "6000000");
+        props.put("hbase.rpc.timeout", "6000000");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 INTEGER, v3 INTEGER)");
+        String cdcName = generateUniqueName();
+
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 100, 1000, 10000)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (2, 200, 2000, 20000)");
+        conn.commit();
+        Thread.sleep(1000);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 101, NULL, NULL)");
+        conn.commit();
+        //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
+//        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+//        conn.commit();
+//        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 102, 1002, 10002)");
+//        conn.commit();
+////        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+//        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (2, 201, NULL, NULL)");
+//        conn.commit();
+//        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
+//        conn.commit();
+
+        // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
+        //      if (<table>.getTableName().getString().equals("N000002") ||
+        //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
+        //          "".isEmpty();
+        //      }
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+        conn.createStatement().execute(cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
+
+        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
+        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
+                " WHERE PHOENIX_ROW_TIMESTAMP() < NOW()"), null);
+        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ INCLUDE(PRE, POST) */ * " +
+                "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
+                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+        assertResultSet(conn.createStatement().executeQuery("SELECT " +
+                "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
+
+        // Have to Debug it further,
+//        HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
+//            put("SELECT 'dummy', k FROM " + cdcName, new int [] {2, 1});
+//            put("SELECT * FROM " + cdcName +
+//                    " ORDER BY k ASC", new int [] {1, 1, 2});
+//            put("SELECT * FROM " + cdcName +
+//                    " ORDER BY k DESC", new int [] {2, 1, 1});
+//            put("SELECT * FROM " + cdcName +
+//                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1});
+//        }};
+//        for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
+//            try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
+//                for (int k:  testQuery.getValue()) {
+//                    assertEquals(true, rs.next());
+//                    assertEquals(k, rs.getInt(2));
+//                }
+//                assertEquals(false, rs.next());
+//            }
+//        }
+
+        try (ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
+            assertEquals(false, rs.next());
+        }
+//        try (ResultSet rs = conn.createStatement().executeQuery("SELECT 'abc' FROM " + cdcName)) {
+//            assertEquals(true, rs.next());
+//            assertEquals("abc", rs.getString(1));
+//            assertEquals(true, rs.next());
+//            assertEquals("abc", rs.getString(1));
+//            assertEquals(true, rs.next());
+//            assertEquals("abc", rs.getString(1));
+//            assertEquals(true, rs.next());
+//            assertEquals("abc", rs.getString(1));
+//            assertEquals(true, rs.next());
+//            assertEquals("abc", rs.getString(1));
+//            assertEquals(true, rs.next());
+//            assertEquals("abc", rs.getString(1));
+//            assertEquals(false, rs.next());
+//        }
+    }
+
+
 
     // Temporary test case used as a reference for debugging and comparing against the CDC query.
     @Test

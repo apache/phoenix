@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -76,6 +77,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     // Map<dataRowKey: Map<TS: Map<qualifier: Cell>>>
     private Set<PTable.CDCChangeScope> cdcChangeScopeSet;
 
+    private Map<Long, ImmutableBytesPtr> indexDeleteFamilyCellMap;
+
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
                                        final Scan scan,
@@ -108,6 +111,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
             Cell firstCell = indexRow.get(indexRow.size() - 1);
+
             byte[] indexRowKey = new ImmutableBytesPtr(firstCell.getRowArray(),
                     firstCell.getRowOffset(), firstCell.getRowLength())
                     .copyBytesIfNecessary();
@@ -127,13 +131,17 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             boolean isIndexCellDeleteColumn = false;
             try {
                 for (Cell cell : resultCells) {
-                    if (cell.getType() == Cell.Type.DeleteColumn) {
+                    if (cell.getType() == Cell.Type.DeleteColumn
+                            && !this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())) {
                         // DDL is not supported in CDC
                         if (cell.getTimestamp() == indexCellTS) {
                             isIndexCellDeleteColumn = true;
                             break;
                         }
-                    } else if (cell.getType() == Cell.Type.Put) {
+                    } else if (cell.getType() == Cell.Type.Put
+                            || (cell.getType() == Cell.Type.DeleteColumn
+                            && (this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())
+                            && this.indexDeleteFamilyCellMap.get(cell.getTimestamp()).equals(dataRowKey)))) {
                         ImmutableBytesPtr colQual = new ImmutableBytesPtr(
                                 cell.getQualifierArray(),
                                 cell.getQualifierOffset(),
@@ -250,8 +258,10 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             rowValueMap.put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }
 
+        Gson gson = new GsonBuilder().serializeNulls().create();
+
         byte[] value =
-                new Gson().toJson(rowValueMap).getBytes(StandardCharsets.UTF_8);
+                gson.toJson(rowValueMap).getBytes(StandardCharsets.UTF_8);
         CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
         Result cdcRow = Result.create(Arrays.asList(builder.
                 setRow(indexToDataRowKeyMap.get(new ImmutableBytesPtr(firstCell.getRowArray(),
@@ -271,6 +281,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     protected void scanDataTableRows(long startTime) throws IOException {
         super.scanDataTableRows(startTime);
         List<List<Cell>> indexRowList = new ArrayList<>();
+        Map<Long, ImmutableBytesPtr> indexDeleteFamilyCellMap = new HashMap<>();
         // Creating new Index Rows for Delete Row events
         for (int rowIndex = 0; rowIndex < indexRows.size(); rowIndex++) {
             List<Cell> indexRow = indexRows.get(rowIndex);
@@ -285,6 +296,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 .copyBytesIfNecessary();
                         ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                                 indexToDataRowKeyMap.get(indexRowKey));
+                        indexDeleteFamilyCellMap.put(cell.getTimestamp(),
+                                dataRowKey);
                         Result dataRow = dataRows.get(dataRowKey);
                         for (Cell dataRowCell : dataRow.rawCells()) {
                             // Note: Upsert adds delete family marker in the index table but not in the datatable.
@@ -307,5 +320,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             }
         }
         this.indexRows = indexRowList;
+        this.indexDeleteFamilyCellMap = indexDeleteFamilyCellMap;
     }
 }
