@@ -320,7 +320,7 @@ public class CompactionScanner implements InternalScanner {
                 this.index  = new PrefixIndex();
                 this.rowKeyParser = new RowKeyParser(baseTable);
                 this.ttl = table.getTTL() != TTL_NOT_DEFINED ? table.getTTL() : DEFAULT_TTL;
-                this.isIndexTable = isIndexTable;
+                this.isIndexTable = isIndexTable || localIndex ;
                 this.isSalted = isSalted;
                 this.isMultiTenant = table.isMultiTenant();
 
@@ -379,7 +379,7 @@ public class CompactionScanner implements InternalScanner {
                 tableList = ViewUtil.getRowKeyPrefixesForPartitionedTables(
                         table.getName().getString(),
                         env.getConfiguration(),
-                        isIndexTable);
+                        this.isIndexTable);
 
                 tableList.forEach(m -> {
                     if (m.getTTL() != TTL_NOT_DEFINED) {

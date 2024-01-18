@@ -2325,8 +2325,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
-        for (boolean isIndex1Local : Lists.newArrayList(/*true,*/ false)) {
-            for (boolean isIndex2Local : Lists.newArrayList(/*true, */false)) {
+        for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
+            for (boolean isIndex2Local : Lists.newArrayList(true, false)) {
                 for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
                     resetEnvironmentEdgeManager();
@@ -2474,8 +2474,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
-        for (boolean isIndex1Local : Lists.newArrayList(/*true, */ false)) {
-            for (boolean isIndex2Local : Lists.newArrayList(/* true, */ false)) {
+        for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
+            for (boolean isIndex2Local : Lists.newArrayList(true, false)) {
                 for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
                     resetEnvironmentEdgeManager();
