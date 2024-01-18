@@ -19,6 +19,7 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.util.EncodedColumnsUtil.getMinMaxQualifiersFromScan;
+import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForRegionScanner;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
@@ -299,14 +300,20 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         final Tuple firstTuple;
         final Region region = getRegion();
         region.startRegionOperation();
+        final byte[] initStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                (scan.isReversed() ? region.getRegionInfo().getEndKey() :
+                        region.getRegionInfo().getStartKey());
         byte[] prevScanStartRowKey =
                 scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW);
-        // If the region has moved after server returns valid or dummy result,
-        // prevScanStartRowKey would be different than actual scan start rowkey.
-        // For such cases, we should reset row count to offset value because
-        // we have already processed rows until offset. Until row count reaches offset,
-        // we should not return dummy rowkey.
-        if (Bytes.compareTo(prevScanStartRowKey, scan.getStartRow()) != 0) {
+        // If the region has moved after server has returned dummy or valid row to client,
+        // prevScanStartRowKey would be different from actual scan start rowkey.
+        // If the region moves after dummy was returned, we do not need to set row count to
+        // offset. However, if the region moves after valid row was returned, we do need to
+        // set row count to offset because we return valid row only after offset num of rows
+        // are skipped.
+        if (Bytes.compareTo(prevScanStartRowKey, initStartRowKey) != 0 && Bytes.compareTo(
+                ByteUtil.concat(prevScanStartRowKey, Bytes.toBytesBinary("\\x00")),
+                initStartRowKey) != 0) {
             iterator.setRowCountToOffset();
         }
         try {
@@ -364,6 +371,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
         return new BaseRegionScanner(s) {
             private Tuple tuple = firstTuple;
+            private byte[] previousResultRowKey;
 
             @Override
             public boolean isFilterDone() {
@@ -377,9 +385,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         return false;
                     }
                     Tuple nextTuple = iterator.next();
-                    if (!isDummy(tuple)) {
+                    if (tuple.size() > 0 && !isDummy(tuple)) {
                         for (int i = 0; i < tuple.size(); i++) {
                             results.add(tuple.getValue(i));
+                            if (i == 0) {
+                                previousResultRowKey = CellUtil.cloneRow(tuple.getValue(i));
+                            }
                         }
                     } else {
                         if (nextTuple == null) {
@@ -397,7 +408,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                             }
                             results.add(kv);
                         } else {
-                            ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
+                            updateDummyWithPrevRowKey(results, initStartRowKey,
+                                    previousResultRowKey);
                         }
                     }
                     tuple = nextTuple;
@@ -422,6 +434,25 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 }
             }
         };
+    }
+
+    /**
+     * Add dummy cell to the result list based on either the previous rowkey returned to the
+     * client or the start rowkey of the scan or region start key.
+     *
+     * @param result result row.
+     * @param initStartRowKey scan start rowkey.
+     * @param previousResultRowKey previous result rowkey returned to client.
+     */
+    private void updateDummyWithPrevRowKey(final List<Cell> result,
+                                           final byte[] initStartRowKey,
+                                           final byte[] previousResultRowKey) {
+        result.clear();
+        if (previousResultRowKey != null) {
+            getDummyResult(previousResultRowKey, result);
+        } else {
+            getDummyResult(initStartRowKey, result);
+        }
     }
 
     private static KeyValue getOffsetKvWithLastScannedRowKey(byte[] value, Tuple tuple) {

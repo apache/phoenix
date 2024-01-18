@@ -356,7 +356,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testLimitOffset() throws Exception {
+    public void testLimitOffsetWithSplit() throws Exception {
         hasTestStarted = true;
         final String tablename = generateUniqueName();
         final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
@@ -410,7 +410,283 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                         STRINGS[offset + filterCond + i], rs.getString(1));
                 i++;
             }
+            assertServerPagingMetric(tablename, rs, true);
+
+            limit = 35;
+            rs = conn.createStatement().executeQuery("SELECT t_id from " + tablename
+                    + " union all SELECT t_id from "
+                    + tablename + " offset " + offset + " FETCH FIRST " + limit + " rows only");
+            i = 0;
+            while (i++ < STRINGS.length - offset) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[offset + i - 1], rs.getString(1));
+            }
+            i = 0;
+            while (i++ < limit - STRINGS.length - offset) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[i - 1], rs.getString(1));
+            }
             // no paging when serial offset
+            assertServerPagingMetric(tablename, rs, true);
+            limit = 1;
+            offset = 1;
+            rs = conn.createStatement()
+                    .executeQuery("SELECT k2 from " + tablename + " order by k2 desc limit "
+                            + limit + " offset " + offset);
+            moveRegionsOfTable(tablename);
+            assertTrue(rs.next());
+            assertEquals(25, rs.getInt(1));
+            assertFalse(rs.next());
+            assertServerPagingMetric(tablename, rs, true);
+        }
+    }
+
+    @Test
+    public void testLimitOffsetWithoutSplit() throws Exception {
+        hasTestStarted = true;
+        final String tablename = generateUniqueName();
+        final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
+                "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
+        String ddl = "CREATE TABLE " + tablename + " (t_id VARCHAR NOT NULL,\n"
+                + "k1 INTEGER NOT NULL,\n" + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n"
+                + "C2.v1 VARCHAR,\n" + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))";
+        TABLE_NAMES.add(tablename);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTestTable(getUrl(), ddl);
+            for (int i = 0; i < 26; i++) {
+                conn.createStatement().execute("UPSERT INTO " + tablename + " values('"
+                        + STRINGS[i] + "'," + i + ","
+                        + (i + 1) + "," + (i + 2) + ",'" + STRINGS[25 - i] + "')");
+            }
+            conn.commit();
+            int limit = 10;
+            // Testing 0 as remaining offset after 4 rows in first region, 4 rows in second region
+            int offset = 8;
+            ResultSet rs;
+            rs = conn.createStatement()
+                    .executeQuery("SELECT t_id from " + tablename + " order by t_id limit "
+                            + limit + " offset " + offset);
+            int i = 0;
+            while (i < limit) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i],
+                        rs.getString(1));
+                i++;
+            }
+            assertServerPagingMetric(tablename, rs, false);
+
+            // Testing query with offset + filter
+            int filterCond = 10;
+            rs = conn.createStatement().executeQuery(
+                    "SELECT t_id from " + tablename + " where k2 > " + filterCond +
+                            " order by t_id limit " + limit + " offset " + offset);
+            i = 0;
+            limit = 5;
+            while (i < limit) {
+                if (i % 4 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals("Expected string didn't match for i = " + i,
+                        STRINGS[offset + filterCond + i], rs.getString(1));
+                i++;
+            }
+            assertServerPagingMetric(tablename, rs, false);
+
+            limit = 35;
+            rs = conn.createStatement().executeQuery("SELECT t_id from " + tablename
+                    + " union all SELECT t_id from "
+                    + tablename + " offset " + offset + " FETCH FIRST " + limit + " rows only");
+            i = 0;
+            while (i++ < STRINGS.length - offset) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[offset + i - 1], rs.getString(1));
+            }
+            i = 0;
+            while (i++ < limit - STRINGS.length - offset) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[i - 1], rs.getString(1));
+            }
+            assertServerPagingMetric(tablename, rs, false);
+            limit = 1;
+            offset = 1;
+            rs = conn.createStatement()
+                    .executeQuery("SELECT k2 from " + tablename + " order by k2 desc limit "
+                            + limit + " offset " + offset);
+            moveRegionsOfTable(tablename);
+            assertTrue(rs.next());
+            assertEquals(25, rs.getInt(1));
+            assertFalse(rs.next());
+            assertServerPagingMetric(tablename, rs, true);
+        }
+    }
+
+    @Test
+    public void testLimitOffsetWithSplit2() throws Exception {
+        hasTestStarted = true;
+        final String tablename = generateUniqueName();
+        final String[] STRINGS = {"a_xyz", "b_xyz", "c_xyz", "d_xyz", "e_xyz", "f_xyz", "g_xyz",
+                "h_xyz", "i_xyz", "j_xyz", "k_xyz", "l_xyz",
+                "m_xyz", "n_xyz", "o_xyz", "p_xyz", "q_xyz", "r_xyz", "s_xyz", "t_xyz", "u_xyz",
+                "v_xyz", "w_xyz", "x_xyz", "y_xyz", "z_xyz"};
+        String ddl = "CREATE TABLE " + tablename + " (t_id VARCHAR,\n"
+                + "k1 INTEGER,\n" + "k2 INTEGER,\n" + "C3.k3 INTEGER,\n"
+                + "C2.v1 VARCHAR,\n" + "CONSTRAINT pk PRIMARY KEY (t_id)) "
+                + "SPLIT ON ('e123','i123','o123')";
+        TABLE_NAMES.add(tablename);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTestTable(getUrl(), ddl);
+            for (int i = 0; i < 26; i++) {
+                conn.createStatement().execute("UPSERT INTO " + tablename + " values('"
+                        + STRINGS[i] + "'," + (i + 1) * 2 + ","
+                        + (i + 1) * 3 + "," + (i + 2) * 2 + ",'" + STRINGS[25 - i] + "')");
+            }
+            conn.commit();
+            int limit = 10;
+            // Testing 0 as remaining offset after 4 rows in first region, 4 rows in second region
+            int offset = 8;
+            ResultSet rs;
+            rs = conn.createStatement()
+                    .executeQuery("SELECT t_id from " + tablename + " order by t_id limit "
+                            + limit + " offset " + offset);
+            int i = 0;
+            while (i < limit) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i],
+                        rs.getString(1));
+                i++;
+            }
+            assertServerPagingMetric(tablename, rs, true);
+
+            // Testing query with offset + filter
+            int filterCond = 30;
+            rs = conn.createStatement().executeQuery(
+                    "SELECT t_id from " + tablename + " where k2 > " + filterCond +
+                            " order by t_id limit " + limit + " offset " + offset);
+            i = 0;
+            limit = 5;
+            while (i < limit) {
+                if (i % 4 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals("Expected string didn't match for i = " + i,
+                        STRINGS[offset + 10 + i], rs.getString(1));
+                i++;
+            }
+            assertServerPagingMetric(tablename, rs, true);
+
+            limit = 35;
+            rs = conn.createStatement().executeQuery("SELECT t_id from " + tablename
+                    + " union all SELECT t_id from "
+                    + tablename + " offset " + offset + " FETCH FIRST " + limit + " rows only");
+            i = 0;
+            while (i++ < STRINGS.length - offset) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[offset + i - 1], rs.getString(1));
+            }
+            i = 0;
+            while (i++ < limit - STRINGS.length - offset) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals(STRINGS[i - 1], rs.getString(1));
+            }
+            // no paging when serial offset
+            assertServerPagingMetric(tablename, rs, true);
+            limit = 1;
+            offset = 1;
+            rs = conn.createStatement()
+                    .executeQuery("SELECT k2 from " + tablename + " order by k2 desc limit "
+                            + limit + " offset " + offset);
+            moveRegionsOfTable(tablename);
+            assertTrue(rs.next());
+            assertEquals(75, rs.getInt(1));
+            assertFalse(rs.next());
+            assertServerPagingMetric(tablename, rs, true);
+        }
+    }
+
+    @Test
+    public void testLimitOffsetWithoutSplit2() throws Exception {
+        hasTestStarted = true;
+        final String tablename = generateUniqueName();
+        final String[] STRINGS = {"a_xyz", "b_xyz", "c_xyz", "d_xyz", "e_xyz", "f_xyz", "g_xyz",
+                "h_xyz", "i_xyz", "j_xyz", "k_xyz", "l_xyz",
+                "m_xyz", "n_xyz", "o_xyz", "p_xyz", "q_xyz", "r_xyz", "s_xyz", "t_xyz", "u_xyz",
+                "v_xyz", "w_xyz", "x_xyz", "y_xyz", "z_xyz"};
+        String ddl = "CREATE TABLE " + tablename + " (t_id VARCHAR,\n"
+                + "k1 INTEGER,\n" + "k2 INTEGER,\n" + "C3.k3 INTEGER,\n"
+                + "C2.v1 VARCHAR,\n" + "CONSTRAINT pk PRIMARY KEY (t_id))";
+        TABLE_NAMES.add(tablename);
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            createTestTable(getUrl(), ddl);
+            for (int i = 0; i < 26; i++) {
+                conn.createStatement().execute("UPSERT INTO " + tablename + " values('"
+                        + STRINGS[i] + "'," + (i + 1) * 2 + ","
+                        + (i + 1) * 3 + "," + (i + 2) * 2 + ",'" + STRINGS[25 - i] + "')");
+            }
+            conn.commit();
+            int limit = 10;
+            // Testing 0 as remaining offset after 4 rows in first region, 4 rows in second region
+            int offset = 8;
+            ResultSet rs;
+            rs = conn.createStatement()
+                    .executeQuery("SELECT t_id from " + tablename + " order by t_id limit "
+                            + limit + " offset " + offset);
+            int i = 0;
+            while (i < limit) {
+                if (i % 3 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i],
+                        rs.getString(1));
+                i++;
+            }
+            assertServerPagingMetric(tablename, rs, false);
+
+            // Testing query with offset + filter
+            int filterCond = 30;
+            rs = conn.createStatement().executeQuery(
+                    "SELECT t_id from " + tablename + " where k2 > " + filterCond +
+                            " order by t_id limit " + limit + " offset " + offset);
+            i = 0;
+            limit = 5;
+            while (i < limit) {
+                if (i % 4 == 0) {
+                    moveRegionsOfTable(tablename);
+                }
+                assertTrue(rs.next());
+                assertEquals("Expected string didn't match for i = " + i,
+                        STRINGS[offset + 10 + i], rs.getString(1));
+                i++;
+            }
             assertServerPagingMetric(tablename, rs, false);
 
             limit = 35;
@@ -442,7 +718,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                             + limit + " offset " + offset);
             moveRegionsOfTable(tablename);
             assertTrue(rs.next());
-            assertEquals(25, rs.getInt(1));
+            assertEquals(75, rs.getInt(1));
             assertFalse(rs.next());
             assertServerPagingMetric(tablename, rs, true);
         }

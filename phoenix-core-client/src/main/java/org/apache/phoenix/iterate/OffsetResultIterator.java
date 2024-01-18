@@ -55,26 +55,24 @@ public class OffsetResultIterator extends DelegateResultIterator {
     @Override
     public Tuple next() throws SQLException {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        boolean rowsScannedForOffset = false;
         while (rowCount < offset) {
-            rowsScannedForOffset = true;
             Tuple tuple = super.next();
             if (tuple == null) {
                 return null;
             }
             if (tuple.size() == 0 || isDummy(tuple)) {
+                if (!isIncompatibleClient) {
+                    return tuple;
+                }
                 // while rowCount < offset absorb the dummy and call next on the underlying scanner
                 continue;
             }
             rowCount++;
-            // No page timeout check at this level because we cannot correctly resume
-            // scans for OFFSET queries until the offset is reached.
-            // getOffsetScanner() has detailed explanation.
             lastScannedTuple = tuple;
-        }
-        if (rowsScannedForOffset && !isIncompatibleClient) {
-            if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
-                return getDummyTuple(lastScannedTuple);
+            if (!isIncompatibleClient) {
+                if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+                    return getDummyTuple(lastScannedTuple);
+                }
             }
         }
         Tuple result = super.next();
