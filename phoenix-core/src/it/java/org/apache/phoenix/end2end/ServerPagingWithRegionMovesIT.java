@@ -24,6 +24,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.ScanningResultPostDummyResultCaller;
+import org.apache.phoenix.iterate.ScanningResultPostValidResultCaller;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDate;
@@ -73,7 +74,29 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 
     private static boolean hasTestStarted = false;
     private static int countOfDummyResults = 0;
+    private static int countOfValidResults = 0;
     private static final List<String> TABLE_NAMES = Collections.synchronizedList(new ArrayList<>());
+
+    private static class TestScanningResultPostValidResultCaller extends
+            ScanningResultPostValidResultCaller {
+
+        @Override
+        public void postValidRowProcess() {
+            if (hasTestStarted && (countOfValidResults++ % 2) == 0 &&
+                    (countOfValidResults < 17 ||
+                            countOfValidResults > 28 && countOfValidResults < 40)) {
+                LOGGER.info("Moving regions of tables {}. current count of valid results: {}",
+                        TABLE_NAMES, countOfValidResults);
+                TABLE_NAMES.forEach(table -> {
+                    try {
+                        moveRegionsOfTable(table);
+                    } catch (Exception e) {
+                        LOGGER.error("Unable to move regions of table: {}", table);
+                    }
+                });
+            }
+        }
+    }
 
     private static class TestScanningResultPostDummyResultCaller extends
             ScanningResultPostDummyResultCaller {
@@ -105,6 +128,8 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
         props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
                 TestScanningResultPostDummyResultCaller.class.getName());
+        props.put(QueryServices.PHOENIX_POST_VALID_PROCESS,
+                TestScanningResultPostValidResultCaller.class.getName());
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -113,6 +138,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         TABLE_NAMES.clear();
         hasTestStarted = false;
         countOfDummyResults = 0;
+        countOfValidResults = 0;
     }
 
     private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isPaged)
@@ -366,8 +392,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
                         rs.getString(1));
                 i++;
             }
-            // no paging when serial offset
-            assertServerPagingMetric(tablename, rs, false);
+            assertServerPagingMetric(tablename, rs, true);
 
             // Testing query with offset + filter
             int filterCond = 10;

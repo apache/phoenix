@@ -55,7 +55,9 @@ public class OffsetResultIterator extends DelegateResultIterator {
     @Override
     public Tuple next() throws SQLException {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        boolean rowsScannedForOffset = false;
         while (rowCount < offset) {
+            rowsScannedForOffset = true;
             Tuple tuple = super.next();
             if (tuple == null) {
                 return null;
@@ -66,10 +68,13 @@ public class OffsetResultIterator extends DelegateResultIterator {
             }
             rowCount++;
             lastScannedTuple = tuple;
-            if (!isIncompatibleClient) {
-                if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
-                    return getDummyTuple(tuple);
-                }
+        }
+        // Do not return dummy result until row count reaches offset as it can lead to data
+        // correctness issues.
+        // getOffsetScanner() has detailed explanation.
+        if (rowsScannedForOffset && !isIncompatibleClient) {
+            if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+                return getDummyTuple(lastScannedTuple);
             }
         }
         Tuple result = super.next();
@@ -104,5 +109,9 @@ public class OffsetResultIterator extends DelegateResultIterator {
 
     public Tuple getLastScannedTuple() {
         return lastScannedTuple;
+    }
+
+    public void setRowCountToOffset() {
+        this.rowCount = this.offset;
     }
 }

@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
@@ -80,8 +81,13 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(NonAggregateRegionScannerFactory.class);
 
     public NonAggregateRegionScannerFactory(RegionCoprocessorEnvironment env) {
         this.env = env;
@@ -293,6 +299,16 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         final Tuple firstTuple;
         final Region region = getRegion();
         region.startRegionOperation();
+        byte[] prevScanStartRowKey =
+                scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW);
+        // If the region has moved after server returns valid or dummy result,
+        // prevScanStartRowKey would be different than actual scan start rowkey.
+        // For such cases, we should reset row count to offset value because
+        // we have already processed rows until offset. Until row count reaches offset,
+        // we should not return dummy rowkey.
+        if (Bytes.compareTo(prevScanStartRowKey, scan.getStartRow()) != 0) {
+            iterator.setRowCountToOffset();
+        }
         try {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
@@ -380,11 +396,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                                 kv = getOffsetKvWithLastScannedRowKey(remainingOffset, tuple);
                             }
                             results.add(kv);
+                        } else {
+                            ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
                         }
                     }
                     tuple = nextTuple;
                     return !isFilterDone();
                 } catch (Throwable t) {
+                    LOGGER.error("Error while iterating Offset scanner.", t);
                     ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
                     return false;
                 }
