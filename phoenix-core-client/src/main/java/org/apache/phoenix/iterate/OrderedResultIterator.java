@@ -403,7 +403,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 }
 
                 if (isDummy(result)) {
-                    return getDummyResult();
+                    getDummyResult();
+                    return resultIterator;
                 }
                 int pos = 0;
                 ImmutableBytesWritable[] sortKeys = new ImmutableBytesWritable[numSortKeys];
@@ -415,7 +416,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 }
                 queueEntries.add(new ResultEntry(sortKeys, result));
                 if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
-                    return getDummyResult();
+                    getDummyResult();
+                    return resultIterator;
                 }
             }
             resultIteratorReady = true;
@@ -432,11 +434,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
     }
 
     /**
-     * Retrieve dummy rowkey and return to the client.
-     *
-     * @return the result iterator.
+     * Retrieve dummy rowkey.
      */
-    private PeekingResultIterator getDummyResult() {
+    private void getDummyResult() {
         if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
             if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) != 0 ||
                     prevScanIncludeStartRowKey != includeStartRowKey) {
@@ -457,7 +457,6 @@ public class OrderedResultIterator implements PeekingResultIterator {
         } else {
             dummyTuple = ScanUtil.getDummyTuple(scanStartRowKey);
         }
-        return resultIterator;
     }
 
     @Override

@@ -474,6 +474,17 @@ public class ByteUtil {
         return previousKey;
     }
 
+    /**
+     * Best attempt to generate largest rowkey smaller than endKey i.e. largest rowkey in the
+     * range of [startKey, endKey). If startKey and endKey are empty, the empty key is returned.
+     * This function is used to return valid rowkey for some ungrouped aggregation e.g. while
+     * returning count value after scanning the rows. If any error or validation issues (e.g.
+     * startKey > endKey) are encountered, null value is returned.
+     *
+     * @param startKey start rowkey for the range.
+     * @param endKey end rowkey for the range.
+     * @return best attempt of largest rowkey in the range of [startKey, endKey).
+     */
     public static byte[] getLargestPossibleRowKeyInRange(byte[] startKey, byte[] endKey) {
         if (startKey.length == 0 && endKey.length == 0) {
             return HConstants.EMPTY_END_ROW;

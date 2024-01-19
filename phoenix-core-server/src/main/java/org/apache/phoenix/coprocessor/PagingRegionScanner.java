@@ -96,8 +96,8 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 // There is no more row from the HBase region scanner. We need to check if PageFilter
                 // has stopped the region scanner
                 if (pagingFilter.isStopped()) {
-                    byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
                     if (results.isEmpty()) {
+                        byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
                         LOGGER.info("Page filter stopped, generating dummy key {} ",
                                 Bytes.toStringBinary(rowKey));
                         ScanUtil.getDummyResult(rowKey, results);
