@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -161,10 +162,14 @@ public class ValidateLastDDLTimestampUtil {
             }
 
             // add the tableRef to the request
-            innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-            setLastDDLTimestampRequestParameters(
-                    innerBuilder, conn.getTenantId(), tableRef.getTable());
-            requestBuilder.addLastDDLTimestampRequests(innerBuilder);
+            // skip if it is an inherited view index, we would have added parent in previous step
+            if (!tableRef.getTable().getName().getString()
+                    .contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+                setLastDDLTimestampRequestParameters(
+                        innerBuilder, conn.getTenantId(), tableRef.getTable());
+                requestBuilder.addLastDDLTimestampRequests(innerBuilder);
+            }
 
             //when querying a view, we need to validate last ddl timestamps for all its ancestors
             if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
@@ -183,12 +188,25 @@ public class ValidateLastDDLTimestampUtil {
             }
 
             //on the write path, we need to validate all indexes of a table/view
-            //in case index state was changed
+            //in case index state was changed.
+            //Inherited view indexes do not exist is SYSTEM.CATALOG, add the parent index.
             if (isWritePath) {
                 for (PTable idxPTable : tableRef.getTable().getIndexes()) {
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                    setLastDDLTimestampRequestParameters(
-                            innerBuilder, conn.getTenantId(), idxPTable);
+                    if (idxPTable.getName().getString()
+                            .contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                        String[] parentNames = idxPTable.getName().getString()
+                                            .split(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                        String parentIndexName = parentNames[parentNames.length-1];
+                        PTable parentIndexTable
+                                = getPTableFromCache(conn, conn.getTenantId(), parentIndexName);
+                        setLastDDLTimestampRequestParameters(
+                                innerBuilder, conn.getTenantId(), parentIndexTable);
+                    }
+                    else {
+                        setLastDDLTimestampRequestParameters(
+                                innerBuilder, conn.getTenantId(), idxPTable);
+                    }
                     requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                 }
             }
