@@ -442,7 +442,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 byte[] prevKey;
                 // In order to generate largest possible rowkey that is less than
                 // initStartRowKey, we need to check size of the region name that can be
-                // used by hbase client for meta lookup, in case meta has moved.
+                // used by hbase client for meta lookup, in case meta cache is expired at client.
                 // Once we know regionLookupInMetaLen, use it to generate largest possible
                 // rowkey that is lower than initStartRowKey by using
                 // ByteUtil#previousKeyWithLength function, which appends "\\xFF" bytes to
