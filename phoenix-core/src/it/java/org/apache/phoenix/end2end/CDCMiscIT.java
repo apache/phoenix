@@ -25,6 +25,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -46,6 +47,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.sql.*;
+import java.util.*;
 
 import static org.apache.phoenix.query.QueryConstants.CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
@@ -469,6 +472,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
+        Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
@@ -478,6 +482,16 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
         //          "".isEmpty();
         //      }
+
+//        String cdc_sql = "CREATE CDC " + cdcName
+//                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+//        conn.createStatement().execute(cdc_sql);
+//        assertCDCState(conn, cdcName, null, 3);
+//        String timeZoneID = Calendar.getInstance().getTimeZone().getID();
+//        try (ResultSet rs = conn.createStatement().executeQuery(
+//                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')")) {
+//            assertEquals(false, rs.next());
+//        }
 
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
