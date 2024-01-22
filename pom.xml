@@ -367,6 +367,9 @@
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
             <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+            <systemPropertyVariables>
+              <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+            </systemPropertyVariables>
           </configuration>
           <executions>
             <execution>
