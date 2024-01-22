@@ -123,7 +123,6 @@ import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
-import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
@@ -146,7 +145,6 @@ import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.ExplainType;
-import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -1592,7 +1590,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 @Override
                 public MutationState execute() throws SQLException {
                     String indexName = ExecutableDropIndexStatement.this.getIndexName().getName();
-                    if (CDCUtil.isACDCIndex(indexName)) {
+                    if (CDCUtil.isCDCIndex(indexName)) {
                         throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX)
                                 .setTableName(indexName)
                                 .build().buildException();

@@ -18,9 +18,6 @@
 
 package org.apache.phoenix.util;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.Map;
@@ -29,16 +26,11 @@ import java.util.Set;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.io.TimeRange;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.util.StringUtils;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.PTable;
-
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "__CDC__";
@@ -96,12 +88,12 @@ public class CDCUtil {
         return indexName.substring(CDC_INDEX_PREFIX.length());
     }
 
-    public static boolean isACDCIndex(String indexName) {
+    public static boolean isCDCIndex(String indexName) {
         return indexName.startsWith(CDC_INDEX_PREFIX);
     }
 
-    public static boolean isACDCIndex(PTable indexTable) {
-        return isACDCIndex(indexTable.getTableName().getString());
+    public static boolean isCDCIndex(PTable indexTable) {
+        return isCDCIndex(indexTable.getTableName().getString());
     }
 
     public static Scan initForRawScan(Scan scan) {
