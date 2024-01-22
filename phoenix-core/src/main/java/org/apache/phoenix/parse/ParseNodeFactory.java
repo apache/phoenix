@@ -377,11 +377,10 @@ public class ParseNodeFactory {
     }
 
     public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
-                                        ColumnName timeIdxColumn, FunctionParseNode timeIdxFunc,
                                         Set<PTable.CDCChangeScope> includeScopes,
                                         ListMultimap<String, Pair<String, Object>> props,
                                         boolean ifNotExists, int bindCount) {
-        return new CreateCDCStatement(cdcObj, dataTable, timeIdxColumn, timeIdxFunc, includeScopes,
+        return new CreateCDCStatement(cdcObj, dataTable, includeScopes,
                 props, ifNotExists, bindCount);
     }
 

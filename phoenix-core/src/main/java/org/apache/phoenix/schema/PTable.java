@@ -1104,11 +1104,5 @@ public interface PTable extends PMetaDataEntity {
          * Include only the post image (state past the change) of the row.
          */
         POST,
-
-        /**
-         * Include only the latest image of the row.
-         */
-        LATEST,
-        ;
     }
 }

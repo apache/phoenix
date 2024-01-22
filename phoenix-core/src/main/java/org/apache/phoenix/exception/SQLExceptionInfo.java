@@ -65,6 +65,7 @@ public class SQLExceptionInfo {
     private final int phoenixColumnSizeBytes;
     private final int maxPhoenixColumnSizeBytes;
     private final String haGroupInfo;
+    private final String cdcChangeScope;
 
     public static class Builder {
         private Throwable rootCause;
@@ -83,6 +84,7 @@ public class SQLExceptionInfo {
         private int maxPhoenixColumnSizeBytes;
         private String haGroupInfo;
         private PTableType tableType;
+        private String cdcChangeScope;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -163,6 +165,11 @@ public class SQLExceptionInfo {
             return this;
         }
 
+        public Builder setCdcChangeScope(String cdcChangeScope) {
+            this.cdcChangeScope = cdcChangeScope;
+            return this;
+        }
+
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
         }
@@ -190,6 +197,7 @@ public class SQLExceptionInfo {
         maxPhoenixColumnSizeBytes = builder.maxPhoenixColumnSizeBytes;
         phoenixColumnSizeBytes = builder.phoenixColumnSizeBytes;
         haGroupInfo = builder.haGroupInfo;
+        cdcChangeScope = builder.cdcChangeScope;
     }
 
     @Override
@@ -234,6 +242,9 @@ public class SQLExceptionInfo {
         }
         if (haGroupInfo != null) {
             builder.append(" ").append(HA_GROUP_INFO).append("=").append(haGroupInfo);
+        }
+        if (cdcChangeScope != null) {
+            builder.append(": ").append(cdcChangeScope);
         }
 
         return builder.toString();
@@ -305,5 +316,9 @@ public class SQLExceptionInfo {
 
     public String getHaGroupInfo() {
         return haGroupInfo;
+    }
+
+    public String getCdcChangeScope() {
+        return cdcChangeScope;
     }
 }

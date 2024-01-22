@@ -220,10 +220,9 @@ public class QueryOptimizer {
         }
 
         PTable table = dataPlan.getTableRef().getTable();
-        // TODO: Need to handle CDC hints.
         if (table.getType() == PTableType.CDC) {
             Set<PTable.CDCChangeScope> cdcIncludeScopes = table.getCDCIncludeScopes();
-            String cdcHint = select.getHint().getHint(Hint.INCLUDE);
+            String cdcHint = select.getHint().getHint(Hint.CDC_INCLUDE);
             if (cdcHint != null && cdcHint.startsWith(HintNode.PREFIX)) {
                 cdcIncludeScopes = CDCUtil.makeChangeScopeEnumsFromString(cdcHint.substring(1,
                         cdcHint.length() - 1));

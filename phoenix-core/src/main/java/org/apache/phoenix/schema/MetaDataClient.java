@@ -19,7 +19,6 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
-import static org.apache.phoenix.exception.SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
@@ -161,6 +160,7 @@ import java.util.Set;
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.hadoop.hbase.client.Table;
@@ -1731,15 +1731,9 @@ public class MetaDataClient {
     }
 
     public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
-        // TODO: Do we need to borrow the schema name of the table?
         ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
         TableRef tableRef = resolver.getTables().get(0);
         PTable dataTable = tableRef.getTable();
-        // Check if data table is a view and give a not supported error.
-        if (dataTable.getType() != TABLE) {
-            throw new SQLExceptionInfo.Builder(INVALID_TABLE_TYPE_FOR_CDC).setTableType(
-                    dataTable.getType()).build().buildException();
-        }
 
         Map<String, Object> tableProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size());
@@ -1749,12 +1743,9 @@ public class MetaDataClient {
 
         NamedNode indexName = FACTORY.indexName(CDCUtil.getCDCIndexName(
                 statement.getCdcObjName().getName()));
-        String timeIdxColName = statement.getTimeIdxColumn() != null ?
-                statement.getTimeIdxColumn().getColumnName() : null;
         IndexKeyConstraint indexKeyConstraint =
                 FACTORY.indexKey(Arrays.asList(new Pair[]{Pair.newPair(
-                        timeIdxColName != null ? FACTORY.column(statement.getDataTable(),
-                                timeIdxColName, timeIdxColName) : statement.getTimeIdxFunc(),
+                        FACTORY.function(PhoenixRowTimestampFunction.NAME, Collections.emptyList()),
                         SortOrder.getDefault())}));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
@@ -1763,13 +1754,10 @@ public class MetaDataClient {
                     TableProperty.SALT_BUCKETS.getPropertyName(),
                     TableProperty.SALT_BUCKETS.getValue(tableProps)));
         }
-        // TODO: Transfer TTL and MaxLookback from statement.getProps() to indexProps.
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
-                        indexProps, statement.isIfNotExists(), indexType, false, 0,
+                        indexProps, statement.isIfNotExists(), indexType, true, 0,
                         new HashMap<>(), null);
-        // TODO: Currently index can be dropped, leaving the CDC dangling, DROP INDEX needs to
-        //  protect based on CDCUtil.isACDCIndex().
         MutationState indexMutationState;
         try {
             // TODO: Should we also allow PTimestamp here, in fact PTimestamp is the right type,
@@ -1782,24 +1770,18 @@ public class MetaDataClient {
                         statement.getCdcObjName().getName()).setRootCause(
                                 e).build().buildException();
             }
-            // TODO: What about translating other index creation failures? E.g., bad TS column.
             throw e;
         }
 
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
-        // TODO: toString() on function will have an extra space at the beginning, but this may
-        //  be OK as I see exactly the same with an index.
-        ColumnName timeIdxCol = statement.getTimeIdxColumn() != null ?
-                statement.getTimeIdxColumn() :
-                FACTORY.columnName(statement.getTimeIdxFunc().toString());
+        ColumnName timeIdxCol = FACTORY.columnName(PhoenixRowTimestampFunction.NAME + "()");
         columnDefs.add(FACTORY.columnDef(timeIdxCol, PDate.INSTANCE.getSqlTypeName(), false, null, false,
                 PDate.INSTANCE.getMaxLength(null), PDate.INSTANCE.getScale(null), false,
                 SortOrder.getDefault(), "", null, false));
         pkColumnDefs.add(FACTORY.columnDefInPkConstraint(timeIdxCol, SortOrder.getDefault(), false));
         for (PColumn pcol : pkColumns) {
-            // TODO: Cross check with the ColumnName creation logic in createIndex (line ~1578).
             columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
                     pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
                     pcol.getScale(), false, pcol.getSortOrder(), "", null, false));

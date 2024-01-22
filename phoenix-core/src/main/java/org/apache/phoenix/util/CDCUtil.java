@@ -21,6 +21,7 @@ package org.apache.phoenix.util;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -33,6 +34,8 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.util.StringUtils;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.PTable;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
@@ -48,7 +51,8 @@ public class CDCUtil {
      * @param includeScopes Comma-separated scope names.
      * @return the set of enums, which can be empty if the string is empty or has no valid names.
      */
-    public static Set<PTable.CDCChangeScope> makeChangeScopeEnumsFromString(String includeScopes) {
+    public static Set<PTable.CDCChangeScope> makeChangeScopeEnumsFromString(String includeScopes)
+            throws SQLException {
         Set<PTable.CDCChangeScope> cdcChangeScopes = new HashSet<>();
         if (includeScopes != null) {
             StringTokenizer st  = new StringTokenizer(includeScopes, ",");
@@ -58,7 +62,9 @@ public class CDCUtil {
                     cdcChangeScopes.add(PTable.CDCChangeScope.valueOf(tok.trim().toUpperCase()));
                 }
                 catch (IllegalArgumentException e) {
-                    // Just ignore unrecognized scopes.
+                    throw new SQLExceptionInfo.Builder(
+                            SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE).setCdcChangeScope(
+                                    tok).build().buildException();
                 }
             }
         }

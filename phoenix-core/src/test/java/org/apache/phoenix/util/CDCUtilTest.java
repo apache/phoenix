@@ -18,9 +18,11 @@
 
 package org.apache.phoenix.util;
 
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.schema.PTable;
 import org.junit.Test;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashSet;
 
@@ -38,10 +40,15 @@ public class CDCUtilTest {
                 CDCUtil.makeChangeScopeEnumsFromString("PRE,"));
         assertEquals(new HashSet<>(Arrays.asList(PRE)),
                 CDCUtil.makeChangeScopeEnumsFromString("PRE, PRE"));
-        assertEquals(new HashSet<>(Arrays.asList(PRE)),
-                CDCUtil.makeChangeScopeEnumsFromString("PRE,DUMMY"));
-        assertEquals(new HashSet<>(Arrays.asList(CHANGE, PRE, POST, LATEST)),
-                CDCUtil.makeChangeScopeEnumsFromString("POST,PRE,CHANGE,LATEST"));
+        assertEquals(new HashSet<>(Arrays.asList(CHANGE, PRE, POST)),
+                CDCUtil.makeChangeScopeEnumsFromString("POST,PRE,CHANGE"));
+        try {
+            CDCUtil.makeChangeScopeEnumsFromString("DUMMY");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE.getErrorCode(),
+                    e.getErrorCode());
+            assertTrue(e.getMessage().endsWith("DUMMY"));
+        }
     }
 
     @Test
@@ -49,9 +56,7 @@ public class CDCUtilTest {
         assertEquals(null, CDCUtil.makeChangeScopeStringFromEnums(null));
         assertEquals("", CDCUtil.makeChangeScopeStringFromEnums(
                 new HashSet<PTable.CDCChangeScope>()));
-        assertEquals("CHANGE,PRE,POST,LATEST", CDCUtil.makeChangeScopeStringFromEnums(
-                new HashSet<>(Arrays.asList(CHANGE, PRE, POST, LATEST))));
-        assertEquals("CHANGE,PRE,POST,LATEST", CDCUtil.makeChangeScopeStringFromEnums(
-                new HashSet<>(Arrays.asList(PRE, LATEST, POST, CHANGE))));
+        assertEquals("CHANGE,PRE,POST", CDCUtil.makeChangeScopeStringFromEnums(
+                new HashSet<>(Arrays.asList(CHANGE, PRE, POST))));
     }
 }

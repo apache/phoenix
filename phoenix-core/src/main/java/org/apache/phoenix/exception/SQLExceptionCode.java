@@ -360,7 +360,7 @@ public enum SQLExceptionCode {
     VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES(10956, "44A38", "View can extend parent primary key"
             + " only if none of the parents have indexes in the parent hierarchy"),
     UNKNOWN_INDEX_TYPE(1098, "44A39", "Unknown INDEX type: "),
-    UNKNOWN_INCLUDE_CHANGE_SCOPE(1099, "44A40", "Unknown change scope for INCLUDE: "),
+    UNKNOWN_INCLUDE_CHANGE_SCOPE(1099, "44A40", "Unknown change scope for CDC INCLUDE"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -469,8 +469,6 @@ public enum SQLExceptionCode {
             "Missing ENCODED_QUALIFIER."),
     EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
             + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
-    INVALID_TABLE_TYPE_FOR_CDC(1152, "XCL52",
-            "Invalid table type for creating CDC."),
 
 
     /**

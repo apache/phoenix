@@ -497,47 +497,38 @@ public class QueryParserTest {
         }
     }
 
-    private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists, String tsCol)
+    private CreateCDCStatement parseCreateCDCSimple(String sql, boolean ifNotExists)
             throws Exception {
         CreateCDCStatement stmt = parseQuery(sql, CreateCDCStatement.class);
         assertEquals("FOO", stmt.getCdcObjName().getName());
         assertEquals("BAR", stmt.getDataTable().getTableName());
-        if (tsCol != null) {
-            assertEquals(tsCol, stmt.getTimeIdxColumn().getColumnName());
-        }
-        else {
-            assertNull(stmt.getTimeIdxColumn());
-        }
         assertEquals(ifNotExists, stmt.isIfNotExists());
         return stmt;
     }
 
     @Test
     public void testCreateCDCSimple() throws Exception {
+        parseCreateCDCSimple("create cdc foo on bar", false);
+        parseCreateCDCSimple("create cdc foo on s.bar", false);
+        parseCreateCDCSimple("create cdc if not exists foo on bar", true);
+        parseCreateCDCSimple("create cdc foo on bar index_type=g", false);
+        parseCreateCDCSimple("create cdc foo on bar index_type=l", false);
         CreateCDCStatement stmt = null;
-        parseCreateCDCSimple("create cdc foo on bar(ts)", false, "TS");
-        parseCreateCDCSimple("create cdc foo on s.bar(ts)", false, "TS");
-        parseCreateCDCSimple("create cdc if not exists foo on bar(ts)", true, "TS");
-        parseCreateCDCSimple("create cdc foo on bar(t) index_type=g", false, "T");
-        parseCreateCDCSimple("create cdc foo on bar(t) index_type=l", false, "T");
-        stmt = parseCreateCDCSimple("create cdc foo on bar(TS_FUNC()) TTL=100, INDEX_TYPE=g",
-                false, null);
-        assertEquals("TS_FUNC", stmt.getTimeIdxFunc().getName());
-        assertEquals(" TS_FUNC()", stmt.getTimeIdxFunc().toString());
+        stmt = parseCreateCDCSimple("create cdc foo on bar TTL=100, INDEX_TYPE=g", false);
         assertEquals(Arrays.asList(new Pair("TTL", 100), new Pair("INDEX_TYPE", "g")),
                 stmt.getProps().get(""));
-        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre)", false, "TS");
+        stmt = parseCreateCDCSimple("create cdc foo on bar include (pre)", false);
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)),
                 stmt.getIncludeScopes());
-        stmt = parseCreateCDCSimple("create cdc foo on bar(ts) include (pre, pre, post)",
-                false, "TS");
+        stmt = parseCreateCDCSimple("create cdc foo on bar include (pre, pre, post)",
+                false);
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE,
                 PTable.CDCChangeScope.POST)), stmt.getIncludeScopes());
-        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def",
-                true, "TS");
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar abc=def",
+                true);
         assertEquals(Arrays.asList(new Pair("ABC", "def")), stmt.getProps().get(""));
-        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar(ts) abc=def, prop=val",
-                true, "TS");
+        stmt = parseCreateCDCSimple("create cdc if not exists foo on bar abc=def, prop=val",
+                true);
         assertEquals(Arrays.asList(new Pair("ABC", "def"), new Pair("PROP", "val")),
                 stmt.getProps().get(""));
     }
@@ -545,10 +536,7 @@ public class QueryParserTest {
     @Test
     public void testCreateCDCWithErrors() throws Exception {
         parseQueryThatShouldFail("create cdc foo");
-        parseQueryThatShouldFail("create cdc foo on bar");
-        parseQueryThatShouldFail("create cdc foo on bar(ts integer)");
-        parseQueryThatShouldFail("create cdc foo on bar(ts1, ts2)");
-        parseQueryThatShouldFail("create cdc foo on bar(ts) include (abc)");
+        parseQueryThatShouldFail("create cdc foo on bar include (abc)");
     }
 
     private void parseInvalidCreateCDC(String sql, int expRrrorCode) throws IOException {

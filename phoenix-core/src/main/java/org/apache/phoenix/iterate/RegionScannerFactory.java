@@ -135,7 +135,8 @@ public abstract class RegionScannerFactory {
       long extraLimit = -1;
 
       {
-        if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)) {
+          // for indexes construct the row filter for uncovered columns if it exists
+          if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)) {
               byte[] expBytes = scan.getAttribute(BaseScannerRegionObserver.INDEX_FILTER);
               if (expBytes == null) {
                   // For older clients
@@ -160,48 +161,45 @@ public abstract class RegionScannerFactory {
               if (limitBytes != null) {
                   extraLimit = Bytes.toLong(limitBytes);
               }
-            if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)
-                    && (tupleProjector != null
-                    || (indexMaintainer != null && indexMaintainer.isUncovered()))) {
+              if (ScanUtil.isLocalOrUncoveredGlobalIndex(scan)
+                      && (tupleProjector != null
+                          || (indexMaintainer != null && indexMaintainer.isUncovered()))) {
 
-              PTable.ImmutableStorageScheme storageScheme =
-                          indexMaintainer.getIndexStorageScheme();
+                  PTable.ImmutableStorageScheme storageScheme =
+                      indexMaintainer.getIndexStorageScheme();
                   Scan dataTableScan = new Scan();
-                  if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
-                    if (dataColumns != null) {
+                  if (dataColumns != null) {
                       for (int i = 0; i < dataColumns.length; i++) {
-                        if (storageScheme ==
-                                PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-                          dataTableScan.addFamily(dataColumns[i].getFamily());
-                        } else {
-                          dataTableScan.addColumn(dataColumns[i].getFamily(),
-                                  dataColumns[i].getQualifier());
-                        }
+                          if (storageScheme ==
+                                  PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+                              dataTableScan.addFamily(dataColumns[i].getFamily());
+                          } else {
+                              dataTableScan.addColumn(dataColumns[i].getFamily(),
+                                      dataColumns[i].getQualifier());
+                          }
                       }
-                    } else if (indexMaintainer.isUncovered()) {
+                  } else if (indexMaintainer.isUncovered()) {
                       // Indexed columns and the columns in index where clause should also be added
                       // to the data columns to scan for uncovered global indexes. This is required
                       // to verify the index row against the data table row.
                       for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
-                        dataTableScan.addColumn(column.getFamily(), column.getQualifier());
+                          dataTableScan.addColumn(column.getFamily(), column.getQualifier());
                       }
-                    }
                   }
                   if (ScanUtil.isLocalIndex(scan)) {
-                    s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                            dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs, offset, actualStartKey, extraLimit);
+                      s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                              dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                              pageSizeMs, offset, actualStartKey, extraLimit);
                   } else {
-                    if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
-                      s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                              dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                              pageSizeMs, extraLimit);
-                    }
-                    else {
-                      s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                              dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                              pageSizeMs, extraLimit);
-                    }
+                      if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
+                          s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                                  pageSizeMs, extraLimit);
+                      } else {
+                          s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                                  pageSizeMs, extraLimit);
+                      }
                   }
               }
           }

@@ -1082,12 +1082,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private static class ExecutableCreateCDCStatement extends CreateCDCStatement
             implements CompilableStatement {
         public ExecutableCreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
-                                            ColumnName timeIdxColumn, FunctionParseNode tfunc,
                                             Set<PTable.CDCChangeScope> includeScopes,
                                             ListMultimap<String, Pair<String, Object>> props,
                                             boolean ifNotExists, int bindCount) {
-            super(cdcObjName, dataTable, timeIdxColumn, tfunc, includeScopes, props, ifNotExists,
-                    bindCount);
+            super(cdcObjName, dataTable, includeScopes, props, ifNotExists, bindCount);
         }
 
         @Override
@@ -1940,11 +1938,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
         @Override
         public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
-                                            ColumnName timeIdxColumn, FunctionParseNode timeIdxFunc,
                                             Set<PTable.CDCChangeScope> includeScopes,
                                             ListMultimap<String, Pair<String, Object>> props,
                                             boolean ifNotExists, int bindCount) {
-            return new ExecutableCreateCDCStatement(cdcObj, dataTable, timeIdxColumn, timeIdxFunc,
+            return new ExecutableCreateCDCStatement(cdcObj, dataTable,
                     includeScopes, props, ifNotExists, bindCount);
         }
 
