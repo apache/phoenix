@@ -67,6 +67,7 @@ import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.UPSERT_EVENT_TYPE;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScanner {
     private static final Logger LOGGER =
@@ -76,8 +77,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private Map<ImmutableBytesPtr, PDataType> dataColQualTypeMap;
     // Map<dataRowKey: Map<TS: Map<qualifier: Cell>>>
     private Set<PTable.CDCChangeScope> cdcChangeScopeSet;
-
-    private Map<Long, ImmutableBytesPtr> indexDeleteFamilyCellMap;
 
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
@@ -131,17 +130,19 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             boolean isIndexCellDeleteColumn = false;
             try {
                 for (Cell cell : resultCells) {
-                    if (cell.getType() == Cell.Type.DeleteColumn
-                            && !this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())) {
-                        // DDL is not supported in CDC
-                        if (cell.getTimestamp() == indexCellTS) {
-                            isIndexCellDeleteColumn = true;
-                            break;
-                        }
-                    } else if (cell.getType() == Cell.Type.Put
-                            || (cell.getType() == Cell.Type.DeleteColumn
-                            && (this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())
-                            && this.indexDeleteFamilyCellMap.get(cell.getTimestamp()).equals(dataRowKey)))) {
+//                    if (cell.getType() == Cell.Type.DeleteColumn
+//                            && !this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())) {
+//                        // DDL is not supported in CDC
+//                        if (cell.getTimestamp() == indexCellTS) {
+//                            isIndexCellDeleteColumn = true;
+//                            break;
+//                        }
+//                    } else if (cell.getType() == Cell.Type.Put
+//                            || (cell.getType() == Cell.Type.DeleteColumn
+//                            && (this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())
+//                            && this.indexDeleteFamilyCellMap.get(cell.getTimestamp()).equals(dataRowKey)))) {
+                    if (cell.getType() == Cell.Type.Put
+                            || cell.getType() == Cell.Type.DeleteColumn) {
                         ImmutableBytesPtr colQual = new ImmutableBytesPtr(
                                 cell.getQualifierArray(),
                                 cell.getQualifierOffset(),
@@ -177,7 +178,17 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 } else {
                     Result cdcRow = getCDCImage(
                             preImageObj, changeImageObj, isIndexCellDeleteRow, indexCellTS, firstCell);
-                    result.add(firstCell);
+                    if (firstCell.getType() == Cell.Type.DeleteFamily) {
+                        result.add(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                                .setRow(firstCell.getRowArray()).
+                                setFamily(firstCell.getFamilyArray())
+                                .setQualifier(indexMaintainer.getEmptyKeyValueQualifier()).
+                                setTimestamp(firstCell.getTimestamp())
+                                .setType(Cell.Type.Put).
+                                setValue(EMPTY_BYTE_ARRAY).build());
+                    } else {
+                        result.add(firstCell);
+                    }
                     if (cdcRow != null && tupleProjector != null) {
                         IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
                                 tupleProjector, ptr);
@@ -320,6 +331,5 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             }
         }
         this.indexRows = indexRowList;
-        this.indexDeleteFamilyCellMap = indexDeleteFamilyCellMap;
     }
 }
