@@ -34,8 +34,10 @@ import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -282,22 +284,26 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         rs.close();
     }
 
-    @Test
-    public void testSelectCDC() throws Exception {
+    private Connection newConnection() throws SQLException {
         Properties props = new Properties();
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         props.put("hbase.client.scanner.timeout.period", "6000000");
         props.put("phoenix.query.timeoutMs", "6000000");
         props.put("zookeeper.session.timeout", "6000000");
         props.put("hbase.rpc.timeout", "6000000");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        return DriverManager.getConnection(getUrl(), props);
+    }
+
+    @Test
+    public void testSelectCDC() throws Exception {
+        Connection conn = newConnection();
         String tableName = generateUniqueName();
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
         conn.commit();
-        Thread.sleep(1000);
+        Thread.sleep(10);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.commit();
         String cdcName = generateUniqueName();
@@ -350,16 +356,79 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testSelectCDCBadIncludeSpec() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC  " + cdcName
+                + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        try {
+            conn.createStatement().executeQuery("SELECT " +
+                    "/*+ CDC_INCLUDE(DUMMY) */ * FROM " + cdcName);
+            fail("Expected to fail due to invalid CDC INCLUDE hint");
+        }
+        catch (SQLException e) {
+            assertEquals(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE.getErrorCode(),
+                    e.getErrorCode());
+            assertTrue(e.getMessage().endsWith("DUMMY"));
+        }
+    }
+
+    @Test
+    public void testSelectTimeRangeQueries() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
+        conn.commit();
+        Thread.sleep(10);
+        Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (3, 300)");
+        conn.commit();
+        Thread.sleep(10);
+        Timestamp ts3 = new Timestamp(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k = 2");
+        Timestamp ts4 = new Timestamp(System.currentTimeMillis());
+
+        String sel_sql = "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND " +
+                "PHOENIX_ROW_TIMESTAMP() <= ?";
+        Object[] testDataSets = new Object[] {
+                new Object[] {ts1, ts2, new int[] {1, 2}}/*,
+                new Object[] {ts2, ts3, new int[] {1, 3}},
+                new Object[] {ts3, ts4, new int[] {1}}*/
+        };
+        PreparedStatement stmt = conn.prepareStatement(sel_sql);
+        for (int i = 0; i < testDataSets.length; ++i) {
+            Object[] testData = (Object[]) testDataSets[i];
+            stmt.setTimestamp(1, (Timestamp) testData[0]);
+            stmt.setTimestamp(2, (Timestamp) testData[1]);
+            try (ResultSet rs = stmt.executeQuery()) {
+                for (int k:  (int[]) testData[2]) {
+                    assertEquals(true, rs.next());
+                    assertEquals(k, rs.getInt(2));
+                }
+                assertEquals(false, rs.next());
+            }
+        }
+    }
+
     // Temporary test case used as a reference for debugging and comparing against the CDC query.
     @Test
     public void testSelectUncoveredIndex() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        props.put("hbase.client.scanner.timeout.period", "6000000");
-        props.put("phoenix.query.timeoutMs", "6000000");
-        props.put("zookeeper.session.timeout", "6000000");
-        props.put("hbase.rpc.timeout", "6000000");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = newConnection();
         String tableName = generateUniqueName();
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER)");
