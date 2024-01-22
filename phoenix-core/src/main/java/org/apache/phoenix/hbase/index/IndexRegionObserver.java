@@ -899,10 +899,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
         }
     }
-    private Mutation getDeleteIndexMutation(Put dataRowState, IndexMaintainer indexMaintainer,
+    public static Mutation getDeleteIndexMutation(Put dataRowState, IndexMaintainer indexMaintainer,
             long ts, ImmutableBytesPtr rowKeyPtr) {
-        ValueGetter cdcDataRowVG = new IndexUtil.SimpleValueGetter(dataRowState);
-        byte[] indexRowKey = indexMaintainer.buildRowKey(cdcDataRowVG, rowKeyPtr, null, null, ts);
+        ValueGetter dataRowVG = new IndexUtil.SimpleValueGetter(dataRowState);
+        byte[] indexRowKey = indexMaintainer.buildRowKey(dataRowVG, rowKeyPtr, null, null, ts);
         return indexMaintainer.buildRowDeleteMutation(indexRowKey,
                 IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
     }
@@ -971,6 +971,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                             new Pair<Mutation, byte[]>(getDeleteIndexMutation(currentDataRowState,
                                     indexMaintainer, ts, rowKeyPtr), rowKeyPtr.get()));
                     if (indexMaintainer.isCDCIndex()) {
+                        // CDC Index needs two delete markers one for deleting the index row, and
+                        // the other for referencing the data table delete mutation with the
+                        // right index row key, that is, the index row key starting with ts
                         Put cdcDataRowState = new Put(currentDataRowState.getRow());
                         cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
                                 indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,

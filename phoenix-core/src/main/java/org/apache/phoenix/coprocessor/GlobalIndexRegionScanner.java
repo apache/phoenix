@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.PagingFilter;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
@@ -69,6 +70,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -1351,6 +1353,17 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                                 indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                                         IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                         indexMutations.add(del);
+                        if (indexMaintainer.isCDCIndex()) {
+                            // CDC Index needs two delete markers one for deleting the index row,
+                            // and the other for referencing the data table delete mutation with
+                            // the right index row key, that is, the index row key starting with ts
+                            Put cdcDataRowState = new Put(currentDataRowState.getRow());
+                            cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
+                                    indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
+                                    ByteUtil.EMPTY_BYTE_ARRAY);
+                            indexMutations.add(IndexRegionObserver.getDeleteIndexMutation(
+                                    currentDataRowState, indexMaintainer, ts, rowKeyPtr));
+                        }
                     }
                     currentDataRowState = null;
                     indexRowKeyForCurrentDataRow = null;
