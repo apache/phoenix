@@ -116,6 +116,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
@@ -437,6 +438,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private boolean isUncovered;
     private Expression indexWhere;
     private Set<ColumnReference> indexWhereColumns;
+    private boolean isCDCIndex;
 
     protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
@@ -674,6 +676,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             this.indexWhere = index.getIndexWhereExpression(connection);
             this.indexWhereColumns = index.getIndexWhereColumns(connection);
         }
+        this.isCDCIndex = CDCUtil.isACDCIndex(index);
 
         initCachedState();
     }
@@ -1773,6 +1776,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             maintainer.indexWhere = null;
             maintainer.indexWhereColumns = null;
         }
+        if (proto.hasIsCDCIndex()) {
+            maintainer.isCDCIndex = proto.getIsCDCIndex();
+        } else {
+            maintainer.isCDCIndex = false;
+        }
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1916,6 +1924,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
             }
         }
+        builder.setIsCDCIndex(maintainer.isCDCIndex);
         return builder.build();
     }
 
@@ -2238,6 +2247,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     public boolean isUncovered() {
         return isUncovered;
+    }
+    public boolean isCDCIndex() {
+        return isCDCIndex;
     }
     
     public boolean isImmutableRows() {
