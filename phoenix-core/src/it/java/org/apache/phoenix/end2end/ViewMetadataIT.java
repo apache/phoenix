@@ -77,6 +77,7 @@ import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
@@ -1166,10 +1167,10 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         s1.execute("create index " + indexName + " ON " + tableName
                 + " (col2)");
 
-        try (ResultSet rs = s2.executeQuery("explain select /*+ INDEX("
+        try (ResultSet rs = s2.executeQuery("select /*+ INDEX("
                 + viewName + " " + indexName + ") */ * from "
                 + viewName + " where col2 = 'aaa'")) {
-            String explainPlan = QueryUtil.getExplainPlan(rs);
+            String explainPlan = s2.unwrap(PhoenixStatement.class).getQueryPlan().getExplainPlan().toString();
 
             // check if the query uses the index
             assertTrue(explainPlan.contains(indexName));
