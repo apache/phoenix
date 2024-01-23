@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -470,9 +471,11 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
+
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
         Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+        Long beforeLong = before.getTime();
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
@@ -492,6 +495,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 //                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')")) {
 //            assertEquals(false, rs.next());
 //        }
+
 
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +

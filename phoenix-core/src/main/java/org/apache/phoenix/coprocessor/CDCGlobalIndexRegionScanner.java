@@ -34,8 +34,10 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -77,6 +79,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private Map<ImmutableBytesPtr, PDataType> dataColQualTypeMap;
     // Map<dataRowKey: Map<TS: Map<qualifier: Cell>>>
     private Set<PTable.CDCChangeScope> cdcChangeScopeSet;
+    private Long startTimeRange;
+    private Long stopTimeRange;
 
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
@@ -103,6 +107,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
 
     @Override
     protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
+        if (scan.getStartRow().length == 8) {
+            startTimeRange = PLong.INSTANCE.getCodec().decodeLong(scan.getStartRow(), 0, SortOrder.getDefault());
+        }
+        if (scan.getStopRow().length == 8) {
+            stopTimeRange = PLong.INSTANCE.getCodec().decodeLong(scan.getStopRow(), 0, SortOrder.getDefault());
+        }
         return CDCUtil.initForRawScan(prepareDataTableScan(dataRowKeys, true));
     }
 
@@ -153,8 +163,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             changeImageObj.put(colQual, cell);
                         }
                     } else if (cell.getType() == Cell.Type.DeleteFamily) {
-                        if (indexCellType == Cell.Type.DeleteFamily
-                            && indexCellTS == cell.getTimestamp()) {
+                        if (indexCellTS == cell.getTimestamp()) {
                             isIndexCellDeleteRow = true;
                             break;
                         }
@@ -288,48 +297,48 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return cdcRow;
     }
 
-    @Override
-    protected void scanDataTableRows(long startTime) throws IOException {
-        super.scanDataTableRows(startTime);
-        List<List<Cell>> indexRowList = new ArrayList<>();
-        Map<Long, ImmutableBytesPtr> indexDeleteFamilyCellMap = new HashMap<>();
-        // Creating new Index Rows for Delete Row events
-        for (int rowIndex = 0; rowIndex < indexRows.size(); rowIndex++) {
-            List<Cell> indexRow = indexRows.get(rowIndex);
-            indexRowList.add(indexRow);
-            if (indexRow.size() > 1) {
-                List<Cell> deleteRow = null;
-                for (int cellIndex = indexRow.size() - 1; cellIndex >= 0; cellIndex--) {
-                    Cell cell = indexRow.get(cellIndex);
-                    if (cell.getType() == Cell.Type.DeleteFamily) {
-                        byte[] indexRowKey = new ImmutableBytesPtr(cell.getRowArray(),
-                                cell.getRowOffset(), cell.getRowLength())
-                                .copyBytesIfNecessary();
-                        ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
-                                indexToDataRowKeyMap.get(indexRowKey));
-                        indexDeleteFamilyCellMap.put(cell.getTimestamp(),
-                                dataRowKey);
-                        Result dataRow = dataRows.get(dataRowKey);
-                        for (Cell dataRowCell : dataRow.rawCells()) {
-                            // Note: Upsert adds delete family marker in the index table but not in the datatable.
-                            // Delete operation adds delete family marker in datatable as well as index table.
-                            if (dataRowCell.getType() == Cell.Type.DeleteFamily
-                                    && dataRowCell.getTimestamp() == cell.getTimestamp()) {
-                                if (deleteRow == null) {
-                                    deleteRow = new ArrayList<>();
-                                }
-                                deleteRow.add(cell);
-                                indexRowList.add(deleteRow);
-                                break;
-                            }
-                        }
-                    }
-                    if (deleteRow != null) {
-                        break;
-                    }
-                }
-            }
-        }
-        this.indexRows = indexRowList;
-    }
+//    @Override
+//    protected void scanDataTableRows(long startTime) throws IOException {
+//        super.scanDataTableRows(startTime);
+//        List<List<Cell>> indexRowList = new ArrayList<>();
+//        Map<Long, ImmutableBytesPtr> indexDeleteFamilyCellMap = new HashMap<>();
+//        // Creating new Index Rows for Delete Row events
+//        for (int rowIndex = 0; rowIndex < indexRows.size(); rowIndex++) {
+//            List<Cell> indexRow = indexRows.get(rowIndex);
+//            indexRowList.add(indexRow);
+//            if (indexRow.size() > 1) {
+//                List<Cell> deleteRow = null;
+//                for (int cellIndex = indexRow.size() - 1; cellIndex >= 0; cellIndex--) {
+//                    Cell cell = indexRow.get(cellIndex);
+//                    if (cell.getType() == Cell.Type.DeleteFamily) {
+//                        byte[] indexRowKey = new ImmutableBytesPtr(cell.getRowArray(),
+//                                cell.getRowOffset(), cell.getRowLength())
+//                                .copyBytesIfNecessary();
+//                        ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
+//                                indexToDataRowKeyMap.get(indexRowKey));
+//                        indexDeleteFamilyCellMap.put(cell.getTimestamp(),
+//                                dataRowKey);
+//                        Result dataRow = dataRows.get(dataRowKey);
+//                        for (Cell dataRowCell : dataRow.rawCells()) {
+//                            // Note: Upsert adds delete family marker in the index table but not in the datatable.
+//                            // Delete operation adds delete family marker in datatable as well as index table.
+//                            if (dataRowCell.getType() == Cell.Type.DeleteFamily
+//                                    && dataRowCell.getTimestamp() == cell.getTimestamp()) {
+//                                if (deleteRow == null) {
+//                                    deleteRow = new ArrayList<>();
+//                                }
+//                                deleteRow.add(cell);
+//                                indexRowList.add(deleteRow);
+//                                break;
+//                            }
+//                        }
+//                    }
+//                    if (deleteRow != null) {
+//                        break;
+//                    }
+//                }
+//            }
+//        }
+//        this.indexRows = indexRowList;
+//    }
 }
