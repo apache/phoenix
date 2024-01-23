@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -26,6 +27,7 @@ import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -454,6 +456,11 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 INTEGER)");
         String cdcName = generateUniqueName();
 
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+        conn.createStatement().execute(cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
+
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
         conn.commit();
@@ -463,9 +470,11 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
+
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
         Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
+        Long beforeLong = before.getTime();
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
@@ -475,13 +484,10 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
         //          "".isEmpty();
         //      }
-        String cdc_sql = "CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
-        conn.createStatement().execute(cdc_sql);
-        assertCDCState(conn, cdcName, null, 3);
+
         String timeZoneID = Calendar.getInstance().getTimeZone().getID();
         try (ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')")) {
+                "SELECT * FROM " + cdcName + " WHERE \" PHOENIX_ROW_TIMESTAMP()\" >= TO_DATE('" + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')")) {
             assertEquals(false, rs.next());
         }
 
