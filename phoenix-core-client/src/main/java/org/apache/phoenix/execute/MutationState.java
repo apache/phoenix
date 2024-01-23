@@ -1219,7 +1219,7 @@ public class MutationState implements SQLCloseable {
             List<TableRef> tableRefs = new ArrayList<>(this.mutationsMap.keySet());
             try {
                 ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
-                        connection, tableRefs, true, true);
+                        connection, tableRefs, true);
             } catch (StaleMetadataCacheException e) {
                 GlobalClientMetrics
                         .GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER.increment();
