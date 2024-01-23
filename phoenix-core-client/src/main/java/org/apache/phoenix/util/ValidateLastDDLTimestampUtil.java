@@ -152,7 +152,7 @@ public class ValidateLastDDLTimestampUtil {
                 PTable parentTable
                         = getPTableFromCache(conn, conn.getTenantId(),
                                              tableRef.getTable().getParentName().getString());
-                setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
+                setLastDDLTimestampRequestParameters(conn, innerBuilder, parentTable);
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
 
@@ -161,7 +161,7 @@ public class ValidateLastDDLTimestampUtil {
             if (!tableRef.getTable().getName().getString()
                     .contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                setLastDDLTimestampRequestParameters(innerBuilder, tableRef.getTable());
+                setLastDDLTimestampRequestParameters(conn, innerBuilder, tableRef.getTable());
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
 
@@ -174,7 +174,7 @@ public class ValidateLastDDLTimestampUtil {
                     PTable parentTable = getPTableFromCache(conn, conn.getTenantId(),
                                                             pTable.getParentName().getString());
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                    setLastDDLTimestampRequestParameters(innerBuilder, parentTable);
+                    setLastDDLTimestampRequestParameters(conn, innerBuilder, parentTable);
                     requestBuilder.addLastDDLTimestampRequests(innerBuilder);
                     pTable = parentTable;
                 }
@@ -182,21 +182,9 @@ public class ValidateLastDDLTimestampUtil {
 
             //validate all indexes of a table/view for any changes
             //in case index state was changed.
-            //Inherited view indexes do not exist is SYSTEM.CATALOG, add the parent index.
             for (PTable idxPTable : tableRef.getTable().getIndexes()) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                if (idxPTable.getName().getString()
-                        .contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-                    String[] parentNames = idxPTable.getName().getString()
-                                        .split(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-                    String parentIndexName = parentNames[parentNames.length-1];
-                    PTable parentIndexTable
-                            = getPTableFromCache(conn, conn.getTenantId(), parentIndexName);
-                    setLastDDLTimestampRequestParameters(innerBuilder, parentIndexTable);
-                }
-                else {
-                    setLastDDLTimestampRequestParameters(innerBuilder, idxPTable);
-                }
+                setLastDDLTimestampRequestParameters(conn, innerBuilder, idxPTable);
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
         }
@@ -207,18 +195,38 @@ public class ValidateLastDDLTimestampUtil {
     /**
      * For the given PTable, set the attributes on the LastDDLTimestampRequest.
      */
-    private static void setLastDDLTimestampRequestParameters(
+    private static void setLastDDLTimestampRequestParameters (
+            PhoenixConnection conn,
             RegionServerEndpointProtos.LastDDLTimestampRequest.Builder builder,
-            PTable pTable) {
-        byte[] tenantIDBytes = pTable.getTenantId() == null
+            PTable pTable) throws TableNotFoundException {
+        PName tenantID = pTable.getTenantId();
+        PName tableName = pTable.getTableName();
+        PName schemaName = pTable.getSchemaName();
+
+        //Inherited view indexes do not exist is SYSTEM.CATALOG, add the parent index.
+        if (pTable.getType().equals(PTableType.INDEX) &&
+                pTable.getName().getString().contains(
+                        QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            String[] parentNames = pTable.getName().getString()
+                    .split(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            String parentIndexName = parentNames[parentNames.length-1];
+            PTable parentIndexTable
+                    = getPTableFromCache(conn, conn.getTenantId(), parentIndexName);
+            tableName = parentIndexTable.getTableName();
+            tenantID= parentIndexTable.getTenantId();
+            schemaName = parentIndexTable.getSchemaName();
+        }
+
+        byte[] tenantIDBytes = (tenantID == null)
                 ? HConstants.EMPTY_BYTE_ARRAY
-                : pTable.getTenantId().getBytes();
-        byte[] schemaBytes = pTable.getSchemaName() == null
-                ?   HConstants.EMPTY_BYTE_ARRAY
-                : pTable.getSchemaName().getBytes();
+                : tenantID.getBytes();
+        byte[] schemaNameBytes = (schemaName == null)
+                ? HConstants.EMPTY_BYTE_ARRAY
+                : schemaName.getBytes();
+
         builder.setTenantId(ByteStringer.wrap(tenantIDBytes));
-        builder.setSchemaName(ByteStringer.wrap(schemaBytes));
-        builder.setTableName(ByteStringer.wrap(pTable.getTableName().getBytes()));
+        builder.setSchemaName(ByteStringer.wrap(schemaNameBytes));
+        builder.setTableName(ByteStringer.wrap(tableName.getBytes()));
         builder.setLastDDLTimestamp(pTable.getLastDDLTimestamp());
     }
 
