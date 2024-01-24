@@ -90,6 +90,15 @@ public class PColumnImpl implements PColumn {
         }
     }
 
+    // This is meant for CDC only.
+    private PColumnImpl(PName columnName, PName familyName, PDataType dataType,
+                  byte[] columnQualifierBytes, SortOrder sortOrder) {
+        this(familyName, columnName, null);
+        this.dataType = dataType;
+        this.columnQualifierBytes = columnQualifierBytes;
+        this.sortOrder = sortOrder;
+    }
+
     // a excluded column (a column that was derived from a parent but that has been deleted) is
     // denoted by a column that has a null type
     public static PColumnImpl createExcludedColumn(PName familyName, PName columnName, Long timestamp) {
@@ -317,6 +326,22 @@ public class PColumnImpl implements PColumn {
             timestamp, derived);
     }
 
+    public static PColumn createFromCDCProto(PTableProtos.CDCColumnDef column) {
+        byte[] columnNameBytes = column.getColumnNameBytes().toByteArray();
+        PName columnName = PNameFactory.newName(columnNameBytes);
+        PName familyName = null;
+        if (column.hasFamilyNameBytes()) {
+            familyName = PNameFactory.newName(column.getFamilyNameBytes().toByteArray());
+        }
+        PDataType dataType = column.hasDataType() ? PDataType.fromSqlTypeName(column.getDataType()) : null;
+        byte[] columnQualifierBytes = null;
+        if (column.hasColumnQualifierBytes()) {
+            columnQualifierBytes = column.getColumnQualifierBytes().toByteArray();
+        }
+        SortOrder sortOrder = SortOrder.fromSystemValue(column.getSortOrder());
+        return new PColumnImpl(columnName, familyName, dataType, columnQualifierBytes, sortOrder);
+    }
+
     public static PTableProtos.PColumn toProto(PColumn column) {
         PTableProtos.PColumn.Builder builder = PTableProtos.PColumn.newBuilder();
         builder.setColumnNameBytes(ByteStringer.wrap(column.getName().getBytes()));
@@ -356,6 +381,24 @@ public class PColumnImpl implements PColumn {
             builder.setTimestamp(column.getTimestamp());
         }
         builder.setDerived(column.isDerived());
+        return builder.build();
+    }
+
+    public static PTableProtos.CDCColumnDef toCDCProto(PColumn column) {
+        PTableProtos.CDCColumnDef.Builder builder = PTableProtos.CDCColumnDef.newBuilder();
+        builder.setColumnNameBytes(ByteStringer.wrap(column.getName().getBytes()));
+        if (column.getFamilyName() != null) {
+            builder.setFamilyNameBytes(ByteStringer.wrap(column.getFamilyName().getBytes()));
+        }
+        if (column.getDataType()!=null) {
+            builder.setDataType(column.getDataType().getSqlTypeName());
+        }
+        if (column.getColumnQualifierBytes() != null) {
+            builder.setColumnQualifierBytes(ByteStringer.wrap(column.getColumnQualifierBytes()));
+        }
+        if (column.getSortOrder()!=null) {
+            builder.setSortOrder(column.getSortOrder().getSystemValue());
+        }
         return builder.build();
     }
 

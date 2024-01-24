@@ -2114,6 +2114,32 @@ public class PTableImpl implements PTable {
         }
     }
 
+    public static PTable createFromCDCProto(PTableProtos.CDCTableDef table) {
+        PName schemaName = PNameFactory.newName(table.getSchemaNameBytes().toByteArray());
+        PName tableName = PNameFactory.newName(table.getTableNameBytes().toByteArray());
+        PName defaultFamilyName = null;
+        if (table.hasDefaultFamilyName()) {
+            defaultFamilyName = PNameFactory.newName(table.getDefaultFamilyName().toByteArray());
+        }
+        List<PColumn> columns = Lists.newArrayListWithExpectedSize(table.getColumnsCount());
+        for (PTableProtos.CDCColumnDef curPColumnProto : table.getColumnsList()) {
+            columns.add(PColumnImpl.createFromCDCProto(curPColumnProto));
+        }
+
+        try {
+            return new PTableImpl.Builder()
+                    .setSchemaName(schemaName)
+                    .setTableName(tableName)
+                    .setDefaultFamilyName(defaultFamilyName)
+                    .setColumns(columns)
+                    .setPhysicalNames(ImmutableList.of())
+                    .setIndexes(Collections.emptyList())
+                    .build();
+        } catch (SQLException e) {
+            throw new RuntimeException(e); // Impossible
+        }
+    }
+
     public static PTableProtos.PTable toProto(PTable table) {
         PTableProtos.PTable.Builder builder = PTableProtos.PTable.newBuilder();
         if (table.getTenantId() != null) {
@@ -2250,6 +2276,23 @@ public class PTableImpl implements PTable {
         if (table.getIndexWhere() != null) {
             builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
                     table.getIndexWhere())));
+        }
+        return builder.build();
+    }
+
+    public static PTableProtos.CDCTableDef toCDCProto(PTable table) {
+        PTableProtos.CDCTableDef.Builder builder = PTableProtos.CDCTableDef.newBuilder();
+        builder.setSchemaNameBytes(ByteStringer.wrap(table.getSchemaName().getBytes()));
+        builder.setTableNameBytes(ByteStringer.wrap(table.getTableName().getBytes()));
+        if (table.getDefaultFamilyName() != null) {
+            builder.setDefaultFamilyName(ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));
+        }
+        List<PColumn> columns = table.getColumns();
+        int columnSize = columns.size();
+        int offset = table.getBucketNum() != null ? 1 : 0;
+        for (int i = offset; i < columnSize; i++) {
+            PColumn column = columns.get(i);
+            builder.addColumns(PColumnImpl.toCDCProto(column));
         }
         return builder.build();
     }

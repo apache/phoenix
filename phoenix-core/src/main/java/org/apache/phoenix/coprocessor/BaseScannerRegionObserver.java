@@ -155,6 +155,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String CDC_INCLUDE_SCOPES = "_CdcIncludeScopes";
     public static final String DATA_COL_QUALIFIER_TO_NAME_MAP = "_DataColQualToNameMap";
     public static final String DATA_COL_QUALIFIER_TO_TYPE_MAP = "_DataColQualToTypeMap";
+    public static final String DATA_CDC_DATA_TABLE_DEF = "_DataCDCDataTableDef";
 
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);

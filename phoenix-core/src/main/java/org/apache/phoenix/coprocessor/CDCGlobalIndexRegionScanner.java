@@ -32,10 +32,13 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.CDCUtil;
@@ -63,6 +66,7 @@ import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_NAME_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_TYPE_MAP;
 
@@ -94,6 +98,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 scan.getAttribute(DATA_COL_QUALIFIER_TO_NAME_MAP));
         dataColQualTypeMap = ScanUtil.deserializeColumnQualifierToTypeMap(
                 scan.getAttribute(DATA_COL_QUALIFIER_TO_TYPE_MAP));
+        PTable dataTableDef = PTableImpl.createFromCDCProto(
+                PTableProtos.CDCTableDef.parseFrom(scan.getAttribute(DATA_CDC_DATA_TABLE_DEF)));
     }
 
     @Override

@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_NAME_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_TYPE_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
@@ -1345,6 +1346,8 @@ public class ScanUtil {
                     serializeColumnQualifierToNameMap(dataColQualNameMap));
             scan.setAttribute(DATA_COL_QUALIFIER_TO_TYPE_MAP,
                     serializeColumnQualifierToTypeMap(dataColTypeMap));
+            scan.setAttribute(DATA_CDC_DATA_TABLE_DEF,
+                    PTableImpl.toCDCProto(dataTable).toByteArray());
         }
     }
 

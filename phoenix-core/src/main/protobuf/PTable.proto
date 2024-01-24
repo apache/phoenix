@@ -53,6 +53,14 @@ message PColumn {
   optional bool derived = 17 [default = false];
 }
 
+message CDCColumnDef {
+  required bytes columnNameBytes = 1;
+  optional bytes familyNameBytes = 2;
+  optional string dataType = 3;
+  optional bytes columnQualifierBytes = 4;
+  optional int32 sortOrder = 5;
+}
+
 message PTableStats {
   required bytes key = 1;
   repeated bytes values = 2;
@@ -120,6 +128,13 @@ message PTable {
   optional bytes streamingTopicName=52;
   optional bytes indexWhere=53;
   optional string CDCIncludeScopes=54;
+}
+
+message CDCTableDef {
+  required bytes schemaNameBytes = 1;
+  required bytes tableNameBytes = 2;
+  optional bytes defaultFamilyName = 3;
+  repeated CDCColumnDef columns = 4;
 }
 
 message EncodedCQCounter {
