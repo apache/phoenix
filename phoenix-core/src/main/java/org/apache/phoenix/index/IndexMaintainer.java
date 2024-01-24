@@ -676,7 +676,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             this.indexWhere = index.getIndexWhereExpression(connection);
             this.indexWhereColumns = index.getIndexWhereColumns(connection);
         }
-        this.isCDCIndex = CDCUtil.isACDCIndex(index);
+        this.isCDCIndex = CDCUtil.isCDCIndex(index);
 
         initCachedState();
     }

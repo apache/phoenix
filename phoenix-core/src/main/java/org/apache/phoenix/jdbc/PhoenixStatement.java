@@ -123,7 +123,6 @@ import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
-import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.AliasedNode;
@@ -146,7 +145,6 @@ import org.apache.phoenix.parse.DeclareCursorStatement;
 import org.apache.phoenix.parse.DeleteJarStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.ExplainType;
-import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ShowCreateTableStatement;
 import org.apache.phoenix.parse.ShowCreateTable;
 import org.apache.phoenix.parse.DropColumnStatement;
@@ -1082,12 +1080,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private static class ExecutableCreateCDCStatement extends CreateCDCStatement
             implements CompilableStatement {
         public ExecutableCreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
-                                            ColumnName timeIdxColumn, FunctionParseNode tfunc,
                                             Set<PTable.CDCChangeScope> includeScopes,
                                             ListMultimap<String, Pair<String, Object>> props,
                                             boolean ifNotExists, int bindCount) {
-            super(cdcObjName, dataTable, timeIdxColumn, tfunc, includeScopes, props, ifNotExists,
-                    bindCount);
+            super(cdcObjName, dataTable, includeScopes, props, ifNotExists, bindCount);
         }
 
         @Override
@@ -1594,7 +1590,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                 @Override
                 public MutationState execute() throws SQLException {
                     String indexName = ExecutableDropIndexStatement.this.getIndexName().getName();
-                    if (CDCUtil.isACDCIndex(indexName)) {
+                    if (CDCUtil.isCDCIndex(indexName)) {
                         throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX)
                                 .setTableName(indexName)
                                 .build().buildException();
@@ -1940,11 +1936,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
         @Override
         public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
-                                            ColumnName timeIdxColumn, FunctionParseNode timeIdxFunc,
                                             Set<PTable.CDCChangeScope> includeScopes,
                                             ListMultimap<String, Pair<String, Object>> props,
                                             boolean ifNotExists, int bindCount) {
-            return new ExecutableCreateCDCStatement(cdcObj, dataTable, timeIdxColumn, timeIdxFunc,
+            return new ExecutableCreateCDCStatement(cdcObj, dataTable,
                     includeScopes, props, ifNotExists, bindCount);
         }
 

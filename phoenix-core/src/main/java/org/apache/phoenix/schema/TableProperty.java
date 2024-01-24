@@ -353,7 +353,8 @@ public enum TableProperty {
         }
     },
 
-    INCLUDE(PhoenixDatabaseMetaData.CDC_INCLUDE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, false, false) {
+    INCLUDE(PhoenixDatabaseMetaData.CDC_INCLUDE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY,
+            true, false, false) {
         @Override
         public Object getPTableValue(PTable table) {
             return table.getCDCIncludeScopes();

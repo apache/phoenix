@@ -133,7 +133,7 @@ public class HintNode {
         /**
          * Override the default CDC include scopes.
          */
-        INCLUDE,
+        CDC_INCLUDE,
         ;
     };
 

@@ -19,23 +19,27 @@ package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
-import javax.xml.transform.Result;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -48,8 +52,22 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+@RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
 public class CDCMiscIT extends ParallelStatsDisabledIT {
+    private final boolean forView;
+
+    public CDCMiscIT(boolean forView) {
+        this.forView = forView;
+    }
+
+    @Parameterized.Parameters(name = "forVieiw={0}")
+    public static synchronized Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][] {
+                { false}, { true }
+        });
+    }
+
     private void assertCDCState(Connection conn, String cdcName, String expInclude,
                                 int idxType) throws SQLException {
         try (ResultSet rs = conn.createStatement().executeQuery("SELECT cdc_include FROM " +
@@ -89,19 +107,33 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(nbuckets, indexTable.getBucketNum());
     }
 
+    private void createAndWait(Connection conn, String tableName, String cdcName, String cdc_sql)
+            throws Exception {
+        conn.createStatement().execute(cdc_sql);
+        IndexToolIT.runIndexTool(false, null, tableName,
+                "\""+CDCUtil.getCDCIndexName(cdcName)+"\"");
+        TestUtil.waitForIndexState(conn, CDCUtil.getCDCIndexName(cdcName), PIndexState.ACTIVE);
+    }
+
     @Test
-    public void testCreate() throws SQLException {
+    public void testCreate() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
                         + " v2 DATE)");
+        if (forView) {
+            String viewName = generateUniqueName();
+            conn.createStatement().execute(
+                    "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+            tableName = viewName;
+        }
         String cdcName = generateUniqueName();
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON NON_EXISTENT_TABLE (PHOENIX_ROW_TIMESTAMP())");
+                    + " ON NON_EXISTENT_TABLE");
             fail("Expected to fail due to non-existent table");
         } catch (SQLException e) {
             assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
@@ -109,42 +141,16 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         try {
             conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(UNKNOWN_FUNCTION())");
-            fail("Expected to fail due to invalid function");
+                    + " ON " + tableName + " INCLUDE (abc)");
+            fail("Expected to fail due to invalid INCLUDE");
         } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.FUNCTION_UNDEFINED.getErrorCode(), e.getErrorCode());
-        }
-
-        try {
-            conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(NOW())");
-            fail("Expected to fail due to non-deterministic function");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.NON_DETERMINISTIC_EXPRESSION_NOT_ALLOWED_IN_INDEX.
-                    getErrorCode(), e.getErrorCode());
-        }
-
-        try {
-            conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(ROUND(v1))");
-            fail("Expected to fail due to non-date expression in the index PK");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(),
+            assertEquals(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE.getErrorCode(),
                     e.getErrorCode());
+            assertTrue(e.getMessage().endsWith("abc"));
         }
 
-        try {
-            conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName +"(v1)");
-            fail("Expected to fail due to non-date column in the index PK");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION.getErrorCode(),
-                    e.getErrorCode());
-        }
-
-        String cdc_sql = "CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
-        conn.createStatement().execute(cdc_sql);
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
 
         try {
@@ -154,42 +160,31 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TABLE_ALREADY_EXIST.getErrorCode(), e.getErrorCode());
             assertTrue(e.getMessage().endsWith(cdcName));
         }
+
         conn.createStatement().execute("CREATE CDC IF NOT EXISTS " + cdcName + " ON " + tableName +
-                "(v2) INCLUDE (pre, post) INDEX_TYPE=g");
+                " INCLUDE (pre, post) INDEX_TYPE=g");
 
         cdcName = generateUniqueName();
-        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-                "(v2) INCLUDE (pre, post) INDEX_TYPE=g");
+        cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName +
+                " INCLUDE (pre, post) INDEX_TYPE=g";
+        createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
                 Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName);
 
         cdcName = generateUniqueName();
-        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-                "(v2) INDEX_TYPE=l");
+        cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INDEX_TYPE=l";
+        createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 2);
         assertPTable(cdcName, null, tableName);
 
-        String viewName = generateUniqueName();
-        conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " +
-                tableName);
-        cdcName = generateUniqueName();
-        try {
-            conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + viewName +
-                    "(PHOENIX_ROW_TIMESTAMP())");
-            fail("Expected to fail on VIEW");
+        // Indexes on views don't support salt buckets and is currently silently ignored.
+        if (! forView) {
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " SALT_BUCKETS = 4";
+            createAndWait(conn, tableName, cdcName, cdc_sql);
+            assertSaltBuckets(cdcName, 4);
         }
-        catch(SQLException e) {
-            assertEquals(SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC.getErrorCode(),
-                    e.getErrorCode());
-            assertTrue(e.getMessage().endsWith(
-                    SQLExceptionCode.INVALID_TABLE_TYPE_FOR_CDC.getMessage() + " tableType=VIEW"));
-        }
-
-        cdcName = generateUniqueName();
-        conn.createStatement().execute("CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP()) SALT_BUCKETS = 4");
-        assertSaltBuckets(cdcName, 4);
 
         conn.close();
     }
@@ -203,8 +198,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 " (tenantId INTEGER NOT NULL, k INTEGER NOT NULL," + " v1 INTEGER, v2 DATE, " +
                 "CONSTRAINT pk PRIMARY KEY (tenantId, k)) MULTI_TENANT=true");
         String cdcName = generateUniqueName();
-        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
-                "(PHOENIX_ROW_TIMESTAMP())");
+        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName);
 
         PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
         List<PColumn> idxPkColumns = indexTable.getPKColumns();
@@ -214,7 +208,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
         List<PColumn> cdcPkColumns = cdcTable.getPKColumns();
-        assertEquals(" PHOENIX_ROW_TIMESTAMP()", cdcPkColumns.get(0).getName().getString());
+        assertEquals("PHOENIX_ROW_TIMESTAMP()", cdcPkColumns.get(0).getName().getString());
         assertEquals("TENANTID", cdcPkColumns.get(1).getName().getString());
         assertEquals("K", cdcPkColumns.get(2).getName().getString());
     }
@@ -260,8 +254,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
                         + " v2 DATE)");
         String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
         conn.createStatement().execute(cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
         String drop_cdc_index_sql = "DROP INDEX \"" + CDCUtil.getCDCIndexName(cdcName) + "\" ON " + tableName;
@@ -291,28 +284,33 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         rs.close();
     }
 
+    private Connection newConnection() throws SQLException {
+        Properties props = new Properties();
+        // Use these only for debugging.
+        //props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        //props.put("hbase.client.scanner.timeout.period", "6000000");
+        //props.put("phoenix.query.timeoutMs", "6000000");
+        //props.put("zookeeper.session.timeout", "6000000");
+        //props.put("hbase.rpc.timeout", "6000000");
+        return DriverManager.getConnection(getUrl(), props);
+    }
+
     @Test
     public void testSelectCDC() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        props.put("hbase.client.scanner.timeout.period", "6000000");
-        props.put("phoenix.query.timeoutMs", "6000000");
-        props.put("zookeeper.session.timeout", "6000000");
-        props.put("hbase.rpc.timeout", "6000000");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = newConnection();
         String tableName = generateUniqueName();
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
         conn.commit();
-        Thread.sleep(1000);
+        Thread.sleep(10);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.commit();
         String cdcName = generateUniqueName();
         String cdc_sql = "CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
-        conn.createStatement().execute(cdc_sql);
+                + " ON " + tableName;
+        createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
         // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
         //      if (<table>.getTableName().getString().equals("N000002") ||
@@ -322,8 +320,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName));
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
                 " WHERE PHOENIX_ROW_TIMESTAMP() < NOW()"));
-        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ INCLUDE(PRE, POST) */ * " +
-                "FROM " + cdcName));
+        assertResultSet(conn.createStatement().executeQuery("SELECT " +
+                "/*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName));
         assertResultSet(conn.createStatement().executeQuery("SELECT " +
                 "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName));
 
@@ -359,16 +357,79 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testSelectCDCBadIncludeSpec() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC  " + cdcName
+                + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        try {
+            conn.createStatement().executeQuery("SELECT " +
+                    "/*+ CDC_INCLUDE(DUMMY) */ * FROM " + cdcName);
+            fail("Expected to fail due to invalid CDC INCLUDE hint");
+        }
+        catch (SQLException e) {
+            assertEquals(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE.getErrorCode(),
+                    e.getErrorCode());
+            assertTrue(e.getMessage().endsWith("DUMMY"));
+        }
+    }
+
+    @Test
+    public void testSelectTimeRangeQueries() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName;
+        conn.createStatement().execute(cdc_sql);
+        Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
+        conn.commit();
+        Thread.sleep(10);
+        Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (3, 300)");
+        conn.commit();
+        Thread.sleep(10);
+        Timestamp ts3 = new Timestamp(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k = 2");
+        Timestamp ts4 = new Timestamp(System.currentTimeMillis());
+
+        String sel_sql = "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND " +
+                "PHOENIX_ROW_TIMESTAMP() <= ?";
+        Object[] testDataSets = new Object[] {
+                new Object[] {ts1, ts2, new int[] {1, 2}}/*,
+                new Object[] {ts2, ts3, new int[] {1, 3}},
+                new Object[] {ts3, ts4, new int[] {1}}*/
+        };
+        PreparedStatement stmt = conn.prepareStatement(sel_sql);
+        for (int i = 0; i < testDataSets.length; ++i) {
+            Object[] testData = (Object[]) testDataSets[i];
+            stmt.setTimestamp(1, (Timestamp) testData[0]);
+            stmt.setTimestamp(2, (Timestamp) testData[1]);
+            try (ResultSet rs = stmt.executeQuery()) {
+                for (int k:  (int[]) testData[2]) {
+                    assertEquals(true, rs.next());
+                    assertEquals(k, rs.getInt(2));
+                }
+                assertEquals(false, rs.next());
+            }
+        }
+    }
+
     // Temporary test case used as a reference for debugging and comparing against the CDC query.
     @Test
     public void testSelectUncoveredIndex() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        props.put("hbase.client.scanner.timeout.period", "6000000");
-        props.put("phoenix.query.timeoutMs", "6000000");
-        props.put("zookeeper.session.timeout", "6000000");
-        props.put("hbase.rpc.timeout", "6000000");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = newConnection();
         String tableName = generateUniqueName();
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " (k INTEGER PRIMARY KEY, v1 INTEGER)");
