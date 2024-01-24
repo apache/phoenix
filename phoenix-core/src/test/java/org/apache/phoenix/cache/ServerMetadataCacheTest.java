@@ -1293,6 +1293,30 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Test that a client can not create an index on a column after another client dropped the column.
+     */
+    @Test
+    public void testClientCannotCreateIndexOnDroppedColumn() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+            createTable(conn1, tableName, NEVER);
+            alterTableDropColumn(conn2, tableName, "v2");
+            createIndex(conn1, tableName, indexName, "v2");
+            fail("Client should not be able to create index on dropped column.");
+        }
+        catch (ColumnNotFoundException expected) {
+        }
+    }
+
+    /**
      * Test that upserts into a view whose parent was dropped throws a TableNotFoundException.
      */
     @Test
