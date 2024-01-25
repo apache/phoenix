@@ -108,6 +108,11 @@ public class ValidateLastDDLTimestampUtil {
                     = getValidateDDLTimestampRequest(conn, tableRefs);
             service.validateLastDDLTimestamp(null, request);
         } catch (Exception e) {
+            // throw the Exception if a table was not found when forming the request
+            // so that we can update cache and retry
+            if (e instanceof TableNotFoundException) {
+                throw (TableNotFoundException)e;
+            }
             SQLException parsedException = ClientUtil.parseServerException(e);
             if (parsedException instanceof StaleMetadataCacheException) {
                 throw parsedException;
@@ -158,6 +163,7 @@ public class ValidateLastDDLTimestampUtil {
 
             // add the tableRef to the request
             // skip if it is an inherited view index, we would have added parent in previous step
+            // TODO: add the parent index.
             if (!tableRef.getTable().getName().getString()
                     .contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();

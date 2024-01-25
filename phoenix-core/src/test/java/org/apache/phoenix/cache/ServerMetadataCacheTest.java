@@ -823,6 +823,30 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Test that a client does not see TableNotFoundException when trying to validate
+     * LAST_DDL_TIMESTAMP for a view and its parent after the table was altered and removed from
+     * the client's cache.
+     */
+    @Test
+    public void testQueryViewAfterParentRemovedFromCache() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config);
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        try (Connection conn = cqs.connect(url, props)) {
+            createTable(conn, tableName, NEVER);
+            createView(conn, tableName, viewName);
+            query(conn, viewName);
+            // this removes the parent table from the client cache
+            alterTableDropColumn(conn, tableName, "v2");
+            query(conn, viewName);
+        } catch (TableNotFoundException e) {
+            fail("TableNotFoundException should not be encountered by client.");
+        }
+    }
+
+    /**
      * Test query on index with stale last ddl timestamp.
      * Client-1 creates a table and an index on it. Client-2 queries table to populate its cache.
      * Client-1 alters a property on the index. Client-2 queries the table again.
