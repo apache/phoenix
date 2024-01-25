@@ -666,12 +666,20 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
      * The index update generation for local indexes uses the existing index update generation code (i.e.,
      * the {@link IndexBuilder} implementation).
      */
-    private void handleLocalIndexUpdates(TableName table,
+    private void handleLocalIndexUpdates(ObserverContext<RegionCoprocessorEnvironment> c,
+                                         TableName table,
                                          MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                         BatchMutateContext context,
                                          Collection<? extends Mutation> pendingMutations,
-                                         PhoenixIndexMetaData indexMetaData) throws Throwable {
-        ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
-        this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations, indexMetaData);
+                                         PhoenixIndexMetaData indexMetaData,
+                                         long ts) throws Throwable {
+        long start = EnvironmentEdgeManager.currentTimeMillis();
+        ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates =
+            prepareLocalIndex(c, table, context, indexMetaData.getIndexMaintainers(), ts);
+        // this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations, indexMetaData);
+        metricSource.updateIndexPrepareTime(dataTableName,
+            EnvironmentEdgeManager.currentTimeMillis() - start);
+
         byte[] tableName = table.getName();
         HTableInterfaceReference hTableInterfaceReference =
                 new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
@@ -689,6 +697,83 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
             miniBatchOp.addOperationsFromCP(0, localUpdates.toArray(new Mutation[localUpdates.size()]));
         }
     }
+
+  private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> prepareLocalIndex(
+      ObserverContext<RegionCoprocessorEnvironment> c, TableName table, BatchMutateContext context,
+      List<IndexMaintainer> maintainers, long ts)
+      throws IOException {
+    ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates = ArrayListMultimap
+        .create();
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = new ArrayList<>(maintainers.size());
+    byte[] tableName = table.getName();
+    HTableInterfaceReference targetHTableInterfaceReference =
+        new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
+    for (IndexMaintainer indexMaintainer : maintainers) {
+      if (!indexMaintainer.isLocalIndex()) {
+        continue;
+      }
+      HTableInterfaceReference hTableInterfaceReference =
+          new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+      indexTables.add(new Pair<>(indexMaintainer, hTableInterfaceReference));
+    }
+    for (Map.Entry<ImmutableBytesPtr, Pair<Put, Put>> entry : context.dataRowStates.entrySet()) {
+      ImmutableBytesPtr rowKeyPtr = entry.getKey();
+      Pair<Put, Put> dataRowState =  entry.getValue();
+      Put currentDataRowState = dataRowState.getFirst();
+      Put nextDataRowState = dataRowState.getSecond();
+      if (currentDataRowState == null && nextDataRowState == null) {
+        continue;
+      }
+      for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
+        IndexMaintainer indexMaintainer = pair.getFirst();
+
+        if (nextDataRowState != null) {
+          ValueGetter nextDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(nextDataRowState);
+          Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+              nextDataRowVG, rowKeyPtr, ts, c.getEnvironment().getRegionInfo().getStartKey(),
+              c.getEnvironment().getRegionInfo().getEndKey(), false);
+          if (indexPut == null) {
+            // No covered column. Just prepare an index row with the empty column
+            byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr,
+                c.getEnvironment().getRegionInfo().getStartKey(),
+                c.getEnvironment().getRegionInfo().getEndKey(), ts);
+            indexPut = new Put(indexRowKey);
+          } else {
+            removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+                indexMaintainer.getEmptyKeyValueQualifier());
+          }
+          indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+              indexMaintainer.getEmptyKeyValueQualifier(), ts, QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+          indexUpdates.put(targetHTableInterfaceReference,
+              new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
+          // Delete the current index row if the new index key is different than the current one
+          if (currentDataRowState != null) {
+            ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
+            byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
+                c.getEnvironment().getRegionInfo().getStartKey(),
+                c.getEnvironment().getRegionInfo().getEndKey(), ts);
+            if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
+              Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                  IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+              indexUpdates.put(targetHTableInterfaceReference,
+                  new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
+            }
+          }
+        } else if (currentDataRowState != null) {
+          ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
+          byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
+              c.getEnvironment().getRegionInfo().getStartKey(),
+              c.getEnvironment().getRegionInfo().getEndKey(), ts);
+          Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+              IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+          indexUpdates.put(targetHTableInterfaceReference,
+              new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
+        }
+      }
+    }
+    return indexUpdates;
+  }
+
     /**
      * Retrieve the the last committed data row state. This method is called only for regular data mutations since for
      * rebuild (i.e., index replay) mutations include all row versions.
@@ -1020,7 +1105,8 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
         if (hasLocalIndex(indexMetaData)) {
             // Group all the updates for a single row into a single update to be processed (for local indexes)
             Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
-            handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData);
+            prepareDataRowStates(c, miniBatchOp, context, now);
+            handleLocalIndexUpdates(c, table, miniBatchOp, context, mutations, indexMetaData, now);
         }
         if (failDataTableUpdatesForTesting) {
             throw new DoNotRetryIOException("Simulating the data table write failure");
