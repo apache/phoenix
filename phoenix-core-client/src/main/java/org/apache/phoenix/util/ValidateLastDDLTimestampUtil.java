@@ -162,14 +162,9 @@ public class ValidateLastDDLTimestampUtil {
             }
 
             // add the tableRef to the request
-            // skip if it is an inherited view index, we would have added parent in previous step
-            // TODO: add the parent index.
-            if (!tableRef.getTable().getName().getString()
-                    .contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-                innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                setLastDDLTimestampRequestParameters(conn, innerBuilder, tableRef.getTable());
-                requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-            }
+            innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+            setLastDDLTimestampRequestParameters(conn, innerBuilder, tableRef.getTable());
+            requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
             //when querying a view, we need to validate last ddl timestamps for all its ancestors
             if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
