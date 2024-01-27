@@ -1458,16 +1458,24 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that a query on the column of a view which was previously dropped
+     * throws a ColumnNotFoundException. Use the same client to drop the column.
+     */
     @Test
     public void testDroppedTableColumnNotVisibleToViewUsingSameClient() throws Exception {
         testDroppedTableColumnNotVisibleToView(true);
     }
 
+    /**
+     * Test that a query on the column of a view which was previously dropped
+     * throws a ColumnNotFoundException. Use a different client to drop the column.
+     */
     @Test
     public void testDroppedTableColumnNotVisibleToViewUsingDifferentClients() throws Exception {
         testDroppedTableColumnNotVisibleToView(false);
     }
-    
+
     public void testDroppedTableColumnNotVisibleToView(boolean useSameClient) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
