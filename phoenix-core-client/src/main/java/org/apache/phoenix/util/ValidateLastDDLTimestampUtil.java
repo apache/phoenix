@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -161,17 +162,16 @@ public class ValidateLastDDLTimestampUtil {
             requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
             //when querying a view, we need to validate last ddl timestamps for all its ancestors
+            //use the ancestorLastDDLTimestampMap in the view PTable
             if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
-                PTable pTable = tableRef.getTable();
-                while (pTable.getParentName() != null) {
-                    PTableKey key = new PTableKey(conn.getTenantId(),
-                            pTable.getParentName().getString());
-                    PTable parentTable = conn.getTable(key);
+                for (Map.Entry<PTableKey, Long> entry :
+                        tableRef.getTable().getAncestorLastDDLTimestampMap().entrySet()) {
                     innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+                    PTable ancestorTable = conn.getTable(entry.getKey());
                     setLastDDLTimestampRequestParameters(
-                            innerBuilder, conn.getTenantId(), parentTable);
+                            innerBuilder, ancestorTable.getTenantId(), ancestorTable);
+                    innerBuilder.setLastDDLTimestamp(entry.getValue());
                     requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-                    pTable = parentTable;
                 }
             }
 

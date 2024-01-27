@@ -1458,6 +1458,41 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testDroppedTableColumnNotVisibleToViewUsingSameClient() throws Exception {
+        testDroppedTableColumnNotVisibleToView(true);
+    }
+
+    @Test
+    public void testDroppedTableColumnNotVisibleToViewUsingDifferentClients() throws Exception {
+        testDroppedTableColumnNotVisibleToView(false);
+    }
+    
+    public void testDroppedTableColumnNotVisibleToView(boolean useSameClient) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
+        try (Connection conn = cqs1.connect(url1, props);
+             Connection conn2 = useSameClient ? conn : cqs2.connect(url2, props)) {
+            createTable(conn, tableName, NEVER);
+            createView(conn, tableName, viewName1);
+            createView(conn, viewName1, viewName2);
+            query(conn2, viewName2);
+
+            alterTableDropColumn(conn, tableName, "v2");
+            query(conn2, tableName);
+
+            conn2.createStatement().execute("SELECT v2 FROM " + viewName2);
+            fail("Column dropped from base table should not be visible to view.");
+        } catch (ColumnNotFoundException expected) {
+        }
+    }
+
     //Helper methods
     private long getLastDDLTimestamp(String tableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
