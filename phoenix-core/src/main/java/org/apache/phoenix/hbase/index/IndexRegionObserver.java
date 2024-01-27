@@ -749,7 +749,18 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
           // Delete the current index row if the new index key is different than the current one
           if (currentDataRowState != null) {
             ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
-            byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
+            // delete not exists cells in data table
+            List<Cell> batch = new ArrayList<>();
+            context.multiMutationMap.get(rowKeyPtr).getFamilyCellMap().values()
+                .forEach(batch::addAll);
+            Delete delete = indexMaintainer.buildDeleteMutation(null, currentDataRowVG, rowKeyPtr,
+                batch, ts, c.getEnvironment().getRegionInfo().getStartKey(),
+                c.getEnvironment().getRegionInfo().getEndKey());
+            if (delete != null) {
+              indexUpdates.put(targetHTableInterfaceReference, new Pair<Mutation, byte[]>(delete, rowKeyPtr.get()));
+            }
+
+/*            byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
                 c.getEnvironment().getRegionInfo().getStartKey(),
                 c.getEnvironment().getRegionInfo().getEndKey(), ts);
             if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
@@ -757,7 +768,7 @@ public class IndexRegionObserver extends CompatIndexRegionObserver implements Re
                   IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
               indexUpdates.put(targetHTableInterfaceReference,
                   new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
-            }
+            }*/
           }
         } else if (currentDataRowState != null) {
           ValueGetter currentDataRowVG = new GlobalIndexRegionScanner.SimpleValueGetter(currentDataRowState);
