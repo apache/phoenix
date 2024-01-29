@@ -118,6 +118,7 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -632,7 +633,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
-                                            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
+                                            MetaDataUtil.getMaxLookbackAge(table, c.getEnvironment().getConfiguration()),
                                             SchemaUtil.getEmptyColumnFamily(table),
                                             table.getEncodingScheme()
                                                     == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?

@@ -25,6 +25,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -1181,5 +1182,10 @@ public class MetaDataUtil {
         } finally {
             connection.setAutoCommit(isAutoCommit);
         }
+    }
+
+    public static long getMaxLookbackAge(PTable table, Configuration conf) {
+        return table.getMaxLookbackAge() != null ? table.getMaxLookbackAge() :
+                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
     }
 }

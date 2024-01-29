@@ -59,7 +59,9 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.schema.PTable;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
@@ -491,6 +493,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
     public static boolean isMaxLookbackTimeEnabled(long maxLookbackTime){
         return maxLookbackTime > 0L;
+    }
+
+    public static boolean isMaxLookbackTimeEnabled(PTable table, Configuration conf) {
+        return isMaxLookbackTimeEnabled(MetaDataUtil.getMaxLookbackAge(table, conf));
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {

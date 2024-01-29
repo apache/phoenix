@@ -61,6 +61,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.AdminProtos;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.compile.MutationPlan;
@@ -549,6 +550,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 							dataTableScan.setTimeRange(scanBeginTime, scanEndTime);
 							dataTableScan.setCacheBlocks(false);
 							dataTableScan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES, TRUE_BYTES);
+                            dataTableScan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE, Bytes.toBytes(dataPTable.getMaxLookbackAge()));
 
 							ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(
 									ByteUtil.EMPTY_BYTE_ARRAY);

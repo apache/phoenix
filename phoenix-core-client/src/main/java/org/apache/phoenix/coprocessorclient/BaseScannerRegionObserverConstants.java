@@ -136,6 +136,8 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
 
+    public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
+
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
     // In case of Index Write failure, we need to determine that Index mutation

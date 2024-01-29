@@ -271,6 +271,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
             // set CURRENT_SCN for our scan so that incoming writes don't throw off scrutiny
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE, Long.toString(ts));
+            PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pdataTable);
 
             // set the source table to either data or index table
             SourceTargetColumnNames columnNames =
@@ -420,8 +421,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
                             ? Long.parseLong(cmdLine.getOptionValue(TIMESTAMP.getOpt()))
                             : EnvironmentEdgeManager.currentTimeMillis() - 60000;
 
-            validateTimestamp(configuration, ts);
-
             if (indexTable != null) {
                 if (!IndexTool.isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
                     throw new IllegalArgumentException(String
@@ -473,6 +472,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 jobs.add(jobFactory.createSubmittableJob(schemaName, indexTable, dataTable,
                     sourceTable, mapperClass));
             }
+            validateTimestamp(configuration, ts);
 
             if (!isForeground) {
                 LOGGER.info("Running Index Scrutiny in Background - Submit async and exit");
@@ -518,7 +518,10 @@ public class IndexScrutinyTool extends Configured implements Tool {
     }
 
     private void validateTimestamp(Configuration configuration, long ts) {
-        long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
+        Configuration jobConf = this.jobs.get(0).getConfiguration();
+        Long tableLevelMaxLookbackAge = PhoenixConfigurationUtil.getMaxLookbackAge(jobConf);
+        long maxLookBackAge = tableLevelMaxLookbackAge != null ? tableLevelMaxLookbackAge :
+                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
         if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
             long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){

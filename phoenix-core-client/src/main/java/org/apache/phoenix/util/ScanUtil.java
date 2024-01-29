@@ -1322,6 +1322,8 @@ public class ScanUtil {
                                                   PhoenixConnection phoenixConnection) throws SQLException {
         setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
+        scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
+                Bytes.toBytes(table.getMaxLookbackAge()));
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
         if (emptyCF != null && emptyCQ != null) {

@@ -167,7 +167,9 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
             LOGGER.info("Target table base query: " + targetTableQuery);
             md5 = MessageDigest.getInstance("MD5");
             ttl = getTableTtl();
-            maxLookbackAgeMillis = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
+            Long tableLevelMaxLookbackAge = PhoenixConfigurationUtil.getMaxLookbackAge(configuration);
+            maxLookbackAgeMillis = tableLevelMaxLookbackAge != null ? tableLevelMaxLookbackAge :
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
         } catch (SQLException | NoSuchAlgorithmException e) {
             tryClosingResourceSilently(this.outputUpsertStmt);
             tryClosingResourceSilently(this.connection);
