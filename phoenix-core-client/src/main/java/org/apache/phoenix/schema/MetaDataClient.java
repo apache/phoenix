@@ -969,7 +969,7 @@ public class MetaDataClient {
         ancestorMap.put(
                 new PTableKey(parentTable.getTenantId(), parentTable.getName().getString()),
                 parentTable.getLastDDLTimestamp());
-        return PTableImpl.builderWithColumns(pTable, pTable.getColumns())
+        return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
                 .setAncestorLastDDLTimestampMap(ancestorMap)
                 .build();
     }
