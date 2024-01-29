@@ -486,6 +486,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //          "".isEmpty();
         //      }
 
+
 //        String cdc_sql = "CREATE CDC " + cdcName
 //                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
 //        conn.createStatement().execute(cdc_sql);
@@ -496,10 +497,9 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 //            assertEquals(false, rs.next());
 //        }
 
-
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
-                " WHERE PHOENIX_ROW_TIMESTAMP() < NOW()"), null);
+                " WHERE \" PHOENIX_ROW_TIMESTAMP()\" < NOW()"), null);
         assertResultSet(conn.createStatement().executeQuery("SELECT /*+ INCLUDE(PRE, POST) */ * " +
                 "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
                         Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
@@ -634,6 +634,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         conn.commit();
         Thread.sleep(1000);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 101, NULL, NULL)");
+        conn.commit();
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
 //        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");

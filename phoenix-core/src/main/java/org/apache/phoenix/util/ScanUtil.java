@@ -19,15 +19,7 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_NAME_MAP;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_TYPE_MAP;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.*;
 import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
@@ -40,16 +32,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NavigableSet;
-import java.util.TreeMap;
+import java.util.*;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -74,6 +57,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessor.generated.CDCInfoProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -89,6 +73,7 @@ import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -1332,19 +1317,93 @@ public class ScanUtil {
             scan.setAttribute(CDC_INCLUDE_SCOPES,
                     context.getEncodedCdcIncludeScopes().getBytes(StandardCharsets.UTF_8));
             CDCUtil.initForRawScan(scan);
-            List<PColumn> columns = dataTable.getColumns();
-            Map<byte[], String> dataColQualNameMap = new HashMap<>(columns.size());
-            Map<byte[], PDataType> dataColTypeMap = new HashMap<>();
-            for (PColumn col: columns) {
-                if (col.getColumnQualifierBytes() != null) {
-                    dataColQualNameMap.put(col.getColumnQualifierBytes(), col.getName().getString());
-                    dataColTypeMap.put(col.getColumnQualifierBytes(), col.getDataType());
+
+            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(dataTable).toByteArray());
+        }
+    }
+
+    public static byte[] serializeColumns(PTable table) {
+        List<PColumn> columns = table.getColumns();
+        Collections.sort(columns, new Comparator<PColumn>() {
+            @Override
+            public int compare(PColumn column1, PColumn column2) {
+                byte[] column1FamilyNameBytes = column1.getFamilyName() == null
+                        ? table.getDefaultFamilyName().getBytes()
+                        : column1.getFamilyName().getBytes();
+                byte[] column2FamilyNameBytes = column2.getFamilyName() == null
+                        ? table.getDefaultFamilyName().getBytes()
+                        : column2.getFamilyName().getBytes();
+                int familyNameComparison = Arrays.compare(column1FamilyNameBytes, column2FamilyNameBytes);
+                if (familyNameComparison != 0) {
+                    return familyNameComparison;
                 }
+                return Arrays.compare(column1.getColumnQualifierBytes(), column2.getColumnQualifierBytes());
             }
-            scan.setAttribute(DATA_COL_QUALIFIER_TO_NAME_MAP,
-                    serializeColumnQualifierToNameMap(dataColQualNameMap));
-            scan.setAttribute(DATA_COL_QUALIFIER_TO_TYPE_MAP,
-                    serializeColumnQualifierToTypeMap(dataColTypeMap));
+        });
+        int nColumns = 0;
+        for (PColumn column: columns) {
+            if (column.getColumnQualifierBytes() != null) {
+                nColumns += 1;
+            }
+        }
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        DataOutputStream output = new DataOutputStream(stream);
+        try {
+            output.writeInt(nColumns);
+            byte[] defaultFamilyNameBytes = table.getDefaultFamilyName().getBytes();
+            output.writeInt(defaultFamilyNameBytes.length);
+            output.write(defaultFamilyNameBytes);
+            for (PColumn column: columns) {
+                byte[] qualifierBytes = column.getColumnQualifierBytes();
+                if (qualifierBytes == null) {
+                    continue;
+                }
+                if (column.getFamilyName() == null) {
+                    output.writeInt(0);
+                } else {
+                    byte[] familyNameBytes = column.getFamilyName().getBytes();
+                    output.writeInt(familyNameBytes.length);
+                    output.write(familyNameBytes);
+                }
+                output.writeInt(qualifierBytes.length);
+                output.write(qualifierBytes);
+                WritableUtils.writeString(output, column.getName().getString());
+                WritableUtils.writeString(output, column.getDataType().getSqlTypeName());
+            }
+            return stream.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static byte[] readByteArray(DataInputStream input) throws IOException {
+        int length = input.readInt();
+        byte[] bytes = new byte[length];
+        int bytesRead = input.read(bytes);
+        if (bytesRead != length) {
+            throw new IOException("Expected number of bytes: " + length + " but got " +
+                    "only: " + bytesRead);
+        }
+        return bytes;
+    }
+
+    public static List<Object[]> deserializeColumns(byte[] columnBytes) {
+        ByteArrayInputStream stream = new ByteArrayInputStream(columnBytes);
+        DataInputStream input = new DataInputStream(stream);
+        try {
+            int size = input.readInt();
+            List<Object[]> columnList = new ArrayList<>(size);
+            for (int i = 0; i < size; ++i) {
+                Object[] columnObj = new Object[4];
+                columnObj[0] = readByteArray(input);
+                columnObj[1] = readByteArray(input);
+                columnObj[2] = WritableUtils.readString(input);
+                columnObj[3] = PDataType.fromSqlTypeName(WritableUtils.readString(input));
+                columnList.add(columnObj);
+            }
+            return columnList;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
