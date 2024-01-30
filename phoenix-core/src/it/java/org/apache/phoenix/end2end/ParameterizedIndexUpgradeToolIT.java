@@ -87,9 +87,9 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private static final String [] TABLE_LIST_NAMESPACE_SIMPLIFIED = new String[1];
 
     private static final String [] TRANSACTIONAL_TABLE_LIST = new String[1];
-
+    private static String tmpDir = System.getProperty("java.io.tmpdir");
     private static String INPUT_LIST = "";
-    private static final String INPUT_FILE = "/tmp/input_file_index_upgrade.csv";
+    private static final String INPUT_FILE = tmpDir + "/input_file_index_upgrade.csv";
 
     private static Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1),
             clientProps = Maps.newHashMapWithExpectedSize(1);
@@ -105,7 +105,6 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private Connection connTenant;
     private Admin admin;
     private IndexUpgradeTool iut;
-    private static String tmpDir = System.getProperty("java.io.tmpdir");;
 
     @Mock
     private IndexTool indexToolMock;
@@ -305,7 +304,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         conn.createStatement().execute("ALTER INDEX " + indexTwoMockOne + " ON " + mockTableOne +
             " DISABLE");
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+            null, tmpDir + "/index_upgrade_" + UUID.randomUUID().toString(),
             true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);
@@ -348,7 +347,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             " (sal, a.name)");
         conn.commit();
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+            null, tmpDir + "/index_upgrade_" + UUID.randomUUID().toString(),
             true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);

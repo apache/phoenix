@@ -88,6 +88,7 @@ import static org.junit.Assert.fail;
 public class TransformToolIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(TransformToolIT.class);
     private final String tableDDLOptions;
+    private static final String filePath = System.getProperty("java.io.tmpdir");
 
     @Parameterized.Parameters(
             name = "mutable={0}")
@@ -342,7 +343,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             args.add("--autosplit=3");
 
             args.add("-op");
-            args.add("/tmp/" + UUID.randomUUID().toString());
+            args.add(filePath + "/" + UUID.randomUUID().toString());
 
             runTransformTool(args.toArray(new String[0]), 0);
 
@@ -1149,7 +1150,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
         }
 
         args.add("-op");
-        args.add("/tmp/" + UUID.randomUUID().toString());
+        args.add(filePath + "/" + UUID.randomUUID().toString());
         // Need to run this job in foreground for the test to be deterministic
         args.add("-runfg");
 
@@ -1190,7 +1191,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
         List<String> args = getArgList(schemaName, dataTable, indexTable,
                 tenantId, startTime, endTime, false, false, false, false, false);
         args.add("-op");
-        args.add("/tmp/" + UUID.randomUUID().toString());
+        args.add(filePath + "/" + UUID.randomUUID().toString());
         return args.toArray(new String[0]);
     }
 
@@ -1200,7 +1201,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
                 indexTableName, tenantId, 0L, 0L);
         List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
         cmdArgList.add("-op");
-        cmdArgList.add("/tmp/" + UUID.randomUUID().toString());
+        cmdArgList.add(filePath + "/" + UUID.randomUUID().toString());
 
         cmdArgList.addAll(Arrays.asList(additionalArgs));
         return runTransformTool(cmdArgList.toArray(new String[cmdArgList.size()]), expectedStatus);

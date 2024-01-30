@@ -68,11 +68,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final long grandChildCount = fanout * fanout;
     private static final long grandGrandChildCount = fanout * fanout * fanout;
 
-    private static final String filePath = "/tmp/";
-    private static final String viewFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.VIEW];
-    private static final String physicalLinkFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
-    private static final String parentLinkFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
-    private static final String childLinkFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
+    private static final String filePath = System.getProperty("java.io.tmpdir");
+    private static final String viewFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.VIEW];
+    private static final String physicalLinkFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
+    private static final String parentLinkFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
+    private static final String childLinkFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
 
     protected static String SCHEMA1 = "SCHEMA1";
     protected static String SCHEMA2 = "SCHEMA2";
