@@ -84,6 +84,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameImpl;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
@@ -1378,6 +1379,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        String index2 = generateUniqueName();
         String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
         String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String tenant1 = TENANT1;
@@ -1387,6 +1389,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                          view1(tenant1)    view3(tenant2)          view4(global)
                           /
                         view2(tenant1)
+                        /
+                    index2(tenant1)
         */
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
@@ -1399,6 +1403,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
                 String view2DDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + view1;
                 tenant1Conn.createStatement().execute(view2DDL);
+
+                tenant1Conn.createStatement().execute("CREATE INDEX " + index2 + " ON " + view2 + "(V1)");
             }
 
             try (Connection tenant2Conn = getTenantConnection(tenant2)) {
@@ -1440,6 +1446,14 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 assertEquals(2, map.size());
                 assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
                 assertEquals(view1PTable.getLastDDLTimestamp(), map.get(view1Key));
+                //tenant1 child view index
+                PTable view2PTable = PhoenixRuntime.getTable(tenant1Conn, view2);
+                PTableKey view2Key = new PTableKey(view2PTable.getTenantId(), view2);
+                assertEquals(1, view2PTable.getIndexes().size());
+                map = view2PTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
+                assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
+
             }
         }
     }
