@@ -495,8 +495,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    public static boolean isMaxLookbackTimeEnabled(PTable table, Configuration conf) {
-        return isMaxLookbackTimeEnabled(MetaDataUtil.getMaxLookbackAge(table, conf));
+    public static boolean isMaxLookbackTimeEnabled(Configuration conf, PTable table) {
+        return isMaxLookbackTimeEnabled(MetaDataUtil.getMaxLookbackAge(conf, table));
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {

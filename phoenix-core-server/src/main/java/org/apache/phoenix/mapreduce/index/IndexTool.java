@@ -480,9 +480,11 @@ public class IndexTool extends Configured implements Tool {
 
         public Job getJob() throws Exception {
             if (isPartialBuild) {
+                // TODO: Check whether we need to set max lookback age in config in this case
                 return configureJobForPartialBuild();
             } else {
                 long maxTimeRange = pIndexTable.getTimeStamp() + 1;
+                PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pIndexTable);
                 // this is set to ensure index tables remains consistent post population.
                 if (pDataTable.isTransactional()) {
                     configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,

@@ -578,6 +578,7 @@ public class TransformTool extends Configured implements Tool {
 
         PhoenixConfigurationUtil.setPhysicalTableName(configuration, pNewTable.getPhysicalName().getString());
         PhoenixConfigurationUtil.setIsTransforming(configuration, true);
+        PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pNewTable);
         Path outputPath = null;
         org.apache.hadoop.fs.FileSystem fs;
         if (basePath != null) {

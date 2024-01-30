@@ -1184,8 +1184,12 @@ public class MetaDataUtil {
         }
     }
 
-    public static long getMaxLookbackAge(PTable table, Configuration conf) {
-        return table.getMaxLookbackAge() != null ? table.getMaxLookbackAge() :
+    public static long getMaxLookbackAge(Configuration conf, PTable table) {
+        return getMaxLookbackAge(conf, table.getMaxLookbackAge());
+    }
+
+    public static long getMaxLookbackAge(Configuration conf, Long maxLookbackAge) {
+        return maxLookbackAge != null ? maxLookbackAge :
                 BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
     }
 }

@@ -49,6 +49,7 @@ import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -114,6 +115,8 @@ public class PhoenixTransformRepairMapper extends TableMapper<ImmutableBytesWrit
                 buildNewTableScan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
                 buildNewTableScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, maintainers.get());
                 buildNewTableScan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES, TRUE_BYTES);
+                ScanUtil.setScanAttributeForMaxLookbackAge(buildNewTableScan,
+                        PhoenixConfigurationUtil.getMaxLookbackAge(context.getConfiguration()));
                 buildNewTableScan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
                 IndexMaintainer transformMaintainer = TransformMaintainer.deserialize(maintainers.get()).get(0);
 

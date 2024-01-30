@@ -59,6 +59,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -519,9 +520,8 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
     private void validateTimestamp(Configuration configuration, long ts) {
         Configuration jobConf = this.jobs.get(0).getConfiguration();
-        Long tableLevelMaxLookbackAge = PhoenixConfigurationUtil.getMaxLookbackAge(jobConf);
-        long maxLookBackAge = tableLevelMaxLookbackAge != null ? tableLevelMaxLookbackAge :
-                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
+        long maxLookBackAge = MetaDataUtil.getMaxLookbackAge(configuration,
+                PhoenixConfigurationUtil.getMaxLookbackAge(jobConf));
         if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
             long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){

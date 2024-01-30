@@ -1322,8 +1322,7 @@ public class ScanUtil {
                                                   PhoenixConnection phoenixConnection) throws SQLException {
         setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
-        scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
-                Bytes.toBytes(table.getMaxLookbackAge()));
+        setScanAttributeForMaxLookbackAge(scan, table);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
         if (emptyCF != null && emptyCQ != null) {
@@ -1616,5 +1615,21 @@ public class ScanUtil {
             }
         }
         return null;
+    }
+
+    public static void setScanAttributeForMaxLookbackAge(Scan scan, PTable table) {
+        setScanAttributeForMaxLookbackAge(scan, table.getMaxLookbackAge());
+    }
+
+    public static void setScanAttributeForMaxLookbackAge(Scan scan, Long maxLookbackAge) {
+        if (maxLookbackAge != null) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
+                    Bytes.toBytes(maxLookbackAge));
+        }
+    }
+
+    public static Long getMaxLookbackAgeFromScanAttribute(Scan scan) {
+        byte[] maxLookbackAge = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
+        return maxLookbackAge != null ? Bytes.toLong(maxLookbackAge) : null;
     }
 }
