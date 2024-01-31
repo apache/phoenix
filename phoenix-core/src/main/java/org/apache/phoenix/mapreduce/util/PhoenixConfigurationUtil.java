@@ -111,9 +111,15 @@ public final class PhoenixConfigurationUtil {
     /** Configuration key for the class name of an ImportPreUpsertKeyValueProcessor */
     public static final String UPSERT_HOOK_CLASS_CONFKEY = "phoenix.mapreduce.import.kvprocessor";
 
+    @Deprecated
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
-    
+
+    @Deprecated
     public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoneix.mapreduce.output.cluster.quorum";
+
+    public static final String MAPREDUCE_INPUT_CLUSTER_URL = "phoenix.mapreduce.input.cluster.url";
+
+    public static final String MAPREDUCE_OUTPUT_CLUSTER_URL = "phoenix.mapreduce.output.cluster.url";
 
     public static final String INDEX_DISABLED_TIMESTAMP_VALUE = "phoenix.mr.index.disableTimestamp";
 
@@ -369,6 +375,7 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will read from
      */
+    @Deprecated
     public static void setInputCluster(final Configuration configuration,
             final String quorum) {
         Preconditions.checkNotNull(configuration);
@@ -380,12 +387,35 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will write to
      */
+    @Deprecated
     public static void setOutputCluster(final Configuration configuration,
             final String quorum) {
         Preconditions.checkNotNull(configuration);
         configuration.set(MAPREDUCE_OUTPUT_CLUSTER_QUORUM, quorum);
     }
-        
+
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should read from
+     * @param configuration
+     * @param url Phoenix JDBC URL
+     */
+    public static void setInputClusterUrl(final Configuration configuration,
+            final String url) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(PhoenixConfigurationUtil.MAPREDUCE_INPUT_CLUSTER_URL, url);
+    }
+
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should write to
+     * @param configuration
+     * @param url Phoenix JDBC URL string for HBase cluster the MapReduce job will write to
+     */
+    public static void setOutputClusterUrl(final Configuration configuration,
+            final String url) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(PhoenixConfigurationUtil.MAPREDUCE_OUTPUT_CLUSTER_URL, url);
+    }
+
     public static Class<?> getInputClass(final Configuration configuration) {
         return configuration.getClass(INPUT_CLASS, NullDBWritable.class);
     }
@@ -588,10 +618,30 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         String quorum = configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
         if (quorum == null) {
+            quorum = configuration.get(HConstants.CLIENT_ZOOKEEPER_QUORUM);
+        }
+        if (quorum == null) {
             quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
         }
         return quorum;
     }
+
+    /**
+     * Returns the Phoenix JDBC URL a Phoenix MapReduce job will read
+     * from. If MAPREDUCE_INPUT_CLUSTER_URL is not set, then it returns the value of
+     * "jdbc:phoenix"
+     * @param configuration
+     * @return URL string
+     */
+    public static String getInputClusterUrl(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String url = configuration.get(MAPREDUCE_INPUT_CLUSTER_URL);
+        if (url == null) {
+            url = PhoenixRuntime.JDBC_PROTOCOL;
+        }
+        return url;
+    }
+
 
     /**
      * Returns the ZooKeeper quorum string for the HBase cluster a Phoenix MapReduce job will
@@ -599,9 +649,26 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @return ZooKeeper quorum string if defined, null otherwise
      */
+    @Deprecated
     public static String getInputClusterZkQuorum(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
+    }
+
+    /**
+     * Returns the Phoenix JDBC URL a Phoenix MapReduce job will write to.
+     * If MAPREDUCE_OUTPUT_CLUSTER_URL is not set, then it returns the value of
+     * "jdbc:phoenix"
+     * @param configuration
+     * @return URL string
+     */
+    public static String getOutputClusterUrl(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_URL);
+        if (quorum == null) {
+            quorum = PhoenixRuntime.JDBC_PROTOCOL;
+        }
+        return quorum;
     }
 
     /**
@@ -610,9 +677,11 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @return ZooKeeper quorum string if defined, null otherwise
      */
+    @Deprecated
     public static String getZKQuorum(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
-        return configuration.get(HConstants.ZOOKEEPER_QUORUM);
+        return configuration.get(HConstants.CLIENT_ZOOKEEPER_QUORUM,
+            configuration.get(HConstants.ZOOKEEPER_QUORUM));
     }
 
     /**
@@ -627,6 +696,9 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
         if (quorum == null) {
+            quorum = configuration.get(HConstants.CLIENT_ZOOKEEPER_QUORUM);
+        }
+        if (quorum == null) {
             quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
         }
         return quorum;
@@ -637,6 +709,7 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @return ZooKeeper quorum string if defined, null otherwise
      */
+    @Deprecated
     public static String getOutputClusterZkQuorum(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);

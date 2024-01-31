@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
-import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
-import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
-import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
@@ -28,10 +25,12 @@ import java.sql.DriverManager;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -45,10 +44,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
     private static final String ORIGINAL_CLUSTER_QUORUM = "myzookeeperhost";
     private static final String OVERRIDE_CLUSTER_QUORUM = "myoverridezookeeperhost";
 
-    // This is a hack that relies on the way The URL is re-constructed from Configuration to
-    // generate a Test connection for the MR jobs
-    protected static String TEST_ZK_QUORUM =
-            CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR + PHOENIX_TEST_DRIVER_URL_PARAM + JDBC_PROTOCOL_TERMINATOR;
+    protected static String TEST_URL = TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL;
 
     @Test
     /**
@@ -76,7 +72,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  AS SELECT * FROM " + tableName + "\n";
             conn.createStatement().execute(viewDdl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setOutputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setOutputTableName(configuration, viewName);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, viewName);
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration, new String[] {"A_STRING", "A_BINARY", "COL1"});
@@ -105,7 +101,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setOutputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setOutputTableName(configuration, tableName);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, tableName);
             PhoenixConfigurationUtil.setUpsertColumnNames(configuration, new String[] {"A_STRING", "A_BINARY", "COL1"});
@@ -132,7 +128,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setOutputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setOutputTableName(configuration, tableName);
             PhoenixConfigurationUtil.setPhysicalTableName(configuration, tableName);
             final String upserStatement = PhoenixConfigurationUtil.getUpsertStatement(configuration);
@@ -153,7 +149,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setInputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
             final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
             final String expectedSelectStatement = "SELECT \"A_STRING\" , \"A_BINARY\" , \"0\".\"COL1\" FROM " + tableName ;
@@ -175,7 +171,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setInputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setInputTableName(configuration, fullTableName);
             final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
             final String expectedSelectStatement = "SELECT \"A_STRING\" , \"A_BINARY\" , \"0\".\"COL1\" FROM " + fullTableName;
@@ -195,7 +191,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  CONSTRAINT pk PRIMARY KEY (a_string, a_binary))\n";
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setInputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setInputTableName(configuration, tableName);
             PhoenixConfigurationUtil.setSelectColumnNames(configuration, new String[]{"A_BINARY"});
             final String selectStatement = PhoenixConfigurationUtil.getSelectStatement(configuration);
@@ -215,7 +211,7 @@ public class PhoenixConfigurationUtilTest extends BaseConnectionlessQueryTest {
                     "  (ID BIGINT NOT NULL PRIMARY KEY, VCARRAY VARCHAR[])\n";
             conn.createStatement().execute(ddl);
             final Configuration configuration = new Configuration ();
-            configuration.set(HConstants.ZOOKEEPER_QUORUM, TEST_ZK_QUORUM);
+            PhoenixConfigurationUtil.setInputClusterUrl(configuration, TEST_URL);
             PhoenixConfigurationUtil.setSelectColumnNames(configuration,new String[]{"ID","VCARRAY"});
             PhoenixConfigurationUtil.setSchemaType(configuration, SchemaType.QUERY);
             PhoenixConfigurationUtil.setInputTableName(configuration, tableName);

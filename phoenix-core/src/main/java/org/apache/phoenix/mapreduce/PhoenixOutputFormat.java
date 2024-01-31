@@ -38,14 +38,13 @@ import org.slf4j.LoggerFactory;
  */
 public class PhoenixOutputFormat <T extends DBWritable> extends OutputFormat<NullWritable,T> {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixOutputFormat.class);
-    private final Set<String> propsToIgnore;
     
     public PhoenixOutputFormat() {
         this(Collections.<String>emptySet());
     }
     
+    // FIXME Never used, and the ignore feature didn't work anyway
     public PhoenixOutputFormat(Set<String> propsToIgnore) {
-        this.propsToIgnore = propsToIgnore;
     }
     
     @Override
@@ -63,7 +62,7 @@ public class PhoenixOutputFormat <T extends DBWritable> extends OutputFormat<Nul
     @Override
     public RecordWriter<NullWritable, T> getRecordWriter(TaskAttemptContext context) throws IOException, InterruptedException {
         try {
-            return new PhoenixRecordWriter<T>(context.getConfiguration(), propsToIgnore);
+            return new PhoenixRecordWriter<T>(context.getConfiguration());
         } catch (SQLException e) {
             LOGGER.error("Error calling PhoenixRecordWriter "  + e.getMessage());
             throw new RuntimeException(e);
