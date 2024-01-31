@@ -26,6 +26,7 @@ import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.tasks.TransformMonitorTask;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -545,7 +546,7 @@ public class TransformMonitorIT extends ParallelStatsDisabledIT {
             int numOfRows = 1;
             TransformToolIT.createTableAndUpsertRows(conn1, dataTableName, numOfRows, isImmutable ? " IMMUTABLE_ROWS=true" : "");
 
-            String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+            String url2 = ConnectionInfo.create(url, null, null).withPrincipal("LongRunningQueries").toUrl();
             try (Connection conn2 = DriverManager.getConnection(url2, PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
                 conn2.setAutoCommit(true);
                 TransformToolIT.upsertRows(conn2, dataTableName, 2, 1);
