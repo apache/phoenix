@@ -23,7 +23,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.phoenix.coprocessor.MetaDataProtocol.MutationCode;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PIndexState;

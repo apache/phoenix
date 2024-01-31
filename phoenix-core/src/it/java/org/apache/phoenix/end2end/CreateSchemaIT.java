@@ -31,9 +31,9 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SchemaAlreadyExistsException;
+import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -57,9 +57,9 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props);
                 Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();) {
             conn.createStatement().execute(ddl1);
-            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin, schemaName1));
+            assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin, schemaName1));
             conn.createStatement().execute(ddl2);
-            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin, schemaName2.toUpperCase()));
+            assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin, schemaName2.toUpperCase()));
         }
         // Try creating it again and verify that it throws SchemaAlreadyExistsException
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -97,9 +97,9 @@ public class CreateSchemaIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("CREATE SCHEMA \""
                     + SchemaUtil.HBASE_NAMESPACE.toUpperCase() + "\"");
 
-            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin,
+            assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin,
                 SchemaUtil.SCHEMA_FOR_DEFAULT_NAMESPACE.toUpperCase()));
-            assertTrue(ServerUtil.isHBaseNamespaceAvailable(admin,
+            assertTrue(ClientUtil.isHBaseNamespaceAvailable(admin,
                 SchemaUtil.HBASE_NAMESPACE.toUpperCase()));
         }
     }

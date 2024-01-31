@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.coprocessor.MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES;
+import static org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.junit.Assert.assertArrayEquals;
@@ -40,13 +40,12 @@ import org.apache.hadoop.hbase.TagUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SortOrder;

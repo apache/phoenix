@@ -54,10 +54,10 @@ import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -81,6 +81,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -97,7 +98,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
         /**
          * This test checks Table properties at ColumnFamilyDescriptor level, turing phoenix_table_ttl
@@ -1208,7 +1209,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 String val = htd.getValue("PRIORITY");
                 assertNotNull("PRIORITY is not set for table:" + htd, val);
                 assertTrue(Integer.parseInt(val)
-                        >= PhoenixRpcSchedulerFactory.getMetadataPriority(config));
+                        >= IndexUtil.getMetadataPriority(config));
             }
             Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
             String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA;
@@ -1232,7 +1233,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                     org.apache.hadoop.hbase.TableName.valueOf(fullIndexeName));
             val = indexTable.getValue("PRIORITY");
             assertNotNull("PRIORITY is not set for table:" + indexTable, val);
-            assertTrue(Integer.parseInt(val) >= PhoenixRpcSchedulerFactory.getIndexPriority(config));
+            assertTrue(Integer.parseInt(val) >= IndexUtil.getIndexPriority(config));
         }
     }
 

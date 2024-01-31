@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
-import org.apache.phoenix.coprocessor.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.CreateTableStatement;

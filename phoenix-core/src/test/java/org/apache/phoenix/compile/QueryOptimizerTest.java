@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.MAX_QUALIFIER;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.MIN_QUALIFIER;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.MAX_QUALIFIER;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.MIN_QUALIFIER;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.junit.Assert.assertEquals;

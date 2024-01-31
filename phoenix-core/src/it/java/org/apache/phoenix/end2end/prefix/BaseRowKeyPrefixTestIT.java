@@ -39,7 +39,7 @@ import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereOptimizer;
-import org.apache.phoenix.coprocessor.TableInfo;
+import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;

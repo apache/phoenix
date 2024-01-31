@@ -30,8 +30,6 @@
   <name>Phoenix - Pherf</name>
 
   <properties>
-    <shaded.package>org.apache.phoenix.shaded</shaded.package>
-
     <!-- Versions for pherf-only dependencies -->
     <diffutils.version>1.2.1</diffutils.version>
     <gson.version>2.9.1</gson.version>
@@ -95,13 +93,17 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.phoenix.thirdparty</groupId>
-      <artifactId>phoenix-shaded-guava</artifactId>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-core-server</artifactId>
     </dependency>
 
     <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-core</artifactId>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-guava</artifactId>
     </dependency>
 
     <dependency>
@@ -178,7 +180,8 @@
         <groupId>org.apache.logging.log4j</groupId>
         <artifactId>log4j-1.2-api</artifactId>
         <scope>test</scope>
-    </dependency>   <dependency>
+    </dependency>
+    <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core</artifactId>
       <type>test-jar</type>

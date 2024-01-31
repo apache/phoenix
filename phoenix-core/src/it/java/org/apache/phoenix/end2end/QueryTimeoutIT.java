@@ -23,15 +23,19 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
 import java.util.Map;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -42,6 +46,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -107,37 +112,38 @@ public class QueryTimeoutIT extends BaseTest {
     
     @Test
     public void testQueryTimeout() throws Exception {
-        int nRows = 60000;
         Connection conn;
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         conn = DriverManager.getConnection(getUrl(), props);
         conn.createStatement().execute(
                 "CREATE TABLE " + tableName + "(k BIGINT PRIMARY KEY, v VARCHAR)");
-        PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES(?, 'AAAAAAAAAAAAAAAAAAAA')");
-        for (int i = 1; i <= nRows; i++) {
-            stmt.setLong(1, i);
-            stmt.executeUpdate();
-            if ((i % 2000) == 0) {
-                conn.commit();
-            }
-        }
-        conn.commit();
-        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
-        
+        TestUtil.addCoprocessor(conn, tableName, QueryTimeoutIT.SleepingRegionObserver.class);
+
         PhoenixStatement pstmt = conn.createStatement().unwrap(PhoenixStatement.class);
         pstmt.setQueryTimeout(1);
         long startTime = System.currentTimeMillis();
         try {
             ResultSet rs = pstmt.executeQuery("SELECT count(*) FROM " + tableName);
-            // Force lots of chunks so query is cancelled
-            assertTrue(pstmt.getQueryPlan().getSplits().size() > 1000);
+            startTime = System.currentTimeMillis();
             rs.next();
             fail("Total time of query was " + (System.currentTimeMillis() - startTime) + " ms, but expected to be greater than 1000");
         } catch (SQLTimeoutException e) {
             long elapsedTimeMillis = System.currentTimeMillis() - startTime;
             assertEquals(SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e.getErrorCode());
-            assertTrue(elapsedTimeMillis > 1000);
+            assertTrue("Total time of query was " + elapsedTimeMillis + " ms, but expected to be greater or equal to 1000",
+                    elapsedTimeMillis >= 1000);
         }
         conn.close();
+    }
+
+    public static class SleepingRegionObserver extends SimpleRegionObserver {
+        @Override
+        public void preScannerClose(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s)
+                throws IOException {
+            try {
+                Thread.sleep(1200); // Wait long enough
+            } catch (InterruptedException e) {
+            }
+        }
     }
 }

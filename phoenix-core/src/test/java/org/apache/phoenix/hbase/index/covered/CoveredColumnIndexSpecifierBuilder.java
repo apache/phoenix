@@ -29,10 +29,11 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.phoenix.hbase.index.Indexer;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.util.IndexUtil;
 
 /**
- * Helper to build the configuration for the {@link NonTxIndexker}.
+ * Helper to build the configuration for the {@link NonTxIndexer}.
  * <p>
  * This class is NOT thread-safe; all concurrent access must be managed externally.
  */
@@ -47,6 +48,9 @@ public class CoveredColumnIndexSpecifierBuilder {
   private static final String INDEX_GROUP_PREFIX = INDEX_TO_TABLE_CONF_PREFX + "group.";
   private static final String INDEX_GROUP_COVERAGE_SUFFIX = ".columns";
   private static final String TABLE_SUFFIX = ".table";
+
+  public static final String NON_TX_INDEX_BUILDER_CLASSNAME = "org.apache.phoenix.index.PhoenixIndexBuilder";
+
 
   // right now, we don't support this should be easy enough to add later
   // private static final String INDEX_GROUP_FULLY_COVERED = ".covered";
@@ -137,7 +141,8 @@ public class CoveredColumnIndexSpecifierBuilder {
     Map<String, String> opts = this.convertToMap();
     opts.put(NonTxIndexBuilder.CODEC_CLASS_NAME_KEY, clazz.getName());
         TableDescriptorBuilder newBuilder = TableDescriptorBuilder.newBuilder(desc);
-        Indexer.enableIndexing(newBuilder, NonTxIndexBuilder.class, opts, Coprocessor.PRIORITY_USER);
+        IndexUtil.enableIndexing(newBuilder, NonTxIndexBuilder.class.getName(), opts,
+                Coprocessor.PRIORITY_USER, QueryConstants.INDEXER_CLASSNAME);
         return newBuilder.build();
   }
 

@@ -64,6 +64,27 @@
             </configuration>
           </execution>
           <execution>
+            <id>lite client without version</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-client-parent/phoenix-client-lite/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>
+                  phoenix-client-lite-${hbase.suffix}-${project.version}.jar
+                </argument>
+                <argument>
+                  <!-- We are overwriting the unshaded client JAR, but we don't care -->
+                  phoenix-client-lite-${hbase.suffix}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
             <id>server without version</id>
             <phase>compile</phase>
             <goals>
@@ -80,6 +101,27 @@
                 <argument>
                   <!-- We are overwriting the unshaded server JAR, but we don't care -->
                   phoenix-server-${hbase.suffix}.jar
+                </argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
+            <id>mapreduce without version</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <executable>ln</executable>
+              <workingDirectory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</workingDirectory>
+              <arguments>
+                <argument>-fnsv</argument>
+                <argument>
+                  phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar
+                </argument>
+                <argument>
+                  <!-- We are overwriting the unshaded  JAR, but we don't care -->
+                  phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar
                 </argument>
               </arguments>
             </configuration>
@@ -151,7 +193,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.phoenix</groupId>
+      <artifactId>phoenix-client-lite-${hbase.suffix}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix</groupId>
