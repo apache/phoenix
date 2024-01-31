@@ -34,7 +34,6 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.slf4j.Logger;
@@ -144,14 +143,17 @@ public class ValidateLastDDLTimestampUtil {
 
         for (TableRef tableRef : tableRefs) {
 
-            //when querying an index, we need to validate its parent table
-            //in case the index was dropped
-            if (PTableType.INDEX.equals(tableRef.getTable().getType())) {
+            // validate all ancestors of this PTable if any
+            // index -> base table
+            // view -> parent view and its ancestors
+            // view index -> view and its ancestors
+            for (Map.Entry<PTableKey, Long> entry :
+                    tableRef.getTable().getAncestorLastDDLTimestampMap().entrySet()) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                PTableKey key = new PTableKey(conn.getTenantId(),
-                        tableRef.getTable().getParentName().getString());
-                PTable parentTable = conn.getTable(key);
-                setLastDDLTimestampRequestParameters(innerBuilder, conn.getTenantId(), parentTable);
+                PTable ancestorTable = conn.getTable(entry.getKey());
+                setLastDDLTimestampRequestParameters(
+                        innerBuilder, ancestorTable.getTenantId(), ancestorTable);
+                innerBuilder.setLastDDLTimestamp(entry.getValue());
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
 
@@ -160,20 +162,6 @@ public class ValidateLastDDLTimestampUtil {
             setLastDDLTimestampRequestParameters(
                     innerBuilder, conn.getTenantId(), tableRef.getTable());
             requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-
-            //when querying a view, we need to validate last ddl timestamps for all its ancestors
-            //use the ancestorLastDDLTimestampMap in the view PTable
-            if (PTableType.VIEW.equals(tableRef.getTable().getType())) {
-                for (Map.Entry<PTableKey, Long> entry :
-                        tableRef.getTable().getAncestorLastDDLTimestampMap().entrySet()) {
-                    innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                    PTable ancestorTable = conn.getTable(entry.getKey());
-                    setLastDDLTimestampRequestParameters(
-                            innerBuilder, ancestorTable.getTenantId(), ancestorTable);
-                    innerBuilder.setLastDDLTimestamp(entry.getValue());
-                    requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-                }
-            }
 
             //on the write path, we need to validate all indexes of a table/view
             //in case index state was changed

@@ -1375,18 +1375,19 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     }
 
     @Test
-    public void testAncestorLastDDLMapPopulatedOnViewHierarchy() throws SQLException {
+    public void testAncestorLastDDLMapPopulatedInViewAndIndexHierarchy() throws SQLException {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-        String index2 = generateUniqueName();
         String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
         String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String index1 = generateUniqueName();
+        String index2 = generateUniqueName();
         String tenant1 = TENANT1;
         String tenant2 = TENANT2;
         /*                                     baseTable
-                                 /                  |               \
-                         view1(tenant1)    view3(tenant2)          view4(global)
+                                 /                  |            \                  \
+                         view1(tenant1)    view3(tenant2)    index1(global)       view4(global)
                           /
                         view2(tenant1)
                         /
@@ -1395,6 +1396,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
             conn.createStatement().execute(baseTableDDL);
+            String index1DDL = "CREATE INDEX " + index1 + " ON " + baseTable + "(V1)";
+            conn.createStatement().execute(index1DDL);
 
 
             try (Connection tenant1Conn = getTenantConnection(tenant1)) {
@@ -1404,7 +1407,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 String view2DDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + view1;
                 tenant1Conn.createStatement().execute(view2DDL);
 
-                tenant1Conn.createStatement().execute("CREATE INDEX " + index2 + " ON " + view2 + "(V1)");
+                String index2DDL = "CREATE INDEX " + index2 + " ON " + view2 + "(V1)";
+                tenant1Conn.createStatement().execute(index2DDL);
             }
 
             try (Connection tenant2Conn = getTenantConnection(tenant2)) {
@@ -1428,6 +1432,11 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             assertEquals(1, map.size());
             assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
 
+            //global index
+            PTable index1PTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(SCHEMA1, index1));
+            map = index1PTable.getAncestorLastDDLTimestampMap();
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+
             //tenant2 view
             try (Connection tenant2Conn = getTenantConnection(tenant2)) {
                 map = PhoenixRuntime.getTable(tenant2Conn, view3).getAncestorLastDDLTimestampMap();
@@ -1449,8 +1458,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 //tenant1 child view index
                 PTable view2PTable = PhoenixRuntime.getTable(tenant1Conn, view2);
                 PTableKey view2Key = new PTableKey(view2PTable.getTenantId(), view2);
-                assertEquals(1, view2PTable.getIndexes().size());
-                map = view2PTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
+                PTable index2PTable = PhoenixRuntime.getTable(tenant1Conn, SchemaUtil.getTableName(SCHEMA3, index2));
+                map = index2PTable.getAncestorLastDDLTimestampMap();
                 assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
                 assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
 

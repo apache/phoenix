@@ -162,7 +162,11 @@ public class PMetaDataImpl implements PMetaData {
             metaData.put(table.getKey(), tableRef);
         }
         for (PTable index : table.getIndexes()) {
-            metaData.put(index.getKey(), tableRefFactory.makePTableRef(index, this.timeKeeper.getCurrentTime(), resolvedTime));
+            PTable indexPTable = index;
+            if (index.getViewIndexId() == null) {
+                indexPTable = MetaDataClient.getPTableWithAncestorLastDDLTimestampMap(index, table);
+            }
+            metaData.put(index.getKey(), tableRefFactory.makePTableRef(indexPTable, this.timeKeeper.getCurrentTime(), resolvedTime));
         }
         if (table.getPhysicalName(true) != null &&
                 !Strings.isNullOrEmpty(table.getPhysicalName(true).getString()) && !table.getPhysicalName(true).getString().equals(table.getTableName().getString())) {

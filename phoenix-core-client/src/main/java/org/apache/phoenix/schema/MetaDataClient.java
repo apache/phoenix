@@ -962,7 +962,7 @@ public class MetaDataClient {
      * @param pTable
      * @param parentTable
      */
-    private PTable getPTableWithAncestorLastDDLTimestampMap(PTable pTable, PTable parentTable)
+    public static PTable getPTableWithAncestorLastDDLTimestampMap(PTable pTable, PTable parentTable)
             throws SQLException {
         Map<PTableKey, Long> ancestorMap
                 = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
