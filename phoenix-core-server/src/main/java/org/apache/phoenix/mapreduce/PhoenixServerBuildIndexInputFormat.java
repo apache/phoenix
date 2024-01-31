@@ -131,7 +131,7 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD,
                         ByteUtil.copyKeyBytesIfNecessary(ptr));
                 scan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES, TRUE_BYTES);
-                ScanUtil.setScanAttributeForMaxLookbackAge(scan, pIndexTable);
+                ScanUtil.setScanAttributeForMaxLookbackAge(scan, pIndexTable.getMaxLookbackAge());
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
             }
             return plan;

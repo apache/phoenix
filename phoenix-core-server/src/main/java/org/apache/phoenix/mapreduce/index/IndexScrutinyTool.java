@@ -272,7 +272,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
 
             // set CURRENT_SCN for our scan so that incoming writes don't throw off scrutiny
             configuration.set(PhoenixConfigurationUtil.CURRENT_SCN_VALUE, Long.toString(ts));
-            PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pdataTable);
+            PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pdataTable.getMaxLookbackAge());
 
             // set the source table to either data or index table
             SourceTargetColumnNames columnNames =

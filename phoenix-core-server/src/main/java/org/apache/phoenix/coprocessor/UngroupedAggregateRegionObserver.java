@@ -633,7 +633,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
-                                            MetaDataUtil.getMaxLookbackAge(c.getEnvironment().getConfiguration(), table),
+                                            MetaDataUtil.getMaxLookbackAge(
+                                                    c.getEnvironment().getConfiguration(), table.getMaxLookbackAge()),
                                             SchemaUtil.getEmptyColumnFamily(table),
                                             table.getEncodingScheme()
                                                     == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?

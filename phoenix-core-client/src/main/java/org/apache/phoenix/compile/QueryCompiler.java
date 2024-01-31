@@ -87,6 +87,8 @@ import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.hadoop.conf.Configuration;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
@@ -190,8 +192,20 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
-        long maxLookBackAgeInMillis =
-            BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conn.getQueryServices().getConfiguration());
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, conn);
+        List<TableRef> involvedTables = resolver.getTables();
+        Long maxLookBackAgeInMillis = null;
+        for(TableRef tableRef: involvedTables) {
+            PTable table = tableRef.getTable();
+            if (maxLookBackAgeInMillis == null) {
+                maxLookBackAgeInMillis = table.getMaxLookbackAge();
+            }
+            else if (table.getMaxLookbackAge() != null) {
+                maxLookBackAgeInMillis = Long.min(maxLookBackAgeInMillis, table.getMaxLookbackAge());
+            }
+        }
+        Configuration conf = conn.getQueryServices().getConfiguration();
+        maxLookBackAgeInMillis = MetaDataUtil.getMaxLookbackAge(conf, maxLookBackAgeInMillis);
         long now = EnvironmentEdgeManager.currentTimeMillis();
         if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
             throw new SQLExceptionInfo.Builder(

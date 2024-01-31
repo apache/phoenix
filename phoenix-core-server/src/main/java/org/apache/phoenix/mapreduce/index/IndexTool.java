@@ -484,7 +484,7 @@ public class IndexTool extends Configured implements Tool {
                 return configureJobForPartialBuild();
             } else {
                 long maxTimeRange = pIndexTable.getTimeStamp() + 1;
-                PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pIndexTable);
+                PhoenixConfigurationUtil.setMaxLookbackAge(configuration, pIndexTable.getMaxLookbackAge());
                 // this is set to ensure index tables remains consistent post population.
                 if (pDataTable.isTransactional()) {
                     configuration.set(PhoenixConfigurationUtil.TX_SCN_VALUE,

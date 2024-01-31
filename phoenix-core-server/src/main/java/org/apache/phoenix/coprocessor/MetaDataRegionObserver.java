@@ -550,7 +550,7 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
 							dataTableScan.setTimeRange(scanBeginTime, scanEndTime);
 							dataTableScan.setCacheBlocks(false);
 							dataTableScan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES, TRUE_BYTES);
-                            ScanUtil.setScanAttributeForMaxLookbackAge(dataTableScan, dataPTable);
+                            ScanUtil.setScanAttributeForMaxLookbackAge(dataTableScan, dataPTable.getMaxLookbackAge());
 
 							ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable(
 									ByteUtil.EMPTY_BYTE_ARRAY);

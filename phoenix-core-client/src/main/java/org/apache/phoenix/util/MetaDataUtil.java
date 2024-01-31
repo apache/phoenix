@@ -83,6 +83,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class MetaDataUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
@@ -1184,11 +1185,8 @@ public class MetaDataUtil {
         }
     }
 
-    public static long getMaxLookbackAge(Configuration conf, PTable table) {
-        return getMaxLookbackAge(conf, table.getMaxLookbackAge());
-    }
-
     public static long getMaxLookbackAge(Configuration conf, Long maxLookbackAge) {
+        Preconditions.checkNotNull(conf);
         return maxLookbackAge != null ? maxLookbackAge :
                 BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
     }

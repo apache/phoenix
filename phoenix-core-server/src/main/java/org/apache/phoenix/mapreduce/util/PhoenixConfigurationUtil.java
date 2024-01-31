@@ -897,9 +897,8 @@ public final class PhoenixConfigurationUtil {
             DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER);
     }
 
-    public static void setMaxLookbackAge(Configuration configuration, PTable table) {
+    public static void setMaxLookbackAge(Configuration configuration, Long maxLookbackAge) {
         Preconditions.checkNotNull(configuration);
-        Long maxLookbackAge = table.getMaxLookbackAge();
         if (maxLookbackAge != null) {
             configuration.setLong(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE, maxLookbackAge);
         }

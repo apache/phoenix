@@ -136,7 +136,7 @@ public class ServerBuildIndexCompiler {
             } else {
                 scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
                 scan.setAttribute(BaseScannerRegionObserverConstants.REBUILD_INDEXES, TRUE_BYTES);
-                ScanUtil.setScanAttributeForMaxLookbackAge(scan, index);
+                ScanUtil.setScanAttributeForMaxLookbackAge(scan, index.getMaxLookbackAge());
                 ScanUtil.setClientVersion(scan, MetaDataProtocol.PHOENIX_VERSION);
                 scan.setAttribute(BaseScannerRegionObserverConstants.INDEX_REBUILD_PAGING, TRUE_BYTES);
                 // Serialize page row size only if we're overriding, else use server side value
