@@ -21,6 +21,7 @@ package org.apache.phoenix.mapreduce.util;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.PhoenixRuntime;
 
 public final class PhoenixConfigurationUtilHelper {
     // This relies on Hadoop Configuration to handle warning about deprecated configs and
@@ -29,8 +30,12 @@ public final class PhoenixConfigurationUtilHelper {
         Configuration.addDeprecation("phoneix.mapreduce.output.cluster.quorum", PhoenixConfigurationUtilHelper.MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
     }
 
+    @Deprecated
     public static final String MAPREDUCE_INPUT_CLUSTER_QUORUM = "phoenix.mapreduce.input.cluster.quorum";
+    @Deprecated
     public static final String MAPREDUCE_OUTPUT_CLUSTER_QUORUM = "phoenix.mapreduce.output.cluster.quorum";
+    public static final String MAPREDUCE_INPUT_CLUSTER_URL = "phoenix.mapreduce.input.cluster.url";
+    public static final String MAPREDUCE_OUTPUT_CLUSTER_URL = "phoenix.mapreduce.output.cluster.url";
     public static final String TRANSFORM_MONITOR_ENABLED = "phoenix.transform.monitor.enabled";
     public static final boolean DEFAULT_TRANSFORM_MONITOR_ENABLED = true;
     /**
@@ -69,9 +74,28 @@ public final class PhoenixConfigurationUtilHelper {
         Preconditions.checkNotNull(configuration);
         String quorum = configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
         if (quorum == null) {
+            quorum = configuration.get(HConstants.CLIENT_ZOOKEEPER_QUORUM);
+        }
+        if (quorum == null) {
             quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
         }
         return quorum;
+    }
+
+    /**
+     * Returns the Phoenix JDBC URL a Phoenix MapReduce job will read
+     * from. If MAPREDUCE_INPUT_CLUSTER_URL is not set, then it returns the value of
+     * "jdbc:phoenix"
+     * @param configuration
+     * @return URL string
+     */
+    public static String getInputClusterUrl(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String url = configuration.get(MAPREDUCE_INPUT_CLUSTER_URL);
+        if (url == null) {
+            url = PhoenixRuntime.JDBC_PROTOCOL;
+        }
+        return url;
     }
 
     /**
@@ -109,6 +133,9 @@ public final class PhoenixConfigurationUtilHelper {
         Preconditions.checkNotNull(configuration);
         String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
         if (quorum == null) {
+            quorum = configuration.get(HConstants.CLIENT_ZOOKEEPER_QUORUM);
+        }
+        if (quorum == null) {
             quorum = configuration.get(HConstants.ZOOKEEPER_QUORUM);
         }
         return quorum;
@@ -120,9 +147,27 @@ public final class PhoenixConfigurationUtilHelper {
      * @param configuration
      * @return ZooKeeper quorum string if defined, null otherwise
      */
+    @Deprecated
     public static String getInputClusterZkQuorum(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(MAPREDUCE_INPUT_CLUSTER_QUORUM);
+    }
+
+
+    /**
+     * Returns the Phoenix JDBC URL a Phoenix MapReduce job will write to.
+     * If MAPREDUCE_OUTPUT_CLUSTER_URL is not set, then it returns the value of
+     * "jdbc:phoenix"
+     * @param configuration
+     * @return URL string
+     */
+    public static String getOutputClusterUrl(final Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String quorum = configuration.get(MAPREDUCE_OUTPUT_CLUSTER_URL);
+        if (quorum == null) {
+            quorum = PhoenixRuntime.JDBC_PROTOCOL;
+        }
+        return quorum;
     }
 
     /**
@@ -131,9 +176,11 @@ public final class PhoenixConfigurationUtilHelper {
      * @param configuration
      * @return ZooKeeper quorum string if defined, null otherwise
      */
+    @Deprecated
     public static String getZKQuorum(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
-        return configuration.get(HConstants.ZOOKEEPER_QUORUM);
+        return configuration.get(HConstants.CLIENT_ZOOKEEPER_QUORUM,
+            configuration.get(HConstants.ZOOKEEPER_QUORUM));
     }
 
     /**
@@ -141,6 +188,7 @@ public final class PhoenixConfigurationUtilHelper {
      * @param configuration
      * @return ZooKeeper quorum string if defined, null otherwise
      */
+    @Deprecated
     public static String getOutputClusterZkQuorum(final Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         return configuration.get(MAPREDUCE_OUTPUT_CLUSTER_QUORUM);
