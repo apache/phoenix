@@ -160,11 +160,11 @@ public abstract class ConnectionInfo {
             builder = new RPCConnectionInfo.Builder(url, configuration, props, info);
         } else if (url.toLowerCase().startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
             // The generic protocol was specified. Try to Determine the protocol from the config
-            if (MasterConnectionInfo.isMaster(configuration)) {
+            if (MasterConnectionInfo.Builder.isMaster(configuration, props, info)) {
                 builder = new MasterConnectionInfo.Builder(url, configuration, props, info);
-            } else if (RPCConnectionInfo.isRPC(configuration)) {
+            } else if (RPCConnectionInfo.Builder.isRPC(configuration, props, info)) {
                 builder = new RPCConnectionInfo.Builder(url, configuration, props, info);
-            } else if (ZKConnectionInfo.isZK(configuration)) {
+            } else if (ZKConnectionInfo.Builder.isZK(configuration, props, info)) {
                 builder = new ZKConnectionInfo.Builder(url, configuration, props, info);
             } else {
                 // No registry class set in config. Use version-dependent default
@@ -354,6 +354,8 @@ public abstract class ConnectionInfo {
         return false;
     }
 
+    public abstract ConnectionInfo withPrincipal(String principal);
+
     /**
      * Parent of the Builder classes for the immutable ConnectionInfo classes
      *
@@ -533,6 +535,23 @@ public abstract class ConnectionInfo {
                 throw getMalFormedUrlException(url);
             }
             return tokenizer;
+        }
+
+        protected static String get(String key, Configuration config, ReadOnlyProps props,
+                Properties info) {
+            String result = null;
+            if (info != null) {
+                result = info.getProperty(key);
+            }
+            if (result == null) {
+                if (props != null) {
+                    result = props.get(key);
+                }
+                if (result == null) {
+                    result = config.get(key, null);
+                }
+            }
+            return result;
         }
     }
 }

@@ -98,10 +98,10 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
                 + toString();
     }
 
-    public static boolean isRPC(Configuration config) {
-        // Default is handled by the caller
-        return config != null && RPC_REGISTRY_CLASS_NAME
-                .equals(config.get(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
+    @Override
+    public ConnectionInfo withPrincipal(String principal) {
+        return new RPCConnectionInfo(isConnectionless, principal, keytab, user,
+            bootstrapServers);
     }
 
     /**
@@ -142,6 +142,8 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
                 hostsList = hostsList.replaceAll("=", ":");
             }
 
+            isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(hostsList);
+
             if (portString != null) {
                 try {
                     port = Integer.parseInt(portString);
@@ -154,7 +156,6 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
             }
 
             if (isConnectionless) {
-                // We probably don't create connectionless MasterConnectionInfo objects
                 if (port != null) {
                     throw getMalFormedUrlException(url);
                 } else {
@@ -182,6 +183,12 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
         @Override
         protected ConnectionInfo build() {
             return new RPCConnectionInfo(isConnectionless, principal, keytab, user, hostsList);
+        }
+
+        public static boolean isRPC(Configuration config, ReadOnlyProps props, Properties info) {
+            // Default is handled by the caller
+            return config != null && RPC_REGISTRY_CLASS_NAME
+                    .equals(get(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, config, props, info));
         }
     }
 }

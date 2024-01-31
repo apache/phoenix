@@ -18,6 +18,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.query.ITGuidePostsCacheFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -70,7 +71,7 @@ public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
 
         // As there is a map of connections in the phoenix driver need to differentiate the url to
         // pick different QueryServices
-        url = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + principal;
+        url = ConnectionInfo.create(url, null, null).withPrincipal(principal).toUrl();
 
         // Load defaults from QueryServicesTestImpl
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);

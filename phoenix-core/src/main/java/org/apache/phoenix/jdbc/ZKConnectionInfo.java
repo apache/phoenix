@@ -35,7 +35,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
  */
 public class ZKConnectionInfo extends ConnectionInfo {
 
-    private static final String ZK_REGISTRY_NAME =
+    public static final String ZK_REGISTRY_NAME =
             "org.apache.hadoop.hbase.client.ZKConnectionRegistry";
 
     private final Integer zkPort;
@@ -149,6 +149,12 @@ public class ZKConnectionInfo extends ConnectionInfo {
     public String toUrl() {
         return PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
                 + toString();
+    }
+
+    @Override
+    public ConnectionInfo withPrincipal(String principal) {
+        return new ZKConnectionInfo(isConnectionless, principal, keytab, user,
+            zkHosts, zkPort, zkRootNode);
     }
 
     /**
@@ -331,11 +337,12 @@ public class ZKConnectionInfo extends ConnectionInfo {
                             HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
             }
         }
+
+        public static boolean isZK(Configuration config, ReadOnlyProps props, Properties info) {
+            // Default is handled by the caller
+            return config != null && ZK_REGISTRY_NAME
+                    .equals(get(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, config, props, info));
+        }
     }
 
-    public static boolean isZK(Configuration config) {
-        // Default is handled by the caller
-        return config != null
-                && ZK_REGISTRY_NAME.equals(config.get(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
-    }
 }
