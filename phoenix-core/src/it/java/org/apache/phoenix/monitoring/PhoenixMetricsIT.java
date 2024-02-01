@@ -50,7 +50,6 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTION_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -84,7 +83,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.hamcrest.CoreMatchers;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
@@ -124,7 +122,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
   public void testResetGlobalPhoenixMetrics() throws Exception {
     resetGlobalMetrics();
     for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
-      assertThat(m, CoreMatchers.<GlobalMetric> instanceOf(GlobalMetricImpl.class));
+      assertTrue(m instanceof GlobalMetricImpl);
       assertEquals(0, m.getValue());
       assertEquals(0, m.getNumberOfSamples());
     }
