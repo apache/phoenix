@@ -314,6 +314,7 @@ public interface QueryConstants {
     String CHANGE_IMAGE = "change_image";
     String UPSERT_EVENT_TYPE = "upsert";
     String DELETE_EVENT_TYPE = "delete";
+    String DEFAULT_COLUMN_FAMILY_STR = "default";
 
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by

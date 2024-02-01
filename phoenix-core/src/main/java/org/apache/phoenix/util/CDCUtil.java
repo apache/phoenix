@@ -19,12 +19,14 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import jdk.internal.util.ArraysSupport;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.util.StringUtils;
 
@@ -109,5 +111,26 @@ public class CDCUtil {
             });
         }
         return scan;
+    }
+
+    public static int compareCellFamilyAndQualifier (byte[] columnFamily1,
+                                                     byte[] columnQual1,
+                                                     byte[] columnFamily2,
+                                                     byte[] columnQual2) {
+        int familyNameComparison = CDCUtil.compare(columnFamily1, columnFamily2);
+        if (familyNameComparison != 0) {
+            return familyNameComparison;
+        }
+        return CDCUtil.compare(columnQual1, columnQual2);
+    }
+
+    public static int compare(byte[] a, byte[] b) {
+        int minLength = Math.min(a.length, b.length);
+        for (int i = 0; i < minLength; i++) {
+            if (a[i] != b[i]) {
+                return Byte.compare(a[i], b[i]);
+            }
+        }
+        return Integer.compare(a.length, b.length);
     }
 }

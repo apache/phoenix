@@ -34,12 +34,10 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,28 +45,29 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.*;
+import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CHANGE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_STR;
+import static org.apache.phoenix.query.QueryConstants.UPSERT_EVENT_TYPE;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScanner {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CDCGlobalIndexRegionScanner.class);
-
     private CDCTableInfo cdcDataTableInfo;
-    // Map<dataRowKey: Map<TS: Map<qualifier: Cell>>>
     private Set<PTable.CDCChangeScope> cdcChangeScopeSet;
-    //private List<CDCColumnInfo> columnList;
-    private Long startTimeRange;
-    private Long stopTimeRange;
-
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
                                        final Scan scan,
@@ -87,17 +86,25 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 .parseFrom(scan.getAttribute(CDC_DATA_TABLE_DEF)));
         Charset utf8Charset = StandardCharsets.UTF_8;
         String cdcChangeScopeStr = utf8Charset.decode(ByteBuffer.wrap(scan.getAttribute(CDC_INCLUDE_SCOPES))).toString();
-        cdcChangeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(cdcChangeScopeStr);
+        try {
+            cdcChangeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(cdcChangeScopeStr);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
-        if (scan.getStartRow().length == 8) {
-            startTimeRange = PLong.INSTANCE.getCodec().decodeLong(scan.getStartRow(), 0, SortOrder.getDefault());
-        }
-        if (scan.getStopRow().length == 8) {
-            stopTimeRange = PLong.INSTANCE.getCodec().decodeLong(scan.getStopRow(), 0, SortOrder.getDefault());
-        }
+        //TODO: Get Timerange from the start row and end row of the index scan object
+        // and set it in the datatable scan object.
+//        if (scan.getStartRow().length == 8) {
+//            startTimeRange = PLong.INSTANCE.getCodec().decodeLong(
+//              scan.getStartRow(), 0, SortOrder.getDefault());
+//        }
+//        if (scan.getStopRow().length == 8) {
+//            stopTimeRange = PLong.INSTANCE.getCodec().decodeLong(
+//              scan.getStopRow(), 0, SortOrder.getDefault());
+//        }
         return CDCUtil.initForRawScan(prepareDataTableScan(dataRowKeys, true));
     }
 
@@ -105,7 +112,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
             Cell firstCell = indexRow.get(indexRow.size() - 1);
-
             byte[] indexRowKey = new ImmutableBytesPtr(firstCell.getRowArray(),
                     firstCell.getRowOffset(), firstCell.getRowLength())
                     .copyBytesIfNecessary();
@@ -113,17 +119,14 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                     indexToDataRowKeyMap.get(indexRowKey));
             Result dataRow = dataRows.get(dataRowKey);
             Long indexCellTS = firstCell.getTimestamp();
-            Cell.Type indexCellType = firstCell.getType();
-
             Map<String, Map<String,Object>> preImageObj = new HashMap<>();
             Map<String, Map<String,Object>> changeImageObj = new HashMap<>();
-
             Long lowerBoundForPreImage = 0l;
-
             boolean isIndexCellDeleteRow = false;
             byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
             try {
                 int columnListIndex = 0;
+                List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList = this.cdcDataTableInfo.getColumnInfoList();
                 for (Cell cell : dataRow.rawCells()) {
                     if (cell.getType() == Cell.Type.DeleteFamily) {
                         if (columnListIndex > 0) {
@@ -136,131 +139,68 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         }
                     } else if (cell.getType() == Cell.Type.DeleteColumn
                             || cell.getType() == Cell.Type.Put) {
-                        CDCTableInfo.CDCColumnInfo cellColumnInfo = new CDCTableInfo.CDCColumnInfo(
-                                cell.getFamilyArray(),
-                                cell.getQualifierArray(),
-                                null,
-                                null
-                        );
-                        if (Arrays.compare(cell.getQualifierArray(), emptyCQ) != 0
-                                && cellColumnInfo.compareTo(this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex)) > 0) {
-                            while (columnListIndex < this.cdcDataTableInfo.getColumnInfoList().size()
-                                    && cellColumnInfo.compareTo(this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex)) > 0) {
+                        if (!Arrays.equals(cell.getQualifierArray(), emptyCQ)
+                                && CDCUtil.compareCellFamilyAndQualifier(
+                                        cell.getFamilyArray(),
+                                        cell.getQualifierArray(),
+                                        cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
+                                        cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) > 0) {
+                            while (columnListIndex <= cdcColumnInfoList.size()
+                                    && CDCUtil.compareCellFamilyAndQualifier(
+                                    cell.getFamilyArray(),
+                                    cell.getQualifierArray(),
+                                    cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
+                                    cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) > 0) {
                                 columnListIndex += 1;
                             }
-                            if (columnListIndex >= this.cdcDataTableInfo.getColumnInfoList().size()) {
+                            if (columnListIndex >= cdcColumnInfoList.size()) {
                                 break;
                             }
                         }
-                        if (cellColumnInfo.compareTo(this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex)) < 0) {
+                        if (CDCUtil.compareCellFamilyAndQualifier(
+                                cell.getFamilyArray(),
+                                cell.getQualifierArray(),
+                                cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
+                                cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) < 0) {
                             continue;
                         }
-                        if (cellColumnInfo.compareTo(this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex)) == 0) {
+                        if (CDCUtil.compareCellFamilyAndQualifier(
+                                cell.getFamilyArray(),
+                                cell.getQualifierArray(),
+                                cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
+                                cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) == 0) {
                             String columnFamily = StandardCharsets.UTF_8
-                                    .decode(ByteBuffer.wrap(this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex).getColumnFamily())).toString();
-                            String columnQualifier = this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex).getColumnName();
+                                    .decode(ByteBuffer.wrap(cdcColumnInfoList.get(columnListIndex).getColumnFamily())).toString();
+                            String columnQualifier = cdcColumnInfoList.get(columnListIndex).getColumnName();
+                            if (Arrays.equals(cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
+                                    cdcDataTableInfo.getDefaultColumnFamily())) {
+                                columnFamily = DEFAULT_COLUMN_FAMILY_STR;
+                            }
                             if (cell.getTimestamp() < indexCellTS
                                     && cell.getTimestamp() > lowerBoundForPreImage) {
-                                if (preImageObj.containsKey(columnFamily)) {
-                                    if (preImageObj.get(columnFamily).containsKey(columnQualifier)) {
-                                        continue;
-                                    }
+                                if (!preImageObj.containsKey(columnFamily)) {
                                     preImageObj.put(columnFamily, new HashMap<>());
-                                    preImageObj.get(columnFamily).put(columnQualifier, this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex).getColumnType().toObject(
-                                            cell.getValueArray()));
                                 }
+                                if (preImageObj.get(columnFamily).containsKey(columnQualifier)) {
+                                    continue;
+                                }
+                                preImageObj.get(columnFamily).put(columnQualifier,
+                                        cdcColumnInfoList.get(columnListIndex).getColumnType().toObject(
+                                        cell.getValueArray()));
                             } else if (cell.getTimestamp() == indexCellTS) {
                                 if (!changeImageObj.containsKey(columnFamily)) {
                                     changeImageObj.put(columnFamily, new HashMap<>());
                                 }
-                                changeImageObj.get(columnFamily).put(columnQualifier, this.cdcDataTableInfo.getColumnInfoList().get(columnListIndex).getColumnType().toObject(
+                                changeImageObj.get(columnFamily).put(columnQualifier,
+                                        cdcColumnInfoList.get(columnListIndex).getColumnType().toObject(
                                         cell.getValueArray()));
                             }
                         }
                     }
                 }
-                result.add(firstCell);
-            } catch (Throwable e) {
-                LOGGER.error("Exception in UncoveredIndexRegionScanner for region "
-                        + region.getRegionInfo().getRegionNameAsString(), e);
-                throw e;
-            }
-        }
-        return false;
-    }
-
-    /*
-    protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
-        if (indexRowIterator.hasNext()) {
-            List<Cell> indexRow = indexRowIterator.next();
-            Cell firstCell = indexRow.get(indexRow.size() - 1);
-
-            byte[] indexRowKey = new ImmutableBytesPtr(firstCell.getRowArray(),
-                    firstCell.getRowOffset(), firstCell.getRowLength())
-                    .copyBytesIfNecessary();
-            ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
-                    indexToDataRowKeyMap.get(indexRowKey));
-            Result dataRow = dataRows.get(dataRowKey);
-            Long indexCellTS = firstCell.getTimestamp();
-            Cell.Type indexCellType = firstCell.getType();
-
-            Map<ImmutableBytesPtr, Cell> preImageObj = new HashMap<>();
-            Map<ImmutableBytesPtr, Cell> changeImageObj = new HashMap<>();
-            List<Cell> resultCells = Arrays.asList(dataRow.rawCells()).stream()
-                    .collect(Collectors.toList());
-            Collections.reverse(resultCells);
-
-            boolean isIndexCellDeleteRow = false;
-            boolean isIndexCellDeleteColumn = false;
-            try {
-                for (Cell cell : resultCells) {
-//                    if (cell.getType() == Cell.Type.DeleteColumn
-//                            && !this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())) {
-//                        // DDL is not supported in CDC
-//                        if (cell.getTimestamp() == indexCellTS) {
-//                            isIndexCellDeleteColumn = true;
-//                            break;
-//                        }
-//                    } else if (cell.getType() == Cell.Type.Put
-//                            || (cell.getType() == Cell.Type.DeleteColumn
-//                            && (this.indexDeleteFamilyCellMap.containsKey(cell.getTimestamp())
-//                            && this.indexDeleteFamilyCellMap.get(cell.getTimestamp()).equals(dataRowKey)))) {
-                    if (cell.getType() == Cell.Type.Put
-                            || cell.getType() == Cell.Type.DeleteColumn) {
-                        ImmutableBytesPtr colQual = new ImmutableBytesPtr(
-                                cell.getQualifierArray(),
-                                cell.getQualifierOffset(),
-                                cell.getQualifierLength());
-                        if (cell.getTimestamp() < indexCellTS) {
-                            preImageObj.put(colQual, cell);
-                        } else if (cell.getTimestamp() == indexCellTS) {
-                            changeImageObj.put(colQual, cell);
-                        }
-                    } else if (cell.getType() == Cell.Type.DeleteFamily) {
-                        if (indexCellTS == cell.getTimestamp()) {
-                            isIndexCellDeleteRow = true;
-                            break;
-                        }
-                        // Removing the Cells which are upserted before this DeleteFamily Cell
-                        // as current index Cell ts is greater than the DeleteFamily Cell
-                        if (indexCellTS > cell.getTimestamp()) {
-                            Iterator<Map.Entry<ImmutableBytesPtr, Cell>> iterator =
-                                    preImageObj.entrySet().iterator();
-                            while (iterator.hasNext()) {
-                                Map.Entry<ImmutableBytesPtr, Cell> entry = iterator.next();
-                                if (entry.getValue().getTimestamp() < cell.getTimestamp()) {
-                                    iterator.remove();
-                                }
-                            }
-                        }
-                    }
-                }
-                if ((indexCellType == Cell.Type.DeleteFamily && !isIndexCellDeleteRow)
-                        || isIndexCellDeleteColumn) {
-                    result.clear();
-                } else {
-                    Result cdcRow = getCDCImage(
-                            preImageObj, changeImageObj, isIndexCellDeleteRow, indexCellTS, firstCell);
+                Result cdcRow = getCDCImage(
+                        preImageObj, changeImageObj, isIndexCellDeleteRow, indexCellTS, firstCell);
+                if (cdcRow != null && tupleProjector != null) {
                     if (firstCell.getType() == Cell.Type.DeleteFamily) {
                         result.add(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
                                 .setRow(firstCell.getRowArray()).
@@ -272,12 +212,10 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                     } else {
                         result.add(firstCell);
                     }
-                    if (cdcRow != null && tupleProjector != null) {
-                        IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
-                                tupleProjector, ptr);
-                    } else {
-                        result.clear();
-                    }
+                    IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
+                            tupleProjector, ptr);
+                } else {
+                    result.clear();
                 }
                 return true;
             } catch (Throwable e) {
@@ -288,63 +226,47 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         }
         return false;
     }
-*/
+
     private Result getCDCImage(
-            Map<ImmutableBytesPtr, Cell> preImageObj,
-            Map<ImmutableBytesPtr, Cell> changeImageObj,
+            Map<String, Map<String, Object>> preImageObj,
+            Map<String, Map<String, Object>> changeImageObj,
             boolean isIndexCellDeleteRow, Long indexCellTS, Cell firstCell) {
         Map<String, Object> rowValueMap = new HashMap<>();
 
-        /*
-        Map<String, Object> preImage = new HashMap<>();
         if (this.cdcChangeScopeSet.size() == 0
                 || (this.cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE))) {
-            for (Map.Entry<ImmutableBytesPtr, Cell> preImageObjCell : preImageObj.entrySet()) {
-                if (dataColQualNameMap.get(preImageObjCell.getKey()) != null) {
-                    preImage.put(dataColQualNameMap.get(preImageObjCell.getKey()),
-                            dataColQualTypeMap.get(preImageObjCell.getKey()).toObject(
-                                    preImageObjCell.getValue().getValueArray()));
-                }
-            }
-            rowValueMap.put(PRE_IMAGE, preImage);
+            rowValueMap.put(PRE_IMAGE, preImageObj);
         }
 
-        Map<String, Object> changeImage = new HashMap<>();
         if (this.cdcChangeScopeSet.size() == 0
                 || (this.cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE))) {
-            for (Map.Entry<ImmutableBytesPtr, Cell> changeImageObjCell
-                    : changeImageObj.entrySet()) {
-                if (dataColQualNameMap.get(changeImageObjCell.getKey()) != null) {
-                    changeImage.put(dataColQualNameMap.get(changeImageObjCell.getKey()),
-                            dataColQualTypeMap.get(changeImageObjCell.getKey()).toObject(
-                                    changeImageObjCell.getValue().getValueArray()));
-                }
-            }
-            rowValueMap.put(CHANGE_IMAGE, changeImage);
+            rowValueMap.put(CHANGE_IMAGE, changeImageObj);
         }
 
-        Map<String, Object> postImage = new HashMap<>();
+        Map<String, Map<String, Object>> postImageObj = new HashMap<>();
         if (this.cdcChangeScopeSet.size() == 0
                 || (this.cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST))) {
             if (!isIndexCellDeleteRow) {
-                for (Map.Entry<ImmutableBytesPtr, Cell> preImageObjCell
+                for (Map.Entry<String, Map<String, Object>> preImageObjFamily
                         : preImageObj.entrySet()) {
-                    if (dataColQualNameMap.get(preImageObjCell.getKey()) != null) {
-                        postImage.put(dataColQualNameMap.get(preImageObjCell.getKey()),
-                                dataColQualTypeMap.get(preImageObjCell.getKey()).toObject(
-                                        preImageObjCell.getValue().getValueArray()));
+                    String columnFamily = preImageObjFamily.getKey();
+                    postImageObj.put(columnFamily, new HashMap<>());
+                    for (Map.Entry<String, Object> preImageColQual : preImageObjFamily.getValue().entrySet()) {
+                        postImageObj.get(columnFamily).put(preImageColQual.getKey(), preImageColQual.getValue());
                     }
                 }
-                for (Map.Entry<ImmutableBytesPtr, Cell> changeImageObjCell
+                for (Map.Entry<String, Map<String, Object>> changeImageObjFamily
                         : changeImageObj.entrySet()) {
-                    if (dataColQualNameMap.get(changeImageObjCell.getKey()) != null) {
-                        postImage.put(dataColQualNameMap.get(changeImageObjCell.getKey()),
-                                dataColQualTypeMap.get(changeImageObjCell.getKey()).toObject(
-                                        changeImageObjCell.getValue().getValueArray()));
+                    String columnFamily = changeImageObjFamily.getKey();
+                    if (!postImageObj.containsKey(columnFamily)) {
+                        postImageObj.put(columnFamily, new HashMap<>());
+                    }
+                    for (Map.Entry<String, Object> changeImageColQual : changeImageObjFamily.getValue().entrySet()) {
+                        postImageObj.get(columnFamily).put(changeImageColQual.getKey(), changeImageColQual.getValue());
                     }
                 }
             }
-            rowValueMap.put(POST_IMAGE, postImage);
+            rowValueMap.put(POST_IMAGE, postImageObj);
         }
 
         if (isIndexCellDeleteRow) {
@@ -352,7 +274,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         } else {
             rowValueMap.put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }
-        */
         Gson gson = new GsonBuilder().serializeNulls().create();
 
         byte[] value =
@@ -371,49 +292,4 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
 
         return cdcRow;
     }
-
-//    @Override
-//    protected void scanDataTableRows(long startTime) throws IOException {
-//        super.scanDataTableRows(startTime);
-//        List<List<Cell>> indexRowList = new ArrayList<>();
-//        Map<Long, ImmutableBytesPtr> indexDeleteFamilyCellMap = new HashMap<>();
-//        // Creating new Index Rows for Delete Row events
-//        for (int rowIndex = 0; rowIndex < indexRows.size(); rowIndex++) {
-//            List<Cell> indexRow = indexRows.get(rowIndex);
-//            indexRowList.add(indexRow);
-//            if (indexRow.size() > 1) {
-//                List<Cell> deleteRow = null;
-//                for (int cellIndex = indexRow.size() - 1; cellIndex >= 0; cellIndex--) {
-//                    Cell cell = indexRow.get(cellIndex);
-//                    if (cell.getType() == Cell.Type.DeleteFamily) {
-//                        byte[] indexRowKey = new ImmutableBytesPtr(cell.getRowArray(),
-//                                cell.getRowOffset(), cell.getRowLength())
-//                                .copyBytesIfNecessary();
-//                        ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
-//                                indexToDataRowKeyMap.get(indexRowKey));
-//                        indexDeleteFamilyCellMap.put(cell.getTimestamp(),
-//                                dataRowKey);
-//                        Result dataRow = dataRows.get(dataRowKey);
-//                        for (Cell dataRowCell : dataRow.rawCells()) {
-//                            // Note: Upsert adds delete family marker in the index table but not in the datatable.
-//                            // Delete operation adds delete family marker in datatable as well as index table.
-//                            if (dataRowCell.getType() == Cell.Type.DeleteFamily
-//                                    && dataRowCell.getTimestamp() == cell.getTimestamp()) {
-//                                if (deleteRow == null) {
-//                                    deleteRow = new ArrayList<>();
-//                                }
-//                                deleteRow.add(cell);
-//                                indexRowList.add(deleteRow);
-//                                break;
-//                            }
-//                        }
-//                    }
-//                    if (deleteRow != null) {
-//                        break;
-//                    }
-//                }
-//            }
-//        }
-//        this.indexRows = indexRowList;
-//    }
 }

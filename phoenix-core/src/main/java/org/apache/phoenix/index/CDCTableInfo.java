@@ -8,6 +8,7 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.CDCUtil;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -113,12 +114,9 @@ public class CDCTableInfo {
 
         @Override
         public int compareTo(CDCColumnInfo columnInfo) {
-            int familyNameComparison = Arrays.compare(this.getColumnFamily(),
-                    columnInfo.getColumnFamily());
-            if (familyNameComparison != 0) {
-                return familyNameComparison;
-            }
-            return Arrays.compare(this.getColumnQualifier(),
+            return CDCUtil.compareCellFamilyAndQualifier(this.getColumnFamily(),
+                    this.getColumnQualifier(),
+                    columnInfo.getColumnFamily(),
                     columnInfo.getColumnQualifier());
         }
 

@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -48,10 +47,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.sql.*;
-import java.util.*;
 
 import static org.apache.phoenix.query.QueryConstants.CHANGE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_STR;
 import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
@@ -274,16 +272,20 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row1.put(POST_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 100d);
-                put("V2", 1000d);
-            }});
+            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 100d);
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
+            row1.put(POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row1.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 100d);
-                put("V2", 1000d);
-            }});
+            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 100d);
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
+            row1.put(CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             row1.put(PRE_IMAGE, new HashMap<String, Double>() {{
@@ -298,16 +300,20 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row2.put(POST_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 200d);
-                put("V2", 2000d);
-            }});
+            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 200d);
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 2000d);
+            row2.put(POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row2.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 200d);
-                put("V2", 2000d);
-            }});
+            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 200d);
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 2000d);
+            row2.put(CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             row2.put(PRE_IMAGE, new HashMap<String, Double>() {{
@@ -321,21 +327,27 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row3.put(POST_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 101d);
-                put("V2", 1000d);
-            }});
+            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 101d);
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
+            row3.put(POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row3.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 101d);
-            }});
+            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 101d);
+            row3.put(CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row3.put(PRE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 100d);
-                put("V2", 1000d);
-            }});
+            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 100d);
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
+            row3.put(PRE_IMAGE, preImage);
         }
         assertEquals(row3, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -354,10 +366,12 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row4.put(PRE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 101d);
-                put("V2", 1000d);
-            }});
+            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 101d);
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
+            row4.put(PRE_IMAGE, preImage);
         }
         assertEquals(row4, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -368,16 +382,20 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row5.put(POST_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 102d);
-                put("V2", 1002d);
-            }});
+            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 102d);
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1002d);
+            row5.put(POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row5.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 102d);
-                put("V2", 1002d);
-            }});
+            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 102d);
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1002d);
+            row5.put(CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             row5.put(PRE_IMAGE, new HashMap<String, Double>() {{
@@ -400,10 +418,12 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row6.put(PRE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 102d);
-                put("V2", 1002d);
-            }});
+            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 102d);
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1002d);
+            row6.put(PRE_IMAGE, preImage);
         }
         assertEquals(row6, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -414,22 +434,28 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             put(EVENT_TYPE, UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row7.put(POST_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 201d);
-                put("V2", null);
-            }});
+            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 201d);
+            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", null);
+            row7.put(POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row7.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 201d);
-                put("V2", null);
-            }});
+            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 201d);
+            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", null);
+            row7.put(CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row7.put(PRE_IMAGE, new HashMap<String, Double>() {{
-                put("V1", 200d);
-                put("V2", 2000d);
-            }});
+            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
+                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+            }};
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 200d);
+            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 2000d);
+            row7.put(PRE_IMAGE, preImage);
         }
         assertEquals(row7, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -474,8 +500,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
-        Timestamp before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis());
-        Long beforeLong = before.getTime();
+        Long before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis()).getTime();
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
@@ -486,65 +511,38 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         //          "".isEmpty();
         //      }
 
-
-//        String cdc_sql = "CREATE CDC " + cdcName
-//                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
-//        conn.createStatement().execute(cdc_sql);
-//        assertCDCState(conn, cdcName, null, 3);
-//        String timeZoneID = Calendar.getInstance().getTimeZone().getID();
-//        try (ResultSet rs = conn.createStatement().executeQuery(
-//                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')")) {
-//            assertEquals(false, rs.next());
-//        }
-
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
-                " WHERE \" PHOENIX_ROW_TIMESTAMP()\" < NOW()"), null);
-        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ INCLUDE(PRE, POST) */ * " +
+                " WHERE \"PHOENIX_ROW_TIMESTAMP()\" < NOW()"), null);
+        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * " +
                 "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
                         Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
         assertResultSet(conn.createStatement().executeQuery("SELECT " +
                 "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
 
-        // Have to Debug it further,
-//        HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
-//            put("SELECT 'dummy', k FROM " + cdcName, new int [] {2, 1});
-//            put("SELECT * FROM " + cdcName +
-//                    " ORDER BY k ASC", new int [] {1, 1, 2});
-//            put("SELECT * FROM " + cdcName +
-//                    " ORDER BY k DESC", new int [] {2, 1, 1});
-//            put("SELECT * FROM " + cdcName +
-//                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1});
-//        }};
-//        for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
-//            try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
-//                for (int k:  testQuery.getValue()) {
-//                    assertEquals(true, rs.next());
-//                    assertEquals(k, rs.getInt(2));
-//                }
-//                assertEquals(false, rs.next());
-//            }
-//        }
+        HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
+            put("SELECT 'dummy', k FROM " + cdcName, new int [] {1, 2, 1, 1, 1, 1, 2});
+            put("SELECT * FROM " + cdcName +
+                    " ORDER BY k ASC", new int [] {1, 1, 1, 1, 1, 2, 2});
+            put("SELECT * FROM " + cdcName +
+                    " ORDER BY k DESC", new int [] {2, 2, 1, 1, 1, 1, 1});
+            put("SELECT * FROM " + cdcName +
+                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1, 1, 1, 1, 2});
+        }};
+        for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
+            try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
+                for (int k:  testQuery.getValue()) {
+                    assertEquals(true, rs.next());
+                    assertEquals(k, rs.getInt(2));
+                }
+                assertEquals(false, rs.next());
+            }
+        }
 
         try (ResultSet rs = conn.createStatement().executeQuery(
                 "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
             assertEquals(false, rs.next());
         }
-//        try (ResultSet rs = conn.createStatement().executeQuery("SELECT 'abc' FROM " + cdcName)) {
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(false, rs.next());
-//        }
     }
 
     @Test
@@ -616,7 +614,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         }
     }
 
-    public void testSelect2CDC() throws Exception {
+    @Test
+    public void testSelectCDCRebuildIndex() throws Exception {
         Properties props = new Properties();
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         props.put("hbase.client.scanner.timeout.period", "6000000");
@@ -629,83 +628,30 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 INTEGER, v3 INTEGER)");
         String cdcName = generateUniqueName();
 
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 100, 1000, 10000)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (2, 200, 2000, 20000)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
         conn.commit();
-        Thread.sleep(1000);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 101, NULL, NULL)");
+        Thread.sleep(10);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.commit();
+
+        //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
-        //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
-//        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-//        conn.commit();
-//        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (1, 102, 1002, 10002)");
-//        conn.commit();
-////        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-//        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2, v3) VALUES (2, 201, NULL, NULL)");
-//        conn.commit();
-//        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
-//        conn.commit();
 
-        // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
-        //      if (<table>.getTableName().getString().equals("N000002") ||
-        //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
-        //          "".isEmpty();
-        //      }
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
+        conn.commit();
+        Long before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis()).getTime();
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+        conn.commit();
+
         String cdc_sql = "CREATE CDC " + cdcName
-                + " ON " + tableName + "(PHOENIX_ROW_TIMESTAMP())";
-        conn.createStatement().execute(cdc_sql);
+                + " ON " + tableName;
+        createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
-
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
-        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
-                " WHERE PHOENIX_ROW_TIMESTAMP() < NOW()"), null);
-        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ INCLUDE(PRE, POST) */ * " +
-                "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
-                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
-        assertResultSet(conn.createStatement().executeQuery("SELECT " +
-                "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
-
-        // Have to Debug it further,
-//        HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
-//            put("SELECT 'dummy', k FROM " + cdcName, new int [] {2, 1});
-//            put("SELECT * FROM " + cdcName +
-//                    " ORDER BY k ASC", new int [] {1, 1, 2});
-//            put("SELECT * FROM " + cdcName +
-//                    " ORDER BY k DESC", new int [] {2, 1, 1});
-//            put("SELECT * FROM " + cdcName +
-//                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1});
-//        }};
-//        for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
-//            try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
-//                for (int k:  testQuery.getValue()) {
-//                    assertEquals(true, rs.next());
-//                    assertEquals(k, rs.getInt(2));
-//                }
-//                assertEquals(false, rs.next());
-//            }
-//        }
-
-        try (ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
-            assertEquals(false, rs.next());
-        }
-//        try (ResultSet rs = conn.createStatement().executeQuery("SELECT 'abc' FROM " + cdcName)) {
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(true, rs.next());
-//            assertEquals("abc", rs.getString(1));
-//            assertEquals(false, rs.next());
-//        }
     }
 
     // Temporary test case used as a reference for debugging and comparing against the CDC query.
