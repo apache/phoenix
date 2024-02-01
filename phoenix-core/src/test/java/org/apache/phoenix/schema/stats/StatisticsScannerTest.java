@@ -16,7 +16,7 @@
  */
 package org.apache.phoenix.schema.stats;
 
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -79,7 +79,7 @@ public class StatisticsScannerTest {
         // Wire up the mocks to the mock StatisticsScanner
         when(mockScanner.getStatisticsWriter()).thenReturn(statsWriter);
         when(mockScanner.createCallable()).thenReturn(callable);
-        when(mockScanner.getStatsCollectionRunTracker(any(Configuration.class))).thenReturn(runTracker);
+        when(mockScanner.getStatsCollectionRunTracker(any())).thenReturn(runTracker);
         when(mockScanner.getRegion()).thenReturn(region);
         when(mockScanner.getConfig()).thenReturn(config);
         when(mockScanner.getTracker()).thenReturn(tracker);
@@ -123,8 +123,8 @@ public class StatisticsScannerTest {
     @Test
     public void testCheckRegionServerStoppingOnException() throws Exception {
         StatisticsScannerCallable realCallable = mockScanner.new StatisticsScannerCallable();
-        doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(Region.class), any(StatisticsCollector.class),
-                any(ImmutableBytesPtr.class), any(List.class));
+        doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(), any(),
+                any(), any());
         when(conn.isClosed()).thenReturn(true);
         when(conn.isAborted()).thenReturn(false);
 
@@ -138,8 +138,8 @@ public class StatisticsScannerTest {
     @Test
     public void testCheckRegionServerStoppedOnException() throws Exception {
         StatisticsScannerCallable realCallable = mockScanner.new StatisticsScannerCallable();
-        doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(Region.class), any(StatisticsCollector.class),
-                any(ImmutableBytesPtr.class), any(List.class));
+        doThrow(new IOException()).when(statsWriter).deleteStatsForRegion(any(), any(),
+                any(), any());
         when(conn.isClosed()).thenReturn(false);
         when(conn.isAborted()).thenReturn(true);
 
