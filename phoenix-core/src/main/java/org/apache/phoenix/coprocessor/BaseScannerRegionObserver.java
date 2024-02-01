@@ -236,7 +236,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
-        if(isLocalIndex) {
+        if (isLocalIndex) {
             ScanUtil.setupLocalIndexScan(scan);
         }
     }
@@ -413,7 +413,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
             // client may recreate scans with wrong region boundaries.
-            if(t instanceof NotServingRegionException) {
+            if (t instanceof NotServingRegionException) {
                 Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
             }

@@ -53,7 +53,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.*;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_DEF;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
@@ -85,7 +87,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         cdcDataTableInfo = CDCTableInfo.createFromProto(CDCInfoProtos.CDCTableDef
                 .parseFrom(scan.getAttribute(CDC_DATA_TABLE_DEF)));
         Charset utf8Charset = StandardCharsets.UTF_8;
-        String cdcChangeScopeStr = utf8Charset.decode(ByteBuffer.wrap(scan.getAttribute(CDC_INCLUDE_SCOPES))).toString();
+        String cdcChangeScopeStr = utf8Charset.decode(
+                ByteBuffer.wrap(scan.getAttribute(CDC_INCLUDE_SCOPES))).toString();
         try {
             cdcChangeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(cdcChangeScopeStr);
         } catch (SQLException e) {
@@ -119,14 +122,15 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                     indexToDataRowKeyMap.get(indexRowKey));
             Result dataRow = dataRows.get(dataRowKey);
             Long indexCellTS = firstCell.getTimestamp();
-            Map<String, Map<String,Object>> preImageObj = new HashMap<>();
-            Map<String, Map<String,Object>> changeImageObj = new HashMap<>();
-            Long lowerBoundForPreImage = 0l;
+            Map<String, Map<String, Object>> preImageObj = new HashMap<>();
+            Map<String, Map<String, Object>> changeImageObj = new HashMap<>();
+            Long lowerBoundForPreImage = 0L;
             boolean isIndexCellDeleteRow = false;
             byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
             try {
                 int columnListIndex = 0;
-                List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList = this.cdcDataTableInfo.getColumnInfoList();
+                List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList =
+                        this.cdcDataTableInfo.getColumnInfoList();
                 for (Cell cell : dataRow.rawCells()) {
                     if (cell.getType() == Cell.Type.DeleteFamily) {
                         if (columnListIndex > 0) {
@@ -141,16 +145,16 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             || cell.getType() == Cell.Type.Put) {
                         if (!Arrays.equals(cell.getQualifierArray(), emptyCQ)
                                 && CDCUtil.compareCellFamilyAndQualifier(
-                                        cell.getFamilyArray(),
-                                        cell.getQualifierArray(),
+                                        cell.getFamilyArray(), cell.getQualifierArray(),
                                         cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
-                                        cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) > 0) {
+                                        cdcColumnInfoList.get(columnListIndex)
+                                                .getColumnQualifier()) > 0) {
                             while (columnListIndex <= cdcColumnInfoList.size()
                                     && CDCUtil.compareCellFamilyAndQualifier(
-                                    cell.getFamilyArray(),
-                                    cell.getQualifierArray(),
+                                    cell.getFamilyArray(), cell.getQualifierArray(),
                                     cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
-                                    cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) > 0) {
+                                    cdcColumnInfoList.get(columnListIndex)
+                                            .getColumnQualifier()) > 0) {
                                 columnListIndex += 1;
                             }
                             if (columnListIndex >= cdcColumnInfoList.size()) {
@@ -158,21 +162,24 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             }
                         }
                         if (CDCUtil.compareCellFamilyAndQualifier(
-                                cell.getFamilyArray(),
-                                cell.getQualifierArray(),
+                                cell.getFamilyArray(), cell.getQualifierArray(),
                                 cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
-                                cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) < 0) {
+                                cdcColumnInfoList.get(columnListIndex)
+                                        .getColumnQualifier()) < 0) {
                             continue;
                         }
                         if (CDCUtil.compareCellFamilyAndQualifier(
-                                cell.getFamilyArray(),
-                                cell.getQualifierArray(),
+                                cell.getFamilyArray(), cell.getQualifierArray(),
                                 cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
-                                cdcColumnInfoList.get(columnListIndex).getColumnQualifier()) == 0) {
+                                cdcColumnInfoList.get(columnListIndex)
+                                        .getColumnQualifier()) == 0) {
                             String columnFamily = StandardCharsets.UTF_8
-                                    .decode(ByteBuffer.wrap(cdcColumnInfoList.get(columnListIndex).getColumnFamily())).toString();
-                            String columnQualifier = cdcColumnInfoList.get(columnListIndex).getColumnName();
-                            if (Arrays.equals(cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
+                                    .decode(ByteBuffer.wrap(cdcColumnInfoList.get(columnListIndex)
+                                            .getColumnFamily())).toString();
+                            String columnQualifier = cdcColumnInfoList.get(columnListIndex)
+                                    .getColumnName();
+                            if (Arrays.equals(
+                                    cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
                                     cdcDataTableInfo.getDefaultColumnFamily())) {
                                 columnFamily = DEFAULT_COLUMN_FAMILY_STR;
                             }
@@ -184,16 +191,20 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 if (preImageObj.get(columnFamily).containsKey(columnQualifier)) {
                                     continue;
                                 }
-                                preImageObj.get(columnFamily).put(columnQualifier,
-                                        cdcColumnInfoList.get(columnListIndex).getColumnType().toObject(
-                                        cell.getValueArray()));
+                                preImageObj.get(columnFamily)
+                                        .put(columnQualifier,
+                                                cdcColumnInfoList.get(columnListIndex)
+                                                        .getColumnType()
+                                                        .toObject(cell.getValueArray()));
                             } else if (cell.getTimestamp() == indexCellTS) {
                                 if (!changeImageObj.containsKey(columnFamily)) {
                                     changeImageObj.put(columnFamily, new HashMap<>());
                                 }
-                                changeImageObj.get(columnFamily).put(columnQualifier,
-                                        cdcColumnInfoList.get(columnListIndex).getColumnType().toObject(
-                                        cell.getValueArray()));
+                                changeImageObj.get(columnFamily)
+                                        .put(columnQualifier,
+                                                cdcColumnInfoList.get(columnListIndex)
+                                                        .getColumnType()
+                                                        .toObject(cell.getValueArray()));
                             }
                         }
                     }
@@ -251,8 +262,10 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         : preImageObj.entrySet()) {
                     String columnFamily = preImageObjFamily.getKey();
                     postImageObj.put(columnFamily, new HashMap<>());
-                    for (Map.Entry<String, Object> preImageColQual : preImageObjFamily.getValue().entrySet()) {
-                        postImageObj.get(columnFamily).put(preImageColQual.getKey(), preImageColQual.getValue());
+                    for (Map.Entry<String, Object> preImageColQual :
+                            preImageObjFamily.getValue().entrySet()) {
+                        postImageObj.get(columnFamily).put(preImageColQual.getKey(),
+                                preImageColQual.getValue());
                     }
                 }
                 for (Map.Entry<String, Map<String, Object>> changeImageObjFamily
@@ -261,8 +274,10 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                     if (!postImageObj.containsKey(columnFamily)) {
                         postImageObj.put(columnFamily, new HashMap<>());
                     }
-                    for (Map.Entry<String, Object> changeImageColQual : changeImageObjFamily.getValue().entrySet()) {
-                        postImageObj.get(columnFamily).put(changeImageColQual.getKey(), changeImageColQual.getValue());
+                    for (Map.Entry<String, Object> changeImageColQual :
+                            changeImageObjFamily.getValue().entrySet()) {
+                        postImageObj.get(columnFamily).put(changeImageColQual.getKey(),
+                                changeImageColQual.getValue());
                     }
                 }
             }

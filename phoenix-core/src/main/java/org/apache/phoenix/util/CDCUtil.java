@@ -19,17 +19,14 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
-import jdk.internal.util.ArraysSupport;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.util.StringUtils;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.schema.PTable;
@@ -113,7 +110,7 @@ public class CDCUtil {
         return scan;
     }
 
-    public static int compareCellFamilyAndQualifier (byte[] columnFamily1,
+    public static int compareCellFamilyAndQualifier(byte[] columnFamily1,
                                                      byte[] columnQual1,
                                                      byte[] columnFamily2,
                                                      byte[] columnQual2) {
