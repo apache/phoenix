@@ -520,6 +520,10 @@ public class QueryParserTest {
         stmt = parseCreateCDCSimple("create cdc foo on bar include (pre)", false);
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)),
                 stmt.getIncludeScopes());
+        stmt = parseCreateCDCSimple("create cdc foo on bar include (pre, post, change)", false);
+        assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE,
+                        PTable.CDCChangeScope.POST, PTable.CDCChangeScope.CHANGE)),
+                stmt.getIncludeScopes());
         stmt = parseCreateCDCSimple("create cdc foo on bar include (pre, pre, post)",
                 false);
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE,
