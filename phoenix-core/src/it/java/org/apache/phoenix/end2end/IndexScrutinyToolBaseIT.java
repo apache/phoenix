@@ -45,7 +45,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;
-    private static final String filePath = System.getProperty("java.io.tmpdir");
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
     protected static String indexRegionObserverEnabled = Boolean.FALSE.toString();
     private static String previousIndexRegionObserverEnabled = indexRegionObserverEnabled;
 
@@ -96,7 +96,7 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
 
         if (OutputFormat.FILE.equals(outputFormat)) {
             args.add("-op");
-            outputDir = filePath + UUID.randomUUID().toString();
+            outputDir = tmpPath + "/" + UUID.randomUUID().toString();
             args.add(outputDir);
         }
 

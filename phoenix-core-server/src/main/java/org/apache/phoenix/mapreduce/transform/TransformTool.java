@@ -111,7 +111,7 @@ import static org.apache.phoenix.util.QueryUtil.getConnection;
 
 public class TransformTool extends Configured implements Tool {
     private static final Logger LOGGER = LoggerFactory.getLogger(TransformTool.class);
-
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
     public enum MR_COUNTER_METRICS {
         TRANSFORM_FAILED,
         TRANSFORM_SUCCEED
@@ -958,7 +958,7 @@ public class TransformTool extends Configured implements Tool {
         }
 
         args.add("-op");
-        args.add("/tmp/" + UUID.randomUUID().toString());
+        args.add(tmpPath + "/" + UUID.randomUUID().toString());
 
         if (!Strings.isNullOrEmpty(systemTransformRecord.getTenantId())) {
             args.add("-tenant");

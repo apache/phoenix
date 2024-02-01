@@ -76,6 +76,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
 
     static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path(s) (comma-separated, mandatory)");
@@ -249,7 +250,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
             outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
         } else {
-            outputPath = new Path("/tmp/" + UUID.randomUUID());
+            outputPath = new Path(tmpPath + "/"+ UUID.randomUUID());
         }
 
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();

@@ -62,7 +62,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
     private static Connection conn;
     private static String zkQuorum;
-    private static final String filePath = System.getProperty("java.io.tmpdir");
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -80,7 +80,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE TABLE S.TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE) SPLIT ON (1,2)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1970/01/02");
@@ -90,7 +90,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input1.csv",
+                "--input", tmpPath + "/input1.csv",
                 "--table", "table1",
                 "--schema", "s",
                 "--zookeeper", zkQuorum});
@@ -120,14 +120,14 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         conn.commit();
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1970/01/02");
         printWriter.close();
 
         fs = FileSystem.get(getUtility().getConfiguration());
-        outputStream = fs.create(new Path(filePath + "/input2.csv"));
+        outputStream = fs.create(new Path(tmpPath + "/input2.csv"));
         printWriter = new PrintWriter(outputStream);
         printWriter.println("3,Name 3,1970/01/03");
         printWriter.println("4,Name 4,1970/01/04");
@@ -137,7 +137,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input1.csv",
+                "--input", tmpPath + "/input1.csv",
                 "--table", "table1",
                 "--schema", "s",
                 "--zookeeper", zkQuorum});
@@ -148,7 +148,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         try {
             exitCode = csvBulkLoadTool.run(new String[] {
-                    "--input", filePath + "/input2.csv",
+                    "--input", tmpPath + "/input2.csv",
                     "--table", "table1",
                     "--schema", "s",
                     "--zookeeper", zkQuorum});
@@ -175,7 +175,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input2.csv",
+                "--input", tmpPath + "/input2.csv",
                 "--table", "table1",
                 "--schema", "s",
                 "--zookeeper", zkQuorum,
@@ -214,7 +214,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 "CONSTRAINT PK PRIMARY KEY (ID, T ROW_TIMESTAMP))");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1971/01/01");
@@ -225,7 +225,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input1.csv",
+                "--input", tmpPath + "/input1.csv",
                 "--table", "table9",
                 "--schema", "s",
                 "--zookeeper", zkQuorum});
@@ -251,7 +251,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 "NAME1 VARCHAR, NAME2 VARCHAR)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input8.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input8.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1\tName 1a\tName 2a");
         printWriter.println("2\tName 2a\tName 2b");
@@ -260,7 +260,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input8.csv",
+                "--input", tmpPath + "/input8.csv",
                 "--table", "table8",
                 "--zookeeper", zkQuorum,
                 "--delimiter", "\\t"});
@@ -283,7 +283,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 "NAME1 VARCHAR, NAME2 VARCHAR)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input8.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input8.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1\t\"\\t123\tName 2a");
         printWriter.println("2\tName 2a\tName 2b");
@@ -292,7 +292,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input8.csv",
+                "--input", tmpPath + "/input8.csv",
                 "--table", "table8",
                 "--zookeeper", zkQuorum,
                 "-q", "",
@@ -319,7 +319,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 "NAME VARCHAR, NAMES VARCHAR ARRAY)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input2.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input2.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1|Name 1a;Name 1b");
         printWriter.println("2|Name 2a;Name 2b");
@@ -328,7 +328,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input2.csv",
+                "--input", tmpPath + "/input2.csv",
                 "--table", "table2",
                 "--zookeeper", zkQuorum,
                 "--delimiter", "|",
@@ -356,11 +356,11 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE TABLE TABLE7 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE) SPLIT ON (1,2)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.close();
-        outputStream = fs.create(new Path(filePath + "/input2.csv"));
+        outputStream = fs.create(new Path(tmpPath + "/input2.csv"));
         printWriter = new PrintWriter(outputStream);
         printWriter.println("2,Name 2,1970/01/02");
         printWriter.close();
@@ -368,7 +368,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
-        String multiFileInput = filePath + "/input1.csv," + filePath + "/input2.csv";
+        String multiFileInput = tmpPath + "/input1.csv," + tmpPath + "/input2.csv";
         int exitCode = csvBulkLoadTool.run(new String[] {
             "--input", multiFileInput,
             "--table", "table7",
@@ -402,7 +402,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
         
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input3.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input3.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,FirstName 1,LastName 1");
         printWriter.println("2,FirstName 2,LastName 2");
@@ -411,7 +411,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input3.csv",
+                "--input", tmpPath + "/input3.csv",
                 "--table", "table3",
                 "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
@@ -440,7 +440,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input3.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input3.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,FirstName 1,LastName 1");
         printWriter.println("2,FirstName 2,LastName 2");
@@ -449,7 +449,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input3.csv",
+                "--input", tmpPath + "/input3.csv",
                 "--table", "table6",
                 "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
@@ -489,7 +489,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input4.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input4.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,FirstName 1,LastName 1");
         printWriter.println("2,FirstName 2,LastName 2");
@@ -498,7 +498,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input4.csv",
+                "--input", tmpPath + "/input4.csv",
                 "--table", tableName,
                 "--index-table", indexTableName,
                 "--zookeeper", zkQuorum });
@@ -540,7 +540,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         }
         LogicalTableNameIT.renameAndDropPhysicalTable(conn, "NULL", schemaName, tableName, newTableName, false);
 
-        String csvName = filePath + "/input_logical_name.csv";
+        String csvName = tmpPath + "/input_logical_name.csv";
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path(csvName));
         PrintWriter printWriter = new PrintWriter(outputStream);
@@ -569,7 +569,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         assertTrue(rs.next());
         assertEquals("FirstName 1", rs.getString(1));
 
-        String csvNameForIndex = filePath + "/input_logical_name_index.csv";
+        String csvNameForIndex = tmpPath + "/input_logical_name_index.csv";
         // Now just run the tool on the index table and check that the index has extra row.
         outputStream = fs.create(new Path(csvNameForIndex));
         printWriter = new PrintWriter(outputStream);
@@ -601,7 +601,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         try {
             csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input4.csv",
+                "--input", tmpPath + "/input4.csv",
                 "--table", tableName,
                 "--zookeeper", zkQuorum });
             fail(String.format("Table %s not created, hence should fail",tableName));
@@ -614,7 +614,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
     @Test
     public void testAlreadyExistsOutputPath() {
         String tableName = "TABLE9";
-        String outputPath = filePath + "/output/tabl9";
+        String outputPath = tmpPath + "/output/table9";
         try {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
@@ -622,7 +622,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             
             FileSystem fs = FileSystem.get(getUtility().getConfiguration());
             fs.create(new Path(outputPath));
-            FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input9.csv"));
+            FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input9.csv"));
             PrintWriter printWriter = new PrintWriter(outputStream);
             printWriter.println("1,FirstName 1,LastName 1");
             printWriter.println("2,FirstName 2,LastName 2");
@@ -631,7 +631,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
             csvBulkLoadTool.setConf(getUtility().getConfiguration());
             csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input9.csv",
+                "--input", tmpPath + "/input9.csv",
                 "--output", outputPath,
                 "--table", tableName,
                 "--zookeeper", zkQuorum });
@@ -648,7 +648,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE IMMUTABLE TABLE S.TABLE10 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE, CF1.T2 DATE, CF2.T3 DATE) ");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input10.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input10.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01,1970/02/01,1970/03/01");
         printWriter.println("2,Name 2,1970/01/02,1970/02/02,1970/03/02");
@@ -656,7 +656,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB, "yyyy/MM/dd");
-        int exitCode = csvBulkLoadTool.run(new String[] { "--input", filePath + "/input10.csv", "--table", "table10",
+        int exitCode = csvBulkLoadTool.run(new String[] { "--input", tmpPath + "/input10.csv", "--table", "table10",
                 "--schema", "s", "--zookeeper", zkQuorum });
         assertEquals(0, exitCode);
         ResultSet rs = stmt.executeQuery("SELECT id, name, t, CF1.T2, CF2.T3 FROM s.table10 ORDER BY id");
@@ -697,7 +697,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 table.getImmutableStorageScheme());
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/inputSCAWO.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/inputSCAWO.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01,1970/02/01,1970/03/01");
         printWriter.println("2,Name 2,1970/01/02,1970/02/02,1970/03/02");
@@ -711,7 +711,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/inputSCAWO.csv",
+                "--input", tmpPath + "/inputSCAWO.csv",
                 "--table", "table12",
                 "--schema", "s",
                 "--zookeeper", zkQuorum});
@@ -733,7 +733,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
 
             final Configuration conf = new Configuration(getUtility().getConfiguration());
             FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-            FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input13.csv"));
+            FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input13.csv"));
             try (PrintWriter printWriter = new PrintWriter(outputStream)) {
                 printWriter.println("id,name");
                 printWriter.println("1,Name 1");
@@ -744,7 +744,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
             csvBulkLoadTool.setConf(conf);
             int exitCode = csvBulkLoadTool.run(new String[] {
-                    "--input", filePath + "/input13.csv",
+                    "--input", tmpPath + "/input13.csv",
                     "--table", "table13",
                     "--schema", "s",
                     "--zookeeper", zkQuorum,
@@ -765,7 +765,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE TABLE S.\"t\" (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, " +
                               "T DATE) SPLIT ON (1,2)");
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1970/01/02");
@@ -774,7 +774,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input1.csv",
+                "--input", tmpPath + "/input1.csv",
                 "--table", "\"t\"",
                 "--schema", "S",
                 "--zookeeper", zkQuorum});
@@ -799,7 +799,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE TABLE \"s\".T (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, " +
                                "T DATE) SPLIT ON (1,2)");
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(filePath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1970/01/02");
@@ -808,7 +808,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = csvBulkLoadTool.run(new String[] {
-                "--input", filePath + "/input1.csv",
+                "--input", tmpPath + "/input1.csv",
                 "--table", "T",
                 "--schema", "\"s\"",
                 "--zookeeper", zkQuorum});

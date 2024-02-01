@@ -111,7 +111,7 @@ import org.slf4j.LoggerFactory;
 public class IndexToolIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexToolIT.class);
 
-    private static String tmpDir;
+    private static String tmpPath;
 
     private final boolean localIndex;
     private final boolean mutable;
@@ -167,9 +167,9 @@ public class IndexToolIT extends BaseTest {
             //Maybe we're gonna have to refactor the namespace
             if(clusterInitialized) {
                 tearDownMiniCluster(0);
-                System.setProperty("java.io.tmpdir", tmpDir);
+                System.setProperty("java.io.tmpdir", tmpPath);
             } else {
-                tmpDir = System.getProperty("java.io.tmpdir");
+                tmpPath = System.getProperty("java.io.tmpdir");
             }
             Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
             serverProps.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
@@ -895,7 +895,7 @@ public class IndexToolIT extends BaseTest {
         }
 
         args.add("-op");
-        args.add("/tmp/" + UUID.randomUUID().toString());
+        args.add(tmpPath + "/" + UUID.randomUUID().toString());
         return args;
     }
 

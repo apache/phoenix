@@ -68,7 +68,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
-    
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
     protected boolean isNamespaceEnabled = false;
     protected final String tableDDLOptions;
     
@@ -246,7 +246,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         args.add(indexName);
         args.add("-runfg");
         args.add("-op");
-        args.add("/tmp/output/partialTable_");
+        args.add(tmpPath + "/output/partialTable_");
         return args.toArray(new String[0]);
     }
 

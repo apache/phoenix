@@ -89,7 +89,7 @@ import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
-    private static final String filePath = System.getProperty("java.io.tmpdir");
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
 
     @Test
     public void testStartKeyStopKey() throws SQLException {
@@ -1558,7 +1558,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             // Now roll back to the old indexing
             IndexUpgradeTool iut =
                     new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
-                            filePath + "/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                            tmpPath + "/index_upgrade_" + UUID.randomUUID().toString(), false, null,
                             false);
             iut.setConf(getUtility().getConfiguration());
             iut.prepareToolSetup();
@@ -1605,7 +1605,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             // Now roll back to the old indexing
             IndexUpgradeTool iut =
                     new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
-                            filePath + "/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                            tmpPath + "/index_upgrade_" + UUID.randomUUID().toString(), false, null,
                             false);
             iut.setConf(getUtility().getConfiguration());
             iut.prepareToolSetup();

@@ -68,11 +68,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final long grandChildCount = fanout * fanout;
     private static final long grandGrandChildCount = fanout * fanout * fanout;
 
-    private static final String filePath = System.getProperty("java.io.tmpdir");
-    private static final String viewFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.VIEW];
-    private static final String physicalLinkFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
-    private static final String parentLinkFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
-    private static final String childLinkFileName = filePath + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
+    private static final String viewFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.VIEW];
+    private static final String physicalLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
+    private static final String parentLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
+    private static final String childLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
 
     protected static String SCHEMA1 = "SCHEMA1";
     protected static String SCHEMA2 = "SCHEMA2";
@@ -140,7 +140,7 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public static synchronized void cleanUp() throws Exception {
         boolean refCountLeaked = isAnyStoreRefCountLeaked();
         for (int i = OrphanViewTool.VIEW; i < OrphanViewTool.ORPHAN_TYPE_COUNT; i++) {
-            File file = new File(filePath + OrphanViewTool.fileName[i]);
+            File file = new File(tmpPath + OrphanViewTool.fileName[i]);
             if (file.exists()) {
                 file.delete();
             }
@@ -454,11 +454,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
         final List<String> args = Lists.newArrayList();
         if (outputPath) {
             args.add("-op");
-            args.add(filePath);
+            args.add(tmpPath);
         }
         if (inputPath) {
             args.add("-ip");
-            args.add(filePath);
+            args.add(tmpPath);
         }
         if (clean) {
             args.add("-c");
