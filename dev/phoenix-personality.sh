@@ -155,9 +155,6 @@ function personality_modules
   # I have been unable to get Jacoco running reliably on ASF Jenkins, thus it is disabled.
 
   extra="--threads=1 -DPhoenixPatchProcess -Dskip.code-coverage "
-  if [[ "${PATCH_BRANCH}" = 4* ]]; then
-    extra="${extra} -Dhttps.protocols=TLSv1.2"
-  fi
 
   # If we have HBASE_PROFILE specified pass along
   # the hbase.profile system property.
@@ -181,6 +178,10 @@ function personality_modules
   if [[ "${testtype}" == checkstyle ]] && [[ "${MODULES[*]}" =~ hbase-checkstyle ]]; then
     MODULES=(.)
   fi
+
+  # Yetus logic cannot handle the tests for a module being in another module, which has been the
+  # case since we split the client and server code, so always test all modules.
+  MODULES=(.)
 
   if [[ ${testtype} == mvninstall ]]; then
     # shellcheck disable=SC2086
