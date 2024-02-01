@@ -166,11 +166,11 @@ public class TaskMetaDataEndpointTest {
     TaskMetaDataProtos.TaskMutateRequest request = builder.build();
     CoprocessorRpcUtils.BlockingRpcCallback<MetaDataProtos.MetaDataResponse> rpcCallback =
       new CoprocessorRpcUtils.BlockingRpcCallback<>();
-    Mockito.doNothing().when(region).mutateRowsWithLocks(Mockito.anyCollectionOf(Mutation.class),
-      Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
+    Mockito.doNothing().when(region).mutateRowsWithLocks(Mockito.anyCollection(), Mockito.any(),
+      Mockito.anyLong(), Mockito.anyLong());
     taskMetaDataEndpoint.upsertTaskDetails(controller, request, rpcCallback);
-    Mockito.verify(region, Mockito.times(1)).mutateRowsWithLocks(
-      Mockito.anyCollectionOf(Mutation.class), Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
+    Mockito.verify(region, Mockito.times(1)).mutateRowsWithLocks(Mockito.anyCollection(),
+      Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
   }
 
   @Test
@@ -183,11 +183,11 @@ public class TaskMetaDataEndpointTest {
     TaskMetaDataProtos.TaskMutateRequest request = builder.build();
     CoprocessorRpcUtils.BlockingRpcCallback<MetaDataProtos.MetaDataResponse> rpcCallback =
       new CoprocessorRpcUtils.BlockingRpcCallback<>();
-    Mockito.doThrow(IOException.class).when(region).mutateRowsWithLocks(
-      Mockito.anyCollectionOf(Mutation.class), Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
+    Mockito.doThrow(IOException.class).when(region).mutateRowsWithLocks(Mockito.anyCollection(),
+      Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
     taskMetaDataEndpoint.upsertTaskDetails(controller, request, rpcCallback);
-    Mockito.verify(region, Mockito.times(1)).mutateRowsWithLocks(
-      Mockito.anyCollectionOf(Mutation.class), Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
+    Mockito.verify(region, Mockito.times(1)).mutateRowsWithLocks(Mockito.anyCollection(),
+      Mockito.any(), Mockito.anyLong(), Mockito.anyLong());
     assertEquals(MetaDataProtos.MutationCode.UNABLE_TO_UPSERT_TASK,
       rpcCallback.get().getReturnCode());
   }

@@ -27,8 +27,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -141,7 +141,7 @@ public class ConnectionQueryServicesImplTest {
 
     // Should be called after upgradeSystemTables()
     // Proves that execution proceeded
-    verify(mockCqs).getSystemTableNamesInDefaultNamespace(any(Admin.class));
+    verify(mockCqs).getSystemTableNamesInDefaultNamespace(any());
 
     try {
       // Verifies that the exception is propagated back to the caller

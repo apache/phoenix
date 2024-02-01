@@ -22,14 +22,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyList;
-import static org.mockito.Matchers.anyListOf;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyMap;
-import static org.mockito.Matchers.anySetOf;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -116,9 +115,9 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
         anyLong(), anyLong());
 
       // verify no create table rpcs
-      verify(connectionQueryServices, never()).createTable(anyListOf(Mutation.class),
-        any(byte[].class), any(PTableType.class), anyMap(), anyList(), any(byte[][].class),
-        eq(false), eq(false), eq(false), any(PTable.class));
+      verify(connectionQueryServices, never()).createTable(anyList(), any(byte[].class),
+        any(PTableType.class), anyMap(), anyList(), any(byte[][].class), eq(false), eq(false),
+        eq(false), any(PTable.class));
       reset(connectionQueryServices);
 
       // execute alter table ddl that adds the same column
@@ -140,7 +139,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
       // else verify no add column calls
       verify(connectionQueryServices, notExists ? times(1) : never()).addColumn(
         eq(Collections.<Mutation> emptyList()), any(PTable.class), any(PTable.class), anyMap(),
-        anySetOf(String.class), anyListOf(PColumn.class));
+        anySet(), anyList());
 
       // upsert one row
       conn2.createStatement()

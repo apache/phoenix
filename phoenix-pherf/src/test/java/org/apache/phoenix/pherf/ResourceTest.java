@@ -17,9 +17,7 @@
  */
 package org.apache.phoenix.pherf;
 
-import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Path;
@@ -56,7 +54,7 @@ public class ResourceTest {
     Collection<Path> paths = list.getResourceList(pattern);
     assertTrue("Resource file list was empty", paths.size() > 0);
     for (Path path : paths) {
-      assertThat(path.toString(), containsString(assertStr));
+      assertTrue(path.toString().contains(assertStr));
     }
     return paths;
   }

@@ -493,7 +493,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                                                // transaction table
         .run(argCapture.capture());
     } else {
-      Mockito.verifyZeroInteractions(indexToolMock);
+      Mockito.verifyNoMoreInteractions(indexToolMock);
     }
   }
 

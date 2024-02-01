@@ -28,6 +28,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Field;
 import java.sql.*;
 import java.util.List;
 import java.util.Properties;
@@ -36,11 +37,24 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.Test;
-import org.mockito.internal.util.reflection.Whitebox;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
+
+  private static Field connectionField;
+  private static Field batchField;
+
+  static {
+    try {
+      connectionField = PhoenixStatement.class.getDeclaredField("connection");
+      connectionField.setAccessible(true);
+      batchField = PhoenixStatement.class.getDeclaredField("batch");
+      batchField.setAccessible(true);
+    } catch (NoSuchFieldException | SecurityException e) {
+      // Test would fail
+    }
+  }
 
   @Test
   public void testMutationUsingExecuteQueryShouldFail() throws Exception {
@@ -167,10 +181,10 @@ public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
     Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
     Statement stmt = connection.createStatement();
     PhoenixConnection connSpy = spy(connection.unwrap(PhoenixConnection.class));
-    Whitebox.setInternalState(stmt, "connection", connSpy);
+    connectionField.set(stmt, connSpy);
     List<PhoenixPreparedStatement> batch = Lists.newArrayList(mock(PhoenixPreparedStatement.class),
       mock(PhoenixPreparedStatement.class), mock(PhoenixPreparedStatement.class));
-    Whitebox.setInternalState(stmt, "batch", batch);
+    batchField.set(stmt, batch);
     final String exMsg = "TEST";
     when(batch.get(0).getUpdateCount()).thenReturn(1);
     doThrow(new SQLException(exMsg)).when(batch.get(1)).executeForBatch();
@@ -196,9 +210,9 @@ public class PhoenixStatementTest extends BaseConnectionlessQueryTest {
     Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
     Statement stmt = connection.createStatement();
     PhoenixConnection connSpy = spy(connection.unwrap(PhoenixConnection.class));
-    Whitebox.setInternalState(stmt, "connection", connSpy);
+    connectionField.set(stmt, connSpy);
     List<PhoenixPreparedStatement> batch = Lists.newArrayList(mock(PhoenixPreparedStatement.class));
-    Whitebox.setInternalState(stmt, "batch", batch);
+    batchField.set(stmt, batch);
     final String exMsg = "TEST";
     doThrow(new SQLException(exMsg)).when(connSpy).commit();
     when(connSpy.getAutoCommit()).thenReturn(true);
