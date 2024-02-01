@@ -23,7 +23,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.function.Consumer;
 
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -33,6 +32,7 @@ import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TimeKeeper;
@@ -134,7 +134,10 @@ public class PMetaDataImpl implements PMetaData {
             String parentName = table.getParentName().getString();
             PTableRef oldParentRef = metaData.get(new PTableKey(table.getTenantId(), parentName));
             // If parentTable isn't cached, that's ok we can skip this
+            // TODO: if parentTable is not cached, how to set the ancestor map on the index
             if (oldParentRef != null) {
+                table = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(table, oldParentRef.getTable());
+                tableRef = tableRefFactory.makePTableRef(table, timeKeeper.getCurrentTime(), resolvedTime);
                 List<PTable> oldIndexes = oldParentRef.getTable().getIndexes();
                 List<PTable> newIndexes = Lists.newArrayListWithExpectedSize(oldIndexes.size() + 1);
                 newIndexes.addAll(oldIndexes);
@@ -164,7 +167,7 @@ public class PMetaDataImpl implements PMetaData {
         for (PTable index : table.getIndexes()) {
             PTable indexPTable = index;
             if (index.getViewIndexId() == null) {
-                indexPTable = MetaDataClient.getPTableWithAncestorLastDDLTimestampMap(index, table);
+                indexPTable = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table);
             }
             metaData.put(index.getKey(), tableRefFactory.makePTableRef(indexPTable, this.timeKeeper.getCurrentTime(), resolvedTime));
         }

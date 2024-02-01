@@ -945,8 +945,8 @@ public class MetaDataClient {
                         = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
                                                                             table, parentTable);
                 result.setTable(
-                        getPTableWithAncestorLastDDLTimestampMap(pTableWithDerivedColumnsAndIndexes,
-                                                                    parentTable));
+                        MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(
+                                pTableWithDerivedColumnsAndIndexes, parentTable));
                 return true;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
@@ -954,24 +954,6 @@ public class MetaDataClient {
             }
         }
         return false;
-    }
-
-    /**
-     * Creates a new PTable object from the provided pTable and with the ancestorLastDDLTimestampMap
-     * Copy the map of the parent and add the last_ddl_timestamp of the parent in the map.
-     * @param pTable
-     * @param parentTable
-     */
-    public static PTable getPTableWithAncestorLastDDLTimestampMap(PTable pTable, PTable parentTable)
-            throws SQLException {
-        Map<PTableKey, Long> ancestorMap
-                = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
-        ancestorMap.put(
-                new PTableKey(parentTable.getTenantId(), parentTable.getName().getString()),
-                parentTable.getLastDDLTimestamp());
-        return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
-                .setAncestorLastDDLTimestampMap(ancestorMap)
-                .build();
     }
 
 	private void addFunctionArgMutation(String functionName, FunctionArgument arg, PreparedStatement argUpsert, int position) throws SQLException {
