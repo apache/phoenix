@@ -180,8 +180,10 @@ function personality_modules
   fi
 
   # Yetus logic cannot handle the tests for a module being in another module, which has been the
-  # case since we split the client and server code, so always test all modules.
-  MODULES=(.)
+  # case since we split the client and server code, so always run the UTs/ITs on the root.
+  if [[ ${testtype} == spotbugs ]]; then
+    MODULES=(.)
+  fi
 
   if [[ ${testtype} == mvninstall ]]; then
     # shellcheck disable=SC2086
