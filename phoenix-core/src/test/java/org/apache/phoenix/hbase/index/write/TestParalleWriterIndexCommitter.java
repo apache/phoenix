@@ -77,7 +77,7 @@ public class TestParalleWriterIndexCommitter {
     writer.stop(this.test.getTableNameString() + " finished");
     assertTrue("Factory didn't get shutdown after writer#stop!", factory.shutdown);
     assertTrue("ExectorService isn't terminated after writer#stop!", exec.isShutdown());
-    Mockito.verifyZeroInteractions(mockStop);
+    Mockito.verifyNoMoreInteractions(mockStop);
   }
 
   @SuppressWarnings({ "unchecked"})

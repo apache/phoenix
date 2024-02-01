@@ -23,8 +23,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.contains;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -34,6 +35,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.Option;
 import org.apache.commons.lang3.RandomStringUtils;
@@ -83,7 +85,7 @@ public class PhoenixHAAdminToolTest {
 
     @Before
     public void setup() throws Exception {
-        when(mockHighAvailibilityCuratorProvider.getCurator(Mockito.anyString(),Mockito.anyObject())).thenReturn(curator);
+        when(mockHighAvailibilityCuratorProvider.getCurator(Mockito.anyString(), any(Properties.class))).thenReturn(curator);
         haGroupName = testName.getMethodName();
         recordV1 = new ClusterRoleRecord(
                 haGroupName, HighAvailabilityPolicy.FAILOVER,

@@ -28,14 +28,14 @@ import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 public class ShouldVerifyTest {
@@ -53,7 +53,7 @@ public class ShouldVerifyTest {
         MockitoAnnotations.initMocks(this);
         indexRowKey = null;
         when(im.getIndexTableName()).thenReturn(Bytes.toBytes("indexName"));
-        when(scanner.shouldVerify(any(IndexTool.IndexVerifyType.class), Matchers.<byte[]>any(), any(Scan.class),
+        when(scanner.shouldVerify(any(IndexTool.IndexVerifyType.class), ArgumentMatchers.<byte[]>any(), any(Scan.class),
                 any(Region.class), any(IndexMaintainer.class),
                 any(IndexVerificationResultRepository.class), anyBoolean())).thenCallRealMethod();
         when(scanner.shouldVerify()).thenCallRealMethod();

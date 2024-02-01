@@ -11,8 +11,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -75,7 +74,7 @@ public class OrderByWithServerMemoryLimitIT extends BaseTest {
                 rs.next();
                 fail("Expected PhoenixIOException due to IllegalStateException");
             } catch (SQLException e) {
-                assertThat(e.getMessage(), containsString(
+                assertTrue(e.getMessage().contains(
                         "ERROR 101 (08000): Unexpected IO exception. ERROR 101 (08000): "
                                 + "Queue full. Consider increasing memory threshold or "
                                 + "spooling to disk"));

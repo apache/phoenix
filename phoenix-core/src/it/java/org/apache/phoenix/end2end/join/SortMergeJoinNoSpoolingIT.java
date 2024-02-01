@@ -11,8 +11,7 @@
 package org.apache.phoenix.end2end.join;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -76,7 +75,7 @@ public class SortMergeJoinNoSpoolingIT extends SortMergeJoinNoIndexIT {
                 rs.next();
                 fail("Expected PhoenixIOException due to IllegalStateException");
             } catch (PhoenixIOException e) {
-                assertThat(e.getMessage(), containsString(
+                assertTrue(e.getMessage().contains(
                     "Queue full. Consider increasing memory threshold or spooling to disk"));
             }
 
