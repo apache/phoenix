@@ -1195,9 +1195,7 @@ public class MetaDataUtil {
             throws SQLException {
         Map<PTableKey, Long> ancestorMap
                 = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
-        ancestorMap.put(
-                new PTableKey(parentTable.getTenantId(), parentTable.getName().getString()),
-                parentTable.getLastDDLTimestamp());
+        ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
         return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
                 .setAncestorLastDDLTimestampMap(ancestorMap)
                 .build();
