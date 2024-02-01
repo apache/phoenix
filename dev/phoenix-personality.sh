@@ -181,7 +181,7 @@ function personality_modules
 
   # Yetus logic cannot handle the tests for a module being in another module, which has been the
   # case since we split the client and server code, so always run the UTs/ITs on the root.
-  if [[ ${testtype} == spotbugs ]]; then
+  if [[ ${testtype} == unit ]]; then
     MODULES=(.)
   fi
 
