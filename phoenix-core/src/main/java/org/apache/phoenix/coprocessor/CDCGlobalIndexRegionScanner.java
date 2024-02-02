@@ -36,6 +36,7 @@ import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
@@ -45,8 +46,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.sql.Date;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -149,7 +153,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                         cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
                                         cdcColumnInfoList.get(columnListIndex)
                                                 .getColumnQualifier()) > 0) {
-                            while (columnListIndex <= cdcColumnInfoList.size()
+                            while (columnListIndex < cdcColumnInfoList.size()
                                     && CDCUtil.compareCellFamilyAndQualifier(
                                     cell.getFamilyArray(), cell.getQualifierArray(),
                                     cdcColumnInfoList.get(columnListIndex).getColumnFamily(),
@@ -191,20 +195,16 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 if (preImageObj.get(columnFamily).containsKey(columnQualifier)) {
                                     continue;
                                 }
-                                preImageObj.get(columnFamily)
-                                        .put(columnQualifier,
-                                                cdcColumnInfoList.get(columnListIndex)
-                                                        .getColumnType()
-                                                        .toObject(cell.getValueArray()));
+                                preImageObj.get(columnFamily).put(columnQualifier,
+                                        this.getColumnValue(cell, cdcColumnInfoList
+                                                .get(columnListIndex).getColumnType()));
                             } else if (cell.getTimestamp() == indexCellTS) {
                                 if (!changeImageObj.containsKey(columnFamily)) {
                                     changeImageObj.put(columnFamily, new HashMap<>());
                                 }
-                                changeImageObj.get(columnFamily)
-                                        .put(columnQualifier,
-                                                cdcColumnInfoList.get(columnListIndex)
-                                                        .getColumnType()
-                                                        .toObject(cell.getValueArray()));
+                                changeImageObj.get(columnFamily).put(columnQualifier,
+                                        this.getColumnValue(cell, cdcColumnInfoList
+                                                .get(columnListIndex).getColumnType()));
                             }
                         }
                     }
@@ -307,4 +307,15 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
 
         return cdcRow;
     }
+
+    private Object getColumnValue (Cell cell, PDataType dataType) {
+        if (dataType.getSqlType() == Types.BINARY) {
+            return Base64.getEncoder().encodeToString(cell.getValueArray());
+        } else if (dataType.getSqlType() == Types.DATE) {
+            return ((Date) dataType.toObject(cell.getValueArray())).getTime();
+        } else {
+            return dataType.toObject(cell.getValueArray());
+        }
+    }
+
 }

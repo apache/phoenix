@@ -34,12 +34,15 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,6 +59,7 @@ import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.UPSERT_EVENT_TYPE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -625,7 +629,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
         conn.createStatement().execute(
-                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 INTEGER, v3 INTEGER)");
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 INTEGER, v3 INTEGER, v4 INTEGER)");
         String cdcName = generateUniqueName();
 
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
@@ -635,7 +639,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.commit();
 
-        //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
+        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v4");
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
 
@@ -651,6 +655,50 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 + " ON " + tableName;
         createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
+        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
+    }
+
+    @Test
+    public void testSelectCDCWithDDL() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.put("hbase.client.scanner.timeout.period", "6000000");
+        props.put("phoenix.query.timeoutMs", "6000000");
+        props.put("zookeeper.session.timeout", "6000000");
+        props.put("hbase.rpc.timeout", "6000000");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v0 INTEGER, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, v3 INTEGER)");
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName;
+        createAndWait(conn, tableName, cdcName, cdc_sql);
+        assertCDCState(conn, cdcName, null, 3);
+
+        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v0");
+        conn.commit();
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+        conn.commit();
+        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v3");
+        conn.commit();
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
+        conn.commit();
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+        conn.commit();
+        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v1v2");
+        conn.commit();
+        conn.createStatement().execute("ALTER TABLE " + tableName + " ADD v4 INTEGER");
+        conn.commit();
+
         assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
     }
 
@@ -683,5 +731,91 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(2, rs.getInt(1));
         assertEquals(200, rs.getInt(2));
         assertEquals(false, rs.next());
+    }
+
+    private void assertCDCBinaryAndDateColumn(ResultSet rs,
+                                              List<byte []> byteColumnValues,
+                                              List<Date> dateColumnValues) throws Exception {
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+
+        Gson gson = new Gson();
+        Map<String, Object> row1 = new HashMap<String, Object>(){{
+            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+        }};
+        Map<String, Map<String, Object>> postImage = new HashMap<String, Map<String, Object>>() {{
+            put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+        }};
+        postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("A_BINARY",
+                Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
+        // JSON doesn't distinguish between integer and floating point fields
+        // Gson has to default to Float/Double for numeric fields
+        postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("D",
+                ((Long)dateColumnValues.get(0).getTime()).doubleValue());
+        row1.put(POST_IMAGE, postImage);
+        Map<String, Map<String, Object>> changeImage = new HashMap<String, Map<String, Object>>() {{
+            put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
+        }};
+        changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("A_BINARY",
+                Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
+        changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("D",
+                ((Long)dateColumnValues.get(0).getTime()).doubleValue());
+        row1.put(CHANGE_IMAGE, changeImage);
+        row1.put(PRE_IMAGE, new HashMap<String, String>() {{
+        }});
+        assertEquals(row1, gson.fromJson(rs.getString(3),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(2, rs.getInt(2));
+        HashMap<String, Object> row2Json = gson.fromJson(rs.getString(3), HashMap.class);
+        String row2BinaryColStr = (String) ((Map)((Map)row2Json.get(CHANGE_IMAGE)).get(DEFAULT_COLUMN_FAMILY_STR)).get("A_BINARY");
+        byte[] row2BinaryCol = Base64.getDecoder().decode(row2BinaryColStr);
+        assertEquals(0, CDCUtil.compare(byteColumnValues.get(1), row2BinaryCol));
+    }
+
+    @Test
+    public void testCDCBinaryAndDateColumn() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.put("hbase.client.scanner.timeout.period", "6000000");
+        props.put("phoenix.query.timeoutMs", "6000000");
+        props.put("zookeeper.session.timeout", "6000000");
+        props.put("hbase.rpc.timeout", "6000000");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        List<byte []> byteColumnValues = new ArrayList<>();
+        byteColumnValues.add( new byte[] {0,0,0,0,0,0,0,0,0,1});
+        byteColumnValues.add(new byte[] {0,0,0,0,0,0,0,0,0,2});
+        List<Date> dateColumnValues = new ArrayList<>();
+        dateColumnValues.add(Date.valueOf("2024-02-01"));
+        dateColumnValues.add(Date.valueOf("2024-01-31"));
+        try {
+
+            conn.createStatement().execute("CREATE TABLE  " + tableName +
+                    " ( k INTEGER PRIMARY KEY," + " a_binary binary(10), d Date)");
+
+            String upsertQuery = "UPSERT INTO " + tableName + " (k, a_binary, d) VALUES (?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(upsertQuery);
+            stmt.setInt(1, 1);
+            stmt.setBytes(2, byteColumnValues.get(0));
+            stmt.setDate(3, dateColumnValues.get(0));
+            stmt.execute();
+            stmt.setInt(1, 2);
+            stmt.setBytes(2, byteColumnValues.get(1));
+            stmt.setDate(3, dateColumnValues.get(1));
+            stmt.execute();
+            conn.commit();
+
+            String cdcName = generateUniqueName();
+            String cdc_sql = "CREATE CDC " + cdcName
+                    + " ON " + tableName;
+            createAndWait(conn, tableName, cdcName, cdc_sql);
+            assertCDCState(conn, cdcName, null, 3);
+            assertCDCBinaryAndDateColumn(conn.createStatement().executeQuery
+                    ("SELECT * FROM " + cdcName), byteColumnValues, dateColumnValues);
+        } finally {
+            conn.close();
+        }
     }
 }
