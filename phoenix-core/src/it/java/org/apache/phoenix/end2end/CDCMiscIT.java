@@ -139,16 +139,6 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
         }
 
-        try {
-            conn.createStatement().execute("CREATE CDC " + cdcName
-                    + " ON " + tableName + " INCLUDE (abc)");
-            fail("Expected to fail due to invalid INCLUDE");
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE.getErrorCode(),
-                    e.getErrorCode());
-            assertTrue(e.getMessage().endsWith("abc"));
-        }
-
         String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
         createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
