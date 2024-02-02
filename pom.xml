@@ -84,9 +84,9 @@
     <hbase.profile.list>2.4.0 2.4 2.5.0 2.5</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
-    <hbase-2.4.runtime.version>2.4.16</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.17</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
-    <hbase-2.5.runtime.version>2.5.5-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.7-hadoop3</hbase-2.5.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -97,9 +97,11 @@
     <antlr-output.dir>target/generated-sources/antlr3</antlr-output.dir>
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
+    <test.tmp.dir>${project.build.directory}</test.tmp.dir>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
+    <netty-bom.version>4.1.104.Final</netty-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
@@ -115,7 +117,6 @@
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.21</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
-    <commons-configuration2.version>2.1.1</commons-configuration2.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.3</snappy.version>
@@ -128,7 +129,7 @@
     <stream.version>2.9.5</stream.version>
     <icu4j.version>72.1</icu4j.version>
     <guice.version>5.1.0</guice.version>
-    <zookeeper.version>3.5.7</zookeeper.version>
+    <zookeeper.version>3.8.3</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
     <jetty.version>9.4.53.v20231009</jetty.version>
@@ -365,6 +366,9 @@
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
             <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+            <systemPropertyVariables>
+              <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+            </systemPropertyVariables>
           </configuration>
           <executions>
             <execution>
@@ -443,6 +447,13 @@
                 <ignoredUsedUndeclaredDependency>
                   <!-- These change too frequently, so we just rely on the hbase transitive deps -->
                   org.apache.hbase.thirdparty:*
+                </ignoredUsedUndeclaredDependency>
+                <ignoredUsedUndeclaredDependency>
+                  <!-- We only need this because the Hadoop Metrics API leak.
+                  By not declaring the dependency, we can pick up the CVE fixed version from Hadoop
+                  without having to also declare a dependency on commons-text dependency
+                  (which we do not use directly at all)-->
+                  org.apache.commons:commons-configuration2
                 </ignoredUsedUndeclaredDependency>
               </ignoredUsedUndeclaredDependencies>
             </configuration>
@@ -620,6 +631,9 @@
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
           <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
+          <systemPropertyVariables>
+            <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
       <!-- All projects create a test jar -->
@@ -1423,6 +1437,14 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1467,6 +1489,16 @@
         <scope>import</scope>
         <type>pom</type>
       </dependency>
+      <!-- We don't depend on netty directly, but we need this to avoid pulling in different
+      4.1.x versions of netty modules from the transitive dependencies
+      (ZK via Omid and ZK via Curator) -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty-bom.version}</version>
+        <scope>import</scope>
+        <type>pom</type>
+      </dependency>
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
@@ -1506,11 +1538,6 @@
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
         <version>${commons-lang.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.commons</groupId>
-        <artifactId>commons-configuration2</artifactId>
-        <version>${commons-configuration2.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>

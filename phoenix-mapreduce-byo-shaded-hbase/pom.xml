@@ -574,6 +574,15 @@
       <version>4.0.0</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+       <!-- provided by Hadoop -->
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-configuration2</artifactId>
+      <!-- random version, for exclusion only -->
+      <version>2.1.1</version>
+      <scope>provided</scope>
+    </dependency>
+
 
     <!-- Other dependencies we don't want to shade in, but are not transitively excluded by the
     above for some reason -->
