@@ -164,11 +164,10 @@ public class PMetaDataImpl implements PMetaData {
         } else {
             metaData.put(table.getKey(), tableRef);
         }
+        // if a view inherits an index from a parent, this also adds the parent as an ancestor for the index
+        // TODO: how to avoid this?
         for (PTable index : table.getIndexes()) {
-            PTable indexPTable = index;
-            if (index.getViewIndexId() == null) {
-                indexPTable = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table);
-            }
+            PTable indexPTable =  MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table);
             metaData.put(index.getKey(), tableRefFactory.makePTableRef(indexPTable, this.timeKeeper.getCurrentTime(), resolvedTime));
         }
         if (table.getPhysicalName(true) != null &&

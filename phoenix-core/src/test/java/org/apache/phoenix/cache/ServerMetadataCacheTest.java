@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -1500,6 +1501,55 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         } catch (ColumnNotFoundException expected) {
         }
     }
+
+    /**
+     * Test that ancestor->last_ddl_timestamp is populated in a new client.
+     * @throws Exception
+     */
+    @Test
+    public void testAncestorLastDDLMapPopulatedInDifferentClient() throws Exception {
+        String SCHEMA1 = generateUniqueName();
+        String SCHEMA2 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String index = generateUniqueName();
+        String view = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String viewIndex = generateUniqueName();
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
+        try (Connection conn = cqs1.connect(url1, props);
+             Connection conn2 = cqs2.connect(url2, props)) {
+            createTable(conn, baseTable, NEVER);
+            createView(conn, baseTable, view);
+            createIndex(conn, baseTable, index, "v2");
+            createIndex(conn, view, viewIndex, "v1");
+
+            query(conn2, view);
+
+            PTable basePTable = PhoenixRuntime.getTable(conn2, baseTable);
+            PTable viewPTable = PhoenixRuntime.getTable(conn2, view);
+            PTable viewIndexPTable = PhoenixRuntime.getTable(conn2, SchemaUtil.getTableName(SCHEMA2, viewIndex));
+            PTable indexPTable = PhoenixRuntime.getTable(conn2, SchemaUtil.getTableName(SCHEMA1, index));
+
+            Map<PTableKey,Long> map = viewPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+
+            map = viewIndexPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(2, map.size());
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+            assertEquals(viewPTable.getLastDDLTimestamp(), map.get(viewPTable.getKey()));
+
+            // ideally the view should not be an ancestor of the index
+            // TODO: change this test after fixing the implementation.
+            map = indexPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(2, map.size());
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+            assertEquals(viewPTable.getLastDDLTimestamp(), map.get(viewPTable.getKey()));
+        }
+    }
+
 
     //Helper methods
     private long getLastDDLTimestamp(String tableName) throws SQLException {
