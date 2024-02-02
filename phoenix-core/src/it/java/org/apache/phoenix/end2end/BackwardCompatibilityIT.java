@@ -22,12 +22,16 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DELET
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DIVERGED_VIEW;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ORDERED_GROUP_BY;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_UNORDERED_GROUP_BY;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DATA;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DELETE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_DIVERGED_VIEW;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_INDEX_REBUILD_ASYNC;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ORDERED_GROUP_BY;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_UNORDERED_GROUP_BY;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.checkForPreConditions;
@@ -438,4 +442,33 @@ public class BackwardCompatibilityIT {
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_VIEW_INDEX, zkQuorum);
         assertExpectedOutput(QUERY_VIEW_INDEX);
     }
+
+    @Test
+    public void testUnorderedGroupByAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_UNORDERED_GROUP_BY, zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_UNORDERED_GROUP_BY, url, NONE);
+        assertExpectedOutput(QUERY_UNORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testUnorderedGroupByAddDataByNewClientReadByOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_UNORDERED_GROUP_BY, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_UNORDERED_GROUP_BY, zkQuorum);
+        assertExpectedOutput(QUERY_UNORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testOrderedGroupByAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_ORDERED_GROUP_BY, zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_ORDERED_GROUP_BY, url, NONE);
+        assertExpectedOutput(QUERY_ORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testOrderedGroupByAddDataByNewClientReadByOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_ORDERED_GROUP_BY, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_ORDERED_GROUP_BY, zkQuorum);
+        assertExpectedOutput(QUERY_ORDERED_GROUP_BY);
+    }
+
 }
