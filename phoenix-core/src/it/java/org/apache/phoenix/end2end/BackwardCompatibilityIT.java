@@ -67,6 +67,7 @@ import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -466,9 +467,31 @@ public class BackwardCompatibilityIT {
 
     @Test
     public void testOrderedGroupByAddDataByNewClientReadByOldClient() throws Exception {
+        Assume.assumeTrue("compatible client version should be >= 5.1.3",
+                isClientCompatibleForOrderedGroupByQuery());
         executeQueriesWithCurrentVersion(CREATE_ORDERED_GROUP_BY, url, NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_ORDERED_GROUP_BY, zkQuorum);
         assertExpectedOutput(QUERY_ORDERED_GROUP_BY);
+    }
+
+    private boolean isClientCompatibleForOrderedGroupByQuery() {
+        String[] clientVersion = compatibleClientVersion.getVersion().split("\\.");
+        int majorVersion = Integer.parseInt(clientVersion[0]);
+        int minorVersion = Integer.parseInt(clientVersion[1]);
+        int patchVersion = Integer.parseInt(clientVersion[2]);
+        if (majorVersion > 5) {
+            return true;
+        }
+        if (majorVersion < 5) {
+            return false;
+        }
+        if (minorVersion > 1) {
+            return true;
+        }
+        if (minorVersion < 1) {
+            return false;
+        }
+        return patchVersion >= 3;
     }
 
 }
