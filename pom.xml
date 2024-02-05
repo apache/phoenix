@@ -432,12 +432,6 @@
                 <ignoredUnusedDeclaredDependency>
                   org.apache.logging.log4j:log4j-1.2-api
                 </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-api
-                </ignoredUnusedDeclaredDependency>
-                <ignoredUnusedDeclaredDependency>
-                  org.apache.logging.log4j:log4j-core
-                </ignoredUnusedDeclaredDependency>
               </ignoredUnusedDeclaredDependencies>
               <ignoredUsedUndeclaredDependencies>
                 <ignoredUsedUndeclaredDependency>
