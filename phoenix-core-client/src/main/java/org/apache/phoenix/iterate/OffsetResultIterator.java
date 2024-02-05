@@ -64,7 +64,8 @@ public class OffsetResultIterator extends DelegateResultIterator {
                 if (!isIncompatibleClient) {
                     return tuple;
                 }
-                // while rowCount < offset absorb the dummy and call next on the underlying scanner
+                // While rowCount < offset absorb the dummy and call next on the underlying scanner.
+                // This is applicable to old client.
                 continue;
             }
             rowCount++;
