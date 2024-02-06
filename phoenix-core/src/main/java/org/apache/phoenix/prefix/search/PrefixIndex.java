@@ -1,5 +1,6 @@
 package org.apache.phoenix.prefix.search;
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.locks.StampedLock;
 public class PrefixIndex {
 	private static final Logger LOGGER = LoggerFactory.getLogger(PrefixIndex.class);
 
-	public static final int R = 255;
+	public static final int R = 256;
 	private TrieNode root = new TrieNode();
 	private final AtomicInteger validPrefixes = new AtomicInteger(0);
 
@@ -128,6 +129,10 @@ public class PrefixIndex {
 			convertedIndex = 128 + (128 + index);
 			index = convertedIndex;
 		}
+		if (LOGGER.isTraceEnabled()) {
+			LOGGER.trace(String.format("%d, %d, %d", depth, originalIndex, convertedIndex));
+		}
+
 		if (!isLocked && node.next[index] == null) {
 			node.put(index, key, tableId, depth + 1);
 		}

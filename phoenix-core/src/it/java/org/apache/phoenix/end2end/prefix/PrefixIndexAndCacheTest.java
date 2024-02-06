@@ -1,9 +1,11 @@
 package org.apache.phoenix.end2end.prefix;
 
 
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.prefix.search.PrefixIndex;
 import org.apache.phoenix.prefix.table.TableTTLInfo;
 import org.apache.phoenix.prefix.table.TableTTLInfoCache;
+import org.apache.phoenix.util.ByteUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -17,6 +19,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -53,6 +56,45 @@ public class PrefixIndexAndCacheTest {
 	public void tearDown() throws Exception {
 	}
 
+
+	@Test
+	public void testSamplePrefixes() {
+		PrefixIndex prefixIndex = new PrefixIndex();
+		TableTTLInfoCache cache = new TableTTLInfoCache();
+		List<TableTTLInfo> sampleTableList = new ArrayList<TableTTLInfo>();
+
+		sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+				ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000001".getBytes(),
+				Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x00"),
+				300));
+		sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+				ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000002".getBytes(),
+				Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x01"),
+				300));
+		sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+				ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000003".getBytes(),
+				Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x02"),
+				300));
+		sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+				ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000004".getBytes(),
+				Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x03"),
+				300));
+		sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+				ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000005".getBytes(),
+				Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x04"),
+				300));
+
+		for (int i = 0; i < sampleTableList.size(); i++) {
+			Integer tableId = cache.addTable(sampleTableList.get(i));
+			prefixIndex.put(sampleTableList.get(i).getPrefix(), tableId);
+			assertEquals(tableId.intValue(), i);
+		}
+		int offset = 0;
+		for (int i = 0; i<sampleTableList.size(); i++) {
+			assertEquals(prefixIndex.get(sampleTableList.get(i).getPrefix(), offset).intValue(), i);
+		}
+
+	}
 
 	@Test
 	public void testSingleSampleDataCount() {
