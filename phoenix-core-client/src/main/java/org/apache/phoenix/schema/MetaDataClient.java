@@ -904,8 +904,7 @@ public class MetaDataClient {
             throws SQLException {
         PTable table = result.getTable();
         boolean hasIndexId = table.getViewIndexId() != null;
-        // only need to inherit columns and indexes for view indexes and views
-        if ((table.getType()==PTableType.INDEX && hasIndexId)
+        if ((table.getType()==PTableType.INDEX)
                 || (table.getType() == PTableType.VIEW && table.getViewType() != ViewType.MAPPED)) {
             String tableName = null;
             try {
@@ -941,12 +940,19 @@ public class MetaDataClient {
                     return false;
                 }
 
-                PTable pTableWithDerivedColumnsAndIndexes
-                        = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
-                                                                            table, parentTable);
-                result.setTable(
-                        MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(
-                                pTableWithDerivedColumnsAndIndexes, parentTable));
+                // only need to inherit columns and indexes for view indexes and views
+                if (!table.getType().equals(PTableType.INDEX) || hasIndexId) {
+                    PTable pTableWithDerivedColumnsAndIndexes
+                            = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
+                            table, parentTable);
+                    result.setTable(
+                            MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(
+                                    pTableWithDerivedColumnsAndIndexes, parentTable));
+                }
+                else {
+                    result.setTable(MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(
+                                                    table, parentTable));
+                }
                 return true;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);

@@ -134,7 +134,6 @@ public class PMetaDataImpl implements PMetaData {
             String parentName = table.getParentName().getString();
             PTableRef oldParentRef = metaData.get(new PTableKey(table.getTenantId(), parentName));
             // If parentTable isn't cached, that's ok we can skip this
-            // TODO: if parentTable is not cached, how to set the ancestor map on the index
             if (oldParentRef != null) {
                 table = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(table, oldParentRef.getTable());
                 tableRef = tableRefFactory.makePTableRef(table, timeKeeper.getCurrentTime(), resolvedTime);
@@ -167,7 +166,7 @@ public class PMetaDataImpl implements PMetaData {
         // if a view inherits an index from a parent, this also adds the parent as an ancestor for the index
         // TODO: how to avoid this?
         for (PTable index : table.getIndexes()) {
-            PTable indexPTable =  MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table);
+            PTable indexPTable = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table);
             metaData.put(index.getKey(), tableRefFactory.makePTableRef(indexPTable, this.timeKeeper.getCurrentTime(), resolvedTime));
         }
         if (table.getPhysicalName(true) != null &&

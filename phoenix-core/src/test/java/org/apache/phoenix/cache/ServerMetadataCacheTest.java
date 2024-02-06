@@ -1541,12 +1541,9 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
             assertEquals(viewPTable.getLastDDLTimestamp(), map.get(viewPTable.getKey()));
 
-            // ideally the view should not be an ancestor of the index
-            // TODO: change this test after fixing the implementation.
             map = indexPTable.getAncestorLastDDLTimestampMap();
-            assertEquals(2, map.size());
+            assertEquals(1, map.size());
             assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
-            assertEquals(viewPTable.getLastDDLTimestamp(), map.get(viewPTable.getKey()));
         }
     }
 

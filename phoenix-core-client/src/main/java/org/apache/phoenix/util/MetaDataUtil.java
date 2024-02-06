@@ -1195,7 +1195,11 @@ public class MetaDataUtil {
             throws SQLException {
         Map<PTableKey, Long> ancestorMap
                 = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
-        ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
+        // this method can be called for an index and a view which inherited this index
+        // from its parent table, skip adding the view as an ancestor of the index.
+        if (pTable.getParentName().equals(parentTable.getName())) {
+            ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
+        }
         return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
                 .setAncestorLastDDLTimestampMap(ancestorMap)
                 .build();
