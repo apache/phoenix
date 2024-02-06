@@ -118,6 +118,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
     public static final String UPGRADE_OP = "upgrade";
     public static final String ROLLBACK_OP = "rollback";
     private static final String GLOBAL_INDEX_ID = "#NA#";
+    private static final String tmpPath = System.getProperty("java.io.tmpdir");
     private IndexTool indexingTool;
 
     private HashMap<String, HashSet<String>> tablesAndIndexes = new HashMap<>();
@@ -739,7 +740,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             String tenantId = indexInfo.getTenantId();
             String baseTable = indexInfo.getBaseTable();
             String schema = indexInfo.getSchemaName();
-            String outFile = "/tmp/index_rebuild_" +schema+"_"+ indexName +
+            String outFile = tmpPath + "/index_rebuild_" +schema+"_"+ indexName +
                     (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"
                     + UUID.randomUUID().toString();
             String[] args = getIndexToolArgValues(schema, baseTable, indexName, outFile, tenantId);

@@ -50,8 +50,6 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
     private static Connection conn;
     private static String zkQuorum;
 
-    private static final String tmpPath = System.getProperty("java.io.tmpdir");
-
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
@@ -66,7 +64,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE TABLE S.TABLE1 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE) SPLIT ON (1,2)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1970/01/02");
@@ -76,7 +74,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         regexBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
         int exitCode = regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input1.csv",
+                "--input", "/tmp/input1.csv",
                 "--table", "table1",
                 "--schema", "s",
                 "--regex", "([^,]*),([^,]*),([^,]*)",
@@ -106,7 +104,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
                 "NAME VARCHAR, NAMES VARCHAR ARRAY, FLAG BOOLEAN)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input2.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input2.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1|Name 1a;Name 1b,true");
         printWriter.println("2|Name 2a;Name 2b,false");
@@ -115,7 +113,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input2.csv",
+                "--input", "/tmp/input2.csv",
                 "--table", "table2",
                 "--zookeeper", zkQuorum,
                 "--array-delimiter", ";",
@@ -143,11 +141,11 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute("CREATE TABLE TABLE7 (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, T DATE) SPLIT ON (1,2)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.close();
-        outputStream = fs.create(new Path(tmpPath + "/input2.csv"));
+        outputStream = fs.create(new Path("/tmp/input2.csv"));
         printWriter = new PrintWriter(outputStream);
         printWriter.println("2,Name 2,1970/01/02");
         printWriter.close();
@@ -155,7 +153,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         regexBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
-        String multiFileInput = tmpPath + "/input1.csv," + tmpPath + "/input2.csv";
+        String multiFileInput = "/tmp/input1.csv,/tmp/input2.csv";
         int exitCode = regexBulkLoadTool.run(new String[] {
             "--input", multiFileInput,
             "--table", "table7",
@@ -192,7 +190,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
         
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input3.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,FirstName 1,LastName 1");
         printWriter.println("2,FirstName 2,LastName 2");
@@ -201,7 +199,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input3.csv",
+                "--input", "/tmp/input3.csv",
                 "--table", "table3",
                 "--regex", "([^,]*),([^,]*),([^,]*)",
                 "--zookeeper", zkQuorum});
@@ -229,7 +227,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input3.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,FirstName 1:LastName 1");
         printWriter.println("2,FirstName 2:LastName 2");
@@ -238,7 +236,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input3.csv",
+                "--input", "/tmp/input3.csv",
                 "--table", "table6",
                 "--regex", "([^,]*),([^:]*):([^,]*)",
                 "--zookeeper", zkQuorum});
@@ -276,7 +274,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         stmt.execute(ddl);
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input4.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input4.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,FirstName 1,LastName 1");
         printWriter.println("2,FirstName 2,LastName 2");
@@ -285,7 +283,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input4.csv",
+                "--input", "/tmp/input4.csv",
                 "--table", tableName,
                 "--regex", "([^,]*),([^,]*),([^,]*)",
                 "--index-table", indexTableName,
@@ -309,7 +307,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         try {
             regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input4.csv",
+                "--input", "/tmp/input4.csv",
                 "--table", tableName,
                 "--regex", "([^,]*),([^,]*),([^,]*)",
                 "--zookeeper", zkQuorum });
@@ -323,7 +321,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
     @Test
     public void testAlreadyExistsOutputPath() {
         String tableName = "TABLE9";
-        String outputPath = tmpPath + "/output/table9";
+        String outputPath = "/tmp/output/table9";
         try {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
@@ -331,7 +329,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
             
             FileSystem fs = FileSystem.get(getUtility().getConfiguration());
             fs.create(new Path(outputPath));
-            FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input9.csv"));
+            FSDataOutputStream outputStream = fs.create(new Path("/tmp/input9.csv"));
             PrintWriter printWriter = new PrintWriter(outputStream);
             printWriter.println("1,FirstName 1,LastName 1");
             printWriter.println("2,FirstName 2,LastName 2");
@@ -340,7 +338,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
             RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
             regexBulkLoadTool.setConf(getUtility().getConfiguration());
             regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input9.csv",
+                "--input", "/tmp/input9.csv",
                 "--output", outputPath,
                 "--table", tableName,
                 "--regex", "([^,]*),([^,]*),([^,]*)",
@@ -359,7 +357,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
                 "NAME VARCHAR, NAMES VARCHAR ARRAY, FLAG BOOLEAN)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path(tmpPath + "/input10.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path( "/tmp/input10.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1|Name 1a;Name 1b,true");
         printWriter.println("2|Name 2a;Name 2b");
@@ -368,7 +366,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         int exitCode = regexBulkLoadTool.run(new String[] {
-                "--input", tmpPath + "/input10.csv",
+                "--input", "/tmp/input10.csv",
                 "--table", "table10",
                 "--zookeeper", zkQuorum,
                 "--array-delimiter", ";",
