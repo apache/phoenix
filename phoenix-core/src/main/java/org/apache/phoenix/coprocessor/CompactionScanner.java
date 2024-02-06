@@ -25,6 +25,7 @@ import java.util.LinkedList;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.clearspring.analytics.util.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
@@ -195,23 +196,6 @@ public class CompactionScanner implements InternalScanner {
                     Bytes.toBytes(tableName),
                     currentTime);
 
-            /*
-            if (isPartitioned) {
-                Pair<List<PTable>, List<TableInfo>> firstDescendant =
-                        ViewUtil.findAllDescendantViews(childLinkHTable, env.getConfiguration(),
-                                EMPTY_BYTE_ARRAY,
-                                Bytes.toBytes(schemaName),
-                                Bytes.toBytes(tableName),
-                                currentTime, true);
-
-                // If descendant view exists
-                if (firstDescendant.getFirst().size() > 0) {
-                    view =  firstDescendant.getFirst().get(0);
-                }
-            }
-
-             */
-
             return isPartitioned ?
                     new PartitionedTableTTLTracker(baseTable, env, isSalted, isPartitionedIndexTable) :
                     new NonPartitionedTableTTLTracker(baseTable, env, store);
@@ -327,12 +311,14 @@ public class CompactionScanner implements InternalScanner {
                 int startingPKPosition = 0;
                 if (this.isMultiTenant && this.isSalted && this.isIndexTable) {
                     // case multi-tenant + salted + index-table =>
-                    // startingPKPosition = 1 after the salt-byte and starting at the viewIndexId
+                    // startingPKPosition = 1 skip the salt-byte and starting at the viewIndexId
                     startingPKPosition = 1;
                 } else if (this.isMultiTenant && this.isSalted) {
                     // case multi-tenant + salted =>
-                    // startingPKPosition = 2 after tenant-id to search the global space
-                    // startingPKPosition = 1 after salt-byte to search the tenant space
+                    // startingPKPosition = 2 skip salt byte + tenant-id to search the global space
+                    // if above search returned no results
+                    // then search using the following start position
+                    // startingPKPosition = 1 skip salt-byte to search the tenant space
                     startingPKPosition = 2;
                 } else if (this.isMultiTenant && this.isIndexTable) {
                     // case multi-tenant + index-table =>
@@ -340,11 +326,11 @@ public class CompactionScanner implements InternalScanner {
                     startingPKPosition = 0;
                 } else if (this.isSalted && this.isIndexTable) {
                     // case salted + index-table =>
-                    // startingPKPosition = 1 after salt-byte using the viewIndexId
+                    // startingPKPosition = 1 skip salt-byte search using the viewIndexId
                     startingPKPosition = 1;
                 } else if (this.isSalted) {
                     // case salted =>
-                    // startingPKPosition = 1 after salt-byte
+                    // startingPKPosition = 1 skip salt-byte
                     startingPKPosition = 1;
                 } else if (this.isIndexTable) {
                     // case index-table =>
@@ -352,7 +338,9 @@ public class CompactionScanner implements InternalScanner {
                     startingPKPosition = 0;
                 } else if (this.isMultiTenant) {
                     // case multi-tenant =>
-                    // startingPKPosition = 1 after tenant-id to search the global space
+                    // startingPKPosition = 1 skip tenant-id to search the global space
+                    // if above search returned no results
+                    // then search using the following start position
                     // startingPKPosition = 0 to search the tenant space
                     startingPKPosition = 1;
                 } else {
@@ -383,15 +371,22 @@ public class CompactionScanner implements InternalScanner {
 
                 tableList.forEach(m -> {
                     if (m.getTTL() != TTL_NOT_DEFINED) {
+                        // add the ttlInfo to the cache.
+                        // each new/unique ttlInfo object added returns a unique tableId.
                         int tableId = ttlCache.addTable(m);
+                        // map the row-prefix to the tableId using prefix index.
                         index.put(m.getPrefix(), tableId);
-                        LOGGER.info(String.format("Adding table : " + m.toString()));
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER.debug(String.format("Updated index : " + m.toString()));
+                        }
+
                     }
                 });
             } catch (Exception e) {
                 LOGGER.error(String.format("Failed to read from catalog: " + e.getMessage()));
             } finally {
-                LOGGER.info(String.format("index-entries = %d, cache-entries = %d for region = %s",
+                LOGGER.info(String.format("PartitionedTableTTLTracker " +
+                                "index-entries = %d, cache-entries = %d for region = %s",
                         index.getValidPrefixes(), ttlCache.getNumTablesInCache(),
                         CompactionScanner.this.store.getRegionInfo().getEncodedName()));
             }
@@ -414,27 +409,34 @@ public class CompactionScanner implements InternalScanner {
                     this.rowContext.setTtl(rowTTL);
                     return;
                 }
-                pkPositions = rowKeyParser.parsePKPositions(result);
-                // The startingPKPosition is initialized in the following manner
-                // case multi-tenant => startingPKPosition = 1, 0
-                // case salted => startingPKPosition = 1
-                // case index-table => startingPKPosition = 0
+                // pkPositions holds the byte offsets for the PKs of the base table
+                // for the current row
+                pkPositions = isIndexTable ?
+                        (isSalted ?
+                                Arrays.asList(0, 1) :
+                                Arrays.asList(0)) :
+                        rowKeyParser.parsePKPositions(result);
+                // The startingPKPosition was initialized(constructor) in the following manner
+                // case multi-tenant + salted + index-table  => startingPKPosition = 1
                 // case multi-tenant + salted => startingPKPosition = 2, 1
                 // case multi-tenant + index-table => startingPKPosition = 0
-                // case multi-tenant + salted + index-table  => startingPKPosition = ?
                 // case salted + index-table => startingPKPosition = 1
+                // case salted => startingPKPosition = 1
+                // case index-table => startingPKPosition = 0
+                // case multi-tenant => startingPKPosition = 1, 0
                 int offset = pkPositions.get(pkPosition);
                 byte[] rowkey = CellUtil.cloneRow(result.get(0));
-                // Search the global view space first
+                // Search using the starting offset (startingPKPosition offset)
                 Integer tableId = index.getTableIdWithPrefix(rowkey, offset);
                 if ((tableId == null) && (!isIndexTable) && (isMultiTenant || isSalted)) {
-                    // Search the tenant space
+                    // search returned no results, determine the new pkPosition(offset) to use
                     if (this.isMultiTenant && this.isSalted) {
                         pkPosition = 1;
                     } else if (isMultiTenant) {
                         pkPosition = 0;
                     }
                     offset = pkPositions.get(pkPosition);
+                    // Search using the next offset
                     tableId = index.getTableIdWithPrefix(rowkey, offset);
                 }
                 tableTTLInfo = ttlCache.getTableById(tableId);
@@ -446,20 +448,22 @@ public class CompactionScanner implements InternalScanner {
             } catch (Exception e) {
                 LOGGER.error(String.format("Exception when visiting table: " + e.getMessage()));
             } finally {
-                LOGGER.info(String.format("visiting row-key = %s, region = %s, table-ttl-info=%s, " +
-                                "matched = %s, prefix-key = %s, " +
-                                "ttl = %d, offset = %d, pk-pos = %d, pk-pos-list = %s",
-                        Bytes.toStringBinary(Result.create(result).getRow()),
-                        CompactionScanner.this.store.getRegionInfo().getEncodedName(),
-                        matched ? tableTTLInfo : "UNKNOWN",
-                        matched,
-                        matched ? Bytes.toStringBinary(tableTTLInfo.getPrefix()) : "UNKNOWN",
-                        rowTTL,
-                        searchOffset,
-                        pkPosition,
-                        pkPositions != null ? pkPositions.stream()
-                                .map((p) -> String.valueOf(p))
-                                .collect(Collectors.joining(",")) : ""));
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug(String.format("visiting row-key = %s, region = %s, table-ttl-info=%s, " +
+                                    "matched = %s, prefix-key = %s, " +
+                                    "ttl = %d, offset = %d, pk-pos = %d, pk-pos-list = %s",
+                            Bytes.toStringBinary(Result.create(result).getRow()),
+                            CompactionScanner.this.store.getRegionInfo().getEncodedName(),
+                            matched ? tableTTLInfo : "UNKNOWN",
+                            matched,
+                            matched ? Bytes.toStringBinary(tableTTLInfo.getPrefix()) : "UNKNOWN",
+                            rowTTL,
+                            searchOffset,
+                            pkPosition,
+                            pkPositions != null ? pkPositions.stream()
+                                    .map((p) -> String.valueOf(p))
+                                    .collect(Collectors.joining(",")) : ""));
+                }
             }
 
         }
