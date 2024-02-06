@@ -317,14 +317,16 @@ public class ScanUtil {
         Filter filter = scan.getFilter();
         if (filter == null) {
             scan.setFilter(andWithFilter); 
-        } else if (filter instanceof FilterList && ((FilterList)filter).getOperator() == FilterList.Operator.MUST_PASS_ALL) {
+        } else if (filter instanceof FilterList && ((FilterList)filter).getOperator()
+                == FilterList.Operator.MUST_PASS_ALL) {
             FilterList filterList = (FilterList)filter;
             List<Filter> allFilters = new ArrayList<Filter>(filterList.getFilters().size() + 1);
             allFilters.addAll(filterList.getFilters());
             allFilters.add(andWithFilter);
             scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,allFilters));
         } else {
-            scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, Arrays.asList(filter, andWithFilter)));
+            scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,
+                    Arrays.asList(filter, andWithFilter)));
         }
     }
     

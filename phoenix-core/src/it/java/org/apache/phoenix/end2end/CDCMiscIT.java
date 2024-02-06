@@ -51,15 +51,13 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import static org.apache.phoenix.query.QueryConstants.CHANGE_IMAGE;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_STR;
-import static org.apache.phoenix.query.QueryConstants.DELETE_EVENT_TYPE;
-import static org.apache.phoenix.query.QueryConstants.EVENT_TYPE;
-import static org.apache.phoenix.query.QueryConstants.POST_IMAGE;
-import static org.apache.phoenix.query.QueryConstants.PRE_IMAGE;
-import static org.apache.phoenix.query.QueryConstants.UPSERT_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
+import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -273,26 +271,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row1 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 100d);
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
-            row1.put(POST_IMAGE, postImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 100d);
+            postImage.put("V2", 1000d);
+            row1.put(CDC_POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 100d);
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
-            row1.put(CHANGE_IMAGE, changeImage);
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 100d);
+            changeImage.put("V2", 1000d);
+            row1.put(CDC_CHANGE_IMAGE, changeImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row1.put(PRE_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            row1.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         assertEquals(row1, gson.fromJson(rs.getString(3),
@@ -301,26 +295,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
         Map<String, Object> row2 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 200d);
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 2000d);
-            row2.put(POST_IMAGE, postImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 200d);
+            postImage.put("V2", 2000d);
+            row2.put(CDC_POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 200d);
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 2000d);
-            row2.put(CHANGE_IMAGE, changeImage);
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 200d);
+            changeImage.put("V2", 2000d);
+            row2.put(CDC_CHANGE_IMAGE, changeImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row2.put(PRE_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            row2.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         assertEquals(row2, gson.fromJson(rs.getString(3),
@@ -328,30 +318,24 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row3 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 101d);
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
-            row3.put(POST_IMAGE, postImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 101d);
+            postImage.put("V2", 1000d);
+            row3.put(CDC_POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 101d);
-            row3.put(CHANGE_IMAGE, changeImage);
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 101d);
+            row3.put(CDC_CHANGE_IMAGE, changeImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 100d);
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
-            row3.put(PRE_IMAGE, preImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 100d);
+            preImage.put("V2", 1000d);
+            row3.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row3, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -359,23 +343,21 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row4 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, DELETE_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row4.put(POST_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            row4.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row4.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
+            row4.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 101d);
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1000d);
-            row4.put(PRE_IMAGE, preImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 101d);
+            preImage.put("V2", 1000d);
+            row4.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row4, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -383,26 +365,22 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row5 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 102d);
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1002d);
-            row5.put(POST_IMAGE, postImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 102d);
+            postImage.put("V2", 1002d);
+            row5.put(CDC_POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 102d);
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1002d);
-            row5.put(CHANGE_IMAGE, changeImage);
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 102d);
+            changeImage.put("V2", 1002d);
+            row5.put(CDC_CHANGE_IMAGE, changeImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row5.put(PRE_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            row5.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         assertEquals(row5, gson.fromJson(rs.getString(3),
@@ -411,23 +389,21 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
         Map<String, Object> row6 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, DELETE_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row6.put(POST_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            row6.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row6.put(CHANGE_IMAGE, new HashMap<String, Double>() {{
+            row6.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 102d);
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 1002d);
-            row6.put(PRE_IMAGE, preImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 102d);
+            preImage.put("V2", 1002d);
+            row6.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row6, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -435,31 +411,25 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
         Map<String, Object> row7 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Map<String, Double>> postImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 201d);
-            postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", null);
-            row7.put(POST_IMAGE, postImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 201d);
+            postImage.put("V2", null);
+            row7.put(CDC_POST_IMAGE, postImage);
         }
         if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Map<String, Double>> changeImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 201d);
-            changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", null);
-            row7.put(CHANGE_IMAGE, changeImage);
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 201d);
+            changeImage.put("V2", null);
+            row7.put(CDC_CHANGE_IMAGE, changeImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            Map<String, Map<String, Double>> preImage = new HashMap<String, Map<String, Double>>() {{
-                put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-            }};
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V1", 200d);
-            preImage.get(DEFAULT_COLUMN_FAMILY_STR).put("V2", 2000d);
-            row7.put(PRE_IMAGE, preImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 200d);
+            preImage.put("V2", 2000d);
+            row7.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row7, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -655,7 +625,10 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 + " ON " + tableName;
         createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
-        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
+        assertResultSet(conn.createStatement().executeQuery(
+                "SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * " + "FROM " + cdcName),
+                new HashSet<PTable.CDCChangeScope>(Arrays.asList(PTable.CDCChangeScope.PRE,
+                        PTable.CDCChangeScope.POST, PTable.CDCChangeScope.CHANGE)));
     }
 
     @Test
@@ -741,27 +714,23 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         Gson gson = new Gson();
         Map<String, Object> row1 = new HashMap<String, Object>(){{
-            put(EVENT_TYPE, UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
-        Map<String, Map<String, Object>> postImage = new HashMap<String, Map<String, Object>>() {{
-            put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-        }};
-        postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("A_BINARY",
+        Map<String, Object> postImage = new HashMap<>();
+        postImage.put("A_BINARY",
                 Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
         // JSON doesn't distinguish between integer and floating point fields
         // Gson has to default to Float/Double for numeric fields
-        postImage.get(DEFAULT_COLUMN_FAMILY_STR).put("D",
+        postImage.put("D",
                 ((Long)dateColumnValues.get(0).getTime()).doubleValue());
-        row1.put(POST_IMAGE, postImage);
-        Map<String, Map<String, Object>> changeImage = new HashMap<String, Map<String, Object>>() {{
-            put(DEFAULT_COLUMN_FAMILY_STR, new HashMap<>());
-        }};
-        changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("A_BINARY",
+        row1.put(CDC_POST_IMAGE, postImage);
+        Map<String, Object> changeImage = new HashMap<>();
+        changeImage.put("A_BINARY",
                 Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
-        changeImage.get(DEFAULT_COLUMN_FAMILY_STR).put("D",
+        changeImage.put("D",
                 ((Long)dateColumnValues.get(0).getTime()).doubleValue());
-        row1.put(CHANGE_IMAGE, changeImage);
-        row1.put(PRE_IMAGE, new HashMap<String, String>() {{
+        row1.put(CDC_CHANGE_IMAGE, changeImage);
+        row1.put(CDC_PRE_IMAGE, new HashMap<String, String>() {{
         }});
         assertEquals(row1, gson.fromJson(rs.getString(3),
                 HashMap.class));
@@ -769,7 +738,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(true, rs.next());
         assertEquals(2, rs.getInt(2));
         HashMap<String, Object> row2Json = gson.fromJson(rs.getString(3), HashMap.class);
-        String row2BinaryColStr = (String) ((Map)((Map)row2Json.get(CHANGE_IMAGE)).get(DEFAULT_COLUMN_FAMILY_STR)).get("A_BINARY");
+        String row2BinaryColStr = (String) ((Map)((Map)row2Json.get(CDC_CHANGE_IMAGE))).get("A_BINARY");
         byte[] row2BinaryCol = Base64.getDecoder().decode(row2BinaryColStr);
         assertEquals(0, CDCUtil.compare(byteColumnValues.get(1), row2BinaryCol));
     }

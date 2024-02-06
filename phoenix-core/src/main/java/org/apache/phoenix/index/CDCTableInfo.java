@@ -30,6 +30,7 @@ import org.apache.phoenix.util.CDCUtil;
 import java.util.Collections;
 import java.util.List;
 
+
 /**
  * CDC Table Def Class
  */
