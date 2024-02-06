@@ -22,6 +22,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.prefix.table.TableTTLInfo;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
@@ -103,6 +104,7 @@ import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY_PTR;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.NULL_DATA_TYPE_VALUE;
 
 public class ViewUtil {
 
@@ -366,7 +368,7 @@ public class ViewUtil {
         }
 
         byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
-        logger.info(String.format("findImmediateRelatedViews: key = %s", Bytes.toStringBinary(key)));
+        logger.debug(String.format("findImmediateRelatedViews: key = %s", Bytes.toStringBinary(key)));
 		Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
                 timestamp);
         SingleColumnValueFilter linkFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES,
@@ -1256,9 +1258,19 @@ public class ViewUtil {
                                 logger.debug(String.format(
                                         "index-name = %s, ttl = %d, row-key-prefix = %d",
                                         index.getName(), index.getTTL(), index.getViewIndexId()));
+                                PDataType viewIndexIdType = index.getviewIndexIdType();
                                 byte[]
                                         viewIndexIdBytes =
                                         PSmallint.INSTANCE.toBytes(index.getViewIndexId());
+                                if (viewIndexIdType.compareTo(PLong.INSTANCE) == 0) {
+                                    viewIndexIdBytes =
+                                            PLong.INSTANCE.toBytes(index.getViewIndexId());
+                                }
+                                logger.debug(String.format(
+                                        "index-name = %s, index-id-type = %s, index-id-bytes = %s",
+                                        index.getName(), viewIndexIdType.getSqlTypeName(),
+                                        Bytes.toStringBinary(viewIndexIdBytes)));
+
                                 tableTTLInfoList.add(
                                         new TableTTLInfo(pTable.getPhysicalName().getBytes(),
                                                 tenantIdBytes, index.getTableName().getBytes(),
