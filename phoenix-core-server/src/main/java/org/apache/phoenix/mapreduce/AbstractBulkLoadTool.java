@@ -250,7 +250,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
             outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
         } else {
-            outputPath = new Path(tmpPath + "/"+ UUID.randomUUID());
+            outputPath = new Path(tmpPath + "/" + UUID.randomUUID());
         }
 
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
