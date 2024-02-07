@@ -27,11 +27,15 @@ import org.apache.hadoop.hbase.client.AsyncConnection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionStatesCount;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.iterate.ScanningResultPostDummyResultCaller;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.QueryBuilder;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -184,6 +188,67 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
                             }
                         }
                     } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                        LOGGER.error("Something went wrong", e);
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            LOGGER.error("Something went wrong..", e);
+        }
+    }
+
+    protected static void splitAllRegionsOfTable(String tableName, int splitAtRow) {
+        try (AsyncConnection asyncConnection =
+                     ConnectionFactory.createAsyncConnection(getUtility().getConfiguration())
+                             .get()) {
+            AsyncAdmin admin = asyncConnection.getAdmin();
+            List<RegionInfo> regionsOfTable =
+                    admin.getRegions(TableName.valueOf(tableName)).get();
+            regionsOfTable.forEach(regionInfo -> {
+                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                    try {
+                        for (int i = 0; i < 5; i++) {
+                            RegionStatesCount regionStatesCount =
+                                    admin.getClusterMetrics().get().getTableRegionStatesCount()
+                                            .get(TableName.valueOf(tableName));
+                            byte[] splitPoint;
+                            if (regionStatesCount.getRegionsInTransition() == 0 &&
+                                    regionStatesCount.getOpenRegions() ==
+                                            regionStatesCount.getTotalRegions()) {
+                                try (Table table =
+                                             utility.getConnection()
+                                                     .getTable(TableName.valueOf(tableName))) {
+                                    try (ResultScanner resultScanner = table.getScanner(
+                                                    new Scan())) {
+                                        Result result = null;
+                                        for (int rowCount = 0; rowCount < splitAtRow; rowCount++) {
+                                            result = resultScanner.next();
+                                            if (result == null) {
+                                                LOGGER.info("Table {} has only {} rows, splitting" +
+                                                                " at row number {} not possible",
+                                                        tableName, rowCount, splitAtRow);
+                                                return;
+                                            }
+                                        }
+                                        splitPoint = result == null ? null :
+                                                ByteUtil.closestPossibleRowAfter(result.getRow());
+                                    }
+                                }
+                                LOGGER.info("Splitting region {}",
+                                        regionInfo.getRegionNameAsString());
+                                admin.flushRegion(regionInfo.getRegionName()).get(3,
+                                        TimeUnit.SECONDS);
+                                admin.splitRegion(regionInfo.getRegionName(), splitPoint).get(4,
+                                        TimeUnit.SECONDS);
+                                break;
+                            } else {
+                                LOGGER.info("Table {} has some region(s) in RIT or not online",
+                                        tableName);
+                            }
+                        }
+                    } catch (InterruptedException | ExecutionException | TimeoutException |
+                             IOException e) {
                         LOGGER.error("Something went wrong", e);
                         throw new RuntimeException(e);
                     }

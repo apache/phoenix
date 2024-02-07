@@ -87,6 +87,7 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
 import org.slf4j.Logger;
@@ -258,7 +259,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             this.aggregateMap = Maps.newHashMapWithExpectedSize(estDistVals);
             this.chunk = tenantCache.getMemoryManager().allocate(estSize);
             this.customAnnotations = customAnnotations;
-            aggregateValueToLastScannedRowKeys = new ConcurrentHashMap<>();
+            aggregateValueToLastScannedRowKeys = Maps.newConcurrentMap();
         }
 
         @Override
@@ -428,10 +429,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final Scan scan;
         private final byte[] scanStartRowKey;
         private final boolean includeStartRowKey;
-        private final byte[] prevScanStartRowKey;
-        private final Boolean prevScanIncludeStartRowKey;
+        private final byte[] actualScanStartRowKey;
+        private final boolean actualScanIncludeStartRowKey;
         private boolean firstScan = true;
-        private boolean updateScannerBasedOnPrevRowKey = false;
+        private boolean skipValidRowsSent = false;
         private byte[] lastReturnedRowKey = null;
 
         private UnorderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
@@ -440,17 +441,14 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             super(scanner);
             this.region = c.getEnvironment().getRegion();
             this.scan = scan;
-            // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
-            // for reverse scan.
-            scanStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
-                    (scan.isReversed() ? region.getRegionInfo().getEndKey() :
-                            region.getRegionInfo().getStartKey());
+            scanStartRowKey =
+                    ServerUtil.getScanStartRowKeyFromScanOrRegionBoundaries(scan, region);
             includeStartRowKey = scan.includeStartRow();
             // Retrieve start rowkey of the previous scan. This would be different than
             // current scan start rowkey if the region has recently moved or split or merged.
-            this.prevScanStartRowKey =
+            this.actualScanStartRowKey =
                     scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW);
-            this.prevScanIncludeStartRowKey = true;
+            this.actualScanIncludeStartRowKey = true;
             this.aggregators = aggregators;
             this.limit = limit;
             this.pageSizeMs = pageSizeMs;
@@ -487,51 +485,52 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
 
         @Override
         public boolean next(List<Cell> resultsToReturn) throws IOException {
-            if (firstScan && prevScanStartRowKey != null && prevScanIncludeStartRowKey != null) {
-                firstScan = false;
+            if (firstScan && actualScanStartRowKey != null) {
                 if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
-                    if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) != 0 ||
-                            prevScanIncludeStartRowKey != includeStartRowKey) {
-                        LOGGER.info("Region has moved.. Prev scan start rowkey {} is not same as" +
-                                        " current scan start rowkey {}",
-                                Bytes.toStringBinary(prevScanStartRowKey),
+                    if (hasRegionMoved()) {
+                        LOGGER.info("Region has moved.. Actual scan start rowkey {} is not same " +
+                                        "as current scan start rowkey {}",
+                                Bytes.toStringBinary(actualScanStartRowKey),
                                 Bytes.toStringBinary(scanStartRowKey));
                         // If region has moved in the middle of the scan operation, after resetting
                         // the scanner, hbase client uses (latest received rowkey + \x00) as new
                         // start rowkey for resuming the scan operation on the new scanner.
                         if (Bytes.compareTo(
-                                ByteUtil.concat(prevScanStartRowKey, Bytes.toBytesBinary("\\x00")),
+                                ByteUtil.concat(actualScanStartRowKey, ByteUtil.ZERO_BYTE),
                                 scanStartRowKey) == 0) {
                             scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
-                                    prevScanStartRowKey);
+                                    actualScanStartRowKey);
                             scan.setAttribute(
                                     QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
-                                    Bytes.toBytes(prevScanIncludeStartRowKey));
+                                    Bytes.toBytes(actualScanIncludeStartRowKey));
                         } else {
                             // This happens when the server side scanner has already sent some
                             // rows back to the client and region has moved, so now we need to
-                            // use updateScannerBasedOnPrevRowKey flag and also reset the scanner
+                            // use skipValidRowsSent flag and also reset the scanner
                             // at paging region scanner level to re-read the previously sent
                             // values in order to re-compute the aggregation and then return
                             // only the next rowkey that was not yet sent back to the client.
-                            updateScannerBasedOnPrevRowKey = true;
+                            skipValidRowsSent = true;
                             scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
-                                    prevScanStartRowKey);
+                                    actualScanStartRowKey);
                             scan.setAttribute(
                                     QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
-                                    Bytes.toBytes(prevScanIncludeStartRowKey));
+                                    Bytes.toBytes(actualScanIncludeStartRowKey));
                         }
                     }
                 }
+            }
+            if (firstScan) {
+                firstScan = false;
             }
             boolean moreRows = next0(resultsToReturn);
             if (ScanUtil.isDummy(resultsToReturn)) {
                 return true;
             }
-            if (updateScannerBasedOnPrevRowKey) {
+            if (skipValidRowsSent) {
                 while (true) {
                     if (!moreRows) {
-                        updateScannerBasedOnPrevRowKey = false;
+                        skipValidRowsSent = false;
                         if (resultsToReturn.size() > 0) {
                             lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
                         }
@@ -542,7 +541,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(),
                             resultRowKey, 0, resultRowKey.length);
                     if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
-                        updateScannerBasedOnPrevRowKey = false;
+                        skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             if (resultsToReturn.size() > 0) {
                                 lastReturnedRowKey = CellUtil.cloneRow(resultsToReturn.get(0));
@@ -560,9 +559,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         return moreRows;
                     } else if (
                             Bytes.compareTo(
-                                    ByteUtil.concat(resultRowKey, Bytes.toBytesBinary("\\x00")),
+                                    ByteUtil.concat(resultRowKey, ByteUtil.ZERO_BYTE),
                                     scanStartRowKey) == 0) {
-                        updateScannerBasedOnPrevRowKey = false;
+                        skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             resultsToReturn.clear();
                             moreRows = next0(resultsToReturn);
@@ -608,7 +607,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     if (regionScanner != null) {
                         return regionScanner.next(resultsToReturn);
                     }
-                    ImmutableBytesPtr currentRowKey = null;
                     do {
                         List<Cell> results = useQualifierAsIndex ?
                                 new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(),
@@ -629,7 +627,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                                     TupleUtil.getConcatenatedValue(result, expressions);
                             ImmutableBytesPtr originalRowKey = new ImmutableBytesPtr();
                             result.getKey(originalRowKey);
-                            currentRowKey = originalRowKey;
                             Aggregator[] rowAggregators = groupByCache.cache(key);
                             groupByCache.cacheAggregateRowKey(key, originalRowKey);
                             // Aggregate values here
@@ -664,7 +661,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
          * Retrieve dummy rowkey and return to the client.
          *
          * @param resultsToReturn dummy cell.
-         * @return true if more rows exist after this one, false if scanner is done.
+         * @return always true, because some rows are likely to exist as we are returning
+         * dummy result to the client.
          */
         private boolean getDummyResult(List<Cell> resultsToReturn) {
             if (lastReturnedRowKey != null) {
@@ -672,12 +670,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                 return true;
             }
             if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
-                if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) !=
-                        0 || prevScanIncludeStartRowKey != includeStartRowKey) {
+                if (hasRegionMoved()) {
                     byte[] lastByte =
                             new byte[]{scanStartRowKey[scanStartRowKey.length - 1]};
                     if (scanStartRowKey.length > 1 && Bytes.compareTo(lastByte,
-                            Bytes.toBytesBinary("\\x00")) == 0) {
+                            ByteUtil.ZERO_BYTE) == 0) {
                         byte[] prevKey = new byte[scanStartRowKey.length - 1];
                         System.arraycopy(scanStartRowKey, 0, prevKey, 0,
                                 prevKey.length);
@@ -693,6 +690,20 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                 ScanUtil.getDummyResult(scanStartRowKey, resultsToReturn);
             }
             return true;
+        }
+
+        /**
+         * Return true if the region has moved in the middle of an ongoing scan operation,
+         * resulting in scanner reset. Based on the return value of this function, we need to
+         * either scan the region as if we are scanning for the first time or we need to scan
+         * the region considering that we have already returned some rows back to client and
+         * we need to resume from the last row that we returned to the client.
+         *
+         * @return true if the region has moved in the middle of an ongoing scan operation.
+         */
+        private boolean hasRegionMoved() {
+            return Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0 ||
+                    actualScanIncludeStartRowKey != includeStartRowKey;
         }
 
         @Override
@@ -741,11 +752,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             minMaxQualifiers = EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan);
             useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
             encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-            // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
-            // for reverse scan.
-            initStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
-                    (scan.isReversed() ? region.getRegionInfo().getEndKey() :
-                            region.getRegionInfo().getStartKey());
+            initStartRowKey = ServerUtil.getScanStartRowKeyFromScanOrRegionBoundaries(scan,
+                    region);
             includeInitStartRowKey = scan.includeStartRow();
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug(LogUtil.addCustomAnnotations(
@@ -935,7 +943,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             RegionInfo.createRegionName(region.getTableDescriptor().getTableName(),
                                     new byte[1], HConstants.NINES, false).length;
                     if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
-                            1, Bytes.toBytesBinary("\\x00"), 0, 1) == 0) {
+                            1, ByteUtil.ZERO_BYTE, 0, 1) == 0) {
                         // If initStartRowKey has last byte as "\\x00", we can discard the last
                         // byte and send the key as dummy rowkey.
                         prevKey = new byte[initStartRowKey.length - 1];

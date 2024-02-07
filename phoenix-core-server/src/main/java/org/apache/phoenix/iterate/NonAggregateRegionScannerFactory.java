@@ -312,7 +312,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         // set row count to offset because we return valid row only after offset num of rows
         // are skipped.
         if (Bytes.compareTo(prevScanStartRowKey, initStartRowKey) != 0 && Bytes.compareTo(
-                ByteUtil.concat(prevScanStartRowKey, Bytes.toBytesBinary("\\x00")),
+                ByteUtil.concat(prevScanStartRowKey, ByteUtil.ZERO_BYTE),
                 initStartRowKey) != 0) {
             iterator.setRowCountToOffset();
         }

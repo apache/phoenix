@@ -166,7 +166,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
     private boolean includeStartRowKey;
     private boolean serverSideIterator = false;
     private boolean firstScan = true;
-    private boolean updateScannerBasedOnPrevRowKey = false;
+    private boolean skipValidRowsSent = false;
 
     protected ResultIterator getDelegate() {
         return delegate;
@@ -199,8 +199,10 @@ public class OrderedResultIterator implements PeekingResultIterator {
         this.scan = scan;
         // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
         // for reverse scan.
-        this.scanStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
-                (scan.isReversed() ? regionInfo.getEndKey() : regionInfo.getStartKey());
+        // Keep this same as ServerUtil#getScanStartRowKeyFromScanOrRegionBoundaries.
+        this.scanStartRowKey =
+                scan.getStartRow().length > 0 ? scan.getStartRow() :
+                        (scan.isReversed() ? regionInfo.getEndKey() : regionInfo.getStartKey());
         // Retrieve start rowkey of the previous scan. This would be different than
         // current scan start rowkey if the region has recently moved or split or merged.
         this.prevScanStartRowKey =
@@ -310,7 +312,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                         // the scanner, hbase client uses (latest received rowkey + \x00) as new
                         // start rowkey for resuming the scan operation on the new scanner.
                         if (Bytes.compareTo(
-                                ByteUtil.concat(prevScanStartRowKey, Bytes.toBytesBinary("\\x00")),
+                                ByteUtil.concat(prevScanStartRowKey, ByteUtil.ZERO_BYTE),
                                 scanStartRowKey) == 0) {
                             scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
                                     prevScanStartRowKey);
@@ -320,11 +322,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
                         } else {
                             // This happens when the server side scanner has already sent some
                             // rows back to the client and region has moved, so now we need to
-                            // use updateScannerBasedOnPrevRowKey flag and also reset the scanner
+                            // use skipValidRowsSent flag and also reset the scanner
                             // at paging region scanner level to re-read the previously sent
                             // values in order to re-compute the aggregation and then return
                             // only the next rowkey that was not yet sent back to the client.
-                            updateScannerBasedOnPrevRowKey = true;
+                            skipValidRowsSent = true;
                             scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
                                     prevScanStartRowKey);
                             scan.setAttribute(
@@ -339,10 +341,10 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 return dummyTuple;
             }
             Tuple result = resultIterator.next();
-            if (updateScannerBasedOnPrevRowKey) {
+            if (skipValidRowsSent) {
                 while (true) {
                     if (result == null) {
-                        updateScannerBasedOnPrevRowKey = false;
+                        skipValidRowsSent = false;
                         return null;
                     }
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -351,16 +353,16 @@ public class OrderedResultIterator implements PeekingResultIterator {
                     System.arraycopy(ptr.get(), ptr.getOffset(), resultRowKey, 0,
                             resultRowKey.length);
                     if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
-                        updateScannerBasedOnPrevRowKey = false;
+                        skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             return result;
                         }
                         return resultIterator.next();
                     } else if (
                             Bytes.compareTo(
-                                    ByteUtil.concat(resultRowKey, Bytes.toBytesBinary("\\x00")),
+                                    ByteUtil.concat(resultRowKey, ByteUtil.ZERO_BYTE),
                                     scanStartRowKey) == 0) {
-                        updateScannerBasedOnPrevRowKey = false;
+                        skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             return resultIterator.next();
                         }
@@ -443,7 +445,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
                 byte[] lastByte =
                         new byte[]{scanStartRowKey[scanStartRowKey.length - 1]};
                 if (scanStartRowKey.length > 1 && Bytes.compareTo(lastByte,
-                        Bytes.toBytesBinary("\\x00")) == 0) {
+                        ByteUtil.ZERO_BYTE) == 0) {
                     byte[] prevKey = new byte[scanStartRowKey.length - 1];
                     System.arraycopy(scanStartRowKey, 0, prevKey, 0,
                             prevKey.length);

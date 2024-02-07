@@ -49,6 +49,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -145,9 +146,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         this.pageSizeMs = pageSizeMs;
         // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
         // for reverse scan.
-        this.initStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
-                (scan.isReversed() ? region.getRegionInfo().getEndKey() :
-                        region.getRegionInfo().getStartKey());
+        this.initStartRowKey =
+                ServerUtil.getScanStartRowKeyFromScanOrRegionBoundaries(scan, region);
         this.includeInitStartRowKey = scan.includeStartRow();
     }
 
@@ -455,7 +455,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                         RegionInfo.createRegionName(region.getTableDescriptor().getTableName(),
                                 new byte[1], HConstants.NINES, false).length;
                 if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
-                        1, Bytes.toBytesBinary("\\x00"), 0, 1) == 0) {
+                        1, ByteUtil.ZERO_BYTE, 0, 1) == 0) {
                     // If initStartRowKey has last byte as "\\x00", we can discard the last
                     // byte and send the key as dummy rowkey.
                     prevKey = new byte[initStartRowKey.length - 1];

@@ -89,6 +89,8 @@ public class ByteUtil {
 
     private static final int[] BITS = {BIT_7, BIT_6, BIT_5, BIT_4, BIT_3, BIT_2, BIT_1, BIT_0};
 
+    public static final byte[] ZERO_BYTE = Bytes.toBytesBinary("\\x00");
+
     public static final Comparator<ImmutableBytesPtr> BYTES_PTR_COMPARATOR = new Comparator<ImmutableBytesPtr>() {
 
         @Override
@@ -812,5 +814,12 @@ public class ByteUtil {
             }
         }
         return l_raw;
+    }
+
+    /**
+     * Create the closest row after the specified row
+     */
+    public static byte[] closestPossibleRowAfter(byte[] row) {
+        return Arrays.copyOf(row, row.length + 1);
     }
 }

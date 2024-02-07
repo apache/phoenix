@@ -55,6 +55,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.InsufficientMemoryException;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -171,7 +172,7 @@ public class SpillableGroupByCache implements GroupByCache {
             LOGGER.debug("Instantiating LRU groupby cache of element size: " + maxCacheSize);
         }
 
-        aggregateValueToLastScannedRowKeys = new ConcurrentHashMap<>();
+        aggregateValueToLastScannedRowKeys = Maps.newConcurrentMap();
         // LRU cache implemented as LinkedHashMap with access order
         cache = new LinkedHashMap<ImmutableBytesWritable, Aggregator[]>(maxCacheSize, 0.75f, true) {
             boolean spill = false;

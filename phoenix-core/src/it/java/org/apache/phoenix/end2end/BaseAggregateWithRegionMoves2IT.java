@@ -498,7 +498,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
         conn.commit();
     }
 
-    protected void testAvgGroupByOrderPreserving(Connection conn, String tableName, int nGuidePosts)
+    protected void testAvgGroupByOrderPreserving(Connection conn, String tableName, int splitSize)
             throws SQLException, IOException {
         TABLE_NAMES.add(tableName);
         QueryBuilder queryBuilder = new QueryBuilder()
@@ -539,7 +539,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
         TestUtil.analyzeTable(conn, tableName);
         List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);
         // nGuideposts when stats are enabled, 4 when disabled
-        assertEquals(4, splits.size());
+        assertEquals(splitSize, splits.size());
     }
 
     @Test
