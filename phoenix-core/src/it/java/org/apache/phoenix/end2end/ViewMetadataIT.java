@@ -1432,9 +1432,12 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
             assertEquals(1, map.size());
             assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
 
-            //global index
+            //global index in cache and in parent PTable
             PTable index1PTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(SCHEMA1, index1));
             map = index1PTable.getAncestorLastDDLTimestampMap();
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+            assertEquals(1, basePTable.getIndexes().size());
+            map = basePTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
             assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
 
             //tenant2 view
@@ -1455,14 +1458,26 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 assertEquals(2, map.size());
                 assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
                 assertEquals(view1PTable.getLastDDLTimestamp(), map.get(view1Key));
-                //tenant1 child view index
+                //tenant1 child view index in cache and in child view PTable
                 PTable view2PTable = PhoenixRuntime.getTable(tenant1Conn, view2);
                 PTableKey view2Key = new PTableKey(view2PTable.getTenantId(), view2);
                 PTable index2PTable = PhoenixRuntime.getTable(tenant1Conn, SchemaUtil.getTableName(SCHEMA3, index2));
                 map = index2PTable.getAncestorLastDDLTimestampMap();
                 assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
                 assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
-
+                assertEquals(2, view2PTable.getIndexes().size());
+                for (PTable index : view2PTable.getIndexes()) {
+                    // inherited index
+                    if (index.getTableName().getString().equals(index1)) {
+                        map = index.getAncestorLastDDLTimestampMap();
+                        assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                    } else {
+                        // view index
+                        map = index.getAncestorLastDDLTimestampMap();
+                        assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                        assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
+                    }
+                }
             }
         }
     }

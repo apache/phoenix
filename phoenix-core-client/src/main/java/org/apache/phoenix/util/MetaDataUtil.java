@@ -1196,7 +1196,7 @@ public class MetaDataUtil {
         Map<PTableKey, Long> ancestorMap
                 = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
         // this method can be called for an index and a view which inherited this index
-        // from its parent table, skip adding the view as an ancestor of the index.
+        // from its ancestors, skip adding the view as an ancestor of the index.
         if (pTable.getParentName().equals(parentTable.getName())) {
             ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
         }

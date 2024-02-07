@@ -1521,11 +1521,13 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
         try (Connection conn = cqs1.connect(url1, props);
              Connection conn2 = cqs2.connect(url2, props)) {
+            //client-1 creates table, view, index and view index
             createTable(conn, baseTable, NEVER);
             createView(conn, baseTable, view);
             createIndex(conn, baseTable, index, "v2");
             createIndex(conn, view, viewIndex, "v1");
 
+            //client-2 queries the view
             query(conn2, view);
 
             PTable basePTable = PhoenixRuntime.getTable(conn2, baseTable);
@@ -1533,15 +1535,24 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             PTable viewIndexPTable = PhoenixRuntime.getTable(conn2, SchemaUtil.getTableName(SCHEMA2, viewIndex));
             PTable indexPTable = PhoenixRuntime.getTable(conn2, SchemaUtil.getTableName(SCHEMA1, index));
 
+            //verify view has base table in ancestor map
             Map<PTableKey,Long> map = viewPTable.getAncestorLastDDLTimestampMap();
             assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
 
+            //verify view index has base table and view in ancestor map
             map = viewIndexPTable.getAncestorLastDDLTimestampMap();
             assertEquals(2, map.size());
             assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
             assertEquals(viewPTable.getLastDDLTimestamp(), map.get(viewPTable.getKey()));
 
+            //verify index has only base table in ancestor map
             map = indexPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(1, map.size());
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+
+            //also verify index PTable within base table has the map
+            assertEquals(1, basePTable.getIndexes().size());
+            map = basePTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
             assertEquals(1, map.size());
             assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
         }

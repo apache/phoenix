@@ -718,7 +718,8 @@ public class MetaDataClient {
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
                             if (addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, resolvedTimestamp,
                                     true, false)) {
-                                connection.addTable(result.getTable(), resolvedTime);
+                                connection.addTable(updateIndexesWithAncestorMap(result.getTable()),
+                                                        resolvedTime);
                             } else {
                                 // if we aren't adding the table, we still need to update the
                                 // resolved time of the table
@@ -960,6 +961,24 @@ public class MetaDataClient {
             }
         }
         return false;
+    }
+
+    /**
+     * Update the indexes within this table with ancestor->last_ddl_timestamp map.
+     * @param table
+     * @return new PTable with list of modified index PTables.
+     * @throws SQLException
+     */
+    private PTable updateIndexesWithAncestorMap(PTable table) throws SQLException {
+        if (table.getIndexes().isEmpty()) {
+            return table;
+        }
+        List<PTable> newIndexes = new ArrayList<>(table.getIndexes().size());
+        for (PTable index : table.getIndexes()) {
+            newIndexes.add(MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table));
+        }
+        return PTableImpl.builderWithColumns(table, PTableImpl.getColumnsToClone(table))
+                .setIndexes(newIndexes).build();
     }
 
 	private void addFunctionArgMutation(String functionName, FunctionArgument arg, PreparedStatement argUpsert, int position) throws SQLException {
@@ -5175,7 +5194,7 @@ public class MetaDataClient {
     private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors,
                                  long timestamp) throws SQLException {
         addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, null, false, alwaysHitServerForAncestors);
-        PTable table = result.getTable();
+        PTable table = updateIndexesWithAncestorMap(result.getTable());
         connection.addTable(table, timestamp);
     }
 

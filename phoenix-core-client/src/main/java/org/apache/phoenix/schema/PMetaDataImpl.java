@@ -20,6 +20,7 @@ package org.apache.phoenix.schema;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -135,8 +136,6 @@ public class PMetaDataImpl implements PMetaData {
             PTableRef oldParentRef = metaData.get(new PTableKey(table.getTenantId(), parentName));
             // If parentTable isn't cached, that's ok we can skip this
             if (oldParentRef != null) {
-                table = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(table, oldParentRef.getTable());
-                tableRef = tableRefFactory.makePTableRef(table, timeKeeper.getCurrentTime(), resolvedTime);
                 List<PTable> oldIndexes = oldParentRef.getTable().getIndexes();
                 List<PTable> newIndexes = Lists.newArrayListWithExpectedSize(oldIndexes.size() + 1);
                 newIndexes.addAll(oldIndexes);
@@ -164,8 +163,7 @@ public class PMetaDataImpl implements PMetaData {
             metaData.put(table.getKey(), tableRef);
         }
         for (PTable index : table.getIndexes()) {
-            PTable indexPTable = MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table);
-            metaData.put(index.getKey(), tableRefFactory.makePTableRef(indexPTable, this.timeKeeper.getCurrentTime(), resolvedTime));
+            metaData.put(index.getKey(), tableRefFactory.makePTableRef(index, this.timeKeeper.getCurrentTime(), resolvedTime));
         }
         if (table.getPhysicalName(true) != null &&
                 !Strings.isNullOrEmpty(table.getPhysicalName(true).getString()) && !table.getPhysicalName(true).getString().equals(table.getTableName().getString())) {
