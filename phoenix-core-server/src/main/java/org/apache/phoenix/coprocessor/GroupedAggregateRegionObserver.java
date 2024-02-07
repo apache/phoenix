@@ -38,7 +38,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -523,7 +522,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             if (firstScan) {
                 firstScan = false;
             }
-            boolean moreRows = next0(resultsToReturn);
+            boolean moreRows = nextInternal(resultsToReturn);
             if (ScanUtil.isDummy(resultsToReturn)) {
                 return true;
             }
@@ -549,7 +548,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             return moreRows;
                         }
                         resultsToReturn.clear();
-                        moreRows = next0(resultsToReturn);
+                        moreRows = nextInternal(resultsToReturn);
                         if (ScanUtil.isDummy(resultsToReturn)) {
                             return true;
                         }
@@ -564,7 +563,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             resultsToReturn.clear();
-                            moreRows = next0(resultsToReturn);
+                            moreRows = nextInternal(resultsToReturn);
                             if (ScanUtil.isDummy(resultsToReturn)) {
                                 return true;
                             }
@@ -575,7 +574,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         }
                     }
                     resultsToReturn.clear();
-                    moreRows = next0(resultsToReturn);
+                    moreRows = nextInternal(resultsToReturn);
                     if (ScanUtil.isDummy(resultsToReturn)) {
                         return true;
                     }
@@ -594,7 +593,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
          * @return true if more rows exist after this one, false if scanner is done.
          * @throws IOException if something goes wrong.
          */
-        private boolean next0(List<Cell> resultsToReturn) throws IOException {
+        private boolean nextInternal(List<Cell> resultsToReturn) throws IOException {
             boolean hasMore;
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             long now;
@@ -646,7 +645,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     return regionScanner.next(resultsToReturn);
                 }
             } catch (Exception e) {
-                LOGGER.error("Unordered group-by scanner next encountered error.", e);
+                LOGGER.error("Unordered group-by scanner next encountered error for region {}",
+                        region.getRegionInfo().getRegionNameAsString(), e);
                 if (e instanceof IOException) {
                     throw e;
                 } else {
@@ -823,7 +823,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     } while (hasMore && !aggBoundary && !atLimit && (now - startTime) < pageSizeMs);
                 }
             } catch (Exception e) {
-                LOGGER.error("Ordered group-by scanner next encountered error.", e);
+                LOGGER.error("Ordered group-by scanner next encountered error for region {}",
+                        region.getRegionInfo().getRegionNameAsString(), e);
                 if (e instanceof IOException) {
                     throw e;
                 } else {
@@ -901,7 +902,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                 currentKey = null;
                 return false;
             } catch (Exception e) {
-                LOGGER.error("Ordered group-by scanner next encountered some issue.", e);
+                LOGGER.error("Ordered group-by scanner next encountered some issue for" +
+                        " region {}", region.getRegionInfo().getRegionNameAsString(), e);
                 if (e instanceof IOException) {
                     throw e;
                 } else {

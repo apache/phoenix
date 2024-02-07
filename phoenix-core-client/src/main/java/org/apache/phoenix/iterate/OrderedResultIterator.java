@@ -161,8 +161,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
     private long pageSizeMs;
     private Scan scan;
     private byte[] scanStartRowKey;
-    private byte[] prevScanStartRowKey;
-    private Boolean prevScanIncludeStartRowKey;
+    private byte[] actualScanStartRowKey;
+    private Boolean actualScanIncludeStartRowKey;
+    private RegionInfo regionInfo = null;
     private boolean includeStartRowKey;
     private boolean serverSideIterator = false;
     private boolean firstScan = true;
@@ -205,11 +206,12 @@ public class OrderedResultIterator implements PeekingResultIterator {
                         (scan.isReversed() ? regionInfo.getEndKey() : regionInfo.getStartKey());
         // Retrieve start rowkey of the previous scan. This would be different than
         // current scan start rowkey if the region has recently moved or split or merged.
-        this.prevScanStartRowKey =
+        this.actualScanStartRowKey =
                 scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW);
-        this.prevScanIncludeStartRowKey = true;
+        this.actualScanIncludeStartRowKey = true;
         this.includeStartRowKey = scan.includeStartRow();
         this.serverSideIterator = true;
+        this.regionInfo = regionInfo;
     }
 
     public OrderedResultIterator(ResultIterator delegate,
@@ -298,27 +300,26 @@ public class OrderedResultIterator implements PeekingResultIterator {
     @Override
     public Tuple next() throws SQLException {
         try {
-            if (firstScan && serverSideIterator && prevScanStartRowKey != null &&
-                    prevScanIncludeStartRowKey != null) {
-                firstScan = false;
+            if (firstScan && serverSideIterator && actualScanStartRowKey != null &&
+                    actualScanIncludeStartRowKey != null) {
                 if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
-                    if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) != 0 ||
-                            prevScanIncludeStartRowKey != includeStartRowKey) {
-                        LOGGER.info("Region has moved. Prev scan start rowkey {} is not same as" +
-                                        " current scan start rowkey  {}",
-                                Bytes.toStringBinary(prevScanStartRowKey),
+                    if (Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0 ||
+                            actualScanIncludeStartRowKey != includeStartRowKey) {
+                        LOGGER.info("Region has moved. Actual scan start rowkey {} is not same as"
+                                        + " current scan start rowkey  {}",
+                                Bytes.toStringBinary(actualScanStartRowKey),
                                 Bytes.toStringBinary(scanStartRowKey));
                         // If region has moved in the middle of the scan operation, after resetting
                         // the scanner, hbase client uses (latest received rowkey + \x00) as new
                         // start rowkey for resuming the scan operation on the new scanner.
                         if (Bytes.compareTo(
-                                ByteUtil.concat(prevScanStartRowKey, ByteUtil.ZERO_BYTE),
+                                ByteUtil.concat(actualScanStartRowKey, ByteUtil.ZERO_BYTE),
                                 scanStartRowKey) == 0) {
                             scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
-                                    prevScanStartRowKey);
+                                    actualScanStartRowKey);
                             scan.setAttribute(
                                     QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
-                                    Bytes.toBytes(prevScanIncludeStartRowKey));
+                                    Bytes.toBytes(actualScanIncludeStartRowKey));
                         } else {
                             // This happens when the server side scanner has already sent some
                             // rows back to the client and region has moved, so now we need to
@@ -328,13 +329,16 @@ public class OrderedResultIterator implements PeekingResultIterator {
                             // only the next rowkey that was not yet sent back to the client.
                             skipValidRowsSent = true;
                             scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
-                                    prevScanStartRowKey);
+                                    actualScanStartRowKey);
                             scan.setAttribute(
                                     QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
-                                    Bytes.toBytes(prevScanIncludeStartRowKey));
+                                    Bytes.toBytes(actualScanIncludeStartRowKey));
                         }
                     }
                 }
+            }
+            if (firstScan) {
+                firstScan = false;
             }
             getResultIterator();
             if (!resultIteratorReady) {
@@ -372,7 +376,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
             }
             return result;
         } catch (Exception e) {
-            LOGGER.error("Ordered result iterator next encountered error.", e);
+            LOGGER.error("Ordered result iterator next encountered error " + (regionInfo != null ?
+                    " for region: " + regionInfo.getRegionNameAsString() : "."), e);
             if (e instanceof SQLException) {
                 throw e;
             } else {
@@ -440,8 +445,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
      */
     private void getDummyResult() {
         if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
-            if (Bytes.compareTo(prevScanStartRowKey, scanStartRowKey) != 0 ||
-                    prevScanIncludeStartRowKey != includeStartRowKey) {
+            if (Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0 ||
+                    actualScanIncludeStartRowKey != includeStartRowKey) {
                 byte[] lastByte =
                         new byte[]{scanStartRowKey[scanStartRowKey.length - 1]};
                 if (scanStartRowKey.length > 1 && Bytes.compareTo(lastByte,
