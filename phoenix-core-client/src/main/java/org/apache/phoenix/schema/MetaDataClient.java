@@ -718,8 +718,8 @@ public class MetaDataClient {
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
                             if (addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, resolvedTimestamp,
                                     true, false)) {
-                                connection.addTable(updateIndexesWithAncestorMap(result.getTable()),
-                                                        resolvedTime);
+                                updateIndexesWithAncestorMap(result);
+                                connection.addTable(result.getTable(), resolvedTime);
                             } else {
                                 // if we aren't adding the table, we still need to update the
                                 // resolved time of the table
@@ -964,21 +964,19 @@ public class MetaDataClient {
     }
 
     /**
-     * Update the indexes within this table with ancestor->last_ddl_timestamp map.
-     * @param table
-     * @return new PTable with list of modified index PTables.
-     * @throws SQLException
+     * Update the indexes within this result's table with ancestor->last_ddl_timestamp map.
      */
-    private PTable updateIndexesWithAncestorMap(PTable table) throws SQLException {
+    private void updateIndexesWithAncestorMap(MetaDataMutationResult result) throws SQLException {
+        PTable table = result.getTable();
         if (table.getIndexes().isEmpty()) {
-            return table;
+            return;
         }
         List<PTable> newIndexes = new ArrayList<>(table.getIndexes().size());
         for (PTable index : table.getIndexes()) {
             newIndexes.add(MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table));
         }
-        return PTableImpl.builderWithColumns(table, PTableImpl.getColumnsToClone(table))
-                .setIndexes(newIndexes).build();
+        result.setTable(PTableImpl.builderWithColumns(table, PTableImpl.getColumnsToClone(table))
+                .setIndexes(newIndexes).build());
     }
 
 	private void addFunctionArgMutation(String functionName, FunctionArgument arg, PreparedStatement argUpsert, int position) throws SQLException {
@@ -5194,8 +5192,8 @@ public class MetaDataClient {
     private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors,
                                  long timestamp) throws SQLException {
         addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, null, false, alwaysHitServerForAncestors);
-        PTable table = updateIndexesWithAncestorMap(result.getTable());
-        connection.addTable(table, timestamp);
+        updateIndexesWithAncestorMap(result);
+        connection.addTable(result.getTable(), timestamp);
     }
 
     private void addFunctionToCache(MetaDataMutationResult result) throws SQLException {
