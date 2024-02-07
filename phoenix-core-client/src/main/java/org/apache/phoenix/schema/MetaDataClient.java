@@ -946,12 +946,11 @@ public class MetaDataClient {
                     PTable pTableWithDerivedColumnsAndIndexes
                             = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
                             table, parentTable);
-                    result.setTable(
-                            MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(
-                                    pTableWithDerivedColumnsAndIndexes, parentTable));
+                    result.setTable(getPTableWithAncestorLastDDLTimestampMap(
+                                        pTableWithDerivedColumnsAndIndexes, parentTable));
                 }
                 else {
-                    result.setTable(MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(
+                    result.setTable(getPTableWithAncestorLastDDLTimestampMap(
                                                     table, parentTable));
                 }
                 return true;
@@ -973,10 +972,30 @@ public class MetaDataClient {
         }
         List<PTable> newIndexes = new ArrayList<>(table.getIndexes().size());
         for (PTable index : table.getIndexes()) {
-            newIndexes.add(MetaDataUtil.getPTableWithAncestorLastDDLTimestampMap(index, table));
+            newIndexes.add(getPTableWithAncestorLastDDLTimestampMap(index, table));
         }
         result.setTable(PTableImpl.builderWithColumns(table, PTableImpl.getColumnsToClone(table))
                 .setIndexes(newIndexes).build());
+    }
+
+    /**
+     * Creates a new PTable object from the provided pTable and with the ancestorLastDDLTimestampMap
+     * Copy the map of the parent and add the last_ddl_timestamp of the parent in the map.
+     * @param pTable
+     * @param parentTable
+     */
+    private PTable getPTableWithAncestorLastDDLTimestampMap(PTable pTable, PTable parentTable)
+            throws SQLException {
+        Map<PTableKey, Long> ancestorMap
+                = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
+        // this method can be called for an index and a view which inherited this index
+        // from its ancestors, skip adding the view as an ancestor of the index.
+        if (pTable.getParentName().equals(parentTable.getName())) {
+            ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
+        }
+        return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
+                .setAncestorLastDDLTimestampMap(ancestorMap)
+                .build();
     }
 
 	private void addFunctionArgMutation(String functionName, FunctionArgument arg, PreparedStatement argUpsert, int position) throws SQLException {

@@ -32,8 +32,6 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableImpl;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
@@ -1183,25 +1181,5 @@ public class MetaDataUtil {
         } finally {
             connection.setAutoCommit(isAutoCommit);
         }
-    }
-
-    /**
-     * Creates a new PTable object from the provided pTable and with the ancestorLastDDLTimestampMap
-     * Copy the map of the parent and add the last_ddl_timestamp of the parent in the map.
-     * @param pTable
-     * @param parentTable
-     */
-    public static PTable getPTableWithAncestorLastDDLTimestampMap(PTable pTable, PTable parentTable)
-            throws SQLException {
-        Map<PTableKey, Long> ancestorMap
-                = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
-        // this method can be called for an index and a view which inherited this index
-        // from its ancestors, skip adding the view as an ancestor of the index.
-        if (pTable.getParentName().equals(parentTable.getName())) {
-            ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
-        }
-        return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
-                .setAncestorLastDDLTimestampMap(ancestorMap)
-                .build();
     }
 }
