@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.Consumer;
 
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
