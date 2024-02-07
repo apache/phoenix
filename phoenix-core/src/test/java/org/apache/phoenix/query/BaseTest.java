@@ -139,6 +139,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.PhoenixTestTableName;
 import org.apache.phoenix.SystemExitRule;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -168,6 +169,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -771,7 +773,10 @@ public abstract class BaseTest {
      * Note, we can't have this value too high since we don't want the shutdown to take too
      * long a time either.
      */
-    private static final int TEARDOWN_THRESHOLD = 30;
+    private static final int TEARDOWN_THRESHOLD = 1;
+
+    @ClassRule
+    public static PhoenixTestTableName phoenixTestTableName = new PhoenixTestTableName();
 
     public static String generateUniqueName() {
         int nextName = NAME_SUFFIX.incrementAndGet();
@@ -779,7 +784,7 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
-        return "N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
+        return phoenixTestTableName.getTableName() + "_" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
     
     private static AtomicInteger SEQ_NAME_SUFFIX = new AtomicInteger(0);
@@ -890,14 +895,18 @@ public abstract class BaseTest {
         }
         try (Connection conn = DriverManager.getConnection(url, props)) {
             DatabaseMetaData dbmd = conn.getMetaData();
-            ResultSet rs = dbmd.getSchemas();
+            ResultSet rs = dbmd.getSchemas(null, "%" + phoenixTestTableName.getTableName() + "%");
             while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if ((schemaName == null) || (schemaName != null && schemaName.isEmpty())) {
+                    continue;
+                }
                 if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
                     continue;
                 }
                 schemaName = SchemaUtil.getEscapedArgument(schemaName);
 
+                LOGGER.info("Dropping schema " + schemaName + " for cleanup.");
                 String ddl = "DROP SCHEMA " + schemaName;
                 conn.createStatement().executeUpdate(ddl);
             }
@@ -907,10 +916,17 @@ public abstract class BaseTest {
         props.remove(CURRENT_SCN_ATTRIB);
         try (Connection seeLatestConn = DriverManager.getConnection(url, props)) {
             DatabaseMetaData dbmd = seeLatestConn.getMetaData();
-            ResultSet rs = dbmd.getSchemas();
-            boolean hasSchemas = rs.next();
-            if (hasSchemas) {
+            ResultSet rs = dbmd.getSchemas(null, "%" + phoenixTestTableName.getTableName() + "%");
+            boolean hasSchemas = false;
+            while (rs.next()) {
                 String schemaName = rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                if ((schemaName == null) || (schemaName != null && schemaName.isEmpty())) {
+                    continue;
+                }
+                if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
+                    continue;
+                }
+                schemaName = SchemaUtil.getEscapedArgument(schemaName);
                 if (schemaName.equals(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME)) {
                     hasSchemas = rs.next();
                 }
@@ -972,13 +988,14 @@ public abstract class BaseTest {
         // Tables are sorted by TENANT_ID
         List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});
         for (String[] tableTypes: tableTypesList) {
-            ResultSet rs = dbmd.getTables(null, null, null, tableTypes);
+            ResultSet rs = dbmd.getTables(null, null, "%" + phoenixTestTableName.getTableName() + "%", tableTypes);
             String lastTenantId = null;
             Connection conn = globalConn;
             while (rs.next()) {
                 String fullTableName = SchemaUtil.getEscapedTableName(
                         rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                         rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                LOGGER.info("Dropping Table " + fullTableName + " for cleanup.");
                 String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName + "  CASCADE";
                 String tenantId = rs.getString(1);
                 if (tenantId != null && !tenantId.equals(lastTenantId))  {

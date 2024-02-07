@@ -47,7 +47,7 @@ import org.junit.runners.Parameterized.Parameters;
  * Basic tests for Phoenix JDBC implementation
  *
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class QueryIT extends BaseQueryIT {
     
     @Parameters(name="QueryIT_{index}") // name is used by failsafe as file name in reports
