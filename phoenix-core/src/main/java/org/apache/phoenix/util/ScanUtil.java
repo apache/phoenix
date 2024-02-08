@@ -1325,11 +1325,10 @@ public class ScanUtil {
 
             PColumn cdcJsonCol = table.getColumnForColumnName(CDC_JSON_COL_NAME);
             scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
-            scan.setAttribute(CDC_INCLUDE_SCOPES,
-                    context.getEncodedCdcIncludeScopes().getBytes(StandardCharsets.UTF_8));
             CDCUtil.initForRawScan(scan);
 
-            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(dataTable).toByteArray());
+            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(dataTable,
+                    context.getEncodedCdcIncludeScopes()).toByteArray());
         }
     }
 

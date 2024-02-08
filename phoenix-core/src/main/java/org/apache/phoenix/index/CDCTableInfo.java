@@ -27,6 +27,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.CDCUtil;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -37,10 +39,16 @@ import java.util.List;
 public class CDCTableInfo {
     private List<CDCColumnInfo> columnInfoList;
     private byte[] defaultColumnFamily;
-    public CDCTableInfo(byte[] defaultColumnFamily, List<CDCColumnInfo> columnInfoList) {
+    private String cdcIncludeScopes;
+    private PTable.QualifierEncodingScheme qualifierEncodingScheme;
+    public CDCTableInfo(byte[] defaultColumnFamily,
+                        List<CDCColumnInfo> columnInfoList, String cdcIncludeScopes,
+                        PTable.QualifierEncodingScheme qualifierEncodingScheme) {
         Collections.sort(columnInfoList);
         this.columnInfoList = columnInfoList;
         this.defaultColumnFamily = defaultColumnFamily;
+        this.cdcIncludeScopes = cdcIncludeScopes;
+        this.qualifierEncodingScheme = qualifierEncodingScheme;
     }
 
     public List<CDCColumnInfo> getColumnInfoList() {
@@ -55,8 +63,24 @@ public class CDCTableInfo {
         return defaultColumnFamily;
     }
 
+    public PTable.QualifierEncodingScheme getQualifierEncodingScheme() {
+        return qualifierEncodingScheme;
+    }
+
+    public void setQualifierEncodingScheme(PTable.QualifierEncodingScheme qualifierEncodingScheme) {
+        this.qualifierEncodingScheme = qualifierEncodingScheme;
+    }
+
     public void setDefaultColumnFamily(byte[] defaultColumnFamily) {
         this.defaultColumnFamily = defaultColumnFamily;
+    }
+
+    public String getCdcIncludeScopes() {
+        return cdcIncludeScopes;
+    }
+
+    public void setCdcIncludeScopes(String cdcIncludeScopes) {
+        this.cdcIncludeScopes = cdcIncludeScopes;
     }
 
     public static CDCTableInfo createFromProto(CDCInfoProtos.CDCTableDef table) {
@@ -64,18 +88,31 @@ public class CDCTableInfo {
         if (table.hasDefaultFamilyName()) {
             defaultColumnFamily = table.getDefaultFamilyName().toByteArray();
         }
+        // For backward compatibility. Clients older than 4.10 will always have non-encoded qualifiers.
+        PTable.QualifierEncodingScheme qualifierEncodingScheme = PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+        if (table.hasQualifierEncodingScheme()) {
+            qualifierEncodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue(table.getQualifierEncodingScheme().toByteArray()[0]);
+        }
         List<CDCColumnInfo> columns = Lists.newArrayListWithExpectedSize(table.getColumnsCount());
         for (CDCInfoProtos.CDCColumnDef curColumnProto : table.getColumnsList()) {
             columns.add(CDCColumnInfo.createFromProto(curColumnProto));
         }
-        return new CDCTableInfo(defaultColumnFamily, columns);
+        return new CDCTableInfo(defaultColumnFamily, columns,
+                table.getCdcIncludeScopes(), qualifierEncodingScheme);
     }
 
-    public static CDCInfoProtos.CDCTableDef toProto(PTable table) {
+    public static CDCInfoProtos.CDCTableDef toProto(PTable table, String cdcIncludeScopes) {
         CDCInfoProtos.CDCTableDef.Builder builder = CDCInfoProtos.CDCTableDef.newBuilder();
         if (table.getDefaultFamilyName() != null) {
             builder.setDefaultFamilyName(
                     ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));
+        }
+        if (cdcIncludeScopes != null) {
+            builder.setCdcIncludeScopes(cdcIncludeScopes);
+        }
+        if (table.getEncodingScheme() != null) {
+            builder.setQualifierEncodingScheme(ByteStringer
+                    .wrap(new byte[] { table.getEncodingScheme().getSerializedMetadataValue() }));
         }
         for (PColumn column : table.getColumns()) {
             if (column.getFamilyName() == null) {
@@ -95,13 +132,16 @@ public class CDCTableInfo {
         private byte[] columnQualifier;
         private String columnName;
         private PDataType columnType;
+        private String columnFamilyName;
 
         public CDCColumnInfo(byte[] columnFamily, byte[] columnQualifier,
-                             String columnName, PDataType columnType) {
+                             String columnName, PDataType columnType,
+                             String columnFamilyName) {
             this.columnFamily = columnFamily;
             this.columnQualifier = columnQualifier;
             this.columnName = columnName;
             this.columnType = columnType;
+            this.columnFamilyName = columnFamilyName;
         }
 
         public byte[] getColumnFamily() {
@@ -135,6 +175,13 @@ public class CDCTableInfo {
         public PDataType getColumnType() {
             return columnType;
         }
+        public String getColumnFamilyName() {
+            return columnFamilyName;
+        }
+
+        public void setColumnFamilyName(String columnFamilyName) {
+            this.columnFamilyName = columnFamilyName;
+        }
 
         @Override
         public int compareTo(CDCColumnInfo columnInfo) {
@@ -149,7 +196,10 @@ public class CDCTableInfo {
             byte[] familyNameBytes = column.getFamilyNameBytes().toByteArray();
             PDataType dataType = PDataType.fromSqlTypeName(column.getDataType());
             byte[] columnQualifierBytes = column.getColumnQualifierBytes().toByteArray();
-            return new CDCColumnInfo(familyNameBytes, columnQualifierBytes, columnName, dataType);
+            String columnFamilyName = StandardCharsets.UTF_8
+                    .decode(ByteBuffer.wrap(familyNameBytes)).toString();
+            return new CDCColumnInfo(familyNameBytes,
+                    columnQualifierBytes, columnName, dataType, columnFamilyName);
         }
 
         public static CDCInfoProtos.CDCColumnDef toProto(PColumn column) {

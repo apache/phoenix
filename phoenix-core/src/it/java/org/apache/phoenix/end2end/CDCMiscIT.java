@@ -18,7 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
+import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -26,8 +28,10 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -66,6 +70,7 @@ import static org.junit.Assert.fail;
 @Category(ParallelStatsDisabledTest.class)
 public class CDCMiscIT extends ParallelStatsDisabledIT {
     private final boolean forView;
+    private ManualEnvironmentEdge injectEdge;
 
     public CDCMiscIT(boolean forView) {
         this.forView = forView;
@@ -76,6 +81,13 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         return Arrays.asList(new Boolean[][] {
                 { false}, { true }
         });
+    }
+
+    @Before
+    public void beforeTest(){
+        EnvironmentEdgeManager.reset();
+        injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
     }
 
     private void assertCDCState(Connection conn, String cdcName, String expInclude,
@@ -434,6 +446,98 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertEquals(row7, gson.fromJson(rs.getString(3),
                 HashMap.class));
 
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        Map<String, Object> row8 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 103d);
+            postImage.put("V2", 1003d);
+            row8.put(CDC_POST_IMAGE, postImage);
+        }
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 103d);
+            changeImage.put("V2", 1003d);
+            row8.put(CDC_CHANGE_IMAGE, changeImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            row8.put(CDC_PRE_IMAGE, preImage);
+        }
+        assertEquals(row8, gson.fromJson(rs.getString(3),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        Map<String, Object> row9 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            row9.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
+            }});
+        }
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row9.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
+            }});
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 103d);
+            preImage.put("V2", 1003d);
+            row9.put(CDC_PRE_IMAGE, preImage);
+        }
+        assertEquals(row9, gson.fromJson(rs.getString(3),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        Map<String, Object> row10 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 104d);
+            postImage.put("V2", 1004d);
+            row10.put(CDC_POST_IMAGE, postImage);
+        }
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 104d);
+            changeImage.put("V2", 1004d);
+            row10.put(CDC_CHANGE_IMAGE, changeImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            row10.put(CDC_PRE_IMAGE, preImage);
+        }
+        assertEquals(row10, gson.fromJson(rs.getString(3),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(2));
+        Map<String, Object> row11 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            row11.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
+            }});
+        }
+        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row11.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
+            }});
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 104d);
+            preImage.put("V2", 1004d);
+            row11.put(CDC_PRE_IMAGE, preImage);
+        }
+        assertEquals(row11, gson.fromJson(rs.getString(3),
+                HashMap.class));
+
         assertEquals(false, rs.next());
         rs.close();
     }
@@ -460,24 +564,38 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 + " ON " + tableName;
         createAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
-
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        injectEdge.setValue(System.currentTimeMillis());
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
         conn.commit();
-        Thread.sleep(10);
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.commit();
-
-        //conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v2");
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
-
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
-        Long before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis()).getTime();
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+        conn.commit();
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
+        conn.commit();
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
+        conn.commit();
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
         //      if (<table>.getTableName().getString().equals("N000002") ||
@@ -495,13 +613,13 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
                 "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
 
         HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
-            put("SELECT 'dummy', k FROM " + cdcName, new int [] {1, 2, 1, 1, 1, 1, 2});
+            put("SELECT 'dummy', k FROM " + cdcName, new int [] {1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1});
             put("SELECT * FROM " + cdcName +
-                    " ORDER BY k ASC", new int [] {1, 1, 1, 1, 1, 2, 2});
+                    " ORDER BY k ASC", new int [] {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2});
             put("SELECT * FROM " + cdcName +
-                    " ORDER BY k DESC", new int [] {2, 2, 1, 1, 1, 1, 1});
+                    " ORDER BY k DESC", new int [] {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
             put("SELECT * FROM " + cdcName +
-                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1, 1, 1, 1, 2});
+                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1});
         }};
         for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
             try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
@@ -615,10 +733,21 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
         conn.commit();
-        Long before = new Timestamp(EnvironmentEdgeManager.currentTimeMillis()).getTime();
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
 
         String cdc_sql = "CREATE CDC " + cdcName
@@ -627,7 +756,7 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         assertCDCState(conn, cdcName, null, 3);
         assertResultSet(conn.createStatement().executeQuery(
                 "SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * " + "FROM " + cdcName),
-                new HashSet<PTable.CDCChangeScope>(Arrays.asList(PTable.CDCChangeScope.PRE,
+                new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE,
                         PTable.CDCChangeScope.POST, PTable.CDCChangeScope.CHANGE)));
     }
 
@@ -666,6 +795,18 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
+        conn.commit();
+        Thread.sleep(10);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         conn.commit();
         conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v1v2");
         conn.commit();
@@ -708,7 +849,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
 
     private void assertCDCBinaryAndDateColumn(ResultSet rs,
                                               List<byte []> byteColumnValues,
-                                              List<Date> dateColumnValues) throws Exception {
+                                              List<Date> dateColumnValues,
+                                              Timestamp timestamp) throws Exception {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(2));
 
@@ -719,16 +861,14 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         Map<String, Object> postImage = new HashMap<>();
         postImage.put("A_BINARY",
                 Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
-        // JSON doesn't distinguish between integer and floating point fields
-        // Gson has to default to Float/Double for numeric fields
-        postImage.put("D",
-                ((Long)dateColumnValues.get(0).getTime()).doubleValue());
+        postImage.put("D", dateColumnValues.get(0).toString());
+        postImage.put("T", timestamp.toString());
         row1.put(CDC_POST_IMAGE, postImage);
         Map<String, Object> changeImage = new HashMap<>();
         changeImage.put("A_BINARY",
                 Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
-        changeImage.put("D",
-                ((Long)dateColumnValues.get(0).getTime()).doubleValue());
+        changeImage.put("D", dateColumnValues.get(0).toString());
+        changeImage.put("T", timestamp.toString());
         row1.put(CDC_CHANGE_IMAGE, changeImage);
         row1.put(CDC_PRE_IMAGE, new HashMap<String, String>() {{
         }});
@@ -740,7 +880,9 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         HashMap<String, Object> row2Json = gson.fromJson(rs.getString(3), HashMap.class);
         String row2BinaryColStr = (String) ((Map)((Map)row2Json.get(CDC_CHANGE_IMAGE))).get("A_BINARY");
         byte[] row2BinaryCol = Base64.getDecoder().decode(row2BinaryColStr);
-        assertEquals(0, CDCUtil.compare(byteColumnValues.get(1), row2BinaryCol));
+
+        assertEquals(0, DescVarLengthFastByteComparisons.compareTo(byteColumnValues.get(1),
+                0, byteColumnValues.get(1).length, row2BinaryCol, 0, row2BinaryCol.length));
     }
 
     @Test
@@ -759,20 +901,23 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
         List<Date> dateColumnValues = new ArrayList<>();
         dateColumnValues.add(Date.valueOf("2024-02-01"));
         dateColumnValues.add(Date.valueOf("2024-01-31"));
+        Timestamp timestampColumnValue = Timestamp.valueOf("2024-01-31 12:12:14");
         try {
 
             conn.createStatement().execute("CREATE TABLE  " + tableName +
-                    " ( k INTEGER PRIMARY KEY," + " a_binary binary(10), d Date)");
+                    " ( k INTEGER PRIMARY KEY," + " a_binary binary(10), d Date, t TIMESTAMP)");
 
-            String upsertQuery = "UPSERT INTO " + tableName + " (k, a_binary, d) VALUES (?, ?, ?)";
+            String upsertQuery = "UPSERT INTO " + tableName + " (k, a_binary, d, t) VALUES (?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsertQuery);
             stmt.setInt(1, 1);
             stmt.setBytes(2, byteColumnValues.get(0));
             stmt.setDate(3, dateColumnValues.get(0));
+            stmt.setTimestamp(4, timestampColumnValue);
             stmt.execute();
             stmt.setInt(1, 2);
             stmt.setBytes(2, byteColumnValues.get(1));
             stmt.setDate(3, dateColumnValues.get(1));
+            stmt.setTimestamp(4, timestampColumnValue);
             stmt.execute();
             conn.commit();
 
@@ -782,7 +927,8 @@ public class CDCMiscIT extends ParallelStatsDisabledIT {
             createAndWait(conn, tableName, cdcName, cdc_sql);
             assertCDCState(conn, cdcName, null, 3);
             assertCDCBinaryAndDateColumn(conn.createStatement().executeQuery
-                    ("SELECT * FROM " + cdcName), byteColumnValues, dateColumnValues);
+                    ("SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * " + "FROM " + cdcName),
+                    byteColumnValues, dateColumnValues, timestampColumnValue);
         } finally {
             conn.close();
         }

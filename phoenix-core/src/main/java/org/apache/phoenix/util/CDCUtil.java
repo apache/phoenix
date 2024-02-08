@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 
 public class CDCUtil {
@@ -114,20 +115,12 @@ public class CDCUtil {
                                                      byte[] columnQual1,
                                                      byte[] columnFamily2,
                                                      byte[] columnQual2) {
-        int familyNameComparison = CDCUtil.compare(columnFamily1, columnFamily2);
+        int familyNameComparison = DescVarLengthFastByteComparisons.compareTo(columnFamily1,
+                0, columnFamily1.length, columnFamily2, 0, columnFamily2.length);
         if (familyNameComparison != 0) {
             return familyNameComparison;
         }
-        return CDCUtil.compare(columnQual1, columnQual2);
-    }
-
-    public static int compare(byte[] a, byte[] b) {
-        int minLength = Math.min(a.length, b.length);
-        for (int i = 0; i < minLength; i++) {
-            if (a[i] != b[i]) {
-                return Byte.compare(a[i], b[i]);
-            }
-        }
-        return Integer.compare(a.length, b.length);
+        return DescVarLengthFastByteComparisons.compareTo(columnQual1,
+                0, columnQual1.length, columnQual2, 0, columnQual2.length);
     }
 }

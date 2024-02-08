@@ -39,6 +39,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,11 +92,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         CDCUtil.initForRawScan(dataTableScan);
         cdcDataTableInfo = CDCTableInfo.createFromProto(CDCInfoProtos.CDCTableDef
                 .parseFrom(scan.getAttribute(CDC_DATA_TABLE_DEF)));
-        Charset utf8Charset = StandardCharsets.UTF_8;
-        String cdcChangeScopeStr = utf8Charset.decode(
-                ByteBuffer.wrap(scan.getAttribute(CDC_INCLUDE_SCOPES))).toString();
         try {
-            cdcChangeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(cdcChangeScopeStr);
+            cdcChangeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(
+                    cdcDataTableInfo.getCdcIncludeScopes());
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -142,7 +141,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             }
             Long lowerBoundTsForPreImage = 0L;
             boolean isIndexCellDeleteRow = false;
-            byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+            byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(
+                    cdcDataTableInfo.getQualifierEncodingScheme()).getFirst();
             try {
                 int columnListIndex = 0;
                 List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList =
@@ -151,6 +151,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         cdcColumnInfoList.get(columnListIndex);
                 for (Cell cell : dataRow.rawCells()) {
                     if (cell.getType() == Cell.Type.DeleteFamily) {
+                        // We will only compare with the first Column Family for Delete Family
+                        // cells because there is no way to delete column family in Phoenix.
                         if (columnListIndex > 0) {
                             continue;
                         }
@@ -158,6 +160,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             isIndexCellDeleteRow = true;
                         } else if (indexCellTS > cell.getTimestamp()
                                 && lowerBoundTsForPreImage == 0L) {
+                            // Cells with timestamp less than the lowerBoundTsForPreImage
+                            // can not be part of the PreImage as there is a Delete Family
+                            // marker after that.
                             lowerBoundTsForPreImage = cell.getTimestamp();
                         }
                     } else if ((cell.getType() == Cell.Type.DeleteColumn
@@ -186,11 +191,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             continue;
                         }
                         if (cellColumnComparator == 0) {
-                            String columnFamily = StandardCharsets.UTF_8
-                                    .decode(ByteBuffer.wrap(currentColumnInfo
-                                            .getColumnFamily())).toString();
-                            String cdcColumnName = columnFamily +
+                            String cdcColumnName = currentColumnInfo.getColumnFamilyName() +
                                     NAME_SEPARATOR + currentColumnInfo.getColumnName();
+                            // Don't include Column Family if it is a default column Family
                             if (Arrays.equals(
                                     currentColumnInfo.getColumnFamily(),
                                     cdcDataTableInfo.getDefaultColumnFamily())) {
@@ -221,7 +224,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         isPostImageInScope);
                 if (cdcRow != null && tupleProjector != null) {
                     if (firstCell.getType() == Cell.Type.DeleteFamily) {
-                        result.add(CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                        // result is of type EncodedColumnQualiferCellsList for queries with
+                        // Order by clause. It fails when Delete Family cell is added to it
+                        // as it expects column qualifier bytes which is not available.
+                        // Adding empty PUT cell as a placeholder.
+                        result.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
                                 .setRow(firstCell.getRowArray()).
                                 setFamily(firstCell.getFamilyArray())
                                 .setQualifier(indexMaintainer.getEmptyKeyValueQualifier()).
@@ -297,8 +304,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private Object getColumnValue(Cell cell, PDataType dataType) {
         if (dataType.getSqlType() == Types.BINARY) {
             return Base64.getEncoder().encodeToString(cell.getValueArray());
-        } else if (dataType.getSqlType() == Types.DATE) {
-            return ((Date) dataType.toObject(cell.getValueArray())).getTime();
+        } else if (dataType.getSqlType() == Types.DATE
+                || dataType.getSqlType() == Types.TIMESTAMP
+                || dataType.getSqlType() == Types.TIME
+                || dataType.getSqlType() == Types.TIME_WITH_TIMEZONE
+                || dataType.getSqlType() == Types.TIMESTAMP_WITH_TIMEZONE) {
+            return dataType.toObject(cell.getValueArray()).toString();
         } else {
             return dataType.toObject(cell.getValueArray());
         }

@@ -31,5 +31,7 @@ message CDCColumnDef {
 
 message CDCTableDef {
   optional bytes defaultFamilyName = 1;
-  repeated CDCColumnDef columns = 2;
+  optional string cdcIncludeScopes = 2;
+  required bytes qualifierEncodingScheme = 3;
+  repeated CDCColumnDef columns = 4;
 }
