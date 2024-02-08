@@ -60,10 +60,15 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 abstract public class BaseScannerRegionObserver implements RegionObserver {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseScannerRegionObserver.class);
+
     /**
      * Used by logger to identify coprocessor
      */
@@ -113,7 +118,18 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             }
         }
         if (isStaleRegionBoundaries) {
-            Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
+            LOGGER.error("Throwing StaleRegionBoundaryCacheException due to mismatched scan "
+                            + "boundaries. Region: {} , lowerInclusiveScanKey: {} , "
+                            + "upperExclusiveScanKey: {} , lowerInclusiveRegionKey: {} , "
+                            + "upperExclusiveRegionKey: {} , scan reversed: {}",
+                    region.getRegionInfo().getRegionNameAsString(),
+                    Bytes.toStringBinary(lowerInclusiveScanKey),
+                    Bytes.toStringBinary(upperExclusiveScanKey),
+                    Bytes.toStringBinary(lowerInclusiveRegionKey),
+                    Bytes.toStringBinary(upperExclusiveRegionKey),
+                    scan.isReversed());
+            Exception cause = new StaleRegionBoundaryCacheException(
+                    region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
         if(isLocalIndex) {
@@ -294,8 +310,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
             // client may recreate scans with wrong region boundaries.
             if(t instanceof NotServingRegionException) {
+                LOGGER.error("postScannerOpen error for region {} . "
+                                + "Thorwing it as StaleRegionBoundaryCacheException",
+                        s.getRegionInfo().getRegionNameAsString(), t);
                 Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
+            } else {
+                LOGGER.error("postScannerOpen error for region {}",
+                        s.getRegionInfo().getRegionNameAsString(), t);
             }
             ClientUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null; // impossible

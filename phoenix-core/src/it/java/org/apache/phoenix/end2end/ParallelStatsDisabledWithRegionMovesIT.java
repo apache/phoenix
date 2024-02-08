@@ -245,6 +245,7 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
                             } else {
                                 LOGGER.info("Table {} has some region(s) in RIT or not online",
                                         tableName);
+                                Thread.sleep(1000);
                             }
                         }
                     } catch (InterruptedException | ExecutionException | TimeoutException |
