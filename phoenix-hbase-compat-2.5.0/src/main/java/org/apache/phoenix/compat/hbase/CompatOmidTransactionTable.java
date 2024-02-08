@@ -19,12 +19,24 @@ package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
 
 public abstract class CompatOmidTransactionTable implements Table {
+
+    protected Table hTable;
+
+    public CompatOmidTransactionTable(Table hTable) {
+        this.hTable = hTable;
+    }
+
+    @Override
+    public HTableDescriptor getTableDescriptor() throws IOException {
+        return hTable.getTableDescriptor();
+    }
 
     @Override
     public RegionLocator getRegionLocator() throws IOException {

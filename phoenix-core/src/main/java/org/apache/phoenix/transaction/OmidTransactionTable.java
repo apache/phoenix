@@ -65,6 +65,7 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     private final boolean addShadowCells;
 
     public OmidTransactionTable() throws SQLException {
+        super(null);
         this.tTable = null;
         this.tx = null;
         this.addShadowCells = false;
@@ -79,6 +80,7 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     }
 
     public OmidTransactionTable(PhoenixTransactionContext ctx, Table hTable, boolean isConflictFree, boolean addShadowCells) throws SQLException  {
+        super(hTable);
         assert(ctx instanceof OmidTransactionContext);
 
         OmidTransactionContext omidTransactionContext = (OmidTransactionContext) ctx;
@@ -119,11 +121,6 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
     @Override
     public Configuration getConfiguration() {
         return tTable.getConfiguration();
-    }
-
-    @Override
-    public HTableDescriptor getTableDescriptor() throws IOException {
-        return tTable.getTableDescriptor();
     }
 
     @Override
