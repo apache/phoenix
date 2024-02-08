@@ -716,8 +716,8 @@ public class MetaDataClient {
                             // In this case, we update the parent table which may in turn pull
                             // in indexes to add to this table.
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                            if (addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, resolvedTimestamp,
-                                    true, false)) {
+                            if (addColumnsIndexesAndLastDDLTimestampsFromAncestors(result,
+                                    resolvedTimestamp, true, false)) {
                                 updateIndexesWithAncestorMap(result);
                                 connection.addTable(result.getTable(), resolvedTime);
                             } else {
@@ -899,13 +899,14 @@ public class MetaDataClient {
      * @return true if the PTable contained by result was modified and false otherwise
      * @throws SQLException if the physical table cannot be found
      */
-    private boolean addColumnsIndexesAndLastDDLTimestampsFromAncestors(MetaDataMutationResult result, Long resolvedTimestamp,
-                                                                       boolean alwaysAddAncestorColumnsAndIndexes,
-                                                                       boolean alwaysHitServerForAncestors)
+    private boolean addColumnsIndexesAndLastDDLTimestampsFromAncestors(
+                                            MetaDataMutationResult result, Long resolvedTimestamp,
+                                            boolean alwaysAddAncestorColumnsAndIndexes,
+                                            boolean alwaysHitServerForAncestors)
             throws SQLException {
         PTable table = result.getTable();
         boolean hasIndexId = table.getViewIndexId() != null;
-        if ((table.getType()==PTableType.INDEX)
+        if (table.getType() == PTableType.INDEX
                 || (table.getType() == PTableType.VIEW && table.getViewType() != ViewType.MAPPED)) {
             String tableName = null;
             try {
@@ -948,8 +949,7 @@ public class MetaDataClient {
                             table, parentTable);
                     result.setTable(getPTableWithAncestorLastDDLTimestampMap(
                                         pTableWithDerivedColumnsAndIndexes, parentTable));
-                }
-                else {
+                } else {
                     result.setTable(getPTableWithAncestorLastDDLTimestampMap(
                                                     table, parentTable));
                 }
@@ -5210,7 +5210,8 @@ public class MetaDataClient {
 
     private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors,
                                  long timestamp) throws SQLException {
-        addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, null, false, alwaysHitServerForAncestors);
+        addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, null,
+                                false, alwaysHitServerForAncestors);
         updateIndexesWithAncestorMap(result);
         connection.addTable(result.getTable(), timestamp);
     }

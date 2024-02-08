@@ -146,8 +146,8 @@ public class ValidateLastDDLTimestampUtil {
             // index -> base table
             // view -> parent view and its ancestors
             // view index -> view and its ancestors
-            for (Map.Entry<PTableKey, Long> entry :
-                    tableRef.getTable().getAncestorLastDDLTimestampMap().entrySet()) {
+            for (Map.Entry<PTableKey, Long> entry
+                    : tableRef.getTable().getAncestorLastDDLTimestampMap().entrySet()) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                 PTableKey ancestorKey = entry.getKey();
                 setLastDDLTimestampRequestParameters(innerBuilder, ancestorKey, entry.getValue());
