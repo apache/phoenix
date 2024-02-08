@@ -704,64 +704,6 @@ public class WhereOptimizer {
                 && (remaining == null || remaining.equals(LiteralExpression.newConstant(true, Determinism.ALWAYS)));
     }
 
-    public static List<Integer> getKeySlotPositions(StatementContext context, FilterableStatement statement) throws SQLException {
-        final List<Integer> pkPositions = Lists.newArrayList();
-        PTable table = context.getCurrentTable().getTable();
-        ParseNode whereNode = statement.getWhere();
-        Expression whereExpression = whereNode.accept(new WhereCompiler.WhereExpressionCompiler(context));
-
-        KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, table);
-        KeyExpressionVisitor.KeySlots keySlots = whereExpression.accept(visitor);
-        if (keySlots != null) {
-            Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.getSlots().iterator();
-            while (iterator.hasNext()) {
-                KeyExpressionVisitor.KeySlot slot = iterator.next();
-                pkPositions.add(slot.getPKPosition());
-            }
-        }
-        return pkPositions;
-    }
-
-    public static List<Integer> getKeySlotPositionsForView(PTable view, Configuration conf) throws SQLException {
-        String physicalTableName = view.getPhysicalName().getString();
-        PName tenantId = view.getTenantId();
-        String viewName = view.getName().getString();
-        String viewStatement = view.getViewStatement();
-        byte[] tenantIdBytes = tenantId == null ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
-        SelectStatement viewSelectStatement = new SQLParser(viewStatement).parseQuery();
-
-        Properties tenantProps = new Properties();
-        if (tenantId != null) {
-            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId.getString());
-        }
-
-        Connection stmtConnection = QueryUtil.getConnectionOnServer(tenantProps, conf)
-                .unwrap(PhoenixConnection.class);
-
-        PhoenixPreparedStatement preparedViewStatement =
-                stmtConnection.prepareStatement(viewStatement).unwrap(PhoenixPreparedStatement.class);
-
-        ColumnResolver resolver = FromCompiler.getResolverForQuery(viewSelectStatement,
-                stmtConnection.unwrap(PhoenixConnection.class));
-        StatementContext viewStatementContext = new StatementContext(preparedViewStatement, resolver);
-
-        final List<Integer> pkPositions = Lists.newArrayList();
-        PTable table = viewStatementContext.getCurrentTable().getTable();
-        ParseNode whereNode = viewSelectStatement.getWhere();
-        Expression whereExpression = whereNode.accept(new WhereCompiler.WhereExpressionCompiler(viewStatementContext));
-
-        KeyExpressionVisitor visitor = new KeyExpressionVisitor(viewStatementContext, table);
-        KeyExpressionVisitor.KeySlots keySlots = whereExpression.accept(visitor);
-        if (keySlots != null) {
-            Iterator<KeyExpressionVisitor.KeySlot> iterator = keySlots.getSlots().iterator();
-            while (iterator.hasNext()) {
-                KeyExpressionVisitor.KeySlot slot = iterator.next();
-                pkPositions.add(slot.getPKPosition());
-            }
-        }
-        return pkPositions;
-    }
-
     private static class RemoveExtractedNodesVisitor extends StatelessTraverseNoExpressionVisitor<Expression> {
         private final Set<Expression> nodesToRemove;
 
