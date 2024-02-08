@@ -158,7 +158,9 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
                 iteratorTypeAndScanSize = "PARALLEL 3-WAY";
             }
             clientSortAlgo = "CLIENT MERGE SORT";
-            expectedTableName = tableName;
+            expectedTableName =
+                    SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName),
+                            indexName) + "(" + tableName + ")";
             keyRanges = " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId
                 + "','" + valuePrefix + "v2-1']";
         } else {
@@ -204,7 +206,9 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
         assertEquals("SERVER FILTER BY FIRST KEY ONLY",
             explainPlanAttributes.getServerWhereFilter());
         assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-        assertEquals(tableName, explainPlanAttributes.getTableName());
+        assertEquals(SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName),
+                        indexName) + "(" + tableName + ")",
+                explainPlanAttributes.getTableName());
         assertEquals(" [1," + tenantId + ",'" + valuePrefix + "v2-1']",
             explainPlanAttributes.getKeyRanges());
         assertEquals("CLIENT MERGE SORT",
