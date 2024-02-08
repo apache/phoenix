@@ -98,7 +98,6 @@ import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 import java.sql.ResultSetMetaData;
@@ -122,7 +121,6 @@ import org.apache.hadoop.hbase.ArrayBackedTag;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
@@ -1426,7 +1424,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             //Scan SysCat to get TTL from Parent View/Table
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-            ttl = scanTTLFromParent(viewKey, clientTimeStamp);
+            ttl = getTTLFromHierarchy(viewKey, clientTimeStamp);
 
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
@@ -1568,7 +1566,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     byte[] viewKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
                             parentSchemaName == null ? null : parentSchemaName.getBytes(),
                             parentTableName.getBytes());
-                    ttl = scanTTLFromParent(viewKey, clientTimeStamp);
+                    ttl = getTTLFromHierarchy(viewKey, clientTimeStamp);
                     isThisAViewIndex = true;
                 }
             } else {
@@ -1621,7 +1619,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     }
 
     /**
-     * Method to return TTL value defined at current level ot up the Hierarchy of the view.
+     * Method to return TTL value defined at current level or up the Hierarchy of the view.
      * @param viewKey Key of the view for which we have to find TTL
      * @param clientTimeStamp Client TimeStamp
      * @return TTL value for a given view, if nothing is defined anywhere then return
@@ -1630,7 +1628,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @throws SQLException
      */
 
-    private int scanTTLFromParent(byte[] viewKey, long clientTimeStamp) throws IOException, SQLException {
+    private int getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
@@ -1667,7 +1665,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             PARENT_TENANT_ID_BYTES);
                     byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
                             parentViewSchemaName, parentViewName);
-                    return scanTTLFromParent(parentViewKey, clientTimeStamp);
+                    return getTTLFromHierarchy(parentViewKey, clientTimeStamp);
                 }
 
                 //Store tableKey to use if we don't find TTL at current level and from
