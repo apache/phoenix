@@ -76,6 +76,7 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -1134,8 +1135,8 @@ public class ViewUtil {
                     "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " +
                             "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " +
                             "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " +
-                    "FROM SYSTEM.CATALOG " +
-                    "WHERE " + "LINK_TYPE = 2 " +
+                            "FROM SYSTEM.CATALOG " +
+                            "WHERE " + "LINK_TYPE = 2 " +
                             "AND TABLE_TYPE IS NULL " +
                             "AND COLUMN_FAMILY = '%s' " +
                             "AND TENANT_ID IS NULL";
@@ -1205,7 +1206,7 @@ public class ViewUtil {
             return;
         }
         String
-        viewsClause =
+                viewsClause =
                 new StringBuilder(viewSet.stream()
                         .map((v) -> String.format("(%s, %s,'%s')",
                                 Bytes.toString(v.getTenantId()),
@@ -1228,9 +1229,9 @@ public class ViewUtil {
 
             try (
                     PhoenixPreparedStatement
-                    viewTTLStmt =
-                    serverConnection.prepareStatement(viewsWithTTLSQL)
-                            .unwrap(PhoenixPreparedStatement.class)) {
+                            viewTTLStmt =
+                            serverConnection.prepareStatement(viewsWithTTLSQL)
+                                    .unwrap(PhoenixPreparedStatement.class)) {
 
                 try (ResultSet viewTTLRS = viewTTLStmt.executeQuery()) {
                     while (viewTTLRS.next()) {
