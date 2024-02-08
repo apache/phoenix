@@ -31,6 +31,7 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -1457,6 +1458,139 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             assertTrue(t.getMessage().contains(INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE));
         }
     }
+
+    /**
+     * Test that a query on the column of a view which was previously dropped
+     * throws a ColumnNotFoundException. Use the same client to drop the column.
+     */
+    @Test
+    public void testDroppedTableColumnNotVisibleToViewUsingSameClient() throws Exception {
+        testDroppedTableColumnNotVisibleToView(true);
+    }
+
+    /**
+     * Test that a query on the column of a view which was previously dropped
+     * throws a ColumnNotFoundException. Use a different client to drop the column.
+     */
+    @Test
+    public void testDroppedTableColumnNotVisibleToViewUsingDifferentClients() throws Exception {
+        testDroppedTableColumnNotVisibleToView(false);
+    }
+
+    public void testDroppedTableColumnNotVisibleToView(boolean useSameClient) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String viewName1 = generateUniqueName();
+        String viewName2 = generateUniqueName();
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
+        try (Connection conn = cqs1.connect(url1, props);
+             Connection conn2 = useSameClient ? conn : cqs2.connect(url2, props)) {
+            createTable(conn, tableName, NEVER);
+            createView(conn, tableName, viewName1);
+            createView(conn, viewName1, viewName2);
+            query(conn2, viewName2);
+
+            alterTableDropColumn(conn, tableName, "v2");
+            query(conn2, tableName);
+
+            conn2.createStatement().execute("SELECT v2 FROM " + viewName2);
+            fail("Column dropped from base table should not be visible to view.");
+        } catch (ColumnNotFoundException expected) {
+        }
+    }
+
+    /**
+     * Test that ancestor->last_ddl_timestamp is populated in a new client.
+     * @throws Exception
+     */
+    @Test
+    public void testAncestorLastDDLMapPopulatedInDifferentClient() throws Exception {
+        String SCHEMA1 = generateUniqueName();
+        String SCHEMA2 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String index = generateUniqueName();
+        String view = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String viewIndex = generateUniqueName();
+        String baseTable2 = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String index2 = generateUniqueName();
+        String view2 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String viewIndex2 = generateUniqueName();
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
+        try (Connection conn = cqs1.connect(url1, props);
+             Connection conn2 = cqs2.connect(url2, props)) {
+            //client-1 creates tables, views, indexes and view indexes
+            createTable(conn, baseTable, NEVER);
+            createView(conn, baseTable, view);
+            createIndex(conn, baseTable, index, "v2");
+            createIndex(conn, view, viewIndex, "v1");
+            createTable(conn, baseTable2, NEVER);
+            createView(conn, baseTable2, view2);
+            createIndex(conn, baseTable2, index2, "v2");
+            createIndex(conn, view2, viewIndex2, "v1");
+
+            //client-2 queries the view
+            query(conn2, view);
+
+            PTable basePTable = PhoenixRuntime.getTable(conn2, baseTable);
+            PTable viewPTable = PhoenixRuntime.getTable(conn2, view);
+            PTable viewIndexPTable = PhoenixRuntime.getTable(conn2, SchemaUtil.getTableName(SCHEMA2, viewIndex));
+            PTable indexPTable = PhoenixRuntime.getTable(conn2, SchemaUtil.getTableName(SCHEMA1, index));
+
+            //verify view has base table in ancestor map
+            Map<PTableKey,Long> map = viewPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+
+            //verify view index has base table and view in ancestor map
+            map = viewIndexPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(2, map.size());
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+            assertEquals(viewPTable.getLastDDLTimestamp(), map.get(viewPTable.getKey()));
+
+            //verify index has only base table in ancestor map
+            map = indexPTable.getAncestorLastDDLTimestampMap();
+            assertEquals(1, map.size());
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+
+            //also verify index PTable within base table has the map
+            assertEquals(1, basePTable.getIndexes().size());
+            map = basePTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
+            assertEquals(1, map.size());
+            assertEquals(basePTable.getLastDDLTimestamp(), map.get(basePTable.getKey()));
+
+            //verify client-2 sees maps directly through PhoenixRuntime, no query on baseTable2 or view2
+            PTable basePTable2 = PhoenixRuntime.getTable(conn2, baseTable2);
+            map = basePTable2.getAncestorLastDDLTimestampMap();
+            assertEquals(0, map.size());
+            assertEquals(1, basePTable2.getIndexes().size());
+            map = basePTable2.getIndexes().get(0).getAncestorLastDDLTimestampMap();
+            assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
+
+            PTable viewPTable2 = PhoenixRuntime.getTable(conn2, view2);
+            map = viewPTable2.getAncestorLastDDLTimestampMap();
+            assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
+            assertEquals(2, viewPTable2.getIndexes().size());
+            for (PTable indexT : viewPTable2.getIndexes()) {
+                // inherited index
+                if (indexT.getTableName().getString().equals(index2)) {
+                    map = indexT.getAncestorLastDDLTimestampMap();
+                    assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
+                } else {
+                    // view index
+                    map = indexT.getAncestorLastDDLTimestampMap();
+                    assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
+                    assertEquals(viewPTable2.getLastDDLTimestamp(), map.get(viewPTable2.getKey()));
+                }
+            }
+        }
+    }
+
 
     //Helper methods
     private long getLastDDLTimestamp(String tableName) throws SQLException {

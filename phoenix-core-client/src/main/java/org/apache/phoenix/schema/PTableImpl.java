@@ -218,6 +218,7 @@ public class PTableImpl implements PTable {
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
+    private Map<PTableKey, Long> ancestorLastDDLTimestampMap;
 
     public static class Builder {
         private PTableKey key;
@@ -284,6 +285,7 @@ public class PTableImpl implements PTable {
         private String externalSchemaId;
         private String streamingTopicName;
         private String indexWhere;
+        private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -711,6 +713,10 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setAncestorLastDDLTimestampMap(Map<PTableKey, Long> map) {
+            this.ancestorLastDDLTimestampMap = map;
+            return this;
+        }
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -1002,6 +1008,7 @@ public class PTableImpl implements PTable {
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
         this.indexWhere = builder.indexWhere;
+        this.ancestorLastDDLTimestampMap = builder.ancestorLastDDLTimestampMap;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1082,7 +1089,8 @@ public class PTableImpl implements PTable {
                 .setSchemaVersion(table.getSchemaVersion())
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
-                .setIndexWhere(table.getIndexWhere());
+                .setIndexWhere(table.getIndexWhere())
+                .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap());
     }
 
     @Override
@@ -2374,6 +2382,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getIndexWhere() {
         return indexWhere;
+    }
+
+    @Override
+    public Map<PTableKey, Long> getAncestorLastDDLTimestampMap() {
+        return ancestorLastDDLTimestampMap;
     }
 
     private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {

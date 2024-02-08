@@ -231,7 +231,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         // Even the indexes should now have the modified value of UPDATE_CACHE_FREQUENCY
         // Note that when we query the base table, during query plan generation, we make 2 getTable
         // requests (to retrieve the base table) for each index of the base table
-        helpTestUpdateCache(fullTableName, new int[] {1, 18}, false);
+        helpTestUpdateCache(fullTableName, new int[] {1, 21}, false);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + localIndex,
                 new int[] {3}, true);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + globalIndex,
