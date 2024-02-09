@@ -304,7 +304,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         conn.createStatement().execute("ALTER INDEX " + indexTwoMockOne + " ON " + mockTableOne +
             " DISABLE");
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-            null, tmpPath + "/index_upgrade_" + UUID.randomUUID().toString(),
+            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
             true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);
@@ -347,7 +347,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             " (sal, a.name)");
         conn.commit();
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-            null, tmpPath + "/index_upgrade_" + UUID.randomUUID().toString(),
+            null,  "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
             true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);

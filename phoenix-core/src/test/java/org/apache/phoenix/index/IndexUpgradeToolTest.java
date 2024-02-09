@@ -53,11 +53,10 @@ public class IndexUpgradeToolTest {
     private static final String ONLY_VERIFY_VALUE = "ONLY";
     private IndexUpgradeTool indexUpgradeTool=null;
     private String outputFile;
-    private static final String tmpPath = System.getProperty("java.io.tmpdir");
 
     public IndexUpgradeToolTest(boolean upgrade) {
         this.upgrade = upgrade;
-        this.outputFile = tmpPath + "/index_upgrade_" + UUID.randomUUID().toString();
+        this.outputFile =  "/tmp/index_upgrade_" + UUID.randomUUID().toString();
     }
 
     private void setup(String[] args) {

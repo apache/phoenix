@@ -301,7 +301,6 @@ public class IndexTool extends Configured implements Tool {
                 + "Only supported for global indexes. If this option is used with -v AFTER, these "
                 + "extra rows will be identified but not repaired.");
 
-    private static final String tmpPath = System.getProperty("java.io.tmpdir");
     public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
     public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
@@ -1228,7 +1227,7 @@ public class IndexTool extends Configured implements Tool {
         }
 
         args.add("-op");
-        args.add(tmpPath + "/" + UUID.randomUUID().toString());
+        args.add("/tmp/" + UUID.randomUUID().toString());
 
         if (disableBefore) {
             PhoenixConfigurationUtil.setDisableIndexes(conf, indexTable);

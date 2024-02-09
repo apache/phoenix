@@ -895,7 +895,7 @@ public class IndexToolIT extends BaseTest {
         }
 
         args.add("-op");
-        args.add(tmpPath + "/" + UUID.randomUUID().toString());
+        args.add("/tmp/" + UUID.randomUUID().toString());
         return args;
     }
 
