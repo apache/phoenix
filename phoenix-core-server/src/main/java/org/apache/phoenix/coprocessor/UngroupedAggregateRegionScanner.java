@@ -661,8 +661,17 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             if (hasAny) {
                 byte[] value = aggregators.toBytes(rowAggregators);
                 if (pageSizeMs == Long.MAX_VALUE) {
-                    // Paging is not set. To be compatible with older clients, do not set the row key
-                    keyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY, SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,
+                    byte[] rowKey;
+                    final boolean isIncompatibleClient =
+                            ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+                    if (!isIncompatibleClient) {
+                        rowKey = CellUtil.cloneRow(lastCell);
+                    } else {
+                        // Paging is not set. To be compatible with older clients, do not set the row key
+                        rowKey = UNGROUPED_AGG_ROW_KEY;
+                    }
+                    keyValue = PhoenixKeyValueUtil.newKeyValue(rowKey, SINGLE_COLUMN_FAMILY,
+                            SINGLE_COLUMN,
                             AGG_TIMESTAMP, value, 0, value.length);
                 } else {
                     keyValue = PhoenixKeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell), SINGLE_COLUMN_FAMILY, SINGLE_COLUMN,

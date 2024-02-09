@@ -19,6 +19,7 @@
 package org.apache.phoenix.cache.aggcache;
 
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
+import static org.apache.phoenix.query.QueryConstants.GROUPED_AGGREGATOR_VALUE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
@@ -27,11 +28,13 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_MAX_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_GROUPBY_SPILL_FILES;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -50,6 +53,9 @@ import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.memory.InsufficientMemoryException;
 import org.apache.phoenix.memory.MemoryManager.MemoryChunk;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.slf4j.Logger;
@@ -101,6 +107,9 @@ public class SpillableGroupByCache implements GroupByCache {
     // TODO Generally better to use Collection API with generics instead of
     // array types
     private final LinkedHashMap<ImmutableBytesWritable, Aggregator[]> cache;
+    private final ConcurrentMap<ImmutableBytesWritable, ImmutableBytesWritable>
+            aggregateValueToLastScannedRowKeys;
+    private final boolean isIncompatibleClient;
     private SpillManager spillManager = null;
     private long totalNumElements;
     private final ServerAggregators aggregators;
@@ -124,9 +133,12 @@ public class SpillableGroupByCache implements GroupByCache {
      * @param tenantId
      * @param aggs
      * @param estSizeNum
+     * @param isIncompatibleClient
      */
     public SpillableGroupByCache(final RegionCoprocessorEnvironment env, ImmutableBytesPtr tenantId,
-            ServerAggregators aggs, final int estSizeNum) {
+                                 ServerAggregators aggs, final int estSizeNum,
+                                 boolean isIncompatibleClient) {
+        this.isIncompatibleClient = isIncompatibleClient;
         totalNumElements = 0;
         this.aggregators = aggs;
         this.env = env;
@@ -159,6 +171,7 @@ public class SpillableGroupByCache implements GroupByCache {
             LOGGER.debug("Instantiating LRU groupby cache of element size: " + maxCacheSize);
         }
 
+        aggregateValueToLastScannedRowKeys = Maps.newConcurrentMap();
         // LRU cache implemented as LinkedHashMap with access order
         cache = new LinkedHashMap<ImmutableBytesWritable, Aggregator[]>(maxCacheSize, 0.75f, true) {
             boolean spill = false;
@@ -358,19 +371,56 @@ public class SpillableGroupByCache implements GroupByCache {
                     return false;
                 }
                 Map.Entry<ImmutableBytesWritable, Aggregator[]> ce = cacheIter.next();
-                ImmutableBytesWritable key = ce.getKey();
+                ImmutableBytesWritable aggregateGroupValPtr = ce.getKey();
                 Aggregator[] aggs = ce.getValue();
-                byte[] value = aggregators.toBytes(aggs);
+                byte[] aggregateArrayBytes = aggregators.toBytes(aggs);
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug("Adding new distinct group: "
-                            + Bytes.toStringBinary(key.get(), key.getOffset(), key.getLength()) +
-                            " with aggregators " + aggs.toString() + " value = " +
-                            Bytes.toStringBinary(value));
+                            + Bytes.toStringBinary(aggregateGroupValPtr.get(),
+                            aggregateGroupValPtr.getOffset(), aggregateGroupValPtr.getLength())
+                            + " with aggregators " + Arrays.toString(aggs) + " value = "
+                            + Bytes.toStringBinary(aggregateArrayBytes));
                 }
-                results.add(PhoenixKeyValueUtil.newKeyValue(key.get(), key.getOffset(), key.getLength(), SINGLE_COLUMN_FAMILY,
-                        SINGLE_COLUMN, AGG_TIMESTAMP, value, 0, value.length));
+                if (!isIncompatibleClient) {
+                    ImmutableBytesWritable lastScannedRowKey =
+                            aggregateValueToLastScannedRowKeys.get(aggregateGroupValPtr);
+                    byte[] aggregateGroupValueBytes = new byte[aggregateGroupValPtr.getLength()];
+                    System.arraycopy(aggregateGroupValPtr.get(), aggregateGroupValPtr.getOffset(),
+                            aggregateGroupValueBytes, 0,
+                            aggregateGroupValueBytes.length);
+                    byte[] finalValue =
+                            ByteUtil.concat(
+                                    PInteger.INSTANCE.toBytes(aggregateGroupValueBytes.length),
+                                    aggregateGroupValueBytes, aggregateArrayBytes);
+                    results.add(
+                            PhoenixKeyValueUtil.newKeyValue(
+                                    lastScannedRowKey.get(),
+                                    lastScannedRowKey.getOffset(),
+                                    lastScannedRowKey.getLength(),
+                                    GROUPED_AGGREGATOR_VALUE_BYTES,
+                                    GROUPED_AGGREGATOR_VALUE_BYTES,
+                                    AGG_TIMESTAMP,
+                                    finalValue,
+                                    0,
+                                    finalValue.length));
+                } else {
+                    results.add(PhoenixKeyValueUtil.newKeyValue(
+                            aggregateGroupValPtr.get(),
+                            aggregateGroupValPtr.getOffset(),
+                            aggregateGroupValPtr.getLength(),
+                            SINGLE_COLUMN_FAMILY,
+                            SINGLE_COLUMN,
+                            AGG_TIMESTAMP,
+                            aggregateArrayBytes, 0,
+                            aggregateArrayBytes.length));
+                }
                 return cacheIter.hasNext();
             }
         };
+    }
+
+    @Override
+    public void cacheAggregateRowKey(ImmutableBytesPtr value, ImmutableBytesPtr rowKey) {
+        aggregateValueToLastScannedRowKeys.put(value, rowKey);
     }
 }

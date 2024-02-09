@@ -35,4 +35,5 @@ public interface GroupByCache extends Closeable {
     long size();
     Aggregator[] cache(ImmutableBytesPtr key);
     RegionScanner getScanner(RegionScanner s);
+    void cacheAggregateRowKey(ImmutableBytesPtr value, ImmutableBytesPtr rowKey);
 }
