@@ -70,7 +70,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-public class BaseViewTTLIT extends ParallelStatsDisabledIT{
+public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT{
     static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     static final int VIEW_TTL_10_SECS = 10;
     static final int VIEW_TTL_300_SECS = 300;
@@ -103,19 +103,6 @@ public class BaseViewTTLIT extends ParallelStatsDisabledIT{
 
     protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
         setUpTestDriver(props, props);
-    }
-
-    @BeforeClass
-    public static void doSetup() throws Exception {
-        // Turn on the TTL feature
-        Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
-            //put(QueryServices.AUTO_UPGRADE_ENABLED, String.valueOf(false));
-            put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
-            put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
-            put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0)); // An hour
-        }};
-
-        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
     }
 
     @Before
@@ -517,8 +504,7 @@ public class BaseViewTTLIT extends ParallelStatsDisabledIT{
 
 
 
-    @Test
-    public void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
+    protected void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
@@ -683,8 +669,7 @@ public class BaseViewTTLIT extends ParallelStatsDisabledIT{
 
     }
 
-    @Test
-    public void testMajorCompactWithOnlyTenantView() throws Exception {
+    protected void testMajorCompactWithOnlyTenantView() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
@@ -763,8 +748,7 @@ public class BaseViewTTLIT extends ParallelStatsDisabledIT{
         );
     }
 
-    @Test
-    public void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
+    protected void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
@@ -920,8 +904,7 @@ public class BaseViewTTLIT extends ParallelStatsDisabledIT{
         }
     }
 
-    @Test
-    public void testMajorCompactFromMultipleTenantIndexes() throws Exception {
+    protected void testMajorCompactFromMultipleTenantIndexes() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
