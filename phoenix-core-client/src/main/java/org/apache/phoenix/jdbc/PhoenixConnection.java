@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static java.util.Collections.emptyMap;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS;
@@ -50,7 +51,6 @@ import java.sql.Savepoint;
 import java.sql.Statement;
 import java.sql.Struct;
 import java.text.Format;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -70,6 +70,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.htrace.Sampler;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.call.CallRunner;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -99,9 +100,11 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.FunctionNotFoundException;
+import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableRef;
@@ -651,11 +654,100 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
                 .equal(tenantId, table.getTenantId()))));
     }
 
-    public PTable getTable(PTableKey key) throws TableNotFoundException {
-        PTable table =  getTableRef(key).getTable();
-        // Force TableNotFoundException for the table that is going through transform
-        if (table.getTransformingNewTable() != null) {
-            throw new TableNotFoundException("Re-read the transforming table", true);
+    /**
+     * Similar to {@link #getTable(String, String, Long)} but returns the most recent
+     * PTable
+     */
+    public PTable getTable(String tenantId, String fullTableName)
+            throws SQLException {
+        return getTable(tenantId, fullTableName, HConstants.LATEST_TIMESTAMP);
+    }
+
+    /**
+     * Returns the PTable as of the timestamp provided. This method can be used to fetch tenant
+     * specific PTable through a global connection. A null timestamp would result in the client side
+     * metadata cache being used (ie. in case table metadata is already present it'll be returned).
+     * To get the latest metadata use {@link #getTable(String, String)}
+     * @param tenantId
+     * @param fullTableName
+     * @param timestamp
+     * @return PTable
+     * @throws SQLException
+     * @throws NullPointerException if conn or fullTableName is null
+     * @throws IllegalArgumentException if timestamp is negative
+     */
+    public PTable getTable(@Nullable String tenantId, String fullTableName,
+            @Nullable Long timestamp) throws SQLException {
+        checkNotNull(fullTableName);
+        if (timestamp != null) {
+            checkArgument(timestamp >= 0);
+        }
+        PTable table;
+        PName pTenantId = (tenantId == null) ? null : PNameFactory.newName(tenantId);
+        try {
+            PTableRef tableref = getTableRef(new PTableKey(pTenantId, fullTableName));
+            if (timestamp == null
+                    || (tableref != null && tableref.getResolvedTimeStamp() == timestamp)) {
+                table = tableref.getTable();
+            } else {
+                throw new TableNotFoundException(fullTableName);
+            }
+        } catch (TableNotFoundException e) {
+            table = getTableNoCache(pTenantId, fullTableName, timestamp);
+        }
+        return table;
+    }
+
+    public PTable getTableNoCache(PName tenantId, String name, long timestamp) throws SQLException {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+        String tableName = SchemaUtil.getTableNameFromFullName(name);
+        MetaDataProtocol.MetaDataMutationResult result =
+                new MetaDataClient(this).updateCache(tenantId, schemaName, tableName, false,
+                        timestamp);
+        if (result.getMutationCode() != MetaDataProtocol.MutationCode.TABLE_ALREADY_EXISTS) {
+            throw new TableNotFoundException(schemaName, tableName);
+        }
+        return result.getTable();
+    }
+
+    public PTable getTableNoCache(PName tenantId, String name) throws SQLException {
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
+        String tableName = SchemaUtil.getTableNameFromFullName(name);
+        MetaDataProtocol.MetaDataMutationResult result =
+                new MetaDataClient(this).updateCache(tenantId, schemaName,
+                        tableName, true);
+        if (result.getMutationCode() != MetaDataProtocol.MutationCode.TABLE_ALREADY_EXISTS) {
+            throw new TableNotFoundException(schemaName, tableName);
+        }
+        return result.getTable();
+    }
+    @VisibleForTesting
+    public PTable getTableNoCache(String name) throws SQLException {
+        return getTableNoCache(getTenantId(), name);
+    }
+
+    /**
+     * Returns the table if it is found in the client metadata cache. If the metadata of this
+     * table has changed since it was put in the cache these changes will not necessarily be
+     * reflected in the returned table. If the table is not found, makes a call to the server to
+     * fetch the latest metadata of the table. This is different than how a table is resolved when
+     * it is referenced from a query (a call is made to the server to fetch the latest metadata of
+     * the table depending on the UPDATE_CACHE_FREQUENCY property)
+     * See https://issues.apache.org/jira/browse/PHOENIX-4475
+     * @param name requires a pre-normalized table name or a pre-normalized schema and table name
+     * @return
+     * @throws SQLException
+     */
+    public PTable getTable(String name) throws SQLException {
+        return getTable(new PTableKey(getTenantId(), name));
+    }
+
+    public PTable getTable(PTableKey key) throws SQLException {
+        PTable table;
+        try {
+            table = getTableRef(key).getTable();
+        } catch (TableNotFoundException e) {
+            table =  getTableNoCache(key.getName());
         }
         return table;
     }
@@ -1379,8 +1471,6 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     /**
      * Returns true if this connection is being used to upgrade the data due to
      * PHOENIX-2067 and false otherwise.
-     *
-     * @return
      */
     public boolean isDescVarLengthRowKeyUpgrade() {
         return isDescVarLengthRowKeyUpgrade;

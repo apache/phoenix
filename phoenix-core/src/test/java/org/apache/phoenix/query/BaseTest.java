@@ -811,7 +811,7 @@ public abstract class BaseTest {
             expectedColumnEncoding, String tableName)
             throws Exception {
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        PTable table = PhoenixRuntime.getTableNoCache(phxConn, tableName);
+        PTable table = phxConn.getTableNoCache(tableName);
         assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
         assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }
@@ -965,7 +965,7 @@ public abstract class BaseTest {
                             rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                             rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
                     try {
-                        PhoenixRuntime.getTable(conn, fullTableName);
+                        conn.unwrap(PhoenixConnection.class).getTable(fullTableName);
                         fail("The following tables are not deleted that should be:" + getTableNames(rs));
                     } catch (TableNotFoundException e) {
                     }

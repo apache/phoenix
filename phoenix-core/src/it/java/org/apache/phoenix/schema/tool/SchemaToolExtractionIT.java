@@ -136,10 +136,11 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         List<String> queries = new ArrayList<String>(){};
         queries.add(createTableStatement);
         queries.add(createIndexStatement);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props)
+                .unwrap(PhoenixConnection.class)) {
             executeCreateStatements(conn, queries);
-            PTable pData = PhoenixRuntime.getTable(conn, pTableFullName);
-            PTable pIndex = PhoenixRuntime.getTable(conn, pIndexFullName);
+            PTable pData = conn.getTable(pTableFullName);
+            PTable pIndex = conn.getTable(pIndexFullName);
             SchemaExtractionProcessor schemaExtractionProcessor = new SchemaExtractionProcessor(null, config, pData, true);
             String tableDDL = schemaExtractionProcessor.process();
             assertTrue(tableDDL.contains("IMMUTABLE_STORAGE_SCHEME"));

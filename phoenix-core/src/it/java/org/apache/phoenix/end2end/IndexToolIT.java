@@ -965,11 +965,12 @@ public class IndexToolIT extends BaseTest {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
 
-        try (Connection conn =
-                     DriverManager.getConnection(getUrl(), props)) {
-            PTable indexTable = PhoenixRuntime.getTableNoCache(conn,
-                   SchemaUtil.normalizeFullTableName(SchemaUtil.getTableName(schemaName, indexTableName)));
-            PTable dataTable = PhoenixRuntime.getTableNoCache(conn, SchemaUtil.normalizeFullTableName(SchemaUtil.getTableName(schemaName, dataTableName)));
+        try (PhoenixConnection conn =
+                (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+            PTable indexTable = conn.getTableNoCache(SchemaUtil
+                    .normalizeFullTableName(SchemaUtil.getTableName(schemaName, indexTableName)));
+            PTable dataTable = conn.getTableNoCache(SchemaUtil
+                    .normalizeFullTableName(SchemaUtil.getTableName(schemaName, dataTableName)));
             boolean transactional = dataTable.isTransactional();
             boolean localIndex = PTable.IndexType.LOCAL.equals(indexTable.getIndexType());
             if ((localIndex || !transactional) && !useSnapshot) {

@@ -78,11 +78,9 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ProjectedColumn;
 import org.apache.phoenix.schema.RowKeySchema;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -194,18 +192,7 @@ public class ProjectionCompiler {
         PhoenixConnection conn = context.getConnection();
         PName tenantId = conn.getTenantId();
         String dataTableName = index.getParentName().getString();
-        PTable dataTable = null;
-        try {
-            dataTable = conn.getTable(new PTableKey(tenantId, dataTableName));
-        } catch (TableNotFoundException e) {
-            if (tenantId != null) {
-                // Check with null tenantId
-                dataTable = conn.getTable(new PTableKey(null, dataTableName));
-            }
-            else {
-                throw e;
-            }
-        }
+        PTable dataTable = conn.getTable(dataTableName);
         int tableOffset = dataTable.getBucketNum() == null ? 0 : 1;
         int minTablePKOffset = getMinPKOffset(dataTable, tenantId);
         int minIndexPKOffset = getMinPKOffset(index, tenantId);
@@ -307,7 +294,7 @@ public class ProjectionCompiler {
         PTable index = tableRef.getTable();
         PhoenixConnection conn = context.getConnection();
         String dataTableName = index.getParentName().getString();
-        PTable dataTable = conn.getTable(new PTableKey(conn.getTenantId(), dataTableName));
+        PTable dataTable = conn.getTable(dataTableName);
         PColumnFamily pfamily = dataTable.getColumnFamily(cfName);
         TableRef projectedTableRef =
                 new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());

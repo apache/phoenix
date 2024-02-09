@@ -107,7 +107,8 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
         props.setProperty(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
         props.setProperty(QueryServices.EXPLAIN_ROW_COUNT_ATTRIB, Boolean.FALSE.toString());
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceEnabled));
-        final Connection conn = DriverManager.getConnection(getUrl(), props);
+        final PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                props);
         Statement stmt = conn.createStatement();
         try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();){
             if (isNamespaceEnabled) {
@@ -130,7 +131,7 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
             conn.commit();
 
             // delete these indexes
-            PTable pindexTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, indxTable));
+            PTable pindexTable = conn.getTable(SchemaUtil.getTableName(schemaName, indxTable));
             try (Table hTable = admin.getConnection().
                     getTable(TableName.valueOf(pindexTable.getPhysicalName().toString()));) {
                 Scan scan = new Scan();

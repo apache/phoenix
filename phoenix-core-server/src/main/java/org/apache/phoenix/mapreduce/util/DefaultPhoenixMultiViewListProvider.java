@@ -22,7 +22,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,9 +134,10 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                                    String tenantId, String fullTableName) {
         boolean skip= false;
         try {
-            PTable pTable = PhoenixRuntime.getTable(connection, tenantId, fullTableName);
-            PTable parentTable = PhoenixRuntime.getTable(connection, null,
-                    pTable.getParentName().toString());
+            PTable pTable = connection.getTable(tenantId, fullTableName);
+            System.out.println("PTable");
+            PTable parentTable = connection.getTable(null, pTable.getParentName().toString());
+            System.out.println("Parent Table");
             if (parentTable.getType() == PTableType.VIEW &&
                     parentTable.getPhoenixTTL() > 0) {
                             /* if the current view parent already has a TTL value, we want to
@@ -164,7 +164,7 @@ public class DefaultPhoenixMultiViewListProvider implements PhoenixMultiViewList
                                                String fullTableName, long viewTtlValue,
                                                List<ViewInfoWritable> viewInfoWritables)
             throws Exception {
-        PTable pTable = PhoenixRuntime.getTable(connection, tenantId, fullTableName);
+        PTable pTable = connection.getTable(tenantId, fullTableName);
         ViewInfoWritable viewInfoTracker = new ViewInfoTracker(
                 tenantId,
                 fullTableName,
