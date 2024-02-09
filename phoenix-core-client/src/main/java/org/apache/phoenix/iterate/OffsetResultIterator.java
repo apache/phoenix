@@ -103,7 +103,7 @@ public class OffsetResultIterator extends DelegateResultIterator {
     }
 
     public Integer getRemainingOffset() {
-        return Math.max((offset - rowCount), 0);
+        return Math.max(offset - rowCount, 0);
     }
 
     public Tuple getLastScannedTuple() {

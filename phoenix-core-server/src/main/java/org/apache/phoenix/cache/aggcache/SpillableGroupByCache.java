@@ -34,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -382,7 +381,7 @@ public class SpillableGroupByCache implements GroupByCache {
                             + " with aggregators " + Arrays.toString(aggs) + " value = "
                             + Bytes.toStringBinary(aggregateArrayBytes));
                 }
-                if(!isIncompatibleClient) {
+                if (!isIncompatibleClient) {
                     ImmutableBytesWritable lastScannedRowKey =
                             aggregateValueToLastScannedRowKeys.get(aggregateGroupValPtr);
                     byte[] aggregateGroupValueBytes = new byte[aggregateGroupValPtr.getLength()];

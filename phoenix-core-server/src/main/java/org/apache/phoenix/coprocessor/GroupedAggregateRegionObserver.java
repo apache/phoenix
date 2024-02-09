@@ -487,8 +487,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             if (firstScan && actualScanStartRowKey != null) {
                 if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
                     if (hasRegionMoved()) {
-                        LOGGER.info("Region has moved.. Actual scan start rowkey {} is not same " +
-                                        "as current scan start rowkey {}",
+                        LOGGER.info("Region has moved.. Actual scan start rowkey {} is not same "
+                                        + "as current scan start rowkey {}",
                                 Bytes.toStringBinary(actualScanStartRowKey),
                                 Bytes.toStringBinary(scanStartRowKey));
                         // If region has moved in the middle of the scan operation, after resetting
@@ -648,8 +648,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             aggregators.aggregate(rowAggregators, result);
                         }
                         now = EnvironmentEdgeManager.currentTimeMillis();
-                        if (hasMore && groupByCache.size() < limit &&
-                                (now - startTime) >= pageSizeMs) {
+                        if (hasMore && groupByCache.size() < limit
+                                && (now - startTime) >= pageSizeMs) {
                             return getDummyResult(resultsToReturn);
                         }
                     } while (hasMore && groupByCache.size() < limit);
@@ -718,8 +718,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
          * @return true if the region has moved in the middle of an ongoing scan operation.
          */
         private boolean hasRegionMoved() {
-            return Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0 ||
-                    actualScanIncludeStartRowKey != includeStartRowKey;
+            return Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0
+                    || actualScanIncludeStartRowKey != includeStartRowKey;
         }
 
         @Override
@@ -918,8 +918,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                 currentKey = null;
                 return false;
             } catch (Exception e) {
-                LOGGER.error("Ordered group-by scanner next encountered some issue for" +
-                        " region {}", region.getRegionInfo().getRegionNameAsString(), e);
+                LOGGER.error("Ordered group-by scanner next encountered some issue for"
+                        + " region {}", region.getRegionInfo().getRegionNameAsString(), e);
                 if (e instanceof IOException) {
                     throw e;
                 } else {
@@ -966,8 +966,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // byte and send the key as dummy rowkey.
                         prevKey = new byte[initStartRowKey.length - 1];
                         System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
-                    } else if (initStartRowKey.length <
-                            (HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen)) {
+                    } else if (initStartRowKey.length < (HConstants.MAX_ROW_LENGTH - 1
+                            - regionLookupInMetaLen)) {
                         prevKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(initStartRowKey,
                                         new byte[HConstants.MAX_ROW_LENGTH - initStartRowKey.length
                                                 - 1 - regionLookupInMetaLen]),

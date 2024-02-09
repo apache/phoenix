@@ -202,8 +202,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
         // for reverse scan.
         // Keep this same as ServerUtil#getScanStartRowKeyFromScanOrRegionBoundaries.
         this.scanStartRowKey =
-                scan.getStartRow().length > 0 ? scan.getStartRow() :
-                        (scan.isReversed() ? regionInfo.getEndKey() : regionInfo.getStartKey());
+                scan.getStartRow().length > 0 ? scan.getStartRow()
+                        : (scan.isReversed() ? regionInfo.getEndKey()
+                        : regionInfo.getStartKey());
         // Retrieve start rowkey of the previous scan. This would be different than
         // current scan start rowkey if the region has recently moved or split or merged.
         this.actualScanStartRowKey =
@@ -300,11 +301,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
     @Override
     public Tuple next() throws SQLException {
         try {
-            if (firstScan && serverSideIterator && actualScanStartRowKey != null &&
-                    actualScanIncludeStartRowKey != null) {
+            if (firstScan && serverSideIterator && actualScanStartRowKey != null
+                    && actualScanIncludeStartRowKey != null) {
                 if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
-                    if (Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0 ||
-                            actualScanIncludeStartRowKey != includeStartRowKey) {
+                    if (Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0
+                            || actualScanIncludeStartRowKey != includeStartRowKey) {
                         LOGGER.info("Region has moved. Actual scan start rowkey {} is not same as"
                                         + " current scan start rowkey  {}",
                                 Bytes.toStringBinary(actualScanStartRowKey),
@@ -391,8 +392,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
             }
             return result;
         } catch (Exception e) {
-            LOGGER.error("Ordered result iterator next encountered error " + (regionInfo != null ?
-                    " for region: " + regionInfo.getRegionNameAsString() : "."), e);
+            LOGGER.error("Ordered result iterator next encountered error " + (regionInfo != null
+                    ? " for region: " + regionInfo.getRegionNameAsString() : "."), e);
             if (e instanceof SQLException) {
                 throw e;
             } else {
@@ -460,8 +461,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
      */
     private void getDummyResult() {
         if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
-            if (Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0 ||
-                    actualScanIncludeStartRowKey != includeStartRowKey) {
+            if (Bytes.compareTo(actualScanStartRowKey, scanStartRowKey) != 0
+                    || actualScanIncludeStartRowKey != includeStartRowKey) {
                 byte[] lastByte =
                         new byte[]{scanStartRowKey[scanStartRowKey.length - 1]};
                 if (scanStartRowKey.length > 1 && Bytes.compareTo(lastByte,

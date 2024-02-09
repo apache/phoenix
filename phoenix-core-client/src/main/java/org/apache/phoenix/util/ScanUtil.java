@@ -1606,8 +1606,7 @@ public class ScanUtil {
      */
     public static boolean isIncompatibleClientForServerReturnValidRowKey(Scan scan) {
         return scan.getAttribute(
-                BaseScannerRegionObserverConstants.SCAN_SERVER_RETURN_VALID_ROW_KEY) ==
-                null;
+                BaseScannerRegionObserverConstants.SCAN_SERVER_RETURN_VALID_ROW_KEY) == null;
     }
 
     // This method assumes that there is at most one instance of PageFilter in a scan

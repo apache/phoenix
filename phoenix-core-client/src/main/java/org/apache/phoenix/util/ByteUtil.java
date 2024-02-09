@@ -548,8 +548,8 @@ public class ByteUtil {
                         Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey));
                 return null;
             }
-            if (Bytes.compareTo(startKey, rowKey) >= 0 ||
-                    Bytes.compareTo(rowKey, endKey) >= 0) {
+            if (Bytes.compareTo(startKey, rowKey) >= 0
+                    || Bytes.compareTo(rowKey, endKey) >= 0) {
                 LOGGER.error("Unexpected result while comparing result rowkey in range "
                                 + "({} , {}) , rowKey: {}",
                         Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey),
@@ -565,8 +565,8 @@ public class ByteUtil {
     }
 
     public static byte[] previousKeyWithLength(byte[] key, int length) {
-        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
-                "less than least expected length " + length);
+        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is "
+                + "less than least expected length " + length);
         byte[] previousKey = new byte[length];
         System.arraycopy(key, 0, previousKey, 0, length);
         if (!previousKey(previousKey, length)) {
@@ -576,8 +576,8 @@ public class ByteUtil {
     }
 
     public static byte[] nextKeyWithLength(byte[] key, int length) {
-        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is " +
-                "less than least expected length " + length);
+        Preconditions.checkArgument(key.length >= length, "Key length " + key.length + " is "
+                + "less than least expected length " + length);
         byte[] nextStartRow = new byte[length];
         System.arraycopy(key, 0, nextStartRow, 0, length);
         if (!nextKey(nextStartRow, length)) {
