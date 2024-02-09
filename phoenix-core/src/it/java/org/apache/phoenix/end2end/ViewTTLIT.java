@@ -2045,4 +2045,21 @@ public class ViewTTLIT extends BaseViewTTLIT {
         String viewName = schemaBuilder.getEntityTenantViewName();
 
     }
+    @Test
+    public void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
+        super.testMajorCompactFromMultipleGlobalIndexes();
+    }
+
+    @Test
+    public void testMajorCompactFromMultipleTenantIndexes() throws Exception {
+        super.testMajorCompactFromMultipleTenantIndexes();
+    }
+    @Test
+    public void testMajorCompactWithOnlyTenantView() throws Exception {
+        super.testMajorCompactWithOnlyTenantView();
+    }
+    @Test
+    public void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
+        super.testMajorCompactWithSaltedIndexedTenantView();
+    }
 }
