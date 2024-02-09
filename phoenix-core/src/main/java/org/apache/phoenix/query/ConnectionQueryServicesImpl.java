@@ -4208,7 +4208,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     PhoenixDatabaseMetaData.TTL + " " + PInteger.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 1,
-                    PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " " +
+                    PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " +
                             PVarbinary.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                     MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,

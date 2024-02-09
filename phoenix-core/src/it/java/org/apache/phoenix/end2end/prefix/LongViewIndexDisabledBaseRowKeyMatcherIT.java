@@ -15,15 +15,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class LongViewIndexEnabledBaseRowKeyPrefixIT extends BaseRowKeyPrefixTestIT {
+public class LongViewIndexDisabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTestIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
         conf.set(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
-        conf.set(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
+        conf.set(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
         conf.set(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "true");
-        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY, "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
+        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
+                "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
 
         // Clear the cached singletons so we can inject our own.
         InstanceResolver.clearSingletons();
@@ -48,6 +49,6 @@ public class LongViewIndexEnabledBaseRowKeyPrefixIT extends BaseRowKeyPrefixTest
 
     @Override
     protected boolean hasLongViewIndexEnabled() {
-        return true;
+        return false;
     }
 }

@@ -241,7 +241,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
@@ -352,8 +352,7 @@ public class MetaDataClient {
                     PHYSICAL_TABLE_NAME + "," +
                     SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME + "," +
-                    TTL + "," +
-                    ROW_KEY_PREFIX + "," +
+                    TTL + "," + ROW_KEY_MATCHER + "," +
                     INDEX_WHERE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -968,7 +967,7 @@ public class MetaDataClient {
             String viewStatement,
             ViewType viewType,
             PDataType viewIndexIdType,
-            byte[] rowKeyPrefix,
+            byte[] rowKeyMatcher,
             byte[][] viewColumnConstants,
             BitSet isViewColumnReferenced
     ) throws SQLException {
@@ -1043,7 +1042,7 @@ public class MetaDataClient {
                 viewStatement,
                 viewType,
                 viewIndexIdType,
-                rowKeyPrefix,
+                rowKeyMatcher,
                 viewColumnConstants,
                 isViewColumnReferenced,
                 false,
@@ -2117,7 +2116,7 @@ public class MetaDataClient {
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-            final byte[] rowKeyPrefix,
+            final byte[] rowKeyMatcher,
             final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced,
             boolean allocateIndexId, IndexType indexType, Date asyncCreatedDate,
             Map<String,Object> tableProps,
@@ -2988,7 +2987,7 @@ public class MetaDataClient {
                         .setIndexes(Collections.<PTable>emptyList())
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
-                        .setRowKeyPrefix(rowKeyPrefix)
+                        .setRowKeyMatcher(rowKeyMatcher)
                         .setTTL(TTL_NOT_DEFINED)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
@@ -3243,10 +3242,10 @@ public class MetaDataClient {
                 tableUpsert.setInt(34, ttl);
             }
 
-            if (rowKeyPrefix == null) {
+            if (rowKeyMatcher == null) {
                 tableUpsert.setNull(35, Types.VARBINARY);
             } else {
-                tableUpsert.setBytes(35, rowKeyPrefix);
+                tableUpsert.setBytes(35, rowKeyMatcher);
             }
             if (tableType == INDEX && statement.getWhereClause() != null) {
                 tableUpsert.setString(36, statement.getWhereClause().toString());
@@ -3396,7 +3395,7 @@ public class MetaDataClient {
                         result.getTable().getExternalSchemaId() : null)
                         .setStreamingTopicName(streamingTopicName)
                         .setTTL(ttl == null || ttl == TTL_NOT_DEFINED ? ttlFromHierarchy : ttl)
-                        .setRowKeyPrefix(rowKeyPrefix)
+                        .setRowKeyMatcher(rowKeyMatcher)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
                         .build();

@@ -66,6 +66,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     createTableWithOrWithOutTTLAsItsProperty(conn, true)));
             assertEquals("TTL is not set correctly at Phoenix level", DEFAULT_TTL_FOR_TEST,
                     table.getTTL());
+            assertNull("RowKeyMatcher should be Null", table.getRowKeyMatcher());
         }
     }
 
@@ -182,7 +183,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             indexes = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
             for (PTable index : indexes) {
                 assertTTLValueOfIndex(PhoenixDatabaseMetaData.TTL_NOT_DEFINED, index);
-                assertNull(index.getRowKeyPrefix());
+                assertNull(index.getRowKeyMatcher());
             }
 
             //Test setting TTL as index property not allowed while creating them or setting them explicitly.
