@@ -75,9 +75,11 @@ public final class BackwardCompatibilityTestUtil {
     public static final String CREATE_DIVERGED_VIEW = "create_diverged_view";
     public static final String UNORDERED_GROUP_BY = "unorder_groupby";
     public static final String ORDERED_GROUP_BY = "ordered_groupby";
+    public static final String ORDER_BY_NON_PK = "orderby_nonpk";
     public static final String OFFSET = "offset";
     public static final String CREATE_UNORDERED_GROUP_BY = "create_" + UNORDERED_GROUP_BY;
     public static final String CREATE_ORDERED_GROUP_BY = "create_" + ORDERED_GROUP_BY;
+    public static final String CREATE_ORDER_BY_NON_PK = "create_" + ORDER_BY_NON_PK;
     public static final String CREATE_OFFSET = "create_" + OFFSET;
     public static final String ADD_DATA = "add_data";
     public static final String ADD_DELETE = "add_delete";
@@ -89,6 +91,7 @@ public final class BackwardCompatibilityTestUtil {
     public static final String QUERY_UNORDERED_GROUP_BY = QUERY_PREFIX + UNORDERED_GROUP_BY;
     public static final String QUERY_ORDERED_GROUP_BY = QUERY_PREFIX + ORDERED_GROUP_BY;
     public static final String QUERY_OFFSET = QUERY_PREFIX + OFFSET;
+    public static final String QUERY_ORDER_BY_NON_PK = QUERY_PREFIX + ORDER_BY_NON_PK;
     public static final String QUERY_CREATE_ADD = QUERY_PREFIX + CREATE_ADD;
     public static final String QUERY_ADD_DATA = QUERY_PREFIX + ADD_DATA;
     public static final String QUERY_ADD_DELETE = QUERY_PREFIX + ADD_DELETE;

@@ -24,6 +24,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_AD
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DIVERGED_VIEW;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_OFFSET;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ORDERED_GROUP_BY;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ORDER_BY_NON_PK;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_UNORDERED_GROUP_BY;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DATA;
@@ -33,6 +34,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CRE
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_OFFSET;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ORDERED_GROUP_BY;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ORDER_BY_NON_PK;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_UNORDERED_GROUP_BY;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
@@ -488,6 +490,22 @@ public class BackwardCompatibilityIT {
         executeQueriesWithCurrentVersion(CREATE_OFFSET, url, NONE);
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_OFFSET, zkQuorum);
         assertExpectedOutput(QUERY_OFFSET);
+    }
+
+    @Test
+    public void testOrderByNonPkAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_ORDER_BY_NON_PK,
+                zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_ORDER_BY_NON_PK, url, NONE);
+        assertExpectedOutput(QUERY_ORDER_BY_NON_PK);
+    }
+
+    @Test
+    public void testOrderByNonPkAddDataByNewClientReadByOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_ORDER_BY_NON_PK, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_ORDER_BY_NON_PK,
+                zkQuorum);
+        assertExpectedOutput(QUERY_ORDER_BY_NON_PK);
     }
 
     private boolean isClientCompatibleForOrderedGroupByQuery() {

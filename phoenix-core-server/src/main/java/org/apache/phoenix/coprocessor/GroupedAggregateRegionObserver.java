@@ -539,7 +539,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     byte[] resultRowKey = new byte[firstCell.getRowLength()];
                     System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(),
                             resultRowKey, 0, resultRowKey.length);
+                    // In case of regular scans, if the region moves and scanner is reset,
+                    // hbase client checks the last returned row by the server, gets the
+                    // rowkey and appends "\x00" byte, before resuming the scan. With this,
+                    // scan includeStartRowKey is set to true.
+                    // However, same is not the case with reverse scans. For the reverse scan,
+                    // hbase client checks the last returned row by the server, gets the
+                    // rowkey and treats it as startRowKey for resuming the scan. With this,
+                    // scan includeStartRowKey is set to false.
+                    // Hence, we need to cover both cases here.
                     if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
+                        // This can be true for reverse scan case.
                         skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             if (resultsToReturn.size() > 0) {
@@ -547,6 +557,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             }
                             return moreRows;
                         }
+                        // If includeStartRowKey is false and the current rowkey is matching
+                        // with scanStartRowKey, return the next row result.
                         resultsToReturn.clear();
                         moreRows = nextInternal(resultsToReturn);
                         if (ScanUtil.isDummy(resultsToReturn)) {
@@ -560,8 +572,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             Bytes.compareTo(
                                     ByteUtil.concat(resultRowKey, ByteUtil.ZERO_BYTE),
                                     scanStartRowKey) == 0) {
+                        // This can be true for regular scan case.
                         skipValidRowsSent = false;
                         if (includeStartRowKey) {
+                            // If includeStartRowKey is true and the (current rowkey + "\0xx") is
+                            // matching with scanStartRowKey, return the next row result.
                             resultsToReturn.clear();
                             moreRows = nextInternal(resultsToReturn);
                             if (ScanUtil.isDummy(resultsToReturn)) {
@@ -573,6 +588,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             return moreRows;
                         }
                     }
+                    // In the loop, keep iterating through rows.
                     resultsToReturn.clear();
                     moreRows = nextInternal(resultsToReturn);
                     if (ScanUtil.isDummy(resultsToReturn)) {

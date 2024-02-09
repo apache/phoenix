@@ -356,18 +356,33 @@ public class OrderedResultIterator implements PeekingResultIterator {
                     byte[] resultRowKey = new byte[ptr.getLength()];
                     System.arraycopy(ptr.get(), ptr.getOffset(), resultRowKey, 0,
                             resultRowKey.length);
+                    // In case of regular scans, if the region moves and scanner is reset,
+                    // hbase client checks the last returned row by the server, gets the
+                    // rowkey and appends "\x00" byte, before resuming the scan. With this,
+                    // scan includeStartRowKey is set to true.
+                    // However, same is not the case with reverse scans. For the reverse scan,
+                    // hbase client checks the last returned row by the server, gets the
+                    // rowkey and treats it as startRowKey for resuming the scan. With this,
+                    // scan includeStartRowKey is set to false.
+                    // Hence, we need to cover both cases here.
                     if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
+                        // This can be true for reverse scan case.
                         skipValidRowsSent = false;
                         if (includeStartRowKey) {
                             return result;
                         }
+                        // If includeStartRowKey is false and the current rowkey is matching
+                        // with scanStartRowKey, return the next row result.
                         return resultIterator.next();
                     } else if (
                             Bytes.compareTo(
                                     ByteUtil.concat(resultRowKey, ByteUtil.ZERO_BYTE),
                                     scanStartRowKey) == 0) {
+                        // This can be true for regular scan case.
                         skipValidRowsSent = false;
                         if (includeStartRowKey) {
+                            // If includeStartRowKey is true and the (current rowkey + "\0xx") is
+                            // matching with scanStartRowKey, return the next row result.
                             return resultIterator.next();
                         }
                     }
