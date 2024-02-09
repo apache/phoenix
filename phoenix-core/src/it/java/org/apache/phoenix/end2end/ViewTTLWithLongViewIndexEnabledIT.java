@@ -4,6 +4,7 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.util.HashMap;
@@ -22,6 +23,24 @@ public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
         }};
 
         setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
+    }
+
+    @Test
+    public void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
+        super.testMajorCompactFromMultipleGlobalIndexes();
+    }
+
+    @Test
+    public void testMajorCompactFromMultipleTenantIndexes() throws Exception {
+        super.testMajorCompactFromMultipleTenantIndexes();
+    }
+    @Test
+    public void testMajorCompactWithOnlyTenantView() throws Exception {
+        super.testMajorCompactWithOnlyTenantView();
+    }
+    @Test
+    public void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
+        super.testMajorCompactWithSaltedIndexedTenantView();
     }
 
 }
