@@ -76,6 +76,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 public abstract class AbstractBulkLoadTool extends Configured implements Tool {
 
     protected static final Logger LOGGER = LoggerFactory.getLogger(AbstractBulkLoadTool.class);
+
     static final Option ZK_QUORUM_OPT = new Option("z", "zookeeper", true, "Supply zookeeper connection details (optional)");
     static final Option INPUT_PATH_OPT = new Option("i", "input", true, "Input path(s) (comma-separated, mandatory)");
     static final Option OUTPUT_PATH_OPT = new Option("o", "output", true, "Output path for temporary HFiles (optional)");

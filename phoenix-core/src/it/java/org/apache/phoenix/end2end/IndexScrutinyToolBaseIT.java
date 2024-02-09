@@ -45,6 +45,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class IndexScrutinyToolBaseIT extends BaseTest {
     protected String outputDir;
+
     protected static String indexRegionObserverEnabled = Boolean.FALSE.toString();
     private static String previousIndexRegionObserverEnabled = indexRegionObserverEnabled;
 

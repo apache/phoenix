@@ -62,6 +62,7 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
     private String viewFullName;
     private String globalIndexName;
     private String globalIndexFullName;
+
     private static final String
             DATA_TABLE_DDL = "CREATE TABLE %s (TENANT_ID VARCHAR(15) NOT NULL, ID INTEGER NOT NULL, NAME VARCHAR"
             + ", ZIP INTEGER, EMPLOYER VARCHAR , CONSTRAINT PK_1 PRIMARY KEY (TENANT_ID, ID)) MULTI_TENANT=true";

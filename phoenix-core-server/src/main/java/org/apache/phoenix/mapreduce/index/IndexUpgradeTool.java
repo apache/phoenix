@@ -739,7 +739,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
             String tenantId = indexInfo.getTenantId();
             String baseTable = indexInfo.getBaseTable();
             String schema = indexInfo.getSchemaName();
-            String outFile = "/tmp/index_rebuild_" + schema + "_" + indexName +
+            String outFile = "/tmp/index_rebuild_" +schema+"_"+ indexName +
                     (GLOBAL_INDEX_ID.equals(tenantId)?"":"_"+tenantId) +"_"
                     + UUID.randomUUID().toString();
             String[] args = getIndexToolArgValues(schema, baseTable, indexName, outFile, tenantId);

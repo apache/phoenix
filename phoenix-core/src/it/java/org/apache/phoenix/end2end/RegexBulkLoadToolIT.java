@@ -153,9 +153,8 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         regexBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
-        String multiFileInput = "/tmp/input1.csv,/tmp/input2.csv";
         int exitCode = regexBulkLoadTool.run(new String[] {
-            "--input", multiFileInput,
+            "--input", "/tmp/input1.csv,/tmp/input2.csv",
             "--table", "table7",
             "--regex", "([^,]*),([^,]*),([^,]*)",
             "--zookeeper", zkQuorum});
@@ -321,7 +320,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
     @Test
     public void testAlreadyExistsOutputPath() {
         String tableName = "TABLE9";
-        String outputPath = "/tmp/output/table9";
+        String outputPath = "/tmp/output/tabl9";
         try {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
@@ -357,7 +356,7 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
                 "NAME VARCHAR, NAMES VARCHAR ARRAY, FLAG BOOLEAN)");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path( "/tmp/input10.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input10.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1|Name 1a;Name 1b,true");
         printWriter.println("2|Name 2a;Name 2b");

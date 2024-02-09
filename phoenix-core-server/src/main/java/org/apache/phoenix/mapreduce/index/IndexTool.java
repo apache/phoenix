@@ -313,7 +313,6 @@ public class IndexTool extends Configured implements Tool {
     public static final String RETRY_VERIFY_NOT_APPLICABLE = "retry verify feature accepts "
             + "non-zero ts set in the past and ts must be present in PHOENIX_INDEX_TOOL_RESULT table";
 
-
     private Options getOptions() {
         final Options options = new Options();
         options.addOption(SCHEMA_NAME_OPTION);

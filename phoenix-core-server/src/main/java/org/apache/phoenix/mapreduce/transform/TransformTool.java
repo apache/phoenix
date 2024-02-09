@@ -111,6 +111,7 @@ import static org.apache.phoenix.util.QueryUtil.getConnection;
 
 public class TransformTool extends Configured implements Tool {
     private static final Logger LOGGER = LoggerFactory.getLogger(TransformTool.class);
+
     public enum MR_COUNTER_METRICS {
         TRANSFORM_FAILED,
         TRANSFORM_SUCCEED

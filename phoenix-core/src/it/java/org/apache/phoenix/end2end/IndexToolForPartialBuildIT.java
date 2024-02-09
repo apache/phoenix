@@ -68,6 +68,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
+    
     protected boolean isNamespaceEnabled = false;
     protected final String tableDDLOptions;
     

@@ -56,7 +56,7 @@ public class IndexUpgradeToolTest {
 
     public IndexUpgradeToolTest(boolean upgrade) {
         this.upgrade = upgrade;
-        this.outputFile =  "/tmp/index_upgrade_" + UUID.randomUUID().toString();
+        this.outputFile = "/tmp/index_upgrade_" + UUID.randomUUID().toString();
     }
 
     private void setup(String[] args) {

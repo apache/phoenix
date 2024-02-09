@@ -213,7 +213,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 "CONSTRAINT PK PRIMARY KEY (ID, T ROW_TIMESTAMP))");
 
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
-        FSDataOutputStream outputStream = fs.create(new Path( "/tmp/input1.csv"));
+        FSDataOutputStream outputStream = fs.create(new Path("/tmp/input1.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
         printWriter.println("1,Name 1,1970/01/01");
         printWriter.println("2,Name 2,1971/01/01");
@@ -367,9 +367,8 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(new Configuration(getUtility().getConfiguration()));
         csvBulkLoadTool.getConf().set(DATE_FORMAT_ATTRIB,"yyyy/MM/dd");
-        String multiFileInput = "/tmp/input1.csv,/tmp/input2.csv";
         int exitCode = csvBulkLoadTool.run(new String[] {
-            "--input", multiFileInput,
+            "--input", "/tmp/input1.csv,/tmp/input2.csv",
             "--table", "table7",
             "--zookeeper", zkQuorum});
         assertEquals(0, exitCode);
@@ -613,7 +612,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
     @Test
     public void testAlreadyExistsOutputPath() {
         String tableName = "TABLE9";
-        String outputPath = "/tmp/output/table9";
+        String outputPath = "/tmp/output/tabl9";
         try {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
