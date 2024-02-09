@@ -153,7 +153,7 @@ public class IndexToolForDeleteBeforeRebuildIT extends ParallelStatsDisabledIT {
         conn.commit();
 
         ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        PTable physicalTable = PhoenixRuntime.getTable(conn, globalIndexFullName);
+        PTable physicalTable = conn.unwrap(PhoenixConnection.class).getTable(globalIndexFullName);
         Table hIndexTable= queryServices.getTable(physicalTable.getPhysicalName().getBytes());
         int count = getUtility().countRows(hIndexTable);
         // Confirm index has rows.

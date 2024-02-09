@@ -229,7 +229,7 @@ public class MutableIndexFailureIT extends BaseTest {
                         + " Disable timestamp: " + idx.getIndexDisableTimestamp());
         }
         System.out.println("************Index state from server  " + s + "******************");
-        table = PhoenixRuntime.getTableNoCache(phxConn, fullTableName);
+        table = phxConn.getTableNoCache(fullTableName);
         for (PTable idx : table.getIndexes()) {
             System.out.println(
                 "Index Name: " + idx.getName().getString() + " State: " + idx.getIndexState()

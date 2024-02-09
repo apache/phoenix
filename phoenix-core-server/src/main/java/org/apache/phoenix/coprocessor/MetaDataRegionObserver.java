@@ -86,7 +86,6 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -375,10 +374,10 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                         conn = getRebuildIndexConnection(env.getConfiguration());
                         dataTableToIndexesMap = Maps.newHashMap();
                     }
-                    PTable dataPTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+                    PTable dataPTable = conn.getTableNoCache(dataTableFullName);
 
                     String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTable);
-                    PTable indexPTable = PhoenixRuntime.getTableNoCache(conn, indexTableFullName);
+                    PTable indexPTable = conn.getTableNoCache(indexTableFullName);
                     // Sanity check in case index was removed from table
                     if (!dataPTable.getIndexes().contains(indexPTable)) {
                         LOGGER.debug(dataTableFullName + " does not contain " +

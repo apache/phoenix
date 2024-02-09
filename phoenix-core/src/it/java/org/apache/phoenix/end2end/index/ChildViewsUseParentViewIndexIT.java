@@ -33,6 +33,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -98,7 +99,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
         final String childViewName1 = generateUniqueName();
         final String childViewName2 = generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             // create base table
             String baseTableDdl = "CREATE TABLE " + baseTableName + " (" +
                     "A0 CHAR(1) NOT NULL PRIMARY KEY," +
@@ -119,7 +120,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
             String childViewDdl = "CREATE VIEW " + childViewName1 + " AS SELECT * FROM " + parentViewName + " WHERE A2 = 'Y'";
             conn.createStatement().execute(childViewDdl);
 
-            PTable childViewPTable = PhoenixRuntime.getTableNoCache(conn, childViewName1);
+            PTable childViewPTable = conn.getTableNoCache(childViewName1);
             // create child of parent view that should *not* be able to use the parent's index
             String grandChildViewDdl1 = "CREATE VIEW " + childViewName2 + " AS SELECT * FROM " + childViewName1 + " WHERE A3 = 'Z'";
             conn.createStatement().execute(grandChildViewDdl1);

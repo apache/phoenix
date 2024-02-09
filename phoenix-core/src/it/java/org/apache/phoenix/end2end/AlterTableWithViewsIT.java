@@ -583,7 +583,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             
             // the base column count is updated in the ptable
             PName tenantId = isMultiTenant ? PNameFactory.newName(TENANT1) : null;
-            PTable view = PhoenixRuntime.getTableNoCache(viewConn, viewOfTable.toUpperCase());
+            PTable view = viewConn.unwrap(PhoenixConnection.class).getTableNoCache(viewOfTable.toUpperCase());
             view = viewConn.unwrap(PhoenixConnection.class).getTable(new PTableKey(tenantId, viewOfTable));
             assertBaseColumnCount(3, view.getBaseColumnCount());
         } 
@@ -823,9 +823,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String childView = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String grandChildView = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn =
-                        isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+                PhoenixConnection viewConn = isMultiTenant
+                        ? (PhoenixConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL1)
+                        : conn) {
             String ddlFormat =
                     "CREATE TABLE IF NOT EXISTS " + baseTable + "  ("
                             + " %s PK2 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR "
@@ -835,7 +836,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             String childViewDDL = "CREATE VIEW " + childView + " AS SELECT * FROM " + baseTable;
             viewConn.createStatement().execute(childViewDDL);
             
-            PTable view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            PTable view = viewConn.getTableNoCache(childView.toUpperCase());
             assertColumnsMatch(view.getColumns(), "PK2", "V1", "V2");
 
             String grandChildViewDDL =
@@ -846,22 +847,22 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
                     "ALTER VIEW " + childView + " ADD CHILD_VIEW_COL VARCHAR";
             viewConn.createStatement().execute(addColumnToChildViewDDL);
 
-            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            view = viewConn.getTableNoCache(childView.toUpperCase());
             assertColumnsMatch(view.getColumns(), "PK2", "V1", "V2", "CHILD_VIEW_COL");
 
-            PTable gcView = PhoenixRuntime.getTableNoCache(viewConn, grandChildView.toUpperCase());
+            PTable gcView = viewConn.getTableNoCache(grandChildView.toUpperCase());
             assertColumnsMatch(gcView.getColumns(), "PK2", "V1", "V2", "CHILD_VIEW_COL");
 
             // dropping base table column from child view should succeed
             String dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN V2";
             viewConn.createStatement().execute(dropColumnFromChildView);
-            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            view = viewConn.getTableNoCache(childView.toUpperCase());
             assertColumnsMatch(view.getColumns(), "PK2", "V1", "CHILD_VIEW_COL");
 
             // dropping view specific column from child view should succeed
             dropColumnFromChildView = "ALTER VIEW " + childView + " DROP COLUMN CHILD_VIEW_COL";
             viewConn.createStatement().execute(dropColumnFromChildView);
-            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            view = viewConn.getTableNoCache(childView.toUpperCase());
             assertColumnsMatch(view.getColumns(), "PK2", "V1");
 
             // Adding column to view that has child views is allowed
@@ -871,11 +872,11 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             viewConn.createStatement().execute("SELECT V5 FROM " + childView);
             viewConn.createStatement().execute("SELECT V5 FROM " + grandChildView);
 
-            view = PhoenixRuntime.getTableNoCache(viewConn, childView.toUpperCase());
+            view = viewConn.getTableNoCache(childView.toUpperCase());
             assertColumnsMatch(view.getColumns(), "PK2", "V1", "V5");
 
             // grand child view should have the same columns
-            gcView = PhoenixRuntime.getTableNoCache(viewConn, grandChildView.toUpperCase());
+            gcView = viewConn.getTableNoCache(grandChildView.toUpperCase());
             assertColumnsMatch(gcView.getColumns(), "PK2", "V1", "V5");
         }
     }
@@ -885,9 +886,13 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl());
-                Connection viewConn = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL1) : conn ;
-                Connection viewConn2 = isMultiTenant ? DriverManager.getConnection(TENANT_SPECIFIC_URL2) : conn) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
+                PhoenixConnection viewConn = isMultiTenant
+                        ? (PhoenixConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL1)
+                        : conn ;
+                PhoenixConnection viewConn2 = isMultiTenant
+                        ? (PhoenixConnection) DriverManager.getConnection(TENANT_SPECIFIC_URL2)
+                        : conn) {
             String ddlFormat = "CREATE TABLE IF NOT EXISTS " + baseTable + " ("
                     + " %s PK1 VARCHAR NOT NULL, V0 VARCHAR, V1 VARCHAR, V2 VARCHAR "
                     + " CONSTRAINT NAME_PK PRIMARY KEY (%s PK1)"
@@ -903,7 +908,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             // Drop the column inherited from base table to make it diverged
             String dropColumn = "ALTER VIEW " + view1 + " DROP COLUMN V2";
             viewConn.createStatement().execute(dropColumn);
-            PTable table = PhoenixRuntime.getTableNoCache(viewConn, view1);
+            PTable table = viewConn.getTableNoCache(view1);
             assertEquals(QueryConstants.DIVERGED_VIEW_BASE_COLUMN_COUNT, table.getBaseColumnCount());
             
             try {
@@ -1459,13 +1464,14 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
         final String viewName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
         final String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                props)) {
             String oldVersion = "V1.0";
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, oldVersion, null);
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
                     " SCHEMA_VERSION='" + oldVersion + "'";
             conn.createStatement().execute(createViewSql);
-            PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
+            PTable view = conn.getTableNoCache(viewFullName);
             assertEquals(oldVersion, view.getSchemaVersion());
             assertNull(view.getStreamingTopicName());
 
@@ -1474,9 +1480,9 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             String alterViewSql = "ALTER VIEW " + viewFullName + " SET SCHEMA_VERSION='"
                 + newVersion + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(alterViewSql);
-            PTable view2 = PhoenixRuntime.getTableNoCache(conn, viewFullName);
+            PTable view2 = conn.getTableNoCache(viewFullName);
             assertEquals(newVersion, view2.getSchemaVersion());
-            PTable baseTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            PTable baseTable = conn.getTableNoCache(dataTableFullName);
             assertEquals(oldVersion, baseTable.getSchemaVersion());
             assertNull(baseTable.getStreamingTopicName());
             assertEquals(topicName, view2.getStreamingTopicName());

@@ -653,7 +653,8 @@ public class IndexTool extends Configured implements Tool {
                 PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
             }
             final List<ColumnInfo> columnMetadataList =
-                    PhoenixRuntime.generateColumnInfo(connection, indexTableWithSchema, indexColumns);
+                    PhoenixRuntime.generateColumnInfo(pConnection, indexTableWithSchema,
+                            indexColumns);
             ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
             if (outputPath != null) {
@@ -977,15 +978,15 @@ public class IndexTool extends Configured implements Tool {
     }
 
     private void setupIndexAndDataTable(Connection connection) throws SQLException, IOException {
-        pDataTable = PhoenixRuntime.getTableNoCache(connection, qDataTable);
+        pDataTable = connection.unwrap(PhoenixConnection.class).getTableNoCache(qDataTable);
         if (!isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
             throw new IllegalArgumentException(
                     String.format(" %s is not an index table for %s for this connection",
                             indexTable, qDataTable));
         }
         qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
-        pIndexTable = PhoenixRuntime.getTable(
-            connection, SchemaUtil.getQualifiedTableName(schemaName, indexTable));
+        pIndexTable = connection.unwrap(PhoenixConnection.class).getTable(
+            SchemaUtil.getQualifiedTableName(schemaName, indexTable));
         indexType = pIndexTable.getIndexType();
         qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
         if (IndexType.LOCAL.equals(indexType)) {

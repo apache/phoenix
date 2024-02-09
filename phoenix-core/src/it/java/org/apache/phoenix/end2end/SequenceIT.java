@@ -40,6 +40,7 @@ import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -238,7 +239,8 @@ public class SequenceIT extends ParallelStatsDisabledIT {
         String schemaName = getSchemaName(sequenceName);
 
         conn.createStatement().execute("CREATE SEQUENCE " + sequenceName + " START WITH 2 INCREMENT BY 4");
-        int bucketNum = PhoenixRuntime.getTableNoCache(conn, SYSTEM_CATALOG_SCHEMA + "." + TYPE_SEQUENCE).getBucketNum();
+        int bucketNum = conn.unwrap(PhoenixConnection.class)
+                .getTableNoCache(SYSTEM_CATALOG_SCHEMA + "." + TYPE_SEQUENCE).getBucketNum();
         assertEquals("Salt bucket for SYSTEM.SEQUENCE should be test default", bucketNum, QueryServicesTestImpl.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
         String query = "SELECT sequence_schema, sequence_name, current_value, increment_by FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='" + sequenceNameWithoutSchema + "'";
         ResultSet rs = conn.prepareStatement(query).executeQuery();

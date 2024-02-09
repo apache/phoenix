@@ -111,7 +111,6 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -601,7 +600,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         PTable table = null;
                         try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                 compactionConfig).unwrap(PhoenixConnection.class)) {
-                            table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+                            table = conn.getTableNoCache(fullTableName);
                         } catch (Exception e) {
                             if (e instanceof TableNotFoundException) {
                                 LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "

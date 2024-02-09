@@ -252,7 +252,6 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -678,7 +677,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     && table.getType() == PTableType.VIEW
                     && table.getViewType() != ViewType.MAPPED) {
                 try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                    PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
+                    PTable pTable = connection.getTableNoCache(table.getParentName().getString());
                     table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
                 }
             }
@@ -1494,7 +1493,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         if (parentTable == null) {
                             // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
                             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                                parentTable = PhoenixRuntime.getTableNoCache(connection, famName.getString());
+                                parentTable = connection.getTableNoCache(famName.getString());
                             } catch (TableNotFoundException e) {
                                 // It is ok to swallow this exception since this could be a view index and _IDX_ table is not there.
                             }
@@ -3042,8 +3041,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && tableType == PTableType.VIEW) {
             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
                     env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                PTable pTable = PhoenixRuntime.getTableNoCache(connection,
-                        table.getParentName().getString());
+                PTable pTable = connection.getTableNoCache(table.getParentName().getString());
                 table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
             }
         }
@@ -3396,7 +3394,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
                         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
                                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-                            PTable pTable = PhoenixRuntime.getTableNoCache(connection,
+                            PTable pTable = connection.getTableNoCache(
                                     table.getParentName().getString());
                             table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
                                     table, pTable);

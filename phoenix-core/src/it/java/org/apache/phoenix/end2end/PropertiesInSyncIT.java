@@ -348,7 +348,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                             .getTableDescriptor(Bytes.toBytes(tableName));
                     defaultCF = tableDescriptor.getColumnFamily(DEFAULT_COLUMN_FAMILY_BYTES);
                 } else {
-                    PTable table = PhoenixRuntime.getTable(conn, tableName);
+                    PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
                     tableDescriptor = conn.unwrap(PhoenixConnection.class).getQueryServices()
                             .getTableDescriptor(table.getPhysicalName().getBytes());
                     defaultCF = tableDescriptor.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table));
@@ -392,7 +392,8 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
         String baseTableName, viewName, viewName2;
         Map<String, Set<String>> createdTablesAndViews = new HashMap<>();
 
-        try (Connection conn = DriverManager.getConnection(getUrl(), new Properties())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                new Properties())) {
             baseTableName = createBaseTableWithProps(conn);
             createdTablesAndViews.put(baseTableName, new HashSet<>());
             Set<String> indexes = createdTablesAndViews.get(baseTableName);
@@ -412,9 +413,9 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
             // Intentionally make UPDATE_CACHE_FREQUENCY out of sync for indexes
             PreparedStatement stmt = conn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
             for (String tableOrViewName : createdTablesAndViews.keySet()) {
-                base = PhoenixRuntime.getTable(conn, tableOrViewName);
+                base = conn.getTable(tableOrViewName);
                 for (String indexTableName : createdTablesAndViews.get(tableOrViewName)) {
-                    index = PhoenixRuntime.getTable(conn, indexTableName);
+                    index = conn.getTable(indexTableName);
                     PName tenantId = index.getTenantId();
                     stmt.setString(1, tenantId == null ? null : tenantId.getString());
                     stmt.setString(2, index.getSchemaName().getString());
@@ -428,7 +429,7 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
             conn.commit();
 
             // Clear the server-side cache so that we get the latest built PTables
-            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            conn.getQueryServices().clearCache();
             // Verify that the modified values are reflected
             for (String tableOrViewName : createdTablesAndViews.keySet()) {
                 assertUpdateCacheFreq(conn, tableOrViewName, baseTableName.equals(tableOrViewName) ?
@@ -439,12 +440,12 @@ public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
                 }
             }
 
-            PhoenixConnection upgradeConn = conn.unwrap(PhoenixConnection.class);
+            PhoenixConnection upgradeConn = conn;
             upgradeConn.setRunningUpgrade(true);
             syncUpdateCacheFreqAllIndexes(upgradeConn,
-                    PhoenixRuntime.getTableNoCache(conn, baseTableName));
+                    conn.getTableNoCache(baseTableName));
 
-            conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+            conn.getQueryServices().clearCache();
             // Verify that indexes have the synced values for UPDATE_CACHE_FREQUENCY
             for (String tableOrViewName : createdTablesAndViews.keySet()) {
                 long expectedVal = baseTableName.equals(tableOrViewName) ?

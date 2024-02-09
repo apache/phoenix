@@ -917,7 +917,8 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
         String indexTableFullName = SchemaUtil.getTableName(schemaName, indexTableName);
 
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                props)) {
             conn.setAutoCommit(true);
             int numOfRows = 1;
             createTableAndUpsertRows(conn, dataTableFullName, numOfRows, tableDDLOptions);
@@ -936,7 +937,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             SystemTransformRecord record = Transform.getTransformRecord(schemaName, indexTableName, dataTableFullName, null, conn.unwrap(PhoenixConnection.class));
             assertNotNull(record);
             assertTransformStatusOrPartial(PTable.TransformStatus.COMPLETED, record);
-            PTable pOldIndexTable = PhoenixRuntime.getTableNoCache(conn, indexTableFullName);
+            PTable pOldIndexTable = conn.getTableNoCache(indexTableFullName);
             assertEquals(SchemaUtil.getTableNameFromFullName(record.getNewPhysicalTableName()),
                     pOldIndexTable.getPhysicalName(true).getString());
 
@@ -951,7 +952,7 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
             record = Transform.getTransformRecord(schemaName, dataTableName, null, null, conn.unwrap(PhoenixConnection.class));
             assertNotNull(record);
             assertTransformStatusOrPartial(PTable.TransformStatus.COMPLETED, record);
-            PTable pOldTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            PTable pOldTable = conn.getTableNoCache(dataTableFullName);
             assertEquals(SchemaUtil.getTableNameFromFullName(record.getNewPhysicalTableName()),
                     pOldTable.getPhysicalName(true).getString());
         }

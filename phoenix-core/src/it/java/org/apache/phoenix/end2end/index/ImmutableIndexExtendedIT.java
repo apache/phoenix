@@ -220,7 +220,7 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
     public static int getRowCountForEmptyColValue(Connection conn, String tableName,
             byte[] valueBytes)  throws IOException, SQLException {
 
-        PTable table = PhoenixRuntime.getTable(conn, tableName);
+        PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
         ConnectionQueryServices queryServices =
@@ -255,13 +255,13 @@ public class ImmutableIndexExtendedIT extends ParallelStatsDisabledIT {
         String indexTable = "IND_" + generateUniqueName();
         String viewTable = "VIEW_" + generateUniqueName();
 
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             final int initialRowCount = 2;
             createAndPopulateTable(conn, dataTable, initialRowCount);
             createView(conn, dataTable, viewTable);
             String baseTable = useView ? viewTable : dataTable;
             createIndex(conn, baseTable, indexTable);
-            String index = PhoenixRuntime.getTable(conn, indexTable).getPhysicalName().getString();
+            String index = conn.getTable(indexTable).getPhysicalName().getString();
             TestUtil.addCoprocessor(conn, index, coproc.getClass());
             boolean upsertStatus = true;
             try {

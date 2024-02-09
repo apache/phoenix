@@ -26,13 +26,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_QUALIFIER;
-import static org.apache.phoenix.util.PhoenixRuntime.getTable;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -287,7 +285,7 @@ public class IndexUtil {
      * @throws TableNotFoundException if table cannot be found in the connection's metdata cache
      */
     public static List<PColumn> getDataColumns(String dataTableName, List<PColumn> indexColumns, PhoenixConnection conn) throws SQLException {
-        PTable dataTable =  getTable(conn, dataTableName);
+        PTable dataTable =  conn.getTable(dataTableName);
         List<PColumn> dataColumns = new ArrayList<PColumn>(indexColumns.size());
         for (PColumn indexColumn : indexColumns) {
             dataColumns.add(getDataColumn(dataTable, indexColumn.getName().getString()));
@@ -654,7 +652,7 @@ public class IndexUtil {
         return MetaDataMutationResult.constructFromProto(tmpResponse);
     }
 
-    public static boolean matchingSplitKeys(byte[][] splitKeys1, byte[][] splitKeys2) throws IOException {
+    public static boolean matchingSplitKeys(byte[][] splitKeys1, byte[][] splitKeys2) {
         if (splitKeys1 != null && splitKeys2 != null && splitKeys1.length == splitKeys2.length) {
             for (int i = 0; i < splitKeys1.length; i++) {
                 if (Bytes.compareTo(splitKeys1[i], splitKeys2[i]) != 0) { return false; }
@@ -665,24 +663,25 @@ public class IndexUtil {
         return true;
     }
 
-    public static PTable getPDataTable(Connection conn, TableDescriptor tableDesc) throws SQLException {
+    public static PTable getPDataTable(PhoenixConnection conn, TableDescriptor tableDesc)
+            throws SQLException {
         String dataTableName = Bytes.toString(tableDesc.getValue(MetaDataUtil.DATA_TABLE_NAME_PROP_BYTES));
         String physicalTableName = tableDesc.getTableName().getNameAsString();
         PTable pDataTable = null;
         if (dataTableName == null) {
             if (physicalTableName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
                 try {
-                    pDataTable = PhoenixRuntime.getTable(conn, physicalTableName
+                    pDataTable = conn.getTable(physicalTableName
                             .replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR));
                 } catch (TableNotFoundException e) {
                     // could be a table mapped to external table
-                    pDataTable = PhoenixRuntime.getTable(conn, physicalTableName);
+                    pDataTable = conn.getTable(physicalTableName);
                 }
             }else{
-                pDataTable = PhoenixRuntime.getTable(conn, physicalTableName);
+                pDataTable = conn.getTable(physicalTableName);
             }
         } else {
-            pDataTable = PhoenixRuntime.getTable(conn, dataTableName);
+            pDataTable = conn.getTable(dataTableName);
         }
         return pDataTable;
     }

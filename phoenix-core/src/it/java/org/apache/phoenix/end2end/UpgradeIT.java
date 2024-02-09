@@ -420,7 +420,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
                     HConstants.VERSIONS + "='1000'\n");
         }
         //Check that the HBase tables reflect the change
-        PTable sysLogTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
+        PTable sysLogTable = conn.getTable(PhoenixDatabaseMetaData.SYSTEM_LOG_NAME);
         TableDescriptor sysLogDesc = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
             PhoenixDatabaseMetaData.SYSTEM_LOG_NAME, cqs.getProps()));
         assertEquals(KeepDeletedCells.TRUE, sysLogDesc.getColumnFamily(
@@ -428,7 +428,7 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
         assertEquals(1000, sysLogDesc.getColumnFamily(
                 SchemaUtil.getEmptyColumnFamily(sysLogTable)).getMaxVersions());
 
-        PTable sysStatsTable = PhoenixRuntime.getTable(conn, PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
+        PTable sysStatsTable = conn.getTable(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME);
         TableDescriptor sysStatsDesc = utility.getAdmin().getDescriptor(SchemaUtil.getPhysicalTableName(
             PhoenixDatabaseMetaData.SYSTEM_STATS_NAME, cqs.getProps()));
         assertEquals(KeepDeletedCells.TRUE, sysStatsDesc.getColumnFamily(

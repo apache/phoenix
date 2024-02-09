@@ -329,7 +329,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testRecreateDroppedTableWithChildViews() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -363,12 +363,12 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         conn.createStatement().execute(tableDdl);
         // the two child views should still not exist
         try {
-            PhoenixRuntime.getTableNoCache(conn, fullViewName1);
+            conn.getTableNoCache(fullViewName1);
             fail();
         } catch (SQLException ignored) {
         }
         try {
-            PhoenixRuntime.getTableNoCache(conn, fullViewName2);
+            conn.getTableNoCache(fullViewName2);
             fail();
         } catch (SQLException ignored) {
         }
@@ -731,7 +731,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testRecreateIndexWhoseAncestorWasDropped() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
         String fullTableName1 = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -772,14 +772,14 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         conn.createStatement().execute(ddl);
 
         String fullIndexName = SchemaUtil.getTableName(SCHEMA2, indexName);
-        PTable index = PhoenixRuntime.getTableNoCache(conn, fullIndexName);
+        PTable index = conn.getTableNoCache(fullIndexName);
         // the index should have v3 but not v2
         validateCols(index);
     }
 
     @Test
     public void testRecreateViewWhoseParentWasDropped() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
         String fullTableName1 = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName1 = SchemaUtil.getTableName(SCHEMA2,
@@ -809,7 +809,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 + " WHERE k > 5";
         conn.createStatement().execute(ddl);
 
-        PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName1);
+        PTable view = conn.getTableNoCache(fullViewName1);
         // the view should have v3 but not v2
         validateCols(view);
     }
@@ -1037,7 +1037,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
                 generateUniqueName());
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             conn.createStatement()
                     .execute("create table " + fullTableName
                             + "(tenantId CHAR(15) NOT NULL, pk1 integer "
@@ -1051,8 +1051,8 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                             + " set IMMUTABLE_ROWS = true");
 
             // fetch the latest tables
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
-            PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+            PTable table = conn.getTableNoCache(fullTableName);
+            PTable view = conn.getTableNoCache(fullViewName);
             assertTrue("IMMUTABLE_ROWS property set incorrectly",
                     table.isImmutableRows());
             assertTrue("IMMUTABLE_ROWS property set incorrectly",
@@ -1346,7 +1346,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     @Test
     public void testCreateViewDefinesPKConstraint() throws Exception {
-        Connection conn = DriverManager.getConnection(getUrl());
+        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
         String fullTableName = SchemaUtil.getTableName(SCHEMA1,
                 generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2,
@@ -1361,7 +1361,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                 + " AS SELECT * FROM " + fullTableName + " WHERE K1 = 1";
         conn.createStatement().execute(ddl);
 
-        PhoenixRuntime.getTableNoCache(conn, fullViewName);
+        conn.getTableNoCache(fullViewName);
 
         // assert PK metadata
         ResultSet rs =

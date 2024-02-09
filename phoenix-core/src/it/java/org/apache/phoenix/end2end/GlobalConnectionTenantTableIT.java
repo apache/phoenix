@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -65,11 +66,11 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testGetLatestTenantTable() throws SQLException {
-        try (Connection conn = getConnection()) {
-            PTable table = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME, null);
+        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+            PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             assertNotNull(table);
             table = null;
-            table = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_INDEX_NAME, null);
+            table = conn.getTable(TENANT_NAME, FULL_INDEX_NAME, null);
             assertNotNull(table);
         }
     }
@@ -77,8 +78,8 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
     @Test
     public void testGetTenantViewAtTimestamp() throws SQLException {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
-        try (Connection conn = getConnection()) {
-            PTable table = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME, null);
+        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+            PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             long tableTimestamp = table.getTimeStamp();
             // Alter table
             try (Connection tenantConn = getTenantConnection(TENANT_NAME)) {
@@ -86,12 +87,12 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
                 tenantConn.createStatement().execute(alterView);
             }
             // Get the altered table and verify
-            PTable newTable = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME);
+            PTable newTable = conn.getTable(TENANT_NAME, FULL_VIEW_NAME);
             assertNotNull(newTable);
             assertTrue(newTable.getTimeStamp() > tableTimestamp);
             assertEquals(newTable.getColumns().size(), (table.getColumns().size() + 1));
             // Now get the old table and verify
-            PTable oldTable = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME, startTime);
+            PTable oldTable = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, startTime);
             assertNotNull(oldTable);
             assertEquals(oldTable.getTimeStamp(), tableTimestamp);
         }
@@ -99,14 +100,13 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testGetTableWithoutTenantId() throws SQLException {
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
             PTable table =
-                    PhoenixRuntime.getTable(conn, null,
-                        SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME));
+                    conn.getTable(null, SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME));
             assertNotNull(table);
 
             try {
-                table = PhoenixRuntime.getTable(conn, null, FULL_VIEW_NAME);
+                table = conn.getTable(null, FULL_VIEW_NAME);
                 fail(
                     "Expected TableNotFoundException for trying to get tenant specific view without tenantid");
             } catch (SQLException e) {
@@ -117,9 +117,9 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testTableNotFound() throws SQLException {
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
             try {
-                PTable table = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME, 1L);
+                PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, 1L);
                 fail("Expected TableNotFoundException");
             } catch (SQLException e) {
                 assertEquals(e.getErrorCode(), SQLExceptionCode.TABLE_UNDEFINED.getErrorCode());
@@ -130,9 +130,9 @@ public class GlobalConnectionTenantTableIT extends BaseTest {
 
     @Test
     public void testGetTableFromCache() throws SQLException {
-        try (Connection conn = getConnection()) {
-            PTable table = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME, null);
-            PTable newTable = PhoenixRuntime.getTable(conn, TENANT_NAME, FULL_VIEW_NAME, null);
+        try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
+            PTable table = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
+            PTable newTable = conn.getTable(TENANT_NAME, FULL_VIEW_NAME, null);
             assertNotNull(newTable);
             assertTrue(newTable == table);
         }

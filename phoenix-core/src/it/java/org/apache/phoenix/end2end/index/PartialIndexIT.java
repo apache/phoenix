@@ -38,6 +38,7 @@ import java.util.Properties;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.exception.PhoenixParserException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -285,8 +286,8 @@ public class PartialIndexIT extends BaseTest {
             // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
-            try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
+            try (PhoenixConnection newConn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+                PTable indexTable = newConn.getTableNoCache(indexTableName);
                 assertTrue(indexTable.getIndexWhere().equals("A > 50"));
             }
         }
@@ -373,8 +374,8 @@ public class PartialIndexIT extends BaseTest {
             // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
-            try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
+            try (PhoenixConnection newConn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+                PTable indexTable = newConn.getTableNoCache(indexTableName);
                 assertTrue(indexTable.getIndexWhere().equals("A > B"));
             }
         }
@@ -466,8 +467,8 @@ public class PartialIndexIT extends BaseTest {
             // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
-            try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
+            try (PhoenixConnection newConn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+                PTable indexTable = newConn.getTableNoCache(indexTableName);
                 assertTrue(indexTable.getIndexWhere().equals("(B IS NOT NULL  AND C IS NOT NULL )"));
             }
         }
@@ -555,8 +556,8 @@ public class PartialIndexIT extends BaseTest {
             // Test index verification and repair by IndexTool
             verifyIndex(dataTableName, indexTableName);
 
-            try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
+            try (PhoenixConnection newConn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+                PTable indexTable = newConn.getTableNoCache(indexTableName);
                 assertTrue(indexTable.getIndexWhere().equals("D LIKE '%cde_'"));
             }
         }

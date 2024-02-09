@@ -1001,7 +1001,8 @@ public class ScanUtil {
                 ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
     }
 
-    public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table) {
+    public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table)
+            throws SQLException {
         Boolean useStats = table.useStatsForParallelization();
         if (useStats != null) {
             return useStats;
@@ -1161,7 +1162,7 @@ public class ScanUtil {
         String tableName = index.getParentTableName().getString();
         PTable dataTable;
         try {
-            dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, tableName));
+            dataTable = conn.getTable(SchemaUtil.getTableName(schemaName, tableName));
             return dataTable;
         } catch (TableNotFoundException e) {
             // This index table must be being deleted
@@ -1230,7 +1231,7 @@ public class ScanUtil {
             if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
                 String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
-                indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
+                indexTable = phoenixConnection.getTable(indexName);
             }
             if (!dataTable.getIndexes().contains(indexTable)) {
                 return;
@@ -1291,8 +1292,8 @@ public class ScanUtil {
                 parentTableName = SchemaUtil.getTableNameFromFullName(parentViewName);
             }
             try {
-                dataTable = PhoenixRuntime.getTable(phoenixConnection,
-                        SchemaUtil.getTableName(parentSchemaName, parentTableName));
+                dataTable = phoenixConnection.getTable(SchemaUtil.getTableName(parentSchemaName,
+                        parentTableName));
             } catch (TableNotFoundException e) {
                 // This data table does not exists anymore. No need to set the scan attributes
                 return;
