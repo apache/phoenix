@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -131,7 +132,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         private Scan scan;
         private Scan indexScan;
         private Scan singleRowIndexScan;
-        private Scan buildIndexScan = null;
+        private Scan buildIndexScanForDataTable = null;
         private Table dataHTable = null;
         private byte[] emptyCF;
         private byte[] emptyCQ;
@@ -268,7 +269,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                     if (verifyRowAndRepairIfNecessary(result)) {
                         break;
                     }
-                    if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >= pageSizeMs) {
+                    if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) >=
+                            pageSizeMs) {
                         byte[] rowKey = CellUtil.cloneRow(cell);
                         result.clear();
                         getDummyResult(rowKey, result);
@@ -386,11 +388,22 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         }
 
         private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
-            if (buildIndexScan == null) {
-                buildIndexScan = new Scan();
+            if (buildIndexScanForDataTable == null) {
+                buildIndexScanForDataTable = new Scan();
                 indexScan = new Scan(scan);
                 singleRowIndexScan = new Scan(scan);
-                byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
+                // Scanners to be opened on index table using indexScan and singleRowIndexScan do
+                // require scanning the latest/newer version of cells i.e. new rows updated on the
+                // index table as part of the read-repair operation.
+                // Both scan objects copy mvcc read point from the original scan object used to
+                // open GlobalIndexScanner. Hence, we need to reset them to -1 so that if the
+                // region moves in the middle of the ongoing scan on the data table, the reset
+                // mvcc value of -1 will ensure that new scanners opened on index table using
+                // indexScan and singleRowIndexScan are able to read the latest snapshot of the
+                // index updates.
+                PackagePrivateFieldAccessor.setMvccReadPoint(indexScan, -1);
+                PackagePrivateFieldAccessor.setMvccReadPoint(singleRowIndexScan, -1);
+                byte[] dataTableName = scan.getAttribute(BaseScannerRegionObserver.PHYSICAL_DATA_TABLE_NAME);
                 dataHTable =
                     ServerUtil.ConnectionFactory.
                         getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, env).
@@ -399,27 +412,28 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
                 // The following attributes are set to instruct UngroupedAggregateRegionObserver to do partial index rebuild
                 // i.e., rebuild a subset of index rows.
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
-                buildIndexScan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
-                buildIndexScan.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
+                buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserver.UNGROUPED_AGG, TRUE_BYTES);
+                buildIndexScanForDataTable.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, scan.getAttribute(PhoenixIndexCodec.INDEX_PROTO_MD));
+                buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserver.REBUILD_INDEXES, TRUE_BYTES);
+                buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserver.SKIP_REGION_BOUNDARY_CHECK, Bytes.toBytes(true));
+                buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
                 // Scan only columns included in the index table plus the empty column
                 for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
-                    buildIndexScan.addColumn(column.getFamily(), column.getQualifier());
+                    buildIndexScanForDataTable.addColumn(column.getFamily(), column.getQualifier());
                 }
-                buildIndexScan.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifierForDataTable());
+                buildIndexScanForDataTable.addColumn(indexMaintainer.getDataEmptyKeyValueCF(), indexMaintainer.getEmptyKeyValueQualifierForDataTable());
             }
             // Rebuild the index row from the corresponding the row in the the data table
             // Get the data row key from the index row key
             byte[] dataRowKey = indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
-            buildIndexScan.withStartRow(dataRowKey, true);
-            buildIndexScan.withStopRow(dataRowKey, true);
-            buildIndexScan.setTimeRange(0, maxTimestamp);
+            buildIndexScanForDataTable.withStartRow(dataRowKey, true);
+            buildIndexScanForDataTable.withStopRow(dataRowKey, true);
+            buildIndexScanForDataTable.setTimeRange(0, maxTimestamp);
             // Pass the index row key to the partial index builder which will rebuild the index row and check if the
             // row key of this rebuilt index row matches with the passed index row key
-            buildIndexScan.setAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY, indexRowKey);
+            buildIndexScanForDataTable.setAttribute(BaseScannerRegionObserver.INDEX_ROW_KEY, indexRowKey);
             Result result = null;
-            try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScan)){
+            try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScanForDataTable)){
                 result = resultScanner.next();
             } catch (Throwable t) {
                 ServerUtil.throwIOException(dataHTable.getName().toString(), t);
