@@ -20,6 +20,9 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.NotServingRegionException;
@@ -50,6 +53,8 @@ import org.apache.phoenix.util.ServerUtil;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionObserver {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(BaseScannerRegionObserver.class);
 
     public static final String AGGREGATORS = "_Aggs";
     public static final String UNORDERED_GROUP_BY_EXPRESSIONS = "_UnorderedGroupByExpressions";
@@ -134,7 +139,37 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
     public static final String EMPTY_COLUMN_FAMILY_NAME = "_EmptyCFName";
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
-    
+
+    /**
+     * The scan attribute to provide the scan start rowkey for analyze table queries.
+     */
+    public static final String SCAN_ANALYZE_ACTUAL_START_ROW = "_ScanAnalyzeActualStartRow";
+
+    /**
+     * The scan attribute to provide the scan stop rowkey for analyze table queries.
+     */
+    public static final String SCAN_ANALYZE_ACTUAL_STOP_ROW = "_ScanAnalyzeActualStopRow";
+
+    /**
+     * The scan attribute to provide the scan start rowkey include boolean value for analyze table
+     * queries.
+     */
+    public static final String SCAN_ANALYZE_INCLUDE_START_ROW = "_ScanAnalyzeIncludeStartRow";
+
+    /**
+     * The scan attribute to provide the scan stop rowkey include boolean value for analyze table
+     * queries.
+     */
+    public static final String SCAN_ANALYZE_INCLUDE_STOP_ROW = "_ScanAnalyzeIncludeStopRow";
+
+    /**
+     * The scan attribute to determine whether client changes are compatible to consume
+     * new format changes sent by the server. This attribute is mainly used to address
+     * data integrity issues related to region moves (PHOENIX-7106).
+     */
+    public static final String SCAN_SERVER_RETURN_VALID_ROW_KEY = "_ScanServerValidRowKey";
+
+
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
     // In case of Index Write failure, we need to determine that Index mutation
@@ -204,12 +239,35 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
                     Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0) || 
                     (actualStartRow != null && Bytes.compareTo(actualStartRow, lowerInclusiveRegionKey) < 0);
         } else {
-            isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
-                    (upperExclusiveRegionKey.length != 0 && upperExclusiveScanKey.length == 0);
+            if (scan.isReversed()) {
+                isStaleRegionBoundaries =
+                        Bytes.compareTo(upperExclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                                (Bytes.compareTo(lowerInclusiveScanKey, upperExclusiveRegionKey) >
+                                        0 && upperExclusiveRegionKey.length != 0) ||
+                                (upperExclusiveRegionKey.length != 0 &&
+                                        lowerInclusiveScanKey.length == 0);
+            } else {
+                isStaleRegionBoundaries =
+                        Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                                (Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) >
+                                        0 && upperExclusiveRegionKey.length != 0) ||
+                                (upperExclusiveRegionKey.length != 0 &&
+                                        upperExclusiveScanKey.length == 0);
+            }
         }
         if (isStaleRegionBoundaries) {
-            Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
+            LOGGER.error("Throwing StaleRegionBoundaryCacheException due to mismatched scan "
+                            + "boundaries. Region: {} , lowerInclusiveScanKey: {} , "
+                            + "upperExclusiveScanKey: {} , lowerInclusiveRegionKey: {} , "
+                            + "upperExclusiveRegionKey: {} , scan reversed: {}",
+                    region.getRegionInfo().getRegionNameAsString(),
+                    Bytes.toStringBinary(lowerInclusiveScanKey),
+                    Bytes.toStringBinary(upperExclusiveScanKey),
+                    Bytes.toStringBinary(lowerInclusiveRegionKey),
+                    Bytes.toStringBinary(upperExclusiveRegionKey),
+                    scan.isReversed());
+            Exception cause = new StaleRegionBoundaryCacheException(
+                    region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
         if(isLocalIndex) {
@@ -363,8 +421,14 @@ abstract public class BaseScannerRegionObserver extends CompatBaseScannerRegionO
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
             // client may recreate scans with wrong region boundaries.
             if(t instanceof NotServingRegionException) {
+                LOGGER.error("postScannerOpen error for region {} . "
+                                + "Thorwing it as StaleRegionBoundaryCacheException",
+                        s.getRegionInfo().getRegionNameAsString(), t);
                 Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
+            } else {
+                LOGGER.error("postScannerOpen error for region {}",
+                        s.getRegionInfo().getRegionNameAsString(), t);
             }
             ServerUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null; // impossible

@@ -402,6 +402,35 @@ public interface QueryServices extends SQLCloseable {
     String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
 
     /**
+     * Only used by tests: parameter to determine num of regionservers to be created by
+     * MiniHBaseCluster.
+     */
+    String TESTS_MINI_CLUSTER_NUM_REGION_SERVERS = "phoenix.tests.minicluster.numregionservers";
+
+
+    /**
+     * Config to inject any processing after the client retrieves dummy result from the server.
+     */
+    String PHOENIX_POST_DUMMY_PROCESS = "phoenix.scanning.result.post.dummy.process";
+
+    /**
+     * Config to inject any processing after the client retrieves valid result from the server.
+     */
+    String PHOENIX_POST_VALID_PROCESS = "phoenix.scanning.result.post.valid.process";
+
+    /**
+     * New start rowkey to be used by paging region scanner for the scan.
+     */
+    String PHOENIX_PAGING_NEW_SCAN_START_ROWKEY = "phoenix.paging.start.newscan.startrow";
+
+    /**
+     * New start rowkey to be included by paging region scanner for the scan. The value of the
+     * attribute is expected to be boolean.
+     */
+    String PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE =
+        "phoenix.paging.start.newscan.startrow.include";
+
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();

@@ -19,10 +19,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -74,9 +74,11 @@ public class OrderByWithServerMemoryLimitIT extends BaseTest {
             try {
                 rs.next();
                 fail("Expected PhoenixIOException due to IllegalStateException");
-            } catch (PhoenixIOException e) {
-                assertThat(e.getMessage(), containsString("java.lang.IllegalStateException: "
-                        + "Queue full. Consider increasing memory threshold or spooling to disk"));
+            } catch (SQLException e) {
+                assertThat(e.getMessage(), containsString(
+                        "ERROR 101 (08000): Unexpected IO exception. ERROR 101 (08000): "
+                                + "Queue full. Consider increasing memory threshold or "
+                                + "spooling to disk"));
             }
         }
     }

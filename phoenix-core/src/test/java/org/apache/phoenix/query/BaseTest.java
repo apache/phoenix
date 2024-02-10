@@ -542,7 +542,8 @@ public abstract class BaseTest {
         utility = new HBaseTestingUtility(conf);
         try {
             long startTime = System.currentTimeMillis();
-            utility.startMiniCluster(NUM_SLAVES_BASE);
+            utility.startMiniCluster(overrideProps.getInt(
+                    QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE));
             long startupTime = System.currentTimeMillis()-startTime;
             LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
             return getLocalClusterUrl(utility);
