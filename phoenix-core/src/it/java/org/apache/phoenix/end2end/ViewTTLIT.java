@@ -2062,4 +2062,8 @@ public class ViewTTLIT extends BaseViewTTLIT {
     public void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
         super.testMajorCompactWithSaltedIndexedTenantView();
     }
+    @Test
+    public void testMajorCompactWithSaltedIndexedBaseTables() throws Exception {
+        super.testMajorCompactWithSaltedIndexedBaseTables();
+    }
 }
