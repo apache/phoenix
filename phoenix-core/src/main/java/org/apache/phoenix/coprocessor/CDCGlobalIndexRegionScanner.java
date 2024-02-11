@@ -147,15 +147,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 int columnListIndex = 0;
                 List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList =
                         this.cdcDataTableInfo.getColumnInfoList();
-                CDCTableInfo.CDCColumnInfo currentColumnInfo =
-                        cdcColumnInfoList.get(columnListIndex);
+                cellLoop:
                 for (Cell cell : dataRow.rawCells()) {
                     if (cell.getType() == Cell.Type.DeleteFamily) {
-                        // We will only compare with the first Column Family for Delete Family
-                        // cells because there is no way to delete column family in Phoenix.
-                        if (columnListIndex > 0) {
-                            continue;
-                        }
                         if (indexCellTS == cell.getTimestamp()) {
                             isIndexCellDeleteRow = true;
                         } else if (indexCellTS > cell.getTimestamp()
@@ -167,43 +161,36 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         }
                     } else if ((cell.getType() == Cell.Type.DeleteColumn
                             || cell.getType() == Cell.Type.Put)
-                            && !Arrays.equals(cell.getQualifierArray(), emptyCQ)
-                            && columnListIndex < cdcColumnInfoList.size()) {
-                        int cellColumnComparator = CDCUtil.compareCellFamilyAndQualifier(
-                                cell.getFamilyArray(), cell.getQualifierArray(),
-                                currentColumnInfo.getColumnFamily(),
-                                currentColumnInfo.getColumnQualifier());
-                        while (cellColumnComparator > 0) {
-                            columnListIndex += 1;
-                            if (columnListIndex >= cdcColumnInfoList.size()) {
-                                break;
-                            }
-                            currentColumnInfo = cdcColumnInfoList.get(columnListIndex);
-                            cellColumnComparator = CDCUtil.compareCellFamilyAndQualifier(
+                            && !Arrays.equals(cell.getQualifierArray(), emptyCQ)) {
+                        while (true) {
+                            CDCTableInfo.CDCColumnInfo currentColumnInfo =
+                                    cdcColumnInfoList.get(columnListIndex);
+                            int columnComparisonResult = CDCUtil.compareCellFamilyAndQualifier(
                                     cell.getFamilyArray(), cell.getQualifierArray(),
                                     currentColumnInfo.getColumnFamily(),
                                     currentColumnInfo.getColumnQualifier());
-                        }
-                        if (columnListIndex >= cdcColumnInfoList.size()) {
-                            break;
-                        }
-                        if (cellColumnComparator < 0) {
-                            continue;
-                        }
-                        if (cellColumnComparator == 0) {
-                            String cdcColumnName = currentColumnInfo.getColumnFamilyName() +
-                                    NAME_SEPARATOR + currentColumnInfo.getColumnName();
-                            // Don't include Column Family if it is a default column Family
-                            if (Arrays.equals(
-                                    currentColumnInfo.getColumnFamily(),
-                                    cdcDataTableInfo.getDefaultColumnFamily())) {
-                                cdcColumnName = currentColumnInfo.getColumnName();
+                            if (columnComparisonResult > 0) {
+                                if (++columnListIndex >= cdcColumnInfoList.size()) {
+                                    // Have no more column definitions, so the rest of the cells
+                                    // must be for dropped columns and so can be ignored.
+                                    break cellLoop;
+                                }
+                                // Continue looking for the right column definition for this cell.
+                                continue;
+                            } else if (columnComparisonResult < 0) {
+                                // We didn't find a column definition for this cell, ignore the
+                                // current cell but continue working on the rest of the cells.
+                                continue cellLoop;
                             }
+
+                            // else, found the column definition.
                             if (cell.getTimestamp() < indexCellTS
                                     && cell.getTimestamp() > lowerBoundTsForPreImage) {
                                 if (isPreImageInScope || isPostImageInScope) {
+                                    String cdcColumnName = getColumnDisplayName(currentColumnInfo);
                                     if (preImageObj.containsKey(cdcColumnName)) {
-                                        continue;
+                                        // Ignore current cell, continue with the rest.
+                                        continue cellLoop;
                                     }
                                     preImageObj.put(cdcColumnName,
                                             this.getColumnValue(cell, cdcColumnInfoList
@@ -211,11 +198,13 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 }
                             } else if (cell.getTimestamp() == indexCellTS) {
                                 if (isChangeImageInScope || isPostImageInScope) {
-                                    changeImageObj.put(cdcColumnName,
+                                    changeImageObj.put(getColumnDisplayName(currentColumnInfo),
                                             this.getColumnValue(cell, cdcColumnInfoList
                                                     .get(columnListIndex).getColumnType()));
                                 }
                             }
+                            // Done processing the current column, look for other columns.
+                            break;
                         }
                     }
                 }
@@ -253,6 +242,20 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return false;
     }
 
+    private String getColumnDisplayName(CDCTableInfo.CDCColumnInfo currentColumnInfo) {
+        String cdcColumnName;
+        // Don't include Column Family if it is a default column Family
+        if (Arrays.equals(currentColumnInfo.getColumnFamily(),
+                cdcDataTableInfo.getDefaultColumnFamily())) {
+            cdcColumnName = currentColumnInfo.getColumnName();
+        }
+        else {
+            cdcColumnName = currentColumnInfo.getColumnFamilyName() +
+                    NAME_SEPARATOR + currentColumnInfo.getColumnName();
+        }
+        return cdcColumnName;
+    }
+
     private Result getCDCImage(
             Map<String, Object> preImageObj, Map<String, Object> changeImageObj,
             boolean isIndexCellDeleteRow, Long indexCellTS, Cell firstCell,
@@ -267,15 +270,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             rowValueMap.put(CDC_CHANGE_IMAGE, changeImageObj);
         }
 
-        Map<String, Object> postImageObj = new HashMap<>();
         if (isPostImageInScope) {
+            Map<String, Object> postImageObj = new HashMap<>();
             if (!isIndexCellDeleteRow) {
-                for (Map.Entry<String, Object> preImageObjCol : preImageObj.entrySet()) {
-                    postImageObj.put(preImageObjCol.getKey(), preImageObjCol.getValue());
-                }
-                for (Map.Entry<String, Object> changeImageObjCol : changeImageObj.entrySet()) {
-                    postImageObj.put(changeImageObjCol.getKey(), changeImageObjCol.getValue());
-                }
+                postImageObj.putAll(preImageObj);
+                postImageObj.putAll(changeImageObj);
             }
             rowValueMap.put(CDC_POST_IMAGE, postImageObj);
         }
