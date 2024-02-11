@@ -70,7 +70,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT{
+public abstract class BaseViewTTLIT extends LocalHBaseIT{
     static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     static final int VIEW_TTL_10_SECS = 10;
     static final int VIEW_TTL_300_SECS = 300;
@@ -1074,6 +1074,187 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT{
                 }
             }
         }
+    }
+
+    protected void testMajorCompactWithSaltedIndexedBaseTables() throws Exception {
+
+        // View TTL is set in seconds (for e.g 10 secs)
+        int viewTTL = VIEW_TTL_10_SECS;
+        PhoenixTestBuilder.SchemaBuilder.TableOptions
+                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        String tableProps = "COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0',TTL=10";
+        tableOptions.setTableProps(tableProps);
+        tableOptions.setSaltBuckets(1);
+        tableOptions.getTablePKColumns().add("ZID");
+        tableOptions.getTablePKColumnTypes().add("CHAR(15)");
+        for (boolean isMultiTenant : Lists.newArrayList(true, false)) {
+
+            resetEnvironmentEdgeManager();
+            tableOptions.setMultiTenant(isMultiTenant);
+            PhoenixTestBuilder.SchemaBuilder.DataOptions dataOptions =  isMultiTenant ?
+                    PhoenixTestBuilder.SchemaBuilder.DataOptions.withDefaults() :
+                    PhoenixTestBuilder.SchemaBuilder.DataOptions.withPrefix("SALTED");
+
+            // OID, KP for non multi-tenanted views
+            int viewCounter = 1;
+            String orgId =
+                    String.format(PhoenixTestBuilder.DDLDefaults.DEFAULT_ALT_TENANT_ID_FMT,
+                            viewCounter,
+                            dataOptions.getUniqueName());
+            String keyPrefix = "SLT";
+
+            // Define the test schema.
+            final PhoenixTestBuilder.SchemaBuilder
+                    schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+
+            if (isMultiTenant) {
+                PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
+                        tenantViewOptions = PhoenixTestBuilder.SchemaBuilder.TenantViewOptions.withDefaults();
+                tenantViewOptions.getTenantViewPKColumns().clear();
+                tenantViewOptions.getTenantViewPKColumnTypes().clear();
+                schemaBuilder
+                        .withTableOptions(tableOptions)
+                        .withTableIndexDefaults()
+                        .withTenantViewOptions(tenantViewOptions)
+                        .withDataOptions(dataOptions)
+                        .withTenantViewIndexDefaults()
+                        .buildWithNewTenant();
+            } else {
+
+                PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions
+                        globalViewOptions = new PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions();
+                globalViewOptions.setSchemaName(PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME);
+                globalViewOptions.setGlobalViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
+                globalViewOptions.setGlobalViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
+                //globalViewOptions.setGlobalViewPKColumns(Lists.newArrayList(TENANT_VIEW_PK_COLUMNS));
+                //globalViewOptions.setGlobalViewPKColumnTypes(Lists.newArrayList(TENANT_VIEW_PK_TYPES));
+
+                PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions
+                        globalViewIndexOptions = new PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions();
+                globalViewIndexOptions.setGlobalViewIndexColumns(
+                        Lists.newArrayList(TENANT_VIEW_INDEX_COLUMNS));
+                globalViewIndexOptions.setGlobalViewIncludeColumns(
+                        Lists.newArrayList(TENANT_VIEW_INCLUDE_COLUMNS));
+
+                globalViewOptions.setGlobalViewCondition(String.format(
+                        "SELECT * FROM %s.%s WHERE OID = '%s' AND KP = '%s'",
+                        dataOptions.getSchemaName(), dataOptions.getTableName(), orgId, keyPrefix));
+                PhoenixTestBuilder.SchemaBuilder.ConnectOptions
+                        connectOptions = new PhoenixTestBuilder.SchemaBuilder.ConnectOptions();
+                connectOptions.setUseGlobalConnectionOnly(true);
+
+                schemaBuilder
+                        .withTableOptions(tableOptions)
+                        .withTableIndexDefaults()
+                        .withGlobalViewOptions(globalViewOptions)
+                        .withDataOptions(dataOptions)
+                        .withConnectOptions(connectOptions)
+                        .withGlobalViewIndexOptions(globalViewIndexOptions)
+                        .build();
+            }
+
+            // Define the test data.
+            PhoenixTestBuilder.DataSupplier dataSupplier = new PhoenixTestBuilder.DataSupplier() {
+
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String oid = orgId;
+                    String kp = keyPrefix;
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    return isMultiTenant ?
+                            Lists.newArrayList(
+                                    new Object[] { zid, col1, col2, col3, col7, col8, col9 }) :
+                            Lists.newArrayList(
+                                    new Object[] { oid, kp, zid, col1, col2, col3, col7, col8, col9 });
+                }
+            };
+
+            long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+            // Create a test data reader/writer for the above schema.
+            PhoenixTestBuilder.DataWriter dataWriter = new PhoenixTestBuilder.BasicDataWriter();
+            PhoenixTestBuilder.DataReader dataReader = new PhoenixTestBuilder.BasicDataReader();
+
+            List<String> columns = isMultiTenant ?
+                    Lists.newArrayList("ZID", "COL1", "COL2", "COL3",
+                            "COL7", "COL8", "COL9") :
+                    Lists.newArrayList("OID", "KP", "ZID", "COL1", "COL2", "COL3",
+                            "COL7", "COL8", "COL9") ;
+            List<String> rowKeyColumns = isMultiTenant ?
+                    Lists.newArrayList("ZID") :
+                    Lists.newArrayList("OID", "KP", "ZID");
+            String connectUrl = isMultiTenant ?
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
+                            schemaBuilder.getDataOptions().getTenantId() :
+                    getUrl();
+            try (Connection writeConnection = DriverManager.getConnection(connectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(
+                        isMultiTenant ?
+                                schemaBuilder.getEntityTenantViewName() :
+                                schemaBuilder.getEntityGlobalViewName());
+
+                dataReader.setValidationColumns(columns);
+                dataReader.setRowKeyColumns(rowKeyColumns);
+                dataReader.setDML(String.format("SELECT %s from %s", Joiner.on(",").join(columns),
+                        isMultiTenant ?
+                                schemaBuilder.getEntityTenantViewName() :
+                                schemaBuilder.getEntityGlobalViewName()));
+                dataReader.setTargetEntity(
+                        isMultiTenant ?
+                                schemaBuilder.getEntityTenantViewName() :
+                                schemaBuilder.getEntityGlobalViewName());
+
+                // Validate data before and after ttl expiration.
+                upsertDataAndRunValidations(viewTTL, DEFAULT_NUM_ROWS, dataWriter, dataReader,
+                        schemaBuilder);
+            }
+
+            PTable table = schemaBuilder.getBaseTable();
+            // validate multi-tenanted base table
+            validateAfterMajorCompaction(
+                    table.getSchemaName().toString(),
+                    table.getTableName().toString(),
+                    false,
+                    earliestTimestamp,
+                    VIEW_TTL_10_SECS,
+                    false,
+                    0
+            );
+
+            String fullTableIndexName = schemaBuilder.getPhysicalTableIndexName(false);
+            // validate base index table
+            validateAfterMajorCompaction(
+                    SchemaUtil.getSchemaNameFromFullName(fullTableIndexName),
+                    SchemaUtil.getTableNameFromFullName(fullTableIndexName),
+                    false,
+                    earliestTimestamp,
+                    VIEW_TTL_10_SECS,
+                    false,
+                    0
+            );
+
+            // validate multi-tenanted index table
+            validateAfterMajorCompaction(
+                    table.getSchemaName().toString(),
+                    table.getTableName().toString(),
+                    true,
+                    earliestTimestamp,
+                    VIEW_TTL_10_SECS,
+                    false,
+                    0
+            );
+        }
+
     }
 
     private void deleteData(
