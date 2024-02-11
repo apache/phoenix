@@ -1637,6 +1637,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         byte[] tableKey = null;
         do {
+
             if (result == null) {
                 return TTL_NOT_DEFINED;
             }
