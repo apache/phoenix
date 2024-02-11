@@ -58,6 +58,43 @@ public class PrefixIndexAndCacheTest {
 
 
 	@Test
+	public void testOverlappingPrefixes() {
+		PrefixIndex globalPrefixIndex = new PrefixIndex();
+		PrefixIndex tenantPrefixIndex = new PrefixIndex();
+		TableTTLInfoCache cache = new TableTTLInfoCache();
+		List<String> sampleRows = new ArrayList<>();
+		sampleRows.add("0010t0001000001001Z01#12348");
+		sampleRows.add("0010t0001000001002Z01#7832438");
+
+		TableTTLInfo table1 = new TableTTLInfo("TEST_ENTITY.T_000001", "", "TEST_ENTITY.GV_000001", "001", 30000);
+		TableTTLInfo table2 = new TableTTLInfo("TEST_ENTITY.T_000001",
+				"0010t0001000001", "TEST_ENTITY.Z01",
+				"0010t0001000001002Z01", 60000);
+
+		Integer tableId1 = cache.addTable(table1);
+		Integer tableId2 = cache.addTable(table2);
+		globalPrefixIndex.put(table1.getPrefix(), tableId1);
+		tenantPrefixIndex.put(table2.getPrefix(), tableId2);
+
+		int tenantOffset = 0;
+		int globalOffset = 15;
+
+		Integer row0GlobalMatch = globalPrefixIndex.get(sampleRows.get(0).getBytes(), globalOffset);
+		assertTrue(String.format("row-%d, matched = %s, row = %s",
+				0, row0GlobalMatch != null, sampleRows.get(0)), row0GlobalMatch != null);
+		Integer row0TenantMatch = tenantPrefixIndex.get(sampleRows.get(0).getBytes(), tenantOffset);
+		assertTrue(String.format("row-%d, matched = %s, row = %s",
+				0, row0TenantMatch != null, sampleRows.get(0)), row0TenantMatch == null);
+
+		Integer row1GlobalMatch = globalPrefixIndex.get(sampleRows.get(1).getBytes(), globalOffset);
+		assertTrue(String.format("row-%d, matched = %s, row = %s",
+				0, row1GlobalMatch != null, sampleRows.get(1)), row1GlobalMatch == null);
+		Integer row1TenantMatch = tenantPrefixIndex.get(sampleRows.get(1).getBytes(), tenantOffset);
+		assertTrue(String.format("row-%d, matched = %s, row = %s",
+				0, row1TenantMatch != null, sampleRows.get(1)), row1TenantMatch != null);
+	}
+
+	@Test
 	public void testSamplePrefixes() {
 		PrefixIndex prefixIndex = new PrefixIndex();
 		TableTTLInfoCache cache = new TableTTLInfoCache();
