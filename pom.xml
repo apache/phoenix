@@ -131,7 +131,7 @@
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.31</joni.version>
     <tephra.version>0.16.1</tephra.version>
-    <omid.version>1.1.0</omid.version>
+    <omid.version>1.1.1</omid.version>
     <stream.version>2.9.5</stream.version>
     <icu4j.version>72.1</icu4j.version>
     <guice.version>5.1.0</guice.version>
