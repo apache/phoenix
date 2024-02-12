@@ -20,8 +20,10 @@ package org.apache.phoenix.end2end;
 import com.google.gson.Gson;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.junit.Before;
@@ -40,6 +42,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +51,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import static org.apache.phoenix.end2end.index.SingleCellIndexIT.dumpTable;
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
@@ -466,30 +470,53 @@ public class CDCQueryIT extends CDCBaseIT {
         }
         String cdcName = generateUniqueName();
         String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null);
         if (! dataFirst) {
             createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
         }
         Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(ts1.getTime());
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        injectEdge.setValue(System.currentTimeMillis());
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
+        conn.commit();
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
         conn.commit();
-        Thread.sleep(10);
-        Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+        injectEdge.incrementValue(100);
+        cal.add(Calendar.MILLISECOND, 300);
+        Timestamp ts2 = new Timestamp(cal.getTime().getTime());
+        injectEdge.incrementValue(100);
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (3, 300)");
         conn.commit();
-        Thread.sleep(10);
-        Timestamp ts3 = new Timestamp(System.currentTimeMillis());
+        injectEdge.incrementValue(100);
+        cal.add(Calendar.MILLISECOND, 200);
+        Timestamp ts3 = new Timestamp(cal.getTime().getTime());
+        dumpTable(CDCUtil.getCDCIndexName(cdcName));
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k = 2");
-        Timestamp ts4 = new Timestamp(System.currentTimeMillis());
+        injectEdge.incrementValue(100);
+        cal.add(Calendar.MILLISECOND, 100);
+        Timestamp ts4 = new Timestamp(cal.getTime().getTime());
         conn.commit();
         if (dataFirst) {
             createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
         }
 
+//        dumpTable(CDCUtil.getCDCIndexName(cdcName));
+//        String sql = "SELECT * FROM " + cdcName + " WHERE \"PHOENIX_ROW_TIMESTAMP()\" <= ?";
+//        PreparedStatement stmt2 = conn.prepareStatement(sql);
+//        //assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() <= ?"), null);
+//
+//        stmt2.setTimestamp(1, ts2);
+//        ResultSet rs2 = stmt2.executeQuery();
+//        assertEquals(true, rs2.next());
         String sel_sql = "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND " +
                 "PHOENIX_ROW_TIMESTAMP() <= ?";
+
         Object[] testDataSets = new Object[] {
                 new Object[] {ts1, ts2, new int[] {1, 2}}/*,
                 new Object[] {ts2, ts3, new int[] {1, 3}},
@@ -658,4 +685,90 @@ public class CDCQueryIT extends CDCBaseIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testSelectCDCFailDataTableUpdate() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        createTable(conn, "CREATE TABLE  " + tableName +
+                " ( k INTEGER PRIMARY KEY," + " v1 INTEGER, v2 INTEGER)", encodingScheme);
+        if (forView) {
+            String viewName = generateUniqueName();
+            createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
+                    encodingScheme);
+            tableName = viewName;
+        }
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName
+                + " ON " + tableName;
+        if (! dataFirst) {
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+        }
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+        assertCDCState(conn, cdcName, null, 3);
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        injectEdge.setValue(System.currentTimeMillis());
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
+        commitWithException(conn);
+
+        injectEdge.incrementValue(100);
+        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+        commitWithException(conn);
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+
+        if (dataFirst) {
+            EnvironmentEdgeManager.reset();
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+        }
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
+        assertEquals(false, rs.next());
+    }
+
+    static private void commitWithException(Connection conn) {
+        try {
+            conn.commit();
+            IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            fail();
+        } catch (Exception e) {
+            // this is expected
+        }
+    }
+
 }

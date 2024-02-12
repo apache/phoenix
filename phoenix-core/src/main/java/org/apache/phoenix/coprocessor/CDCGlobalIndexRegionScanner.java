@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet;
 import org.apache.phoenix.coprocessor.generated.CDCInfoProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -140,98 +141,109 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 changeImageObj = new HashMap<>();
             }
             Long lowerBoundTsForPreImage = 0L;
+            boolean isChangeDataTableCellPresent = false;
             boolean isIndexCellDeleteRow = false;
             byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(
                     cdcDataTableInfo.getQualifierEncodingScheme()).getFirst();
             try {
-                int columnListIndex = 0;
-                List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList =
-                        this.cdcDataTableInfo.getColumnInfoList();
-                cellLoop:
-                for (Cell cell : dataRow.rawCells()) {
-                    if (cell.getType() == Cell.Type.DeleteFamily) {
-                        if (indexCellTS == cell.getTimestamp()) {
-                            isIndexCellDeleteRow = true;
-                        } else if (indexCellTS > cell.getTimestamp()
-                                && lowerBoundTsForPreImage == 0L) {
-                            // Cells with timestamp less than the lowerBoundTsForPreImage
-                            // can not be part of the PreImage as there is a Delete Family
-                            // marker after that.
-                            lowerBoundTsForPreImage = cell.getTimestamp();
-                        }
-                    } else if ((cell.getType() == Cell.Type.DeleteColumn
-                            || cell.getType() == Cell.Type.Put)
-                            && !Arrays.equals(cell.getQualifierArray(), emptyCQ)) {
-                        while (true) {
-                            CDCTableInfo.CDCColumnInfo currentColumnInfo =
-                                    cdcColumnInfoList.get(columnListIndex);
-                            int columnComparisonResult = CDCUtil.compareCellFamilyAndQualifier(
-                                    cell.getFamilyArray(), cell.getQualifierArray(),
-                                    currentColumnInfo.getColumnFamily(),
-                                    currentColumnInfo.getColumnQualifier());
-                            if (columnComparisonResult > 0) {
-                                if (++columnListIndex >= cdcColumnInfoList.size()) {
-                                    // Have no more column definitions, so the rest of the cells
-                                    // must be for dropped columns and so can be ignored.
-                                    break cellLoop;
-                                }
-                                // Continue looking for the right column definition for this cell.
-                                continue;
-                            } else if (columnComparisonResult < 0) {
-                                // We didn't find a column definition for this cell, ignore the
-                                // current cell but continue working on the rest of the cells.
-                                continue cellLoop;
+                if (dataRow != null) {
+                    int columnListIndex = 0;
+                    List<CDCTableInfo.CDCColumnInfo> cdcColumnInfoList =
+                            this.cdcDataTableInfo.getColumnInfoList();
+                    cellLoop:
+                    for (Cell cell : dataRow.rawCells()) {
+                        if (cell.getType() == Cell.Type.DeleteFamily) {
+                            if (indexCellTS == cell.getTimestamp()) {
+                                isIndexCellDeleteRow = true;
+                            } else if (indexCellTS > cell.getTimestamp()
+                                    && lowerBoundTsForPreImage == 0L) {
+                                // Cells with timestamp less than the lowerBoundTsForPreImage
+                                // can not be part of the PreImage as there is a Delete Family
+                                // marker after that.
+                                lowerBoundTsForPreImage = cell.getTimestamp();
                             }
-
-                            // else, found the column definition.
-                            if (cell.getTimestamp() < indexCellTS
-                                    && cell.getTimestamp() > lowerBoundTsForPreImage) {
-                                if (isPreImageInScope || isPostImageInScope) {
-                                    String cdcColumnName = getColumnDisplayName(currentColumnInfo);
-                                    if (preImageObj.containsKey(cdcColumnName)) {
-                                        // Ignore current cell, continue with the rest.
-                                        continue cellLoop;
+                        } else if ((cell.getType() == Cell.Type.DeleteColumn
+                                || cell.getType() == Cell.Type.Put)
+                                && !Arrays.equals(cell.getQualifierArray(), emptyCQ)) {
+                            while (true) {
+                                CDCTableInfo.CDCColumnInfo currentColumnInfo =
+                                        cdcColumnInfoList.get(columnListIndex);
+                                int columnComparisonResult = CDCUtil.compareCellFamilyAndQualifier(
+                                        cell.getFamilyArray(), cell.getQualifierArray(),
+                                        currentColumnInfo.getColumnFamily(),
+                                        currentColumnInfo.getColumnQualifier());
+                                if (columnComparisonResult > 0) {
+                                    if (++columnListIndex >= cdcColumnInfoList.size()) {
+                                        // Have no more column definitions, so the rest of the cells
+                                        // must be for dropped columns and so can be ignored.
+                                        break cellLoop;
                                     }
-                                    preImageObj.put(cdcColumnName,
-                                            this.getColumnValue(cell, cdcColumnInfoList
-                                                    .get(columnListIndex).getColumnType()));
+                                    // Continue looking for the right column definition for this cell.
+                                    continue;
+                                } else if (columnComparisonResult < 0) {
+                                    // We didn't find a column definition for this cell, ignore the
+                                    // current cell but continue working on the rest of the cells.
+                                    continue cellLoop;
                                 }
-                            } else if (cell.getTimestamp() == indexCellTS) {
-                                if (isChangeImageInScope || isPostImageInScope) {
-                                    changeImageObj.put(getColumnDisplayName(currentColumnInfo),
-                                            this.getColumnValue(cell, cdcColumnInfoList
-                                                    .get(columnListIndex).getColumnType()));
+
+                                // else, found the column definition.
+                                if (cell.getTimestamp() < indexCellTS
+                                        && cell.getTimestamp() > lowerBoundTsForPreImage) {
+                                    if (isPreImageInScope || isPostImageInScope) {
+                                        String cdcColumnName = getColumnDisplayName(currentColumnInfo);
+                                        if (preImageObj.containsKey(cdcColumnName)) {
+                                            // Ignore current cell, continue with the rest.
+                                            continue cellLoop;
+                                        }
+                                        preImageObj.put(cdcColumnName,
+                                                this.getColumnValue(cell, cdcColumnInfoList
+                                                        .get(columnListIndex).getColumnType()));
+                                    }
+                                } else if (cell.getTimestamp() == indexCellTS) {
+                                    isChangeDataTableCellPresent = true;
+                                    if (isChangeImageInScope || isPostImageInScope) {
+                                        changeImageObj.put(getColumnDisplayName(currentColumnInfo),
+                                                this.getColumnValue(cell, cdcColumnInfoList
+                                                        .get(columnListIndex).getColumnType()));
+                                    }
                                 }
+                                // Done processing the current column, look for other columns.
+                                break;
                             }
-                            // Done processing the current column, look for other columns.
-                            break;
                         }
                     }
-                }
-                Result cdcRow = getCDCImage(preImageObj, changeImageObj, isIndexCellDeleteRow,
-                        indexCellTS, firstCell, isChangeImageInScope, isPreImageInScope,
-                        isPostImageInScope);
-                if (cdcRow != null && tupleProjector != null) {
-                    if (firstCell.getType() == Cell.Type.DeleteFamily) {
-                        // result is of type EncodedColumnQualiferCellsList for queries with
-                        // Order by clause. It fails when Delete Family cell is added to it
-                        // as it expects column qualifier bytes which is not available.
-                        // Adding empty PUT cell as a placeholder.
-                        result.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
-                                .setRow(firstCell.getRowArray()).
-                                setFamily(firstCell.getFamilyArray())
-                                .setQualifier(indexMaintainer.getEmptyKeyValueQualifier()).
-                                setTimestamp(firstCell.getTimestamp())
-                                .setType(Cell.Type.Put).
-                                setValue(EMPTY_BYTE_ARRAY).build());
+                    if (isChangeDataTableCellPresent || isIndexCellDeleteRow) {
+                        Result cdcRow = getCDCImage(preImageObj, changeImageObj, isIndexCellDeleteRow,
+                                indexCellTS, firstCell, isChangeImageInScope, isPreImageInScope,
+                                isPostImageInScope);
+                        if (cdcRow != null && tupleProjector != null) {
+                            if (firstCell.getType() == Cell.Type.DeleteFamily) {
+                                // result is of type EncodedColumnQualiferCellsList for queries with
+                                // Order by clause. It fails when Delete Family cell is added to it
+                                // as it expects column qualifier bytes which is not available.
+                                // Adding empty PUT cell as a placeholder.
+                                result.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
+                                        .setRow(firstCell.getRowArray()).
+                                        setFamily(firstCell.getFamilyArray())
+                                        .setQualifier(indexMaintainer.getEmptyKeyValueQualifier()).
+                                        setTimestamp(firstCell.getTimestamp())
+                                        .setType(Cell.Type.Put).
+                                        setValue(EMPTY_BYTE_ARRAY).build());
+                            } else {
+                                result.add(firstCell);
+                            }
+                            IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
+                                    tupleProjector, ptr);
+                        } else {
+                            result.clear();
+                        }
                     } else {
-                        result.add(firstCell);
+                        result.clear();
                     }
-                    IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
-                            tupleProjector, ptr);
                 } else {
                     result.clear();
                 }
+
                 return true;
             } catch (Throwable e) {
                 LOGGER.error("Exception in UncoveredIndexRegionScanner for region "
@@ -313,5 +325,4 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             return dataType.toObject(cell.getValueArray());
         }
     }
-
 }

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;

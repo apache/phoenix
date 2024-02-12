@@ -88,10 +88,13 @@ public class CDCTableInfo {
         if (table.hasDefaultFamilyName()) {
             defaultColumnFamily = table.getDefaultFamilyName().toByteArray();
         }
-        // For backward compatibility. Clients older than 4.10 will always have non-encoded qualifiers.
-        PTable.QualifierEncodingScheme qualifierEncodingScheme = PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+        // For backward compatibility. Clients older than 4.10 will always have
+        // non-encoded qualifiers.
+        PTable.QualifierEncodingScheme qualifierEncodingScheme
+                = PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
         if (table.hasQualifierEncodingScheme()) {
-            qualifierEncodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue(table.getQualifierEncodingScheme().toByteArray()[0]);
+            qualifierEncodingScheme = PTable.QualifierEncodingScheme.fromSerializedValue(
+                    table.getQualifierEncodingScheme().toByteArray()[0]);
         }
         List<CDCColumnInfo> columns = Lists.newArrayListWithExpectedSize(table.getColumnsCount());
         for (CDCInfoProtos.CDCColumnDef curColumnProto : table.getColumnsList()) {
