@@ -122,23 +122,37 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test
     public void testTooLowSCNWithTableLevelMaxLookback() throws Exception {
-        String dataTableName = generateUniqueName();
-        optionBuilder.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
-        tableDDLOptions = optionBuilder.toString();
-        createTable(dataTableName);
+        String dataTableName1 = generateUniqueName();
+        StringBuilder optionBuilderForDataTable1 = new StringBuilder(optionBuilder);
+        optionBuilderForDataTable1.append("MAX_LOOKBACK_AGE="+((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000));
+        tableDDLOptions = optionBuilderForDataTable1.toString();
+        createTable(dataTableName1);
+        StringBuilder optionBuilderForDataTable2 = new StringBuilder(optionBuilder);
+        optionBuilderForDataTable2.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
+        String dataTableName2 = generateUniqueName();
+        tableDDLOptions = optionBuilderForDataTable2.toString();
+        createTable(dataTableName2);
+        Assert.assertEquals(new Long((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000),
+                queryTableLevelMaxLookbackAge(dataTableName1));
+        Assert.assertEquals(new Long(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000),
+                queryTableLevelMaxLookbackAge(dataTableName2));
         injectEdge.setValue(System.currentTimeMillis());
         EnvironmentEdgeManager.injectEdge(injectEdge);
         //increase long enough to make sure we can find the syscat row for the table
         injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
-        populateTable(dataTableName);
+        populateTable(dataTableName1);
+        populateTable(dataTableName2);
         long populateTime = EnvironmentEdgeManager.currentTimeMillis();
         injectEdge.incrementValue(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000 + 1000);
         Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
                 (populateTime + MAX_LOOKBACK_AGE * 1000));
+        Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                populateTime + (TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000);
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(populateTime));
         try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
-            connscn.createStatement().executeQuery("select * from " + dataTableName);
+            connscn.createStatement().executeQuery("select * from " + dataTableName1 + " where " +
+                    "val3 in (select val3 from " + dataTableName2 + ")");
         } catch (SQLException se) {
             SQLExceptionCode code =
                     SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE;
@@ -226,6 +240,7 @@ public class MaxLookbackIT extends BaseTest {
 
             TableName dataTable = TableName.valueOf(dataTableName);
             populateTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
             TableName indexTable = TableName.valueOf(indexName);
