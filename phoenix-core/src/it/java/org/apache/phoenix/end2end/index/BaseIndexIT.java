@@ -279,7 +279,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         Iterator<Pair<byte[],List<Cell>>> iterator = PhoenixRuntime.getUncommittedDataIterator(conn);
         if (iterator.hasNext()) {
             byte[] tableName = iterator.next().getFirst(); // skip data table mutations
-            PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
+            PTable table = conn.unwrap(PhoenixConnection.class).getTable(Bytes.toString(tableName));
             boolean clientSideUpdate = (!localIndex || (transactional && table.getTransactionProvider().getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))) 
                     && (!mutable || transactional);
             if (!clientSideUpdate) {

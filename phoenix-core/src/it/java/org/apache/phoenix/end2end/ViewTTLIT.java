@@ -1855,7 +1855,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
 
         // Test setting masking expired rows property
-        try (Connection conn = DriverManager.getConnection(tenantConnectUrl, props);
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager
+                .getConnection(tenantConnectUrl, props);
                 final Statement statement = conn.createStatement()) {
             conn.setAutoCommit(true);
 
@@ -1864,8 +1865,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
             final QueryPlan queryPlan = pstmt.optimizeQuery(stmtString);
 
-            PTable table = PhoenixRuntime
-                    .getTable(conn, schemaBuilder.getDataOptions().getTenantId(), viewName);
+            PTable table = conn.getTable(schemaBuilder.getDataOptions().getTenantId(), viewName);
 
             PhoenixResultSet
                     rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
@@ -1880,7 +1880,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
         }
 
         // Test setting delete expired rows property
-        try (Connection conn = DriverManager.getConnection(tenantConnectUrl, props);
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager
+                .getConnection(tenantConnectUrl, props);
                 final Statement statement = conn.createStatement()) {
             conn.setAutoCommit(true);
 
@@ -1890,8 +1891,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             final QueryPlan queryPlan = pstmt.optimizeQuery(stmtString);
             final Scan scan = queryPlan.getContext().getScan();
 
-            PTable table = PhoenixRuntime
-                    .getTable(conn, schemaBuilder.getDataOptions().getTenantId(), viewName);
+            PTable table = conn.getTable(schemaBuilder.getDataOptions().getTenantId(), viewName);
 
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
@@ -2504,7 +2504,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 getUrl() :
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
 
-        try (Connection deleteConnection = DriverManager.getConnection(connectUrl, props);
+        try (PhoenixConnection deleteConnection = (PhoenixConnection) DriverManager
+                .getConnection(connectUrl, props);
                 final Statement statement = deleteConnection.createStatement()) {
             deleteConnection.setAutoCommit(true);
 
@@ -2516,7 +2517,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
             final Scan scan = queryPlan.getContext().getScan();
 
-            PTable table = PhoenixRuntime.getTable(deleteConnection, tenantId, viewName);
+            PTable table = deleteConnection.getTable(tenantId, viewName);
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
@@ -2545,7 +2546,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                 getUrl() :
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
 
-        try (Connection deleteConnection = DriverManager.getConnection(connectUrl, props);
+        try (PhoenixConnection deleteConnection = (PhoenixConnection) DriverManager
+                .getConnection(connectUrl, props);
                 final Statement statement = deleteConnection.createStatement()) {
             deleteConnection.setAutoCommit(true);
 
@@ -2557,7 +2559,7 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
             final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
             final Scan scan = queryPlan.getContext().getScan();
 
-            PTable table = PhoenixRuntime.getTable(deleteConnection, tenantId, indexName);
+            PTable table = deleteConnection.getTable(tenantId, indexName);
 
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =

@@ -261,7 +261,7 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
 
     PTable getPTable(String pTableFullName) throws SQLException {
         try (Connection conn = getConnection()) {
-            return PhoenixRuntime.getTable(conn, pTableFullName);
+            return conn.unwrap(PhoenixConnection.class).getTable(pTableFullName);
         }
     }
 

@@ -39,6 +39,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -600,8 +601,8 @@ public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     }
 
     private SourceTargetColumnNames getColNames() throws SQLException {
-        PTable pdataTable = PhoenixRuntime.getTable(conn, dataTableFullName);
-        PTable pindexTable = PhoenixRuntime.getTable(conn, indexTableFullName);
+        PTable pdataTable = conn.unwrap(PhoenixConnection.class).getTable(dataTableFullName);
+        PTable pindexTable = conn.unwrap(PhoenixConnection.class).getTable(indexTableFullName);
         SourceTargetColumnNames
                 columnNames =
                 new SourceTargetColumnNames.DataSourceColNames(pdataTable, pindexTable);

@@ -327,7 +327,7 @@ public class TransactionIT  extends ParallelStatsDisabledIT {
             assertEquals(txProvider, rs.getString(PhoenixDatabaseMetaData.TRANSACTION_PROVIDER));
             
             // Ensure round-trip-ability of TRANSACTION_PROVIDER
-            PTable table = PhoenixRuntime.getTableNoCache(conn, transactTableName);
+            PTable table = conn.unwrap(PhoenixConnection.class).getTableNoCache(transactTableName);
             assertEquals(txProvider, table.getTransactionProvider().name());
 
             String nonTransactTableName = generateUniqueName();

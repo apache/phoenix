@@ -295,7 +295,7 @@ public class IndexTestUtil {
     public static void assertRowsForEmptyColValue(Connection conn, String tableName,
             byte[] emptyValue) throws SQLException, IOException {
         ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        PTable pTable = PhoenixRuntime.getTable(conn, tableName);
+        PTable pTable = conn.unwrap(PhoenixConnection.class).getTable(tableName);
         Table hTable = cqs.getTable(pTable.getPhysicalName().getBytes());
 
         byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(pTable);

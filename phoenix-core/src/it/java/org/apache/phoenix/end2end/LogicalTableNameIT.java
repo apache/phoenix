@@ -433,7 +433,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
 
     @Test @Ignore("Requires PHOENIX-6722")
     public void testChangeDetectionAfterTableNameChange() throws Exception {
-        try(Connection conn = getConnection(props)) {
+        try(PhoenixConnection conn = (PhoenixConnection) getConnection(props)) {
             String schemaName = "S_" + generateUniqueName();
             String tableName = "T_" + generateUniqueName();
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
@@ -441,7 +441,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
             String alterDdl = "ALTER TABLE " + fullTableName + " SET CHANGE_DETECTION_ENABLED=true";
             conn.createStatement().execute(alterDdl);
 
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             assertTrue(table.isChangeDetectionEnabled());
             assertNotNull(table.getExternalSchemaId());
             AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
@@ -451,7 +451,7 @@ public class LogicalTableNameIT extends LogicalTableNameBaseIT {
             LogicalTableNameIT.createAndPointToNewPhysicalTable(conn, fullTableName, fullNewTableName, false);
 
             //logical table name should still be the same for PTable lookup
-            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable newTable = conn.getTableNoCache(fullTableName);
             //but the schema in the registry should match the new PTable
             AlterTableIT.verifySchemaExport(newTable, getUtility().getConfiguration());
         }

@@ -542,7 +542,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.PENDING_MUTATIONS_DDL_THROW_ATTRIB, Boolean.toString(true));
         String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                props)) {
             String ddl =
                     "create table " + tableName + " ( id1 UNSIGNED_INT not null primary key,"
                             + "appId1 VARCHAR)";
@@ -550,7 +551,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
             // ensure table got created
             Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
             assertNotNull(admin.getDescriptor(TableName.valueOf(tableName)));
-            assertNotNull(PhoenixRuntime.getTableNoCache(conn, tableName));
+            assertNotNull(conn.getTableNoCache(tableName));
         }
     }
 

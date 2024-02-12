@@ -44,6 +44,7 @@ import org.apache.hadoop.hbase.wal.WALKeyImpl;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.schema.PTable;
@@ -97,12 +98,12 @@ public class SystemCatalogWALEntryFilterIT extends ParallelStatsDisabledIT {
     Properties tenantProperties = new Properties();
     tenantProperties.setProperty("TenantId", TENANT_ID);
     //create two versions of a view -- one with a tenantId and one without
-    try (java.sql.Connection connection =
-             ConnectionUtil.getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
+    try (PhoenixConnection connection = (PhoenixConnection) ConnectionUtil
+            .getInputConnection(getUtility().getConfiguration(), tenantProperties)) {
       ensureTableCreated(getUrl(), TestUtil.ENTITY_HISTORY_TABLE_NAME);
       connection.createStatement().execute(CREATE_TENANT_VIEW_SQL);
-      catalogTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
-      childLinkTable = PhoenixRuntime.getTable(connection, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
+      catalogTable = connection.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+      childLinkTable = connection.getTable(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
       walKeyCatalog = new WALKeyImpl(REGION, TableName.valueOf(
         PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME), 0, 0, uuid);
       walKeyChildLink = new WALKeyImpl(REGION, TableName.valueOf(

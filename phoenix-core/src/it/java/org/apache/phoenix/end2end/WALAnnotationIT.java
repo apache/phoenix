@@ -107,13 +107,13 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testNoAnnotationsIfChangeDetectionDisabled() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             SchemaBuilder builder = new SchemaBuilder(getUrl());
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
             tableOptions.setChangeDetectionEnabled(false);
             builder.withTableOptions(tableOptions).build();
-            PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            PTable table = conn.getTableNoCache(builder.getEntityTableName());
             assertFalse("Change detection is enabled when it shouldn't be!",
                 table.isChangeDetectionEnabled());
             String upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +
@@ -128,7 +128,7 @@ public class WALAnnotationIT extends BaseTest {
                 "ALTER TABLE " + builder.getEntityTableName() +
                     " SET " + CHANGE_DETECTION_ENABLED + "=TRUE";
             conn.createStatement().execute(enableSql);
-            table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            table = conn.getTableNoCache(builder.getEntityTableName());
             assertTrue("Change detection is disabled when it should be enabled!",
                 table.isChangeDetectionEnabled());
             //set to FALSE
@@ -136,7 +136,7 @@ public class WALAnnotationIT extends BaseTest {
                 "ALTER TABLE " + builder.getEntityTableName() +
                     " SET " + CHANGE_DETECTION_ENABLED + "=FALSE";
             conn.createStatement().execute(disableSql);
-            table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            table = conn.getTableNoCache(builder.getEntityTableName());
             assertFalse("Change detection is enabled when it should be disabled!",
                 table.isChangeDetectionEnabled());
             //now upsert again
@@ -182,7 +182,7 @@ public class WALAnnotationIT extends BaseTest {
     // "base" table data they index.
 
     private String upsertAndDeleteHelper(SchemaBuilder builder, boolean createGlobalIndex) throws Exception {
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
 
             if (createGlobalIndex) {
@@ -195,7 +195,7 @@ public class WALAnnotationIT extends BaseTest {
                 " ('a', 'b', 'c')";
             conn.createStatement().execute(upsertSql);
             conn.commit();
-            PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            PTable table = conn.getTableNoCache(builder.getEntityTableName());
             assertTrue("Change Detection Enabled is false!", table.isChangeDetectionEnabled());
             // Deleting by entire PK gets executed as more like an UPSERT VALUES than an UPSERT
             // SELECT (i.e, it generates the Mutations and then pushes them to server, rather than
@@ -223,7 +223,7 @@ public class WALAnnotationIT extends BaseTest {
 
     @Test
     public void testUpsertSelectClientSide() throws Exception {
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
             SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
             //upsert selecting from a different table will force processing to be client-side
@@ -242,14 +242,12 @@ public class WALAnnotationIT extends BaseTest {
         }
     }
 
-    private void verifyBaseAndTargetAnnotations(Connection conn, SchemaBuilder baseBuilder,
+    private void verifyBaseAndTargetAnnotations(PhoenixConnection conn, SchemaBuilder baseBuilder,
                                                 SchemaBuilder targetBuilder,
                                                 int expectedAnnotations) throws SQLException, IOException {
-        PTable baseTable = PhoenixRuntime.getTableNoCache(conn,
-            baseBuilder.getEntityTableName());
+        PTable baseTable = conn.getTableNoCache(baseBuilder.getEntityTableName());
         assertAnnotation(expectedAnnotations, baseBuilder.getPhysicalTableName(false), baseTable.getExternalSchemaId());
-        PTable targetTable = PhoenixRuntime.getTableNoCache(conn,
-            targetBuilder.getEntityTableName());
+        PTable targetTable = conn.getTableNoCache(targetBuilder.getEntityTableName());
         assertAnnotation(expectedAnnotations, targetBuilder.getPhysicalTableName(false), targetTable.getExternalSchemaId());
     }
 
@@ -257,7 +255,7 @@ public class WALAnnotationIT extends BaseTest {
     public void testUpsertSelectServerSide() throws Exception {
         Assume.assumeFalse(isImmutable); //only mutable tables can be processed server-side
         SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             targetBuilder.withTableOptions(getTableOptions()).build();
             conn.createStatement().execute("UPSERT INTO " + targetBuilder.getEntityTableName() + " " +
                 "VALUES" +
@@ -268,7 +266,7 @@ public class WALAnnotationIT extends BaseTest {
             String sql = "UPSERT INTO " + targetBuilder.getEntityTableName() +
                 " (OID, KP, COL1, COL2, COL3) SELECT * FROM " + targetBuilder.getEntityTableName();
             conn.createStatement().execute(sql);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, targetBuilder.getEntityTableName());
+            PTable table = conn.getTableNoCache(targetBuilder.getEntityTableName());
             assertAnnotation(1, targetBuilder.getPhysicalTableName(false),
                 table.getExternalSchemaId());
         }
@@ -281,7 +279,7 @@ public class WALAnnotationIT extends BaseTest {
         // processed client-side
         SchemaBuilder baseBuilder = new SchemaBuilder(getUrl());
         SchemaBuilder targetBuilder = new SchemaBuilder(getUrl());
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             baseBuilder.withTableOptions(getTableOptions()).build();
             targetBuilder.withTableOptions(getTableOptions()).build();
             conn.createStatement().execute("UPSERT INTO " + baseBuilder.getEntityTableName() + " VALUES" +
@@ -306,7 +304,7 @@ public class WALAnnotationIT extends BaseTest {
     private void testRangeDeleteHelper(boolean isClientSide) throws Exception {
         SchemaBuilder builder = new SchemaBuilder(getUrl());
         builder.withTableOptions(getTableOptions()).build();
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             conn.createStatement().execute("UPSERT INTO " + builder.getEntityTableName() +
                 " VALUES ('a', 'b', '2', 'bc', '3')");
             conn.commit();
@@ -321,7 +319,7 @@ public class WALAnnotationIT extends BaseTest {
             conn.setAutoCommit(!isClientSide);
             conn.createStatement().execute(sql);
             conn.commit();
-            PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            PTable table = conn.getTableNoCache(builder.getEntityTableName());
             assertAnnotation(2, table.getPhysicalName().getString(), table.getExternalSchemaId());
         }
 
@@ -336,7 +334,7 @@ public class WALAnnotationIT extends BaseTest {
     @Test
     public void testGlobalViewUpsert() throws Exception {
         SchemaBuilder builder = new SchemaBuilder(getUrl());
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             createGlobalViewHelper(builder, conn);
             conn.createStatement().execute("UPSERT INTO " + builder.getEntityGlobalViewName()
                 + " VALUES" + " ('a', '" + PhoenixTestBuilder.DDLDefaults.DEFAULT_KP +
@@ -347,16 +345,16 @@ public class WALAnnotationIT extends BaseTest {
                 "and ID = 'c'";
             conn.createStatement().execute(deleteSql);
             conn.commit();
-            PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityGlobalViewName());
+            PTable view = conn.getTableNoCache(builder.getEntityGlobalViewName());
             assertAnnotation(2, view.getPhysicalName().getString(), view.getExternalSchemaId());
         }
 
     }
 
-    private void createGlobalViewHelper(SchemaBuilder builder, Connection conn) throws Exception {
+    private void createGlobalViewHelper(SchemaBuilder builder, PhoenixConnection conn) throws Exception {
         builder.withTableOptions(getTableOptions()).
             withGlobalViewOptions(getGlobalViewOptions(builder)).build();
-        PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityGlobalViewName());
+        PTable view = conn.getTableNoCache(builder.getEntityGlobalViewName());
         assertTrue("View does not have change detection enabled!",
             view.isChangeDetectionEnabled());
     }
@@ -379,10 +377,10 @@ public class WALAnnotationIT extends BaseTest {
         // child tenant view. Make sure that the annotations use the tenant view name
         String tenant = generateUniqueName();
         SchemaBuilder builder = new SchemaBuilder(getUrl());
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             createGlobalViewHelper(builder, conn);
         }
-        try (Connection conn = getTenantConnection(tenant)) {
+        try (PhoenixConnection conn = (PhoenixConnection) getTenantConnection(tenant)) {
             SchemaBuilder.DataOptions dataOptions = builder.getDataOptions();
             dataOptions.setTenantId(tenant);
             if (createIndex) {
@@ -403,7 +401,7 @@ public class WALAnnotationIT extends BaseTest {
                 "' and COL1 = '2' AND ID = 'c' AND ZID = 'd'";
             conn.createStatement().execute(deleteSql);
             conn.commit();
-            PTable view = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTenantViewName());
+            PTable view = conn.getTableNoCache(builder.getEntityTenantViewName());
             assertAnnotation(2, view.getPhysicalName().getString(), view.getExternalSchemaId());
             if (createIndex) {
                 assertAnnotation(0,
@@ -430,10 +428,10 @@ public class WALAnnotationIT extends BaseTest {
     public void testOnDuplicateUpsertWithIndex() throws Exception {
         Assume.assumeFalse(this.isImmutable); // on duplicate is not supported for immutable tables
         SchemaBuilder builder = new SchemaBuilder(getUrl());
-        try (Connection conn = getConnection()) {
+        try (PhoenixConnection conn = getConnection()) {
             SchemaBuilder.TableOptions tableOptions = getTableOptions();
             builder.withTableOptions(tableOptions).withTableIndexDefaults().build();
-            PTable table = PhoenixRuntime.getTableNoCache(conn, builder.getEntityTableName());
+            PTable table = conn.getTableNoCache(builder.getEntityTableName());
             assertTrue("Change Detection Enabled is false!", table.isChangeDetectionEnabled());
             Long ddlTimestamp = table.getLastDDLTimestamp();
             String upsertSql = "UPSERT INTO " + builder.getEntityTableName() + " VALUES" +

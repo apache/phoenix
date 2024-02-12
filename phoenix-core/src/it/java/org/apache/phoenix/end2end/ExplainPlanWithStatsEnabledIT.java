@@ -1257,7 +1257,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
     private void validatePropertyOnViewIndex(String viewName, String viewIndexName, boolean useStats, Connection conn,
             Connection tenantConn) throws SQLException, TableNotFoundException {
         // fetch the latest view ptable
-        PhoenixRuntime.getTableNoCache(tenantConn, viewName);
+        tenantConn.unwrap(PhoenixConnection.class).getTableNoCache(viewName);
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
         PTable viewIndex = phxConn.getTable(new PTableKey(phxConn.getTenantId(), viewIndexName));
         assertEquals("USE_STATS_FOR_PARALLELIZATION property set incorrectly", useStats,

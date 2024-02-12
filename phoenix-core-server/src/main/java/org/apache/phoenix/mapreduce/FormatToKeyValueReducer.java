@@ -47,7 +47,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -95,7 +94,7 @@ public class FormatToKeyValueReducer
         columnIndexes = new HashMap<>();
         int columnIndex = 0;
         for (int index = 0; index < logicalNames.size(); index++) {
-            PTable table = PhoenixRuntime.getTable(conn, logicalNames.get(index));
+            PTable table = conn.getTable(logicalNames.get(index));
             if (!table.getImmutableStorageScheme().equals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN)) {
                 List<PColumnFamily> cfs = table.getColumnFamilies();
                 for (int i = 0; i < cfs.size(); i++) {

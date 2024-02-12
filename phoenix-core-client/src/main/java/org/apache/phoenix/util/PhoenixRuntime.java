@@ -17,9 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.schema.types.PDataType.ARRAY_TYPE_SUFFIX;
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.File;
@@ -56,8 +54,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -81,18 +77,12 @@ import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.KeyValueSchema;
 import org.apache.phoenix.schema.KeyValueSchema.KeyValueSchemaBuilder;
-import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
-import org.apache.phoenix.schema.PTableKey;
-import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
@@ -497,17 +487,8 @@ public class PhoenixRuntime {
     }
 
     public static PTable getTableNoCache(Connection conn, String name) throws SQLException {
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-        String tableName = SchemaUtil.getTableNameFromFullName(name);
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        MetaDataMutationResult result = new MetaDataClient(pconn).updateCache(pconn.getTenantId(),
-                schemaName, tableName, true);
-        if(result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-            throw new TableNotFoundException(schemaName, tableName);
-        }
-
-        return result.getTable();
-
+        return pconn.getTableNoCache(name);
     }
     
     /**
@@ -524,22 +505,8 @@ public class PhoenixRuntime {
      * @throws SQLException
      */
     public static PTable getTable(Connection conn, String name) throws SQLException {
-        PTable table;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        try {
-            table = pconn.getTable(new PTableKey(pconn.getTenantId(), name));
-        } catch (TableNotFoundException e) {
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(name);
-            String tableName = SchemaUtil.getTableNameFromFullName(name);
-            MetaDataMutationResult result =
-                    new MetaDataClient(pconn).updateCache(schemaName, tableName);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                TableMetricsManager.updateMetricsForSystemCatalogTableMethod(name, NUM_METADATA_LOOKUP_FAILURES, 1);
-                throw e;
-            }
-            table = result.getTable();
-        }
-        return table;
+        return pconn.getTable(name);
     }
 
     /**
@@ -568,33 +535,8 @@ public class PhoenixRuntime {
     public static PTable getTable(Connection conn, @Nullable String tenantId, String fullTableName,
             @Nullable Long timestamp) throws SQLException {
         checkNotNull(conn);
-        checkNotNull(fullTableName);
-        if (timestamp != null) {
-            checkArgument(timestamp >= 0);
-        }
-        PTable table = null;
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        PName pTenantId = (tenantId == null) ? null : PNameFactory.newName(tenantId);
-        try {
-            PTableRef tableref = pconn.getTableRef(new PTableKey(pTenantId, fullTableName));
-            if (timestamp == null
-                    || (tableref != null && tableref.getResolvedTimeStamp() == timestamp)) {
-                table = tableref.getTable();
-            } else {
-                throw new TableNotFoundException(fullTableName);
-            }
-        } catch (TableNotFoundException e) {
-            String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
-            String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
-            MetaDataMutationResult result =
-                    new MetaDataClient(pconn).updateCache(pTenantId, schemaName, tableName, false,
-                        timestamp);
-            if (result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
-                throw e;
-            }
-            table = result.getTable();
-        }
-        return table;
+        return pconn.getTable(tenantId, fullTableName, timestamp);
     }
 
     /**

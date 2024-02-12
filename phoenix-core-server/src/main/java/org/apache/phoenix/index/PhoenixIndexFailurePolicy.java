@@ -60,7 +60,6 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -342,7 +341,7 @@ public class PhoenixIndexFailurePolicy extends DelegateIndexFailurePolicy {
         try {
             conn = QueryUtil.getConnectionOnServer(this.env.getConfiguration()).unwrap(
                     PhoenixConnection.class);
-            PTable dataTable = PhoenixRuntime.getTableNoCache(conn, ref.getTableName());
+            PTable dataTable = conn.getTableNoCache(ref.getTableName());
             List<PTable> indexes = dataTable.getIndexes();
             // local index used to get view id from index mutation row key.
             PTable localIndex = null;

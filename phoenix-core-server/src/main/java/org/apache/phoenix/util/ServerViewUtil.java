@@ -103,8 +103,8 @@ public class ServerViewUtil extends ViewUtil {
                     // (and thus will throw a TableNotFoundException). Otherwise, if we are looking
                     // at an orphan parent->child link, then the view might actually be a legitimate
                     // child view on another table/view and we should obviously not drop it
-                    view = PhoenixRuntime.getTableNoCache(connection,
-                            SchemaUtil.getTableName(viewSchemaName, viewName));
+                    view = connection.getTableNoCache(SchemaUtil
+                            .getTableName(viewSchemaName, viewName));
                 } catch (TableNotFoundException expected) {
                     // Expected for an orphan view since some ancestor was dropped earlier
                     logger.info("Found an expected orphan parent->child link keyed by the parent."

@@ -169,8 +169,8 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     }
 
     private void setIndexRowStatusesToVerified(Connection conn, String dataTableFullName, String indexTableFullName) throws Exception {
-        PTable pDataTable = PhoenixRuntime.getTable(conn, dataTableFullName);
-        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexTableFullName);
+        PTable pDataTable = conn.unwrap(PhoenixConnection.class).getTable(dataTableFullName);
+        PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(indexTableFullName);
         Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
                 .getTable(pIndexTable.getPhysicalName().getBytes());
         Scan scan = new Scan();

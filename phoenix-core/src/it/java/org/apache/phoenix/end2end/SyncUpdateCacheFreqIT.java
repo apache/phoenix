@@ -107,7 +107,7 @@ public class SyncUpdateCacheFreqIT extends BaseTest {
                     false);
             }
 
-            try (Connection conn = getConnection()) {
+            try (PhoenixConnection conn = (PhoenixConnection) getConnection()) {
                 PreparedStatement stmt =
                     conn.prepareStatement(UPSERT_UPDATE_CACHE_FREQUENCY);
 
@@ -137,8 +137,7 @@ public class SyncUpdateCacheFreqIT extends BaseTest {
                 pcon.setRunningUpgrade(true);
 
                 UpgradeUtil.syncUpdateCacheFreqAllIndexes(pcon,
-                    PhoenixRuntime.getTableNoCache(conn,
-                        SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME)));
+                    conn.getTableNoCache(SchemaUtil.getTableName(SCHEMA_NAME, TABLE_NAME)));
 
                 // assert that index frequencies are in sync with table/view cache frequencies
                 for (String tableOrView : TABLE_TO_INDEX.keySet()) {

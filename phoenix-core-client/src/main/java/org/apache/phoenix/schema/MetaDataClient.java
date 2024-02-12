@@ -2593,7 +2593,7 @@ public class MetaDataClient {
                      * the same HTable. Views always use the base table's column qualifier counter for doling out
                      * encoded column qualifier.
                      */
-                    viewPhysicalTable = PhoenixRuntime.getTable(connection, physicalNames.get(0).getString());
+                    viewPhysicalTable = connection.getTable(physicalNames.get(0).getString());
                     immutableStorageScheme = viewPhysicalTable.getImmutableStorageScheme();
                     encodingScheme = viewPhysicalTable.getEncodingScheme();
 					if (EncodedColumnsUtil.usesEncodedColumnNames(viewPhysicalTable)) {
@@ -3606,7 +3606,7 @@ public class MetaDataClient {
         // Checking the parent table whether exists
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
         try {
-            PTable ptable = connection.getTable(new PTableKey(connection.getTenantId(), fullTableName));
+            PTable ptable = connection.getTable(fullTableName);
             if (parentTableName != null &&!parentTableName.equals(ptable.getParentTableName().getString())) {
                 throw new SQLExceptionInfo.Builder(PARENT_TABLE_NOT_FOUND)
                         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -4138,7 +4138,9 @@ public class MetaDataClient {
                 int numPkColumnsAdded = 0;
                 Set<String> colFamiliesForPColumnsToBeAdded = new LinkedHashSet<>();
                 Set<String> families = new LinkedHashSet<>();
-                PTable tableForCQCounters = tableType == PTableType.VIEW ? PhoenixRuntime.getTable(connection, table.getPhysicalName().getString()) : table;
+                PTable tableForCQCounters = tableType == PTableType.VIEW
+                        ? connection.getTable(table.getPhysicalName().getString())
+                        : table;
                 EncodedCQCounter cqCounterToUse = tableForCQCounters.getEncodedCQCounter();
                 Map<String, Integer> changedCqCounters = new HashMap<>(numCols);
                 if (numCols > 0 ) {
@@ -4672,7 +4674,7 @@ public class MetaDataClient {
         boolean hasIndexId = table.getViewIndexId() != null;
         if ( (table.getType()==PTableType.INDEX && hasIndexId)
                 || (table.getType() == PTableType.VIEW && table.getViewType() != ViewType.MAPPED)) {
-            parentTable = PhoenixRuntime.getTable(connection, table.getParentName().getString());
+            parentTable = connection.getTable(table.getParentName().getString());
             if (parentTable==null) {
                 String schemaName = table.getSchemaName()!=null ? table.getSchemaName().getString() : null;
                 throw new TableNotFoundException(schemaName, table.getTableName().getString());
@@ -5975,8 +5977,8 @@ public class MetaDataClient {
 
                 changePermsOnSchema(clusterConnection, changePermsStatement);
             } else if (changePermsStatement.getTableName() != null) {
-                PTable inputTable = PhoenixRuntime.getTable(connection,
-                        SchemaUtil.normalizeFullTableName(changePermsStatement.getTableName().toString()));
+                PTable inputTable = connection.getTable(SchemaUtil.
+                        normalizeFullTableName(changePermsStatement.getTableName().toString()));
                 if (!(PTableType.TABLE.equals(inputTable.getType()) || PTableType.SYSTEM.equals(inputTable.getType()))) {
                     throw new AccessDeniedException("Cannot GRANT or REVOKE permissions on INDEX TABLES or VIEWS");
                 }

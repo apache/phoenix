@@ -804,27 +804,7 @@ public class FromCompiler {
                     }
                 } else {
                     try {
-                        theTable = connection.getTable(new PTableKey(tenantId, fullTableName));
-                    } catch (TableNotFoundException e1) {
-                        if (tenantId != null) { // Check with null tenantId next
-                            try {
-                                theTable = connection.getTable(new PTableKey(null, fullTableName));
-                            } catch (TableNotFoundException e2) {
-                            }
-                        }
-                    }
-                    // We always attempt to update the cache in the event of a TableNotFoundException
-                    try {
-                        if (theTable == null) {
-                            MetaDataMutationResult result = client.updateCache(schemaName, tableName);
-                            if (result.wasUpdated()) {
-                                timeStamp = TransactionUtil.getResolvedTimestamp(connection, result);
-                            }
-                            theTable = result.getTable();
-                        }
-                        if (theTable == null) {
-                            throw new TableNotFoundException(schemaName, tableName, timeStamp);
-                        }
+                        theTable = connection.getTable(fullTableName);
                     } catch (Throwable e) {
                         error = true;
                         throw e;
