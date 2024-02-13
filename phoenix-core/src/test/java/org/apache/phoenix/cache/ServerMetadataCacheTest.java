@@ -1594,41 +1594,79 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Test that a tenant connection is able to learn about state change of an inherited index on a tenant view.
+     * Test that tenant connections are able to learn about state change of an inherited index
+     * on their tenant views with different names.
      */
     @Test
-    public void testInheritedIndexOnTenantView() throws Exception {
+    public void testInheritedIndexOnTenantViewsDifferentNames() throws Exception {
+        testInheritedIndexOnTenantViews(false);
+    }
+
+    /**
+     * Test that tenant connections are able to learn about state change of an inherited index
+     * on their tenant views with same names.
+     */
+    @Test
+    public void testInheritedIndexOnTenantViewsSameNames() throws Exception {
+        testInheritedIndexOnTenantViews(true);
+    }
+
+    public void testInheritedIndexOnTenantViews(boolean sameTenantViewNames) throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String url = QueryUtil.getConnectionUrl(props, config, "client1");
         ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
         String baseTableName =  generateUniqueName();
         String globalViewName = generateUniqueName();
         String globalViewIndexName =  generateUniqueName();
-        String tenantViewName =  generateUniqueName();
+        String tenantViewName1 =  generateUniqueName();
+        String tenantViewName2 =  sameTenantViewNames ? tenantViewName1 : generateUniqueName();
         try (Connection conn = cqs.connect(url, props)) {
             // create table, view and view index
             conn.createStatement().execute("CREATE TABLE " + baseTableName +
-                    " (TENANT_ID CHAR(8) NOT NULL, KP CHAR(3) NOT NULL, PK CHAR(3) NOT NULL, KV CHAR(2), KV2 CHAR(2) " +
+                    " (TENANT_ID CHAR(9) NOT NULL, KP CHAR(3) NOT NULL, PK CHAR(3) NOT NULL, KV CHAR(2), KV2 CHAR(2) " +
                     "CONSTRAINT PK PRIMARY KEY(TENANT_ID, KP, PK)) MULTI_TENANT=true,UPDATE_CACHE_FREQUENCY=NEVER");
             conn.createStatement().execute("CREATE VIEW " + globalViewName +
                     " AS SELECT * FROM " + baseTableName + " WHERE  KP = '001'");
             conn.createStatement().execute("CREATE INDEX " + globalViewIndexName + " on " +
                     globalViewName + " (KV) " + " INCLUDE (KV2) ASYNC");
-            String tenantId = "tenantId";
-            Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
-            try (Connection tenantConn = cqs.connect(url, tenantProps)) {
-                //create tenant view and upsert one row, this updates all the timestamps in the client's cache
-                tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + globalViewName);
-                tenantConn.createStatement().execute("UPSERT INTO " + tenantViewName + " (PK, KV, KV2) VALUES " + "('PK1', 'KV', '01')");
-                tenantConn.commit();
-                // build global view index
-                IndexToolIT.runIndexTool(false, "", globalViewName,
-                        globalViewIndexName);
-                // query on secondary key should use inherited index.
-                String query = "SELECT KV2 FROM  " + tenantViewName + " WHERE KV = 'KV'";
-                ResultSet rs = tenantConn.createStatement().executeQuery(query);
-                assertPlan((PhoenixResultSet) rs,  "", tenantViewName + "#" + globalViewIndexName);
+            String tenantId1 = "tenantId1";
+            String tenantId2 = "tenantId2";
+            Properties tenantProps1 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            Properties tenantProps2 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            tenantProps1.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId1);
+            tenantProps2.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
+
+            //create tenant views and upsert one row, this updates all the timestamps in the client's cache
+            try (Connection tenantConn1 = cqs.connect(url, tenantProps1);
+                 Connection tenantConn2 = cqs.connect(url, tenantProps2)) {
+                tenantConn1.createStatement().execute("CREATE VIEW " + tenantViewName1 + " AS SELECT * FROM " + globalViewName);
+                tenantConn1.createStatement().execute("UPSERT INTO " + tenantViewName1 + " (PK, KV, KV2) VALUES " + "('PK1', 'KV', '01')");
+                tenantConn1.commit();
+
+                tenantConn2.createStatement().execute("CREATE VIEW " + tenantViewName2 + " AS SELECT * FROM " + globalViewName);
+                tenantConn2.createStatement().execute("UPSERT INTO " + tenantViewName2 + " (PK, KV, KV2) VALUES " + "('PK2', 'KV', '02')");
+                tenantConn2.commit();
+            }
+            // build global view index
+            IndexToolIT.runIndexTool(false, "", globalViewName,
+                    globalViewIndexName);
+
+            // query on secondary key should use inherited index for all tenant views.
+            try (Connection tenantConn1 = cqs.connect(url, tenantProps1);
+                 Connection tenantConn2 = cqs.connect(url, tenantProps2)) {
+
+                String query1 = "SELECT KV2 FROM  " + tenantViewName1 + " WHERE KV = 'KV'";
+                String query2 = "SELECT KV2 FROM  " + tenantViewName2 + " WHERE KV = 'KV'";
+
+                ResultSet rs = tenantConn1.createStatement().executeQuery(query1);
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewName1 + "#" + globalViewIndexName);
+                assertTrue(rs.next());
+                assertEquals("01", rs.getString(1));
+
+                rs = tenantConn2.createStatement().executeQuery(query2);
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewName2 + "#" + globalViewIndexName);
+                assertTrue(rs.next());
+                assertEquals("02", rs.getString(1));
             }
         }
     }
