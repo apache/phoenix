@@ -20,9 +20,11 @@ package org.apache.phoenix.cache;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -1591,8 +1593,55 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that a tenant connection is able to learn about state change of an inherited index on a tenant view.
+     */
+    @Test
+    public void testInheritedIndexOnTenantView() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config, "client1");
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+        String baseTableName =  generateUniqueName();
+        String globalViewName = generateUniqueName();
+        String globalViewIndexName =  generateUniqueName();
+        String tenantViewName =  generateUniqueName();
+        try (Connection conn = cqs.connect(url, props)) {
+            // create table, view and view index
+            conn.createStatement().execute("CREATE TABLE " + baseTableName +
+                    " (TENANT_ID CHAR(8) NOT NULL, KP CHAR(3) NOT NULL, PK CHAR(3) NOT NULL, KV CHAR(2), KV2 CHAR(2) " +
+                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, KP, PK)) MULTI_TENANT=true,UPDATE_CACHE_FREQUENCY=NEVER");
+            conn.createStatement().execute("CREATE VIEW " + globalViewName +
+                    " AS SELECT * FROM " + baseTableName + " WHERE  KP = '001'");
+            conn.createStatement().execute("CREATE INDEX " + globalViewIndexName + " on " +
+                    globalViewName + " (KV) " + " INCLUDE (KV2) ASYNC");
+            String tenantId = "tenantId";
+            Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            try (Connection tenantConn = cqs.connect(url, tenantProps)) {
+                //create tenant view and upsert one row, this updates all the timestamps in the client's cache
+                tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + globalViewName);
+                tenantConn.createStatement().execute("UPSERT INTO " + tenantViewName + " (PK, KV, KV2) VALUES " + "('PK1', 'KV', '01')");
+                tenantConn.commit();
+                // build global view index
+                IndexToolIT.runIndexTool(false, "", globalViewName,
+                        globalViewIndexName);
+                // query on secondary key should use inherited index.
+                String query = "SELECT KV2 FROM  " + tenantViewName + " WHERE KV = 'KV'";
+                ResultSet rs = tenantConn.createStatement().executeQuery(query);
+                assertPlan((PhoenixResultSet) rs,  "", tenantViewName + "#" + globalViewIndexName);
+            }
+        }
+    }
+
+
 
     //Helper methods
+    public static void assertPlan(PhoenixResultSet rs, String schemaName, String tableName) {
+        PTable table = rs.getContext().getCurrentTable().getTable();
+        assertTrue(table.getSchemaName().getString().equals(schemaName) &&
+                table.getTableName().getString().equals(tableName));
+    }
+
     private long getLastDDLTimestamp(String tableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // Need to use different connection than what is used for creating table or indexes.

@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
@@ -74,15 +75,14 @@ public class ValidateLastDDLTimestampUtil {
      * Verifies that table metadata for given tables is up-to-date in client cache with server.
      * A random live region server is picked for invoking the RPC to validate LastDDLTimestamp.
      * Retry once if there was an error performing the RPC, otherwise throw the Exception.
+     *
      * @param tableRefs
-     * @param isWritePath
      * @param doRetry
      * @throws SQLException
      */
-    public static void validateLastDDLTimestamp(
-            PhoenixConnection conn, List<TableRef> tableRefs, boolean isWritePath, boolean doRetry)
-            throws SQLException {
-
+    public static void validateLastDDLTimestamp(PhoenixConnection conn,
+                                                List<TableRef> tableRefs,
+                                                boolean doRetry) throws SQLException {
         String infoString = getInfoString(conn.getTenantId(), tableRefs);
         try (Admin admin = conn.getQueryServices().getAdmin()) {
             // get all live region servers
@@ -100,7 +100,7 @@ public class ValidateLastDDLTimestampUtil {
                     service = RegionServerEndpointProtos.RegionServerEndpointService
                     .newBlockingStub(admin.coprocessorService(regionServer));
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request
-                    = getValidateDDLTimestampRequest(conn, tableRefs, isWritePath);
+                    = getValidateDDLTimestampRequest(tableRefs);
             service.validateLastDDLTimestamp(null, request);
         } catch (Exception e) {
             SQLException parsedException = ClientUtil.parseServerException(e);
@@ -112,7 +112,7 @@ public class ValidateLastDDLTimestampUtil {
             if (doRetry) {
                 // update the list of live region servers
                 conn.getQueryServices().refreshLiveRegionServers();
-                validateLastDDLTimestamp(conn, tableRefs, isWritePath, false);
+                validateLastDDLTimestamp(conn, tableRefs, false);
                 return;
             }
             throw parsedException;
@@ -122,19 +122,16 @@ public class ValidateLastDDLTimestampUtil {
     /**
      * Build a request for the validateLastDDLTimestamp RPC for the given tables.
      * 1. For a view, we need to add all its ancestors to the request
-     *    in case something changed in the hierarchy.
+     * in case something changed in the hierarchy.
      * 2. For an index, we need to add its parent table to the request
-     *    in case the index was dropped.
-     * 3. On the write path, we need to add all indexes of a table/view
-     *    in case index state was changed.
-     * @param conn
+     * in case the index was dropped.
+     * 3. Add all indexes of a table/view in case index state was changed.
+     *
      * @param tableRefs
-     * @param isWritePath
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private static RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
-        getValidateDDLTimestampRequest(PhoenixConnection conn, List<TableRef> tableRefs,
-                                        boolean isWritePath) {
+    getValidateDDLTimestampRequest(List<TableRef> tableRefs) {
 
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
@@ -158,18 +155,15 @@ public class ValidateLastDDLTimestampUtil {
             PTable ptable = tableRef.getTable();
             innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
             setLastDDLTimestampRequestParameters(innerBuilder, ptable.getKey(),
-                                                    ptable.getLastDDLTimestamp());
+                    ptable.getLastDDLTimestamp());
             requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
-            //on the write path, we need to validate all indexes of a table/view
-            //in case index state was changed
-            if (isWritePath) {
-                for (PTable idxPTable : tableRef.getTable().getIndexes()) {
-                    innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
-                    setLastDDLTimestampRequestParameters(innerBuilder, idxPTable.getKey(),
-                                                            idxPTable.getLastDDLTimestamp());
-                    requestBuilder.addLastDDLTimestampRequests(innerBuilder);
-                }
+            // add all indexes of the current table
+            for (PTable idxPTable : tableRef.getTable().getIndexes()) {
+                innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
+                setLastDDLTimestampRequestParameters(innerBuilder, idxPTable.getKey(),
+                        idxPTable.getLastDDLTimestamp());
+                requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
         }
         return requestBuilder.build();
@@ -178,18 +172,30 @@ public class ValidateLastDDLTimestampUtil {
     /**
      * For the given PTable, set the attributes on the LastDDLTimestampRequest.
      */
-    private static void setLastDDLTimestampRequestParameters(
+    private static void setLastDDLTimestampRequestParameters (
             RegionServerEndpointProtos.LastDDLTimestampRequest.Builder builder,
             PTableKey key, long lastDDLTimestamp) {
+        String tableName = key.getTableName();
+        String schemaName = key.getSchemaName();
+
+        // view(V) with Index (VIndex) -> child view (V1) -> grand child view (V2)
+        // inherited view index is of the form V2#V1#VIndex, it does not exist in syscat
+        if (tableName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+            int lastIndexOf = tableName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+            String indexFullName = tableName.substring(lastIndexOf + 1);
+            tableName = SchemaUtil.getTableNameFromFullName(indexFullName);
+            schemaName = SchemaUtil.getSchemaNameFromFullName(indexFullName);
+        }
+
         byte[] tenantIDBytes = key.getTenantId() == null
                 ? HConstants.EMPTY_BYTE_ARRAY
                 : key.getTenantId().getBytes();
-        byte[] schemaBytes = key.getSchemaName() == null
+        byte[] schemaBytes = schemaName == null
                 ?   HConstants.EMPTY_BYTE_ARRAY
                 : key.getSchemaName().getBytes();
         builder.setTenantId(ByteStringer.wrap(tenantIDBytes));
         builder.setSchemaName(ByteStringer.wrap(schemaBytes));
-        builder.setTableName(ByteStringer.wrap(key.getTableName().getBytes()));
+        builder.setTableName(ByteStringer.wrap(tableName.getBytes()));
         builder.setLastDDLTimestamp(lastDDLTimestamp);
     }
 }

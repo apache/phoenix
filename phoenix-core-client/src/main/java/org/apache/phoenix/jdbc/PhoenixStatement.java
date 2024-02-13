@@ -389,7 +389,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 //plan.getTableRef can be null in some cases like EXPLAIN <query>
                                 if (shouldValidateLastDdlTimestamp && plan.getTableRef() != null) {
                                     ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
-                                        connection, Arrays.asList(plan.getTableRef()), false, true);
+                                        connection, Arrays.asList(plan.getTableRef()), true);
                                 }
 
                                 if (plan.getTableRef() != null
