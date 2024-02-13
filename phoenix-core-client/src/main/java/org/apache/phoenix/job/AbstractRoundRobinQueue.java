@@ -17,11 +17,21 @@
  */
 package org.apache.phoenix.job;
 
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 
-import java.util.*;
+import java.util.AbstractQueue;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.ListIterator;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
+
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+
+import static org.apache.phoenix.query.QueryServicesOptions.UNLIMITED_QUEUE_SIZE;
 
 /**
  *
@@ -88,7 +98,7 @@ public abstract class AbstractRoundRobinQueue<E> extends AbstractQueue<E>
 
         ProducerList<E> producerList = null;
         synchronized(lock) {
-            if (this.size == this.maxSize) {
+            if (this.maxSize != UNLIMITED_QUEUE_SIZE && this.size == this.maxSize) {
                 return false;
             }
             producerList = this.producerMap.get(producerKey);
