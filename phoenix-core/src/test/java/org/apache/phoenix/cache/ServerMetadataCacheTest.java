@@ -28,6 +28,7 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConnectionProperty;
@@ -1659,12 +1660,14 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
                 String query2 = "SELECT KV2 FROM  " + tenantViewName2 + " WHERE KV = 'KV'";
 
                 ResultSet rs = tenantConn1.createStatement().executeQuery(query1);
-                assertPlan((PhoenixResultSet) rs,  "", tenantViewName1 + "#" + globalViewIndexName);
+                assertPlan((PhoenixResultSet) rs,  "",
+                        tenantViewName1 + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + globalViewIndexName);
                 assertTrue(rs.next());
                 assertEquals("01", rs.getString(1));
 
                 rs = tenantConn2.createStatement().executeQuery(query2);
-                assertPlan((PhoenixResultSet) rs,  "", tenantViewName2 + "#" + globalViewIndexName);
+                assertPlan((PhoenixResultSet) rs,  "",
+                        tenantViewName2 + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + globalViewIndexName);
                 assertTrue(rs.next());
                 assertEquals("02", rs.getString(1));
             }
