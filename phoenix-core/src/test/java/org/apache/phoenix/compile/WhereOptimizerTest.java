@@ -3458,6 +3458,49 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    /**
+     * Test that tenantId is present in the scan start row key when using an inherited index on a tenant view.
+     */
+    @Test
+    public void testScanKeyInheritedIndexTenantView() throws Exception {
+        String baseTableName =  generateUniqueName();
+        String globalViewName = generateUniqueName();
+        String globalViewIndexName =  generateUniqueName();
+        String tenantViewName =  generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // create table, view and view index
+            conn.createStatement().execute("CREATE TABLE " + baseTableName +
+                    " (TENANT_ID CHAR(8) NOT NULL, KP CHAR(3) NOT NULL, PK CHAR(3) NOT NULL, KV CHAR(2), KV2 CHAR(2) " +
+                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, KP, PK)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + globalViewName +
+                    " AS SELECT * FROM " + baseTableName + " WHERE  KP = '001'");
+            conn.createStatement().execute("CREATE INDEX " + globalViewIndexName + " on " +
+                    globalViewName + " (KV) " + " INCLUDE (KV2)");
+            //create tenant view
+            String tenantId = "tenantId";
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + globalViewName);
+                // query on secondary key
+                String query = "SELECT KV2 FROM  " + tenantViewName + " WHERE KV = 'KV'";
+                PhoenixConnection pconn = tenantConn.unwrap(PhoenixConnection.class);
+                PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+                QueryPlan plan = pstmt.compileQuery();
+                plan = tenantConn.unwrap(PhoenixConnection.class).getQueryServices().getOptimizer().optimize(pstmt, plan);
+                // optimized query plan should use inherited index
+                assertEquals(tenantViewName + "#" + globalViewIndexName, plan.getContext().getCurrentTable().getTable().getName().getString());
+                Scan scan = plan.getContext().getScan();
+                PTable viewIndexPTable = tenantConn.unwrap(PhoenixConnection.class).getTable(globalViewIndexName);
+                // PK of view index [_INDEX_ID, tenant_id, KV, PK]
+                byte[] startRow = ByteUtil.concat(PLong.INSTANCE.toBytes(viewIndexPTable.getViewIndexId()),
+                                                    PChar.INSTANCE.toBytes(tenantId),
+                                                    PChar.INSTANCE.toBytes("KV"));
+                assertArrayEquals(startRow, scan.getStartRow());
+            }
+        }
+    }
+
     private void createBaseTable(String baseTable) throws SQLException {
 
         try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
