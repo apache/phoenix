@@ -198,7 +198,7 @@ public class ValidateLastDDLTimestampUtil {
         byte[] tenantIDBytes = key.getTenantId() == null
                 ? HConstants.EMPTY_BYTE_ARRAY
                 : key.getTenantId().getBytes();
-        byte[] schemaBytes = schemaName == null
+        byte[] schemaBytes = (schemaName == null || schemaName.isEmpty())
                 ?   HConstants.EMPTY_BYTE_ARRAY
                 : key.getSchemaName().getBytes();
         builder.setTenantId(ByteStringer.wrap(tenantIDBytes));
