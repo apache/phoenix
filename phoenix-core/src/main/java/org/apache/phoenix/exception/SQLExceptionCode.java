@@ -368,6 +368,8 @@ public enum SQLExceptionCode {
 
     TTL_ALREADY_DEFINED_IN_HIERARCHY(10958, "44A40", TTL
             + " property is already defined in hierarchy for this entity"),
+    VIEW_TTL_NOT_ENABLED(10959,"44A41", TTL +
+            " property can not be set on Views as phoenix.view.ttl.enabled is false"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

@@ -1130,6 +1130,12 @@ public class MetaDataClient {
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
+    private boolean isViewTTLEnabled() {
+        return connection.getQueryServices().getConfiguration().
+                getBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
+    }
+
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
             throws SQLException {
         // Don't mistakenly commit pending rows
@@ -2180,6 +2186,14 @@ public class MetaDataClient {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
                             .setMessage(String.format("entity = %s, TTL value should be > 0",
                                     tableName))
+                            .build()
+                            .buildException();
+                }
+                if (!isViewTTLEnabled() && tableType == VIEW) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                            VIEW_TTL_NOT_ENABLED)
+                            .setSchemaName(schemaName)
+                            .setTableName(tableName)
                             .build()
                             .buildException();
                 }
@@ -5677,6 +5691,14 @@ public class MetaDataClient {
                         .build()
                         .buildException();
             }
+
+            if (!isViewTTLEnabled() && table.getType() == PTableType.VIEW) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.VIEW_TTL_NOT_ENABLED)
+                        .build()
+                        .buildException();
+            }
+
             if (table.getType() != PTableType.TABLE && (table.getType() != PTableType.VIEW ||
                     table.getViewType() != UPDATABLE)) {
                 throw new SQLExceptionInfo.Builder(

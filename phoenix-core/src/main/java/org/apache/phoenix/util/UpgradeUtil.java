@@ -23,6 +23,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
@@ -1535,11 +1536,17 @@ public class UpgradeUtil {
                                 puts.add(put);
 
                                 //Set TTL to Default at CF level when Phoenix level ttl is enabled
-                                ColumnFamilyDescriptor columnFamilyDescriptor = ColumnFamilyDescriptorBuilder.newBuilder(
-                                        DEFAULT_COLUMN_FAMILY_BYTES).setTimeToLive(ColumnFamilyDescriptorBuilder.DEFAULT_TTL).build();
-                                TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(admin.getDescriptor(SchemaUtil.getPhysicalTableName(
-                                        tableName, readOnlyProps))).modifyColumnFamily(columnFamilyDescriptor).build();
-                                admin.modifyTable(tableDescriptor);
+                                if (oldMetaConnection.getQueryServices().getConfiguration().getBoolean(
+                                        QueryServices.PHOENIX_TABLE_TTL_ENABLED, DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
+                                    ColumnFamilyDescriptor columnFamilyDescriptor = ColumnFamilyDescriptorBuilder
+                                            .newBuilder(DEFAULT_COLUMN_FAMILY_BYTES).setTimeToLive(
+                                                    ColumnFamilyDescriptorBuilder.DEFAULT_TTL).build();
+                                    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(
+                                            admin.getDescriptor(SchemaUtil.getPhysicalTableName(
+                                            tableName, readOnlyProps))).modifyColumnFamily(
+                                                    columnFamilyDescriptor).build();
+                                    admin.modifyTable(tableDescriptor);
+                                }
                             }
                         }
 
