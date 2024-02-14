@@ -1,6 +1,5 @@
-package org.apache.phoenix.prefix.search;
+package org.apache.phoenix.util.matcher;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,16 +7,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.StampedLock;
 
 /**
- * This class holds the index, mapping row-key prefixes to tableIds.
+ * This class holds the index, mapping row-key matcher patterns to tableIds.
  * Assumes byte[] are UTF-8 encoded.
  * This class is thread safe.
  */
-public class PrefixIndex {
-	private static final Logger LOGGER = LoggerFactory.getLogger(PrefixIndex.class);
+public class RowKeyMatcher {
+	private static final Logger LOGGER = LoggerFactory.getLogger(RowKeyMatcher.class);
 
 	public static final int R = 256;
 	private TrieNode root = new TrieNode();
-	private final AtomicInteger validPrefixes = new AtomicInteger(0);
+	private final AtomicInteger numEntries = new AtomicInteger(0);
 
 	// Basic Trie node implementation
 	class TrieNode {
@@ -41,7 +40,7 @@ public class PrefixIndex {
 		protected void put(int pos, byte[] key, int val, int depth) {
 			long stamp = sl.writeLock();
 			try {
-				this.next[pos] = PrefixIndex.this.put(this.next[pos], key, val, depth, true);
+				this.next[pos] = RowKeyMatcher.this.put(this.next[pos], key, val, depth, true);
 			}
 			finally {
 				sl.unlock(stamp);
@@ -54,7 +53,7 @@ public class PrefixIndex {
 			try {
 				if (this.tableId == null) {
 					this.tableId = tableId;
-					validPrefixes.incrementAndGet();
+					numEntries.incrementAndGet();
 				}
 			}
 			finally {
@@ -64,13 +63,13 @@ public class PrefixIndex {
 	}
 
 	// return the number of prefixes that this index has.
-	public int getValidPrefixes() {
-		return validPrefixes.get();
+	public int getNumEntries() {
+		return numEntries.get();
 	}
 
-	// return the Id associated with the prefix.
-	public Integer getTableIdWithPrefix(byte[] prefix, int offset) {
-		return get(prefix, offset);
+	// return the Id associated with the rowkey.
+	public Integer match(byte[] rowkey, int offset) {
+		return get(rowkey, offset);
 	}
 
 	public Integer get(byte[] key, int offset) {

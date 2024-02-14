@@ -43,4 +43,17 @@ public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
         super.testMajorCompactWithSaltedIndexedTenantView();
     }
 
+    @Test
+    public void testMajorCompactWithVariousViewsAndOptions() throws Exception {
+        super.testMajorCompactWithVariousViewsAndOptions();
+    }
+    @Test
+    public void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
+        super.testMajorCompactWhenTTLSetForSomeTenants();
+    }
+    @Test
+    public void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
+        super.testTenantViewsWIthOverlappingRowPrefixes();
+    }
+
 }

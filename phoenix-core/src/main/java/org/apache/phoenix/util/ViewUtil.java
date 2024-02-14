@@ -16,12 +16,8 @@
 package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.prefix.table.TableTTLInfo;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.util.matcher.TableTTLInfo;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
@@ -76,7 +72,6 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -101,11 +96,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
-import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY_PTR;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarChars;
-import static org.apache.phoenix.util.ViewIndexIdRetrieveUtil.NULL_DATA_TYPE_VALUE;
 
 public class ViewUtil {
 
@@ -1108,19 +1101,25 @@ public class ViewUtil {
     }
 
     /// TODO : Needs optimization and remove logging
-    public static List<TableTTLInfo> getRowKeyPrefixesForPartitionedTables(String fullTableName,
-            Configuration configuration, boolean isIndexTable) throws SQLException {
+    public static List<TableTTLInfo> getMatchPatternsForPartitionedTables(String fullTableName,
+            Configuration configuration, boolean globalViews, boolean tenantViews,
+            boolean viewIndexes) throws SQLException {
 
         List<TableTTLInfo> tableTTLInfoList = Lists.newArrayList();
-        Set<TableInfo> globalViewSet = getGlobalViews(fullTableName, configuration);
-        if (globalViewSet.size() > 0) {
-            getTTLInfo(globalViewSet, configuration, isIndexTable, tableTTLInfoList);
+        if (globalViews || viewIndexes) {
+            Set<TableInfo> globalViewSet = getGlobalViews(fullTableName, configuration);
+            if (globalViewSet.size() > 0) {
+                getTTLInfo(globalViewSet, configuration, viewIndexes, tableTTLInfoList);
+            }
         }
 
-        Set<TableInfo> tenantViewSet = getTenantViews(fullTableName, configuration);
-        if (tenantViewSet.size() > 0) {
-            getTTLInfo(tenantViewSet, configuration, isIndexTable, tableTTLInfoList);
+        if (tenantViews || viewIndexes) {
+            Set<TableInfo> tenantViewSet = getTenantViews(fullTableName, configuration);
+            if (tenantViewSet.size() > 0) {
+                getTTLInfo(tenantViewSet, configuration, viewIndexes, tableTTLInfoList);
+            }
         }
+
         return tableTTLInfoList;
     }
 
@@ -1173,7 +1172,13 @@ public class ViewUtil {
                 configuration)) {
             String
                     tenantViewsSQLFormat =
-                    "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME," + "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " + "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " + "FROM SYSTEM.CATALOG " + "WHERE LINK_TYPE = 2 " + "AND COLUMN_FAMILY = '%s' " + "AND TENANT_ID IS NOT NULL";
+                    "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME," +
+                            "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " +
+                            "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " +
+                            "FROM SYSTEM.CATALOG " +
+                            "WHERE LINK_TYPE = 2 " +
+                            "AND COLUMN_FAMILY = '%s' " +
+                            "AND TENANT_ID IS NOT NULL";
             String tenantViewSQL = String.format(tenantViewsSQLFormat, fullTableName);
             logger.debug("tenantViewSQL:" + tenantViewSQL);
 
