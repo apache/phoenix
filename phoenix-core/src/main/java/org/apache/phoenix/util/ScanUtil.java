@@ -1222,7 +1222,7 @@ public class ScanUtil {
             PhoenixConnection phoenixConnection) throws SQLException {
 
         //If entity is a view and phoenix.view.ttl.enabled is false then don't set TTL scan attribute.
-        if ((table.getType() == PTableType.VIEW) && phoenixConnection.getQueryServices().getConfiguration().getBoolean(
+        if ((table.getType() == PTableType.VIEW) && !phoenixConnection.getQueryServices().getConfiguration().getBoolean(
                 QueryServices.PHOENIX_VIEW_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED
         )) {

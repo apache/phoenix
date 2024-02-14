@@ -4227,11 +4227,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                     MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
                     PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
-            //Values in PHOENIX_TTL column will not be used for futher release as PHOENIX_TTL column is being deprecated
-            //and will be removed in later release. To copy copyDataFromPhoenixTTLtoTTL(metaConnection) can be used..
+            //Values in PHOENIX_TTL column will not be used for further release as PHOENIX_TTL column is being deprecated
+            //and will be removed in later release. To copy copyDataFromPhoenixTTLtoTTL(metaConnection) can be used but
+            //as that feature was not fully built we are not moving old value to new column
 
-            //If phoenix.table.ttl.enabled.upgrade if true then move all TTL defined at HBase level
-            //to Phoenix Level i.e. store them in SYSCAT, for phoenix.table.ttl.enabled to consume
+            //move TTL values stored in descriptor to SYSCAT TTL column.
             moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
