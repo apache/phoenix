@@ -165,6 +165,7 @@ public class ValidateLastDDLTimestampUtil {
                     ptable.getLastDDLTimestamp());
             requestBuilder.addLastDDLTimestampRequests(innerBuilder);
 
+            // add all indexes of the current table
             for (PTable idxPTable : tableRef.getTable().getIndexes()) {
                 innerBuilder = RegionServerEndpointProtos.LastDDLTimestampRequest.newBuilder();
                 setLastDDLTimestampRequestParameters(innerBuilder, idxPTable.getKey(),

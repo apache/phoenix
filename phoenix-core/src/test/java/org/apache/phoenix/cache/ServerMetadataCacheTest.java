@@ -20,12 +20,15 @@ package org.apache.phoenix.cache;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
+import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConnectionProperty;
@@ -1639,8 +1642,95 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that tenant connections are able to learn about state change of an inherited index
+     * on their tenant views with different names.
+     */
+    @Test
+    public void testInheritedIndexOnTenantViewsDifferentNames() throws Exception {
+        testInheritedIndexOnTenantViews(false);
+    }
+
+    /**
+     * Test that tenant connections are able to learn about state change of an inherited index
+     * on their tenant views with same names.
+     */
+    @Test
+    public void testInheritedIndexOnTenantViewsSameNames() throws Exception {
+        testInheritedIndexOnTenantViews(true);
+    }
+
+    public void testInheritedIndexOnTenantViews(boolean sameTenantViewNames) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config, "client1");
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+        String baseTableName =  generateUniqueName();
+        String globalViewName = generateUniqueName();
+        String globalViewIndexName =  generateUniqueName();
+        String tenantViewName1 =  generateUniqueName();
+        String tenantViewName2 =  sameTenantViewNames ? tenantViewName1 : generateUniqueName();
+        try (Connection conn = cqs.connect(url, props)) {
+            // create table, view and view index
+            conn.createStatement().execute("CREATE TABLE " + baseTableName +
+                    " (TENANT_ID CHAR(9) NOT NULL, KP CHAR(3) NOT NULL, PK CHAR(3) NOT NULL, KV CHAR(2), KV2 CHAR(2) " +
+                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, KP, PK)) MULTI_TENANT=true,UPDATE_CACHE_FREQUENCY=NEVER");
+            conn.createStatement().execute("CREATE VIEW " + globalViewName +
+                    " AS SELECT * FROM " + baseTableName + " WHERE  KP = '001'");
+            conn.createStatement().execute("CREATE INDEX " + globalViewIndexName + " on " +
+                    globalViewName + " (KV) " + " INCLUDE (KV2) ASYNC");
+            String tenantId1 = "tenantId1";
+            String tenantId2 = "tenantId2";
+            Properties tenantProps1 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            Properties tenantProps2 = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            tenantProps1.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId1);
+            tenantProps2.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId2);
+
+            //create tenant views and upsert one row, this updates all the timestamps in the client's cache
+            try (Connection tenantConn1 = cqs.connect(url, tenantProps1);
+                 Connection tenantConn2 = cqs.connect(url, tenantProps2)) {
+                tenantConn1.createStatement().execute("CREATE VIEW " + tenantViewName1 + " AS SELECT * FROM " + globalViewName);
+                tenantConn1.createStatement().execute("UPSERT INTO " + tenantViewName1 + " (PK, KV, KV2) VALUES " + "('PK1', 'KV', '01')");
+                tenantConn1.commit();
+
+                tenantConn2.createStatement().execute("CREATE VIEW " + tenantViewName2 + " AS SELECT * FROM " + globalViewName);
+                tenantConn2.createStatement().execute("UPSERT INTO " + tenantViewName2 + " (PK, KV, KV2) VALUES " + "('PK2', 'KV', '02')");
+                tenantConn2.commit();
+            }
+            // build global view index
+            IndexToolIT.runIndexTool(false, "", globalViewName,
+                    globalViewIndexName);
+
+            // query on secondary key should use inherited index for all tenant views.
+            try (Connection tenantConn1 = cqs.connect(url, tenantProps1);
+                 Connection tenantConn2 = cqs.connect(url, tenantProps2)) {
+
+                String query1 = "SELECT KV2 FROM  " + tenantViewName1 + " WHERE KV = 'KV'";
+                String query2 = "SELECT KV2 FROM  " + tenantViewName2 + " WHERE KV = 'KV'";
+
+                ResultSet rs = tenantConn1.createStatement().executeQuery(query1);
+                assertPlan((PhoenixResultSet) rs,  "",
+                        tenantViewName1 + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + globalViewIndexName);
+                assertTrue(rs.next());
+                assertEquals("01", rs.getString(1));
+
+                rs = tenantConn2.createStatement().executeQuery(query2);
+                assertPlan((PhoenixResultSet) rs,  "",
+                        tenantViewName2 + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + globalViewIndexName);
+                assertTrue(rs.next());
+                assertEquals("02", rs.getString(1));
+            }
+        }
+    }
+
+
 
     //Helper methods
+    public static void assertPlan(PhoenixResultSet rs, String schemaName, String tableName) {
+        PTable table = rs.getContext().getCurrentTable().getTable();
+        assertTrue(table.getSchemaName().getString().equals(schemaName) &&
+                table.getTableName().getString().equals(tableName));
+    }
+
     private long getLastDDLTimestamp(String tableName) throws SQLException {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         // Need to use different connection than what is used for creating table or indexes.
