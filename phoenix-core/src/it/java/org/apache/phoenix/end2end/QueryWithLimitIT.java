@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryServicesOptions.UNLIMITED_QUEUE_SIZE;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -36,6 +38,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -49,25 +52,25 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class QueryWithLimitIT extends BaseTest {
     
     private String tableName;
-    
-    @Before
-    public void generateTableName() {
-        tableName = generateUniqueName();
-    }
-    
+    private static Map<String,String> props = Maps.newHashMapWithExpectedSize(5);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Map<String,String> props = Maps.newHashMapWithExpectedSize(3);
         // Must update config before starting server
         props.put(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(50));
         props.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(1));
         props.put(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB, Integer.toString(0)); // Prevents RejectedExecutionException when creatomg sequence table
         props.put(QueryServices.THREAD_POOL_SIZE_ATTRIB, Integer.toString(4));
         props.put(QueryServices.LOG_SALT_BUCKETS_ATTRIB, Integer.toString(0)); // Prevents RejectedExecutionException when creating log table
-        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
-    
+
+    @Before
+    public void setupDriver() throws Exception {
+        destroyDriver();
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        tableName = generateUniqueName();
+    }
+
     @Test
     public void testQueryWithLimitAndStats() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
@@ -106,26 +109,42 @@ public class QueryWithLimitIT extends BaseTest {
     
     @Test
     public void testQueryWithoutLimitFails() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-
-        conn.createStatement().execute("create table " + tableName + "\n" +
-                "   (i1 integer not null, i2 integer not null\n" +
-                "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
-        initTableValues(conn, 100);
-        conn.createStatement().execute("UPDATE STATISTICS " + tableName);
-        
+        Properties connProps = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         String query = "SELECT i1 FROM " + tableName;
-        try {
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            rs.next();
-            fail();
-        } catch (SQLException e) {
-            assertTrue(e.getCause() instanceof RejectedExecutionException);
+        try (Connection conn = DriverManager.getConnection(getUrl(), connProps)) {
+
+            conn.createStatement().execute("create table " + tableName + "\n" +
+                    "   (i1 integer not null, i2 integer not null\n" +
+                    "    CONSTRAINT pk PRIMARY KEY (i1,i2))");
+            initTableValues(conn, 100);
+            conn.createStatement().execute("UPDATE STATISTICS " + tableName);
+
+            try {
+                ResultSet rs = conn.createStatement().executeQuery(query);
+                rs.next();
+                fail();
+            } catch (SQLException e) {
+                assertTrue(e.getCause() instanceof RejectedExecutionException);
+            }
         }
-        conn.close();
+
+        // now run the same test with queue size set to unlimited
+        try {
+            destroyDriver();
+            // copy the existing properties
+            Map<String, String> newProps = Maps.newHashMap(props);
+            newProps.put(QueryServices.QUEUE_SIZE_ATTRIB, Integer.toString(UNLIMITED_QUEUE_SIZE));
+            setUpTestDriver(new ReadOnlyProps(newProps.entrySet().iterator()));
+            try (Connection conn = DriverManager.getConnection(getUrl(), connProps)) {
+                // now the query should succeed
+                ResultSet rs = conn.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+            }
+        } finally {
+            destroyDriver();
+        }
     }
-    
+
     protected void initTableValues(Connection conn, int nRows) throws Exception {
         PreparedStatement stmt = conn.prepareStatement(
             "upsert into " + tableName + 
