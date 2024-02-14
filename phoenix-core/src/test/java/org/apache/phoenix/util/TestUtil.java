@@ -825,8 +825,8 @@ public class TestUtil {
             // In HBase 2.5 getLastMajorCompactionTimestamp doesn't seem to get updated when the
             // clock is stopped, so check for the state going to NONE instead
             if (state.equals(CompactionState.NONE) && (previousState != null
-                    && previousState.equals(CompactionState.MAJOR_AND_MINOR)
-                    || previousState.equals(CompactionState.MAJOR))) {
+                    && (previousState.equals(CompactionState.MAJOR_AND_MINOR)
+                    || previousState.equals(CompactionState.MAJOR)))) {
                 break;
             }
             previousState = state;

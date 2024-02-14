@@ -230,7 +230,7 @@ public class MaxLookbackIT extends BaseTest {
     }
 
     @Test
-    public void testCompactionWithTTLAsForeverAndKeepDeletedCellsAsFalseWithTableLevelMaxLookback() throws Exception {
+    public void testRecentlyDeletedRowsNotCompactedAwayWithTableLevelMaxLookback() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             optionBuilder.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
@@ -431,6 +431,8 @@ public class MaxLookbackIT extends BaseTest {
             if (timeToAdvance > 0) {
                 injectEdge.incrementValue(timeToAdvance);
             }
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
+                    afterFirstInsertSCN + ttl * 1000);
             Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
                     afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
             //make sure that we can compact away the now-expired rows
@@ -440,6 +442,74 @@ public class MaxLookbackIT extends BaseTest {
             // and this will always return 0 whether it's still on-disk or not
             assertRawRowCount(conn, dataTable, 0);
             assertRawRowCount(conn, indexTable, 0);
+        }
+        finally {
+            conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
+        }
+    }
+
+    @Test
+    public void testExpiredVersionsAreNotFlushedWithTableLevelMaxLookback() throws Exception {
+        ttl = 8;
+        long maxLookbackAge = 12;
+        optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
+                append(maxLookbackAge * 1000);
+        tableDDLOptions = optionBuilder.toString();
+        Configuration conf = getUtility().getConfiguration();
+        //disable automatic memstore flushes
+        long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
+                HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
+        conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+            populateTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
+            TableName dataTable = TableName.valueOf(dataTableName);
+            TableName indexTable = TableName.valueOf(indexName);
+            assertTableHasTtl(conn, dataTable, ttl);
+            assertTableHasTtl(conn, indexTable, ttl);
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.incrementValue(1);
+            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(1);
+            populateTable(dataTableName);
+            injectEdge.incrementValue(1);
+            //first make sure we inserted correctly
+            String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
+            String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
+            assertRowExistsAtSCN(getUrl(), sql, afterFirstInsertSCN, true);
+            assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            assertRowExistsAtSCN(getUrl(),indexSql, afterFirstInsertSCN, true);
+            int originalDataTableRawCellCountPerRow = 8;
+            int originalIndexTableRawCellCountPerRow = 6;
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
+            long timeToAdvance = (maxLookbackAge * 1000) -
+                    (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
+            if (timeToAdvance > 0) {
+                injectEdge.incrementValue(timeToAdvance);
+            }
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
+                    afterFirstInsertSCN + ttl * 1000);
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                    afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
+            flush(dataTable);
+            flush(indexTable);
+            int newDataTableRawCellCountPerRow = 4;
+            int newIndexTableRawCellCount = 3;
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), newDataTableRawCellCountPerRow);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), newIndexTableRawCellCount);
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), newDataTableRawCellCountPerRow);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), newIndexTableRawCellCount);
         }
         finally {
             conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
