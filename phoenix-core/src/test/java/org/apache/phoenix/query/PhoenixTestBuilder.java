@@ -1078,7 +1078,8 @@ public class PhoenixTestBuilder {
             entityGlobalViewName = SchemaUtil.getTableName(globalViewSchemaName, globalViewName);
 
             // Derive the keyPrefix to use.
-            entityKeyPrefix = dataOptions.getKeyPrefix() != null && !dataOptions.getKeyPrefix().isEmpty()?
+            entityKeyPrefix =
+                    dataOptions.getKeyPrefix() != null && !dataOptions.getKeyPrefix().isEmpty()?
                     dataOptions.getKeyPrefix() :
                     connectOptions.useGlobalConnectionOnly ?
                             (String.format("Z%02d", dataOptions.getViewNumber())) :
@@ -1086,13 +1087,19 @@ public class PhoenixTestBuilder {
                                     (String.format("Z%02d", dataOptions.getViewNumber())) :
                                     DDLDefaults.DEFAULT_KP);
 
-            String tenantViewName = SchemaUtil.normalizeIdentifier(entityKeyPrefix);
+            String tenantViewName =
+                    dataOptions.getTenantViewName() != null &&
+                            !dataOptions.getTenantViewName().isEmpty() ?
+                            dataOptions.getTenantViewName() :
+                            SchemaUtil.normalizeIdentifier(entityKeyPrefix);
             entityTenantViewName = SchemaUtil.getTableName(tenantViewSchemaName, tenantViewName);
             String globalViewCondition = globalViewOptions.globalViewCondition != null &&
                     !globalViewOptions.globalViewCondition.isEmpty() ?
                     globalViewOptions.getGlobalViewCondition() :
-                    String.format("SELECT * FROM %s WHERE KP = '%s'",
-                            entityTableName, entityKeyPrefix);
+                    String.format("SELECT * FROM %s WHERE %s = '%s'",
+                            entityTableName,
+                            tableOptions.getTablePKColumns().get(1),
+                            entityKeyPrefix);
             String schemaName = SchemaUtil.getSchemaNameFromFullName(entityTableName);
 
             // Table and Table Index creation.
@@ -1359,14 +1366,14 @@ public class PhoenixTestBuilder {
 
         Connection getGlobalViewConnection() throws SQLException {
             return getPhoenixConnection(connectOptions.useTenantConnectionForGlobalView ?
-                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + dataOptions.tenantId :
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + dataOptions.getTenantId() :
                     getUrl());
         }
 
         Connection getTenantConnection() throws SQLException {
             return getPhoenixConnection(connectOptions.useGlobalConnectionOnly ?
                     getUrl() :
-                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + dataOptions.tenantId);
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + dataOptions.getTenantId());
         }
 
         Connection getPhoenixConnection(String url) throws SQLException {
@@ -1990,6 +1997,7 @@ public class PhoenixTestBuilder {
             String schemaName = DDLDefaults.DEFAULT_SCHEMA_NAME;
             String tableName = "";
             String globalViewName = "";
+            String tenantViewName = "";
 
             /*
              *****************************
@@ -2001,9 +2009,9 @@ public class PhoenixTestBuilder {
                 options.uniqueNamePrefix = prefix;
                 options.uniqueName = generateUniqueName().substring(1);
                 options.viewCounter = new AtomicInteger(0);
-                options.tenantId =
-                        String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
-                                options.uniqueName);
+//                options.tenantId =
+//                        String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
+//                                options.uniqueName);
                 options.tableName =
                         String.format(DDLDefaults.DEFAULT_UNIQUE_PREFIX_TABLE_NAME_FMT,
                                 options.uniqueNamePrefix,
@@ -2020,9 +2028,6 @@ public class PhoenixTestBuilder {
                 DataOptions options = new DataOptions();
                 options.uniqueName = generateUniqueName().substring(1);
                 options.viewCounter = new AtomicInteger(0);
-                options.tenantId =
-                        String.format(options.tenantIdFormat, TENANT_COUNTER.get(),
-                                options.uniqueName);
                 options.tableName =
                         String.format(DDLDefaults.DEFAULT_UNIQUE_TABLE_NAME_FMT,
                                 options.uniqueName);
@@ -2063,6 +2068,9 @@ public class PhoenixTestBuilder {
             }
 
             public String getTenantId() {
+                if (tenantId == null || tenantId.isEmpty()) {
+                    return getNextTenantId();
+                }
                 return tenantId;
             }
 
@@ -2112,6 +2120,14 @@ public class PhoenixTestBuilder {
 
             public void setGlobalViewName(String globalViewName) {
                 this.globalViewName = globalViewName;
+            }
+
+            public String getTenantViewName() {
+                return tenantViewName;
+            }
+
+            public void setTenantViewName(String tenantViewName) {
+                this.tenantViewName = tenantViewName;
             }
 
             public String getSchemaName() {

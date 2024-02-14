@@ -1,11 +1,10 @@
-package org.apache.phoenix.end2end.prefix;
+package org.apache.phoenix.util;
 
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.prefix.search.PrefixIndex;
-import org.apache.phoenix.prefix.table.TableTTLInfo;
-import org.apache.phoenix.prefix.table.TableTTLInfoCache;
-import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.matcher.RowKeyMatcher;
+import org.apache.phoenix.util.matcher.TableTTLInfo;
+import org.apache.phoenix.util.matcher.TableTTLInfoCache;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -23,7 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class PrefixIndexAndCacheTest {
+public class RowKeyMatcherTest {
 
 	public List<TableTTLInfo> getSampleData() {
 
@@ -59,8 +58,8 @@ public class PrefixIndexAndCacheTest {
 
 	@Test
 	public void testOverlappingPrefixes() {
-		PrefixIndex globalPrefixIndex = new PrefixIndex();
-		PrefixIndex tenantPrefixIndex = new PrefixIndex();
+		RowKeyMatcher globalRowKeyMatcher = new RowKeyMatcher();
+		RowKeyMatcher tenantRowKeyMatcher = new RowKeyMatcher();
 		TableTTLInfoCache cache = new TableTTLInfoCache();
 		List<String> sampleRows = new ArrayList<>();
 		sampleRows.add("0010t0001000001001Z01#12348");
@@ -73,30 +72,30 @@ public class PrefixIndexAndCacheTest {
 
 		Integer tableId1 = cache.addTable(table1);
 		Integer tableId2 = cache.addTable(table2);
-		globalPrefixIndex.put(table1.getPrefix(), tableId1);
-		tenantPrefixIndex.put(table2.getPrefix(), tableId2);
+		globalRowKeyMatcher.put(table1.getMatchPattern(), tableId1);
+		tenantRowKeyMatcher.put(table2.getMatchPattern(), tableId2);
 
 		int tenantOffset = 0;
 		int globalOffset = 15;
 
-		Integer row0GlobalMatch = globalPrefixIndex.get(sampleRows.get(0).getBytes(), globalOffset);
+		Integer row0GlobalMatch = globalRowKeyMatcher.get(sampleRows.get(0).getBytes(), globalOffset);
 		assertTrue(String.format("row-%d, matched = %s, row = %s",
 				0, row0GlobalMatch != null, sampleRows.get(0)), row0GlobalMatch != null);
-		Integer row0TenantMatch = tenantPrefixIndex.get(sampleRows.get(0).getBytes(), tenantOffset);
+		Integer row0TenantMatch = tenantRowKeyMatcher.get(sampleRows.get(0).getBytes(), tenantOffset);
 		assertTrue(String.format("row-%d, matched = %s, row = %s",
 				0, row0TenantMatch != null, sampleRows.get(0)), row0TenantMatch == null);
 
-		Integer row1GlobalMatch = globalPrefixIndex.get(sampleRows.get(1).getBytes(), globalOffset);
+		Integer row1GlobalMatch = globalRowKeyMatcher.get(sampleRows.get(1).getBytes(), globalOffset);
 		assertTrue(String.format("row-%d, matched = %s, row = %s",
 				0, row1GlobalMatch != null, sampleRows.get(1)), row1GlobalMatch == null);
-		Integer row1TenantMatch = tenantPrefixIndex.get(sampleRows.get(1).getBytes(), tenantOffset);
+		Integer row1TenantMatch = tenantRowKeyMatcher.get(sampleRows.get(1).getBytes(), tenantOffset);
 		assertTrue(String.format("row-%d, matched = %s, row = %s",
 				0, row1TenantMatch != null, sampleRows.get(1)), row1TenantMatch != null);
 	}
 
 	@Test
 	public void testSamplePrefixes() {
-		PrefixIndex prefixIndex = new PrefixIndex();
+		RowKeyMatcher rowKeyMatcher = new RowKeyMatcher();
 		TableTTLInfoCache cache = new TableTTLInfoCache();
 		List<TableTTLInfo> sampleTableList = new ArrayList<TableTTLInfo>();
 
@@ -123,59 +122,59 @@ public class PrefixIndexAndCacheTest {
 
 		for (int i = 0; i < sampleTableList.size(); i++) {
 			Integer tableId = cache.addTable(sampleTableList.get(i));
-			prefixIndex.put(sampleTableList.get(i).getPrefix(), tableId);
+			rowKeyMatcher.put(sampleTableList.get(i).getMatchPattern(), tableId);
 			assertEquals(tableId.intValue(), i);
 		}
 		int offset = 0;
 		for (int i = 0; i<sampleTableList.size(); i++) {
-			assertEquals(prefixIndex.get(sampleTableList.get(i).getPrefix(), offset).intValue(), i);
+			assertEquals(rowKeyMatcher.get(sampleTableList.get(i).getMatchPattern(), offset).intValue(), i);
 		}
 
 	}
 
 	@Test
 	public void testSingleSampleDataCount() {
-		PrefixIndex prefixIndex = new PrefixIndex();
+		RowKeyMatcher rowKeyMatcher = new RowKeyMatcher();
 		TableTTLInfoCache cache = new TableTTLInfoCache();
 
 		List<TableTTLInfo> sampleTableList = getSampleData();
-		runTest(prefixIndex, cache, sampleTableList, 1, 1);
+		runTest(rowKeyMatcher, cache, sampleTableList, 1, 1);
 
 		//Assert results
-		assertResults(prefixIndex, sampleTableList);
+		assertResults(rowKeyMatcher, sampleTableList);
 		assertResults(cache, sampleTableList);
 
 	}
 
 	@Test
 	public void testRepeatingSampleDataCount() {		
-		PrefixIndex prefixIndex = new PrefixIndex();
+		RowKeyMatcher rowKeyMatcher = new RowKeyMatcher();
 		TableTTLInfoCache cache = new TableTTLInfoCache();
 		List<TableTTLInfo> sampleTableList = getSampleData();
-		runTest(prefixIndex, cache, sampleTableList, 1, 25);
+		runTest(rowKeyMatcher, cache, sampleTableList, 1, 25);
 		
 		//Assert results
-		assertResults(prefixIndex, sampleTableList);
+		assertResults(rowKeyMatcher, sampleTableList);
 		assertResults(cache, sampleTableList);
 
 	}
 	
 	@Test
 	public void testConcurrentSampleDataCount() {
-		PrefixIndex prefixIndex = new PrefixIndex();
+		RowKeyMatcher rowKeyMatcher = new RowKeyMatcher();
 		TableTTLInfoCache cache = new TableTTLInfoCache();
 		List<TableTTLInfo> sampleTableList = getSampleData();
-		runTest(prefixIndex, cache, sampleTableList, 5, 5);
+		runTest(rowKeyMatcher, cache, sampleTableList, 5, 5);
 
 		//Assert results
-		assertResults(prefixIndex, sampleTableList);
+		assertResults(rowKeyMatcher, sampleTableList);
 		assertResults(cache, sampleTableList);
 	}
 
-	private void assertResults(PrefixIndex prefixIndex, List<TableTTLInfo> sampleTableList) {
+	private void assertResults(RowKeyMatcher rowKeyMatcher, List<TableTTLInfo> sampleTableList) {
 		//Assert results
 		int tableCountExpected = sampleTableList.size();
-		int prefixCountActual = prefixIndex.getValidPrefixes();
+		int prefixCountActual = rowKeyMatcher.getNumEntries();
 		String message = String.format("expected = %d, actual = %d", tableCountExpected, prefixCountActual);
 		assertTrue(message, tableCountExpected == prefixCountActual);
 	}
@@ -191,7 +190,7 @@ public class PrefixIndexAndCacheTest {
 		assertTrue(message, tableCountExpected == tableCountActual);
 	}
 
-	private void runTest(PrefixIndex targetPrefixIndex, TableTTLInfoCache cache,
+	private void runTest(RowKeyMatcher targetRowKeyMatcher, TableTTLInfoCache cache,
 			List<TableTTLInfo> sampleData, int numThreads, int numRepeats) {
 		
 		try {			
@@ -202,7 +201,7 @@ public class PrefixIndexAndCacheTest {
 	                public void run() {
 	                    try {                  
 	                        for (int repeats = 0; repeats < numRepeats; repeats++) {
-	                			addTablesToPrefixIndex(sampleData, targetPrefixIndex);
+	                			addTablesToPrefixIndex(sampleData, targetRowKeyMatcher);
 								addTablesToCache(sampleData, cache);
 	                        }
 	                    } finally {
@@ -223,10 +222,10 @@ public class PrefixIndexAndCacheTest {
 	}
 	
 	
-	private void addTablesToPrefixIndex(List<TableTTLInfo> tableList, PrefixIndex prefixIndex) {
+	private void addTablesToPrefixIndex(List<TableTTLInfo> tableList, RowKeyMatcher rowKeyMatcher) {
 		AtomicInteger tableId = new AtomicInteger(0);
 		tableList.forEach(m -> {
-			prefixIndex.put(m.getPrefix(), tableId.incrementAndGet());
+			rowKeyMatcher.put(m.getMatchPattern(), tableId.incrementAndGet());
 		});
 	}
 

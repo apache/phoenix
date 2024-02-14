@@ -18,10 +18,8 @@
 
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataReader;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
@@ -38,17 +36,12 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -59,11 +52,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 
 import static java.util.Arrays.asList;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
@@ -80,9 +71,6 @@ import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLIT extends BaseViewTTLIT {
-    protected static void setUpTestDriver(ReadOnlyProps props) throws Exception {
-        setUpTestDriver(props, props);
-    }
 
     @BeforeClass
     public static void doSetup() throws Exception {
@@ -94,120 +82,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
         }};
 
         setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
-    }
-
-    @Before
-    public void beforeTest(){
-        EnvironmentEdgeManager.reset();
-        injectEdge = new ManualEnvironmentEdge();
-        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
-    }
-
-    @After
-    public synchronized void afterTest() throws Exception {
-        EnvironmentEdgeManager.reset();
-    }
-
-
-    private SchemaBuilder createLevel2TenantViewWithGlobalLevelTTL(
-            TenantViewOptions tenantViewOptions,
-            TenantViewIndexOptions tenantViewIndexOptions,
-            boolean allowIndex) throws Exception {
-        // Define the test schema.
-        // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
-        // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
-        // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-
-        TableOptions tableOptions = TableOptions.withDefaults();
-        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
-
-        GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
-        // View TTL is set to 300s => 300000 ms
-        globalViewOptions.setTableProps("TTL=300");
-
-        SchemaBuilder.GlobalViewIndexOptions globalViewIndexOptions
-                = SchemaBuilder.GlobalViewIndexOptions.withDefaults();
-        globalViewIndexOptions.setLocal(false);
-
-        TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
-        if (tenantViewOptions != null) {
-            tenantViewWithOverrideOptions = tenantViewOptions;
-        }
-        TenantViewIndexOptions tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
-        if (tenantViewIndexOptions != null) {
-            tenantViewIndexOverrideOptions = tenantViewIndexOptions;
-        }
-        if (allowIndex) {
-            schemaBuilder.withTableOptions(tableOptions)
-                    .withGlobalViewOptions(globalViewOptions)
-                    .withGlobalViewIndexOptions(globalViewIndexOptions)
-                    .withTenantViewOptions(tenantViewWithOverrideOptions)
-                    .withTenantViewIndexOptions(tenantViewIndexOverrideOptions)
-                    .buildWithNewTenant();
-        } else {
-            schemaBuilder.withTableOptions(tableOptions)
-                    .withGlobalViewOptions(globalViewOptions)
-                    .withTenantViewOptions(tenantViewWithOverrideOptions)
-                    .withTenantViewIndexOptions(tenantViewIndexOverrideOptions)
-                    .buildWithNewTenant();
-        }
-        return schemaBuilder;
-    }
-
-    private SchemaBuilder createLevel2TenantViewWithTenantLevelTTL(
-            TenantViewOptions tenantViewOptions, TenantViewIndexOptions tenantViewIndexOptions)
-            throws Exception {
-        // Define the test schema.
-        // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
-        // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
-        // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-
-        TableOptions tableOptions = TableOptions.withDefaults();
-        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
-
-        GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
-
-        TenantViewOptions tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
-        // View TTL is set to 300s => 300000 ms
-        tenantViewWithOverrideOptions.setTableProps("TTL=300");
-        if (tenantViewOptions != null) {
-            tenantViewWithOverrideOptions = tenantViewOptions;
-        }
-        TenantViewIndexOptions tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
-        if (tenantViewIndexOptions != null) {
-            tenantViewIndexOverrideOptions = tenantViewIndexOptions;
-        }
-        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
-                .withTenantViewOptions(tenantViewWithOverrideOptions)
-                .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildWithNewTenant();
-        return schemaBuilder;
-    }
-
-    private SchemaBuilder createLevel1TenantView(TenantViewOptions tenantViewOptions,
-            TenantViewIndexOptions tenantViewIndexOptions) throws Exception {
-        // Define the test schema.
-        // 1. Table with default columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
-        // 2. Tenant with default columns => (ZID, COL7, COL8, COL9), PK => (ZID)
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-
-        TableOptions tableOptions = TableOptions.withDefaults();
-        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
-
-        TenantViewOptions tenantViewOverrideOptions = TenantViewOptions.withDefaults();
-        if (tenantViewOptions != null) {
-            tenantViewOverrideOptions = tenantViewOptions;
-        }
-        TenantViewIndexOptions tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
-        if (tenantViewIndexOptions != null) {
-            tenantViewIndexOverrideOptions = tenantViewIndexOptions;
-        }
-
-        schemaBuilder.withTableOptions(tableOptions)
-                .withTenantViewOptions(tenantViewOverrideOptions)
-                .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildNewView();
-        return schemaBuilder;
     }
 
     /**
@@ -556,49 +430,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
             }
         }
 
-    }
-
-    @Test
-    public void testResetServerCache() {
-        try {
-            clearCache(true, true, Arrays.asList(new String[] {"00DNA0000000MXY"}));
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-    private void clearCache(boolean globalFixNeeded, boolean tenantFixNeeded, List<String> allTenants)
-            throws SQLException {
-
-        if (globalFixNeeded) {
-            try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
-                clearCache(globalConnection, "PLATFORM_ENTITY", "DECISION_TABLE_RECORDSET");
-            }
-        }
-        if (tenantFixNeeded || globalFixNeeded) {
-            for (String tenantId : allTenants) {
-                String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
-                try (Connection tenantConnection = DriverManager.getConnection(tenantURL)) {
-                    clearCache(tenantConnection, "PLATFORM_ENTITY", "195");
-                }
-            }
-        }
-    }
-
-    private static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
-
-        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
-        PName tenantIdName = currentConnection.getTenantId();
-        String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
-
-        // Clear server side cache
-        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
-                Bytes.toBytes(tenantId), Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
-
-        // Clear connection cache
-        currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
-                String.format("%s.%s", schemaName, tableName), null, 0);
     }
 
 
@@ -1359,135 +1190,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
         }
     }
 
-    @Test
-    public void testWithVariousSQLsWhenTTLSetForSomeTenants() throws Exception {
-
-        // View TTL is set in seconds (for e.g 10 secs)
-        int viewTTL = VIEW_TTL_10_SECS;
-        TableOptions tableOptions = TableOptions.withDefaults();
-        tableOptions.getTableColumns().clear();
-        tableOptions.getTableColumnTypes().clear();
-
-        GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-
-        TenantViewOptions tenantViewOptions = new TenantViewOptions();
-        tenantViewOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
-        tenantViewOptions
-                .setTenantViewColumnTypes(asList("CHAR(15)", "VARCHAR", "VARCHAR", "VARCHAR"));
-
-        OtherOptions testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
-        testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
-        testCaseWhenAllCFMatchAndAllDefault
-                .setTableCFs(Lists.newArrayList((String) null, null, null));
-        testCaseWhenAllCFMatchAndAllDefault
-                .setGlobalViewCFs(Lists.newArrayList((String) null, null, null));
-        testCaseWhenAllCFMatchAndAllDefault
-                .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
-
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
-                .withTenantViewOptions(tenantViewOptions)
-                .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault);
-
-        long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-        Set<Integer> hasTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3, 7 }));
-        Set<Integer> tenantSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4, 5, 6, 7 }));
-        int nonCompactedTenantSet = tenantSet.size() - hasTTLSet.size();
-        for (int tenant : tenantSet) {
-            // Set TTL only when tenant = 2
-            if (hasTTLSet.contains(tenant)) {
-                tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
-            }
-            // build schema for tenant
-            schemaBuilder.buildWithNewTenant();
-            // reset the TTL attribute for the next view
-            tenantViewOptions.setTableProps("");
-
-            // Define the test data.
-            //final String groupById = String.format(ID_FMT, 0);
-            DataSupplier dataSupplier = new DataSupplier() {
-
-                @Override public List<Object> getValues(int rowIndex) {
-                    Random rnd = new Random();
-                    String id = String.format(ID_FMT, rowIndex);
-                    String zid = String.format(ZID_FMT, rowIndex);
-                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-
-                    return Lists.newArrayList(
-                            new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
-                }
-            };
-
-            // Create a test data reader/writer for the above schema.
-            DataWriter dataWriter = new BasicDataWriter();
-            List<String> columns =
-                    Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
-            List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
-            String tenantConnectUrl =
-                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
-            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
-                writeConnection.setAutoCommit(true);
-                dataWriter.setConnection(writeConnection);
-                dataWriter.setDataSupplier(dataSupplier);
-                dataWriter.setUpsertColumns(columns);
-                dataWriter.setRowKeyColumns(rowKeyColumns);
-                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-                upsertData(dataWriter, DEFAULT_NUM_ROWS);
-
-                // Case : count(1) sql
-                DataReader dataReader = new BasicDataReader();
-                dataReader.setValidationColumns(Arrays.asList("num_rows"));
-                dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
-                dataReader.setDML(String
-                        .format("SELECT count(1) as num_rows from %s HAVING count(1) > 0",
-                                schemaBuilder.getEntityTenantViewName()));
-                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-                long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-
-                // Validate data before and after ttl expiration.
-                if (hasTTLSet.contains(tenant)) {
-                    validateExpiredRowsAreNotReturnedUsingCounts(viewTTL, dataReader, schemaBuilder);
-                } else {
-                    validateRowsAreNotMaskedUsingCounts(scnTimestamp, dataReader, schemaBuilder);
-                }
-
-                // Case : group by sql
-                dataReader.setValidationColumns(Arrays.asList("num_rows"));
-                dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
-                dataReader.setDML(String
-                        .format("SELECT count(1) as num_rows from %s GROUP BY ID HAVING count(1) > 0",
-                                schemaBuilder.getEntityTenantViewName()));
-
-                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-                // Validate data before and after ttl expiration.
-                if (hasTTLSet.contains(tenant)) {
-                    validateExpiredRowsAreNotReturnedUsingCounts(viewTTL, dataReader, schemaBuilder);
-                } else {
-                    validateRowsAreNotMaskedUsingCounts(scnTimestamp, dataReader, schemaBuilder);
-                }
-            }
-        }
-
-
-        PTable table = schemaBuilder.getBaseTable();
-        // validate multi-tenanted base table
-        validateAfterMajorCompaction(
-                table.getSchemaName().toString(),
-                table.getTableName().toString(),
-                false,
-                earliestTimestamp,
-                VIEW_TTL_10_SECS,
-                false,
-                nonCompactedTenantSet * DEFAULT_NUM_ROWS
-        );
-    }
 
     @Test
     public void testWithVariousSQLsForMultipleViews() throws Exception {
@@ -1578,137 +1280,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
         }
     }
 
-    @Test
-    public void testWithTenantViewAndGlobalViewAndVariousOptions() throws Exception {
-
-        // View TTL is set in seconds (for e.g 10 secs)
-        int viewTTL = VIEW_TTL_10_SECS;
-
-        // Define the test schema
-        TableOptions tableOptions = TableOptions.withDefaults();
-        String tableProps = "MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
-        tableOptions.setTableProps(tableProps);
-
-        GlobalViewOptions globalViewOptions = SchemaBuilder.GlobalViewOptions.withDefaults();
-        globalViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
-
-        GlobalViewIndexOptions globalViewIndexOptions = GlobalViewIndexOptions.withDefaults();
-
-        TenantViewOptions tenantViewOptions = new TenantViewOptions();
-        tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
-        tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
-
-        TenantViewIndexOptions tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
-        // TODO handle Local Index cases
-        // Test cases :
-        // Local vs Global indexes, Tenant vs Global views, various column family options.
-        for (boolean isGlobalViewLocal : Lists.newArrayList(/* true, */false)) {
-            for (boolean isTenantViewLocal : Lists.newArrayList(/* true, */ false)) {
-                for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
-
-                    /**
-                     * TODO:
-                     * Need to revisit indexing code path,
-                     * as there are some left over rows after delete in these cases.
-                     */
-                    //if (!isGlobalViewLocal && !isTenantViewLocal) continue;
-
-                    resetEnvironmentEdgeManager();
-                    globalViewIndexOptions.setLocal(isGlobalViewLocal);
-                    tenantViewIndexOptions.setLocal(isTenantViewLocal);
-
-                    final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-                    schemaBuilder.withTableOptions(tableOptions)
-                            .withGlobalViewOptions(globalViewOptions)
-                            .withGlobalViewIndexOptions(globalViewIndexOptions)
-                            .withTenantViewOptions(tenantViewOptions)
-                            .withTenantViewIndexOptions(tenantViewIndexOptions)
-                            .withOtherOptions(options)
-                            .buildWithNewTenant();
-
-                    // Define the test data.
-                    DataSupplier dataSupplier = new DataSupplier() {
-
-                        @Override public List<Object> getValues(int rowIndex) {
-                            Random rnd = new Random();
-                            String id = String.format(ID_FMT, rowIndex);
-                            String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-                            String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
-
-                            return Lists.newArrayList(
-                                    new Object[] { id, col1, col2, col3, col4, col5, col6,
-                                                   col7, col8, col9 });
-                        }
-                    };
-
-                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-                    // Create a test data reader/writer for the above schema.
-                    DataWriter dataWriter = new BasicDataWriter();
-                    DataReader dataReader = new BasicDataReader();
-
-                    List<String> columns =
-                            Lists.newArrayList("ID",
-                                    "COL1", "COL2", "COL3", "COL4", "COL5",
-                                    "COL6", "COL7", "COL8", "COL9");
-                    List<String> rowKeyColumns = Lists.newArrayList("ID");
-                    String tenantConnectUrl =
-                            getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
-                                    schemaBuilder.getDataOptions().getTenantId();
-                    try (Connection writeConnection = DriverManager
-                            .getConnection(tenantConnectUrl)) {
-                        writeConnection.setAutoCommit(true);
-                        dataWriter.setConnection(writeConnection);
-                        dataWriter.setDataSupplier(dataSupplier);
-                        dataWriter.setUpsertColumns(columns);
-                        dataWriter.setRowKeyColumns(rowKeyColumns);
-                        dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-                        dataReader.setValidationColumns(columns);
-                        dataReader.setRowKeyColumns(rowKeyColumns);
-                        dataReader.setDML(String
-                                .format("SELECT %s from %s", Joiner.on(",").join(columns),
-                                        schemaBuilder.getEntityTenantViewName()));
-                        dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
-
-                        // Validate data before and after ttl expiration.
-                        upsertDataAndRunValidations(viewTTL, DEFAULT_NUM_ROWS, dataWriter,
-                                dataReader, schemaBuilder);
-                    }
-
-                    PTable table = schemaBuilder.getBaseTable();
-                    // validate multi-tenanted base table
-                    validateAfterMajorCompaction(
-                            table.getSchemaName().toString(),
-                            table.getTableName().toString(),
-                            false,
-                            earliestTimestamp,
-                            VIEW_TTL_10_SECS,
-                            false,
-                            0
-                    );
-
-                    // validate multi-tenanted index table
-                    validateAfterMajorCompaction(
-                            table.getSchemaName().toString(),
-                            table.getTableName().toString(),
-                            true,
-                            earliestTimestamp,
-                            VIEW_TTL_10_SECS,
-                            false,
-                            0
-                    );
-
-                }
-            }
-        }
-    }
 
     /**
      * ************************************************************
@@ -1986,4 +1557,17 @@ public class ViewTTLIT extends BaseViewTTLIT {
     public void testMajorCompactWithSaltedIndexedBaseTables() throws Exception {
         super.testMajorCompactWithSaltedIndexedBaseTables();
     }
+    @Test
+    public void testMajorCompactWithVariousViewsAndOptions() throws Exception {
+        super.testMajorCompactWithVariousViewsAndOptions();
+    }
+    @Test
+    public void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
+        super.testMajorCompactWhenTTLSetForSomeTenants();
+    }
+    @Test
+    public void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
+        super.testTenantViewsWIthOverlappingRowPrefixes();
+    }
+
 }
