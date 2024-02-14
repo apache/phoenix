@@ -16,31 +16,41 @@ import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.PhoenixTestBuilder;
+import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataReader;
+import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
+import org.apache.phoenix.query.PhoenixTestBuilder.DataReader;
+import org.apache.phoenix.query.PhoenixTestBuilder.DataSupplier;
+import org.apache.phoenix.query.PhoenixTestBuilder.DataWriter;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.ConnectOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.DataOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.OtherOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions;
+import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
+
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.types.PDataType;
+
+
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,13 +61,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 
+import static java.util.Arrays.asList;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.MAX_ROWS;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_COLUMNS;
@@ -70,7 +81,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-public abstract class BaseViewTTLIT extends LocalHBaseIT{
+public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     static final Logger LOGGER = LoggerFactory.getLogger(ViewTTLIT.class);
     static final int VIEW_TTL_10_SECS = 10;
     static final int VIEW_TTL_300_SECS = 300;
@@ -121,6 +132,48 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
         EnvironmentEdgeManager.reset();
         injectEdge = new ManualEnvironmentEdge();
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+    }
+
+    // TODO remove
+    public void testResetServerCache() {
+        try {
+            clearCache(true, true, Arrays.asList(new String[] {"00DNA0000000MXY"}));
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void clearCache(boolean globalFixNeeded, boolean tenantFixNeeded, List<String> allTenants)
+            throws SQLException {
+
+        if (globalFixNeeded) {
+            try (PhoenixConnection globalConnection = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+                clearCache(globalConnection, "PLATFORM_ENTITY", "DECISION_TABLE_RECORDSET");
+            }
+        }
+        if (tenantFixNeeded || globalFixNeeded) {
+            for (String tenantId : allTenants) {
+                String tenantURL = getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
+                try (Connection tenantConnection = DriverManager.getConnection(tenantURL)) {
+                    clearCache(tenantConnection, "PLATFORM_ENTITY", "195");
+                }
+            }
+        }
+    }
+
+    private static void clearCache(Connection tenantConnection, String schemaName, String tableName) throws SQLException {
+
+        PhoenixConnection currentConnection = tenantConnection.unwrap(PhoenixConnection.class);
+        PName tenantIdName = currentConnection.getTenantId();
+        String tenantId = tenantIdName == null ? "" : tenantIdName.getString();
+
+        // Clear server side cache
+        currentConnection.unwrap(PhoenixConnection.class).getQueryServices().clearTableFromCache(
+                Bytes.toBytes(tenantId), Bytes.toBytes(schemaName), Bytes.toBytes(tableName), 0);
+
+        // Clear connection cache
+        currentConnection.getMetaDataCache().removeTable(currentConnection.getTenantId(),
+                String.format("%s.%s", schemaName, tableName), null, 0);
     }
 
     // Scans the HBase rows directly and asserts
@@ -198,8 +251,121 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
     }
 
 
+    protected SchemaBuilder createLevel2TenantViewWithGlobalLevelTTL(
+            TenantViewOptions tenantViewOptions,
+            TenantViewIndexOptions tenantViewIndexOptions,
+            boolean allowIndex) throws Exception {
+        // Define the test schema.
+        // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
+        // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
+        // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+
+        TableOptions tableOptions = TableOptions.withDefaults();
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
+
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
+        // View TTL is set to 300s => 300000 ms
+        globalViewOptions.setTableProps("TTL=300");
+
+        GlobalViewIndexOptions globalViewIndexOptions
+                = GlobalViewIndexOptions.withDefaults();
+        globalViewIndexOptions.setLocal(false);
+
+        TenantViewOptions
+                tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
+        if (tenantViewOptions != null) {
+            tenantViewWithOverrideOptions = tenantViewOptions;
+        }
+        TenantViewIndexOptions
+                tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
+        if (tenantViewIndexOptions != null) {
+            tenantViewIndexOverrideOptions = tenantViewIndexOptions;
+        }
+        if (allowIndex) {
+            schemaBuilder.withTableOptions(tableOptions)
+                    .withGlobalViewOptions(globalViewOptions)
+                    .withGlobalViewIndexOptions(globalViewIndexOptions)
+                    .withTenantViewOptions(tenantViewWithOverrideOptions)
+                    .withTenantViewIndexOptions(tenantViewIndexOverrideOptions)
+                    .buildWithNewTenant();
+        } else {
+            schemaBuilder.withTableOptions(tableOptions)
+                    .withGlobalViewOptions(globalViewOptions)
+                    .withTenantViewOptions(tenantViewWithOverrideOptions)
+                    .withTenantViewIndexOptions(tenantViewIndexOverrideOptions)
+                    .buildWithNewTenant();
+        }
+        return schemaBuilder;
+    }
+
+    protected SchemaBuilder createLevel2TenantViewWithTenantLevelTTL(
+            TenantViewOptions tenantViewOptions, TenantViewIndexOptions tenantViewIndexOptions)
+            throws Exception {
+        // Define the test schema.
+        // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
+        // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
+        // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
+
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
+
+        TenantViewOptions
+                tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
+        // View TTL is set to 300s => 300000 ms
+        tenantViewWithOverrideOptions.setTableProps("TTL=300");
+        if (tenantViewOptions != null) {
+            tenantViewWithOverrideOptions = tenantViewOptions;
+        }
+        TenantViewIndexOptions
+                tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
+        if (tenantViewIndexOptions != null) {
+            tenantViewIndexOverrideOptions = tenantViewIndexOptions;
+        }
+        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
+                .withTenantViewOptions(tenantViewWithOverrideOptions)
+                .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildWithNewTenant();
+        return schemaBuilder;
+    }
+
+    protected SchemaBuilder createLevel1TenantView(
+            TenantViewOptions tenantViewOptions,
+            TenantViewIndexOptions tenantViewIndexOptions) throws Exception {
+        // Define the test schema.
+        // 1. Table with default columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
+        // 2. Tenant with default columns => (ZID, COL7, COL8, COL9), PK => (ZID)
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
+
+        TenantViewOptions
+                tenantViewOverrideOptions = TenantViewOptions.withDefaults();
+        if (tenantViewOptions != null) {
+            tenantViewOverrideOptions = tenantViewOptions;
+        }
+        TenantViewIndexOptions
+                tenantViewIndexOverrideOptions = TenantViewIndexOptions.withDefaults();
+        if (tenantViewIndexOptions != null) {
+            tenantViewIndexOverrideOptions = tenantViewIndexOptions;
+        }
+
+        schemaBuilder.withTableOptions(tableOptions)
+                .withTenantViewOptions(tenantViewOverrideOptions)
+                .withTenantViewIndexOptions(tenantViewIndexOverrideOptions).buildNewView();
+        return schemaBuilder;
+    }
+
+
     void upsertDataAndRunValidations(long viewTTL, int numRowsToUpsert,
-            PhoenixTestBuilder.DataWriter dataWriter, PhoenixTestBuilder.DataReader dataReader, PhoenixTestBuilder.SchemaBuilder schemaBuilder)
+            DataWriter dataWriter, DataReader dataReader, SchemaBuilder schemaBuilder)
             throws Exception {
 
         //Insert for the first time and validate them.
@@ -212,8 +378,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
     }
 
-    void validateExpiredRowsAreNotReturnedUsingCounts(long viewTTL, PhoenixTestBuilder.DataReader dataReader,
-            PhoenixTestBuilder.SchemaBuilder schemaBuilder) throws IOException, SQLException {
+    void validateExpiredRowsAreNotReturnedUsingCounts(long viewTTL, DataReader dataReader,
+            SchemaBuilder schemaBuilder) throws IOException, SQLException {
 
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
@@ -245,7 +411,7 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
     void validateExpiredRowsAreNotReturnedUsingData(long viewTTL,
             org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertedData,
-            PhoenixTestBuilder.DataReader dataReader, PhoenixTestBuilder.SchemaBuilder schemaBuilder) throws SQLException {
+            DataReader dataReader, SchemaBuilder schemaBuilder) throws SQLException {
 
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
@@ -281,8 +447,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
     }
 
-    void validateRowsAreNotMaskedUsingCounts(long probeTimestamp, PhoenixTestBuilder.DataReader dataReader,
-            PhoenixTestBuilder.SchemaBuilder schemaBuilder) throws SQLException {
+    void validateRowsAreNotMaskedUsingCounts(long probeTimestamp, DataReader dataReader,
+            SchemaBuilder schemaBuilder) throws SQLException {
 
         String tenantConnectUrl =
                 getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions()
@@ -343,14 +509,14 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
     }
 
     org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> upsertData(
-            PhoenixTestBuilder.DataWriter dataWriter, int numRowsToUpsert) throws Exception {
+            DataWriter dataWriter, int numRowsToUpsert) throws Exception {
         // Upsert rows
         dataWriter.upsertRows(1, numRowsToUpsert);
         return dataWriter.getDataTable();
     }
 
     org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> fetchData(
-            PhoenixTestBuilder.DataReader dataReader) throws SQLException {
+            DataReader dataReader) throws SQLException {
 
         dataReader.readRows();
         return dataReader.getDataTable();
@@ -437,12 +603,12 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
         }
     }
 
-    List<PhoenixTestBuilder.SchemaBuilder.OtherOptions> getTableAndGlobalAndTenantColumnFamilyOptions() {
+    List<OtherOptions> getTableAndGlobalAndTenantColumnFamilyOptions() {
 
-        List<PhoenixTestBuilder.SchemaBuilder.OtherOptions> testCases = Lists.newArrayList();
+        List<OtherOptions> testCases = Lists.newArrayList();
 
-        PhoenixTestBuilder.SchemaBuilder.OtherOptions
-                testCaseWhenAllCFMatchAndAllDefault = new PhoenixTestBuilder.SchemaBuilder.OtherOptions();
+        OtherOptions
+                testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
         testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
         testCaseWhenAllCFMatchAndAllDefault
                 .setTableCFs(Lists.newArrayList((String) null, null, null));
@@ -452,32 +618,32 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                 .setTenantViewCFs(Lists.newArrayList((String) null, null, null));
         testCases.add(testCaseWhenAllCFMatchAndAllDefault);
 
-        PhoenixTestBuilder.SchemaBuilder.OtherOptions
-                testCaseWhenAllCFMatchAndSame = new PhoenixTestBuilder.SchemaBuilder.OtherOptions();
+        OtherOptions
+                testCaseWhenAllCFMatchAndSame = new OtherOptions();
         testCaseWhenAllCFMatchAndSame.setTestName("testCaseWhenAllCFMatchAndSame");
         testCaseWhenAllCFMatchAndSame.setTableCFs(Lists.newArrayList("A", "A", "A"));
         testCaseWhenAllCFMatchAndSame.setGlobalViewCFs(Lists.newArrayList("A", "A", "A"));
         testCaseWhenAllCFMatchAndSame.setTenantViewCFs(Lists.newArrayList("A", "A", "A"));
         testCases.add(testCaseWhenAllCFMatchAndSame);
 
-        PhoenixTestBuilder.SchemaBuilder.OtherOptions
-                testCaseWhenAllCFMatch = new PhoenixTestBuilder.SchemaBuilder.OtherOptions();
+        OtherOptions
+                testCaseWhenAllCFMatch = new OtherOptions();
         testCaseWhenAllCFMatch.setTestName("testCaseWhenAllCFMatch");
         testCaseWhenAllCFMatch.setTableCFs(Lists.newArrayList(null, "A", "B"));
         testCaseWhenAllCFMatch.setGlobalViewCFs(Lists.newArrayList(null, "A", "B"));
         testCaseWhenAllCFMatch.setTenantViewCFs(Lists.newArrayList(null, "A", "B"));
         testCases.add(testCaseWhenAllCFMatch);
 
-        PhoenixTestBuilder.SchemaBuilder.OtherOptions
-                testCaseWhenTableCFsAreDiff = new PhoenixTestBuilder.SchemaBuilder.OtherOptions();
+        OtherOptions
+                testCaseWhenTableCFsAreDiff = new OtherOptions();
         testCaseWhenTableCFsAreDiff.setTestName("testCaseWhenTableCFsAreDiff");
         testCaseWhenTableCFsAreDiff.setTableCFs(Lists.newArrayList(null, "A", "B"));
         testCaseWhenTableCFsAreDiff.setGlobalViewCFs(Lists.newArrayList("A", "A", "B"));
         testCaseWhenTableCFsAreDiff.setTenantViewCFs(Lists.newArrayList("A", "A", "B"));
         testCases.add(testCaseWhenTableCFsAreDiff);
 
-        PhoenixTestBuilder.SchemaBuilder.OtherOptions
-                testCaseWhenGlobalAndTenantCFsAreDiff = new PhoenixTestBuilder.SchemaBuilder.OtherOptions();
+        OtherOptions
+                testCaseWhenGlobalAndTenantCFsAreDiff = new OtherOptions();
         testCaseWhenGlobalAndTenantCFsAreDiff.setTestName("testCaseWhenGlobalAndTenantCFsAreDiff");
         testCaseWhenGlobalAndTenantCFsAreDiff.setTableCFs(Lists.newArrayList(null, "A", "B"));
         testCaseWhenGlobalAndTenantCFsAreDiff.setGlobalViewCFs(Lists.newArrayList("A", "A", "A"));
@@ -489,7 +655,7 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
     void runValidations(long viewTTL,
             org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object> table,
-            PhoenixTestBuilder.DataReader dataReader, PhoenixTestBuilder.SchemaBuilder schemaBuilder)
+            DataReader dataReader, SchemaBuilder schemaBuilder)
             throws Exception {
 
         //Insert for the first time and validate them.
@@ -508,8 +674,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
-        PhoenixTestBuilder.SchemaBuilder.TableOptions
-                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
         String tableProps = "COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
         tableOptions.setTableProps(tableProps);
         tableOptions.setSaltBuckets(1);
@@ -517,9 +683,9 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
             resetEnvironmentEdgeManager();
             tableOptions.setMultiTenant(isMultiTenant);
-            PhoenixTestBuilder.SchemaBuilder.DataOptions dataOptions =  isMultiTenant ?
-                    PhoenixTestBuilder.SchemaBuilder.DataOptions.withDefaults() :
-                    PhoenixTestBuilder.SchemaBuilder.DataOptions.withPrefix("SALTED");
+            DataOptions dataOptions =  isMultiTenant ?
+                    DataOptions.withDefaults() :
+                    DataOptions.withPrefix("SALTED");
 
             // OID, KP for non multi-tenanted views
             int viewCounter = 1;
@@ -530,12 +696,12 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
             String keyPrefix = "SLT";
 
             // Define the test schema.
-            final PhoenixTestBuilder.SchemaBuilder
-                    schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+            final SchemaBuilder
+                    schemaBuilder = new SchemaBuilder(getUrl());
 
             if (isMultiTenant) {
-                PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
-                        tenantViewOptions = PhoenixTestBuilder.SchemaBuilder.TenantViewOptions.withDefaults();
+                TenantViewOptions
+                        tenantViewOptions = TenantViewOptions.withDefaults();
                 tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
                 schemaBuilder
                         .withTableOptions(tableOptions)
@@ -545,8 +711,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                         .buildWithNewTenant();
             } else {
 
-                PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions
-                        globalViewOptions = new PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions();
+                GlobalViewOptions
+                        globalViewOptions = new GlobalViewOptions();
                 globalViewOptions.setSchemaName(PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME);
                 globalViewOptions.setGlobalViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
                 globalViewOptions.setGlobalViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
@@ -554,8 +720,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                 globalViewOptions.setGlobalViewPKColumnTypes(Lists.newArrayList(TENANT_VIEW_PK_TYPES));
                 globalViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
 
-                PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions
-                        globalViewIndexOptions = new PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions();
+                GlobalViewIndexOptions
+                        globalViewIndexOptions = new GlobalViewIndexOptions();
                 globalViewIndexOptions.setGlobalViewIndexColumns(
                         Lists.newArrayList(TENANT_VIEW_INDEX_COLUMNS));
                 globalViewIndexOptions.setGlobalViewIncludeColumns(
@@ -564,8 +730,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                 globalViewOptions.setGlobalViewCondition(String.format(
                         "SELECT * FROM %s.%s WHERE OID = '%s' AND KP = '%s'",
                         dataOptions.getSchemaName(), dataOptions.getTableName(), orgId, keyPrefix));
-                PhoenixTestBuilder.SchemaBuilder.ConnectOptions
-                        connectOptions = new PhoenixTestBuilder.SchemaBuilder.ConnectOptions();
+                ConnectOptions
+                        connectOptions = new ConnectOptions();
                 connectOptions.setUseGlobalConnectionOnly(true);
 
                 schemaBuilder
@@ -578,7 +744,7 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
             }
 
             // Define the test data.
-            PhoenixTestBuilder.DataSupplier dataSupplier = new PhoenixTestBuilder.DataSupplier() {
+            DataSupplier dataSupplier = new DataSupplier() {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
@@ -601,8 +767,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
             long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
             // Create a test data reader/writer for the above schema.
-            PhoenixTestBuilder.DataWriter dataWriter = new PhoenixTestBuilder.BasicDataWriter();
-            PhoenixTestBuilder.DataReader dataReader = new PhoenixTestBuilder.BasicDataReader();
+            DataWriter dataWriter = new BasicDataWriter();
+            DataReader dataReader = new BasicDataReader();
 
             List<String> columns = isMultiTenant ?
                     Lists.newArrayList("ZID", "COL1", "COL2", "COL3",
@@ -673,24 +839,24 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
-        PhoenixTestBuilder.SchemaBuilder.TableOptions
-                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
         String tableProps = "MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
         tableOptions.setTableProps(tableProps);
 
-        PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
-                tenantViewOptions = PhoenixTestBuilder.SchemaBuilder.TenantViewOptions.withDefaults();
+        TenantViewOptions
+                tenantViewOptions = TenantViewOptions.withDefaults();
         tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
 
         // Define the test schema.
-        final PhoenixTestBuilder.SchemaBuilder schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
         schemaBuilder
                 .withTableOptions(tableOptions)
                 .withTenantViewOptions(tenantViewOptions)
                 .buildWithNewTenant();
 
         // Define the test data.
-        PhoenixTestBuilder.DataSupplier dataSupplier = new PhoenixTestBuilder.DataSupplier() {
+        DataSupplier dataSupplier = new DataSupplier() {
 
             @Override public List<Object> getValues(int rowIndex) {
                 Random rnd = new Random();
@@ -707,8 +873,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
         long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         // Create a test data reader/writer for the above schema.
-        PhoenixTestBuilder.DataWriter dataWriter = new PhoenixTestBuilder.BasicDataWriter();
-        PhoenixTestBuilder.DataReader dataReader = new PhoenixTestBuilder.BasicDataReader();
+        DataWriter dataWriter = new BasicDataWriter();
+        DataReader dataReader = new BasicDataReader();
 
         List<String> columns = Lists.newArrayList("ZID", "COL1", "COL2", "COL3",
                 "COL7", "COL8", "COL9");
@@ -752,20 +918,20 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
-        PhoenixTestBuilder.SchemaBuilder.TableOptions
-                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
         String tableProps = "MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
         tableOptions.setTableProps(tableProps);
 
-        PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions
-                globalViewOptions = PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions.withDefaults();
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
         globalViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
 
-        PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions
-                globalViewIndexOptions = PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions.withDefaults();
+        GlobalViewIndexOptions
+                globalViewIndexOptions = GlobalViewIndexOptions.withDefaults();
 
-        PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
-                tenantViewOptions = new PhoenixTestBuilder.SchemaBuilder.TenantViewOptions();
+        TenantViewOptions
+                tenantViewOptions = new TenantViewOptions();
         tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
         tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
 
@@ -774,12 +940,12 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
         // Local vs Global indexes, various column family options.
         for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
             for (boolean isIndex2Local : Lists.newArrayList(true, false)) {
-                for (PhoenixTestBuilder.SchemaBuilder.OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
+                for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
                     resetEnvironmentEdgeManager();
                     // Define the test schema.
-                    final PhoenixTestBuilder.SchemaBuilder
-                            schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+                    final SchemaBuilder
+                            schemaBuilder = new SchemaBuilder(getUrl());
 
                     schemaBuilder
                             .withTableOptions(tableOptions)
@@ -822,8 +988,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                         String tenantId = schemaBuilder.getDataOptions().getTenantId();
 
                         // Define the test data.
-                        PhoenixTestBuilder.DataSupplier
-                                dataSupplier = new PhoenixTestBuilder.DataSupplier() {
+                        DataSupplier
+                                dataSupplier = new DataSupplier() {
 
                             @Override public List<Object> getValues(int rowIndex) {
                                 Random rnd = new Random();
@@ -842,8 +1008,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                         };
 
                         // Create a test data reader/writer for the above schema.
-                        PhoenixTestBuilder.DataWriter
-                                dataWriter = new PhoenixTestBuilder.BasicDataWriter();
+                        DataWriter
+                                dataWriter = new BasicDataWriter();
                         List<String> columns = Lists.newArrayList(
                                 "ID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
                         List<String> rowKeyColumns = Lists.newArrayList("ID");
@@ -860,8 +1026,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                             upsertData(dataWriter, DEFAULT_NUM_ROWS);
 
                             // Case : count(1) sql
-                            PhoenixTestBuilder.DataReader
-                                    dataReader = new PhoenixTestBuilder.BasicDataReader();
+                            DataReader
+                                    dataReader = new BasicDataReader();
                             dataReader.setValidationColumns(Arrays.asList("num_rows"));
                             dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
                             dataReader.setDML(String.format(
@@ -908,34 +1074,34 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
-        PhoenixTestBuilder.SchemaBuilder.TableOptions
-                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
         String tableProps = "MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
         tableOptions.setTableProps(tableProps);
 
-        PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions
-                globalViewOptions = PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions.withDefaults();
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
 
-        PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
-                tenantViewOptions = new PhoenixTestBuilder.SchemaBuilder.TenantViewOptions();
+        TenantViewOptions
+                tenantViewOptions = new TenantViewOptions();
         tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
         tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
         tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
 
-        PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions
-                tenantViewIndexOptions = PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions.withDefaults();
+        TenantViewIndexOptions
+                tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
 
         // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
         for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
             for (boolean isIndex2Local : Lists.newArrayList(true, false)) {
-                for (PhoenixTestBuilder.SchemaBuilder.OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
+                for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
                     resetEnvironmentEdgeManager();
                     // Define the test schema.
-                    final PhoenixTestBuilder.SchemaBuilder
-                            schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+                    final SchemaBuilder
+                            schemaBuilder = new SchemaBuilder(getUrl());
                     schemaBuilder.withTableOptions(tableOptions)
                             .withGlobalViewOptions(globalViewOptions)
                             .withTenantViewOptions(tenantViewOptions)
@@ -989,8 +1155,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                         }
 
                         // Define the test data.
-                        PhoenixTestBuilder.DataSupplier
-                                dataSupplier = new PhoenixTestBuilder.DataSupplier() {
+                        DataSupplier
+                                dataSupplier = new DataSupplier() {
 
                             @Override public List<Object> getValues(int rowIndex) {
                                 Random rnd = new Random();
@@ -1014,8 +1180,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                         };
 
                         // Create a test data reader/writer for the above schema.
-                        PhoenixTestBuilder.DataWriter
-                                dataWriter = new PhoenixTestBuilder.BasicDataWriter();
+                        DataWriter
+                                dataWriter = new BasicDataWriter();
                         List<String> columns = Lists
                                 .newArrayList("ID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
                         List<String> rowKeyColumns = Lists.newArrayList("ID");
@@ -1030,8 +1196,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                             upsertData(dataWriter, DEFAULT_NUM_ROWS);
 
                             // Case : count(1) sql
-                            PhoenixTestBuilder.DataReader
-                                    dataReader = new PhoenixTestBuilder.BasicDataReader();
+                            DataReader
+                                    dataReader = new BasicDataReader();
                             dataReader.setValidationColumns(Arrays.asList("num_rows"));
                             dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
                             dataReader.setDML(String
@@ -1080,8 +1246,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
-        PhoenixTestBuilder.SchemaBuilder.TableOptions
-                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
         String tableProps = "COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0',TTL=10";
         tableOptions.setTableProps(tableProps);
         tableOptions.setSaltBuckets(1);
@@ -1091,9 +1257,9 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
             resetEnvironmentEdgeManager();
             tableOptions.setMultiTenant(isMultiTenant);
-            PhoenixTestBuilder.SchemaBuilder.DataOptions dataOptions =  isMultiTenant ?
-                    PhoenixTestBuilder.SchemaBuilder.DataOptions.withDefaults() :
-                    PhoenixTestBuilder.SchemaBuilder.DataOptions.withPrefix("SALTED");
+            DataOptions dataOptions =  isMultiTenant ?
+                    DataOptions.withDefaults() :
+                    DataOptions.withPrefix("SALTED");
 
             // OID, KP for non multi-tenanted views
             int viewCounter = 1;
@@ -1104,12 +1270,12 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
             String keyPrefix = "SLT";
 
             // Define the test schema.
-            final PhoenixTestBuilder.SchemaBuilder
-                    schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+            final SchemaBuilder
+                    schemaBuilder = new SchemaBuilder(getUrl());
 
             if (isMultiTenant) {
-                PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
-                        tenantViewOptions = PhoenixTestBuilder.SchemaBuilder.TenantViewOptions.withDefaults();
+                TenantViewOptions
+                        tenantViewOptions = TenantViewOptions.withDefaults();
                 tenantViewOptions.getTenantViewPKColumns().clear();
                 tenantViewOptions.getTenantViewPKColumnTypes().clear();
                 schemaBuilder
@@ -1121,16 +1287,16 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                         .buildWithNewTenant();
             } else {
 
-                PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions
-                        globalViewOptions = new PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions();
+                GlobalViewOptions
+                        globalViewOptions = new GlobalViewOptions();
                 globalViewOptions.setSchemaName(PhoenixTestBuilder.DDLDefaults.DEFAULT_SCHEMA_NAME);
                 globalViewOptions.setGlobalViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
                 globalViewOptions.setGlobalViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
                 //globalViewOptions.setGlobalViewPKColumns(Lists.newArrayList(TENANT_VIEW_PK_COLUMNS));
                 //globalViewOptions.setGlobalViewPKColumnTypes(Lists.newArrayList(TENANT_VIEW_PK_TYPES));
 
-                PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions
-                        globalViewIndexOptions = new PhoenixTestBuilder.SchemaBuilder.GlobalViewIndexOptions();
+                GlobalViewIndexOptions
+                        globalViewIndexOptions = new GlobalViewIndexOptions();
                 globalViewIndexOptions.setGlobalViewIndexColumns(
                         Lists.newArrayList(TENANT_VIEW_INDEX_COLUMNS));
                 globalViewIndexOptions.setGlobalViewIncludeColumns(
@@ -1139,8 +1305,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
                 globalViewOptions.setGlobalViewCondition(String.format(
                         "SELECT * FROM %s.%s WHERE OID = '%s' AND KP = '%s'",
                         dataOptions.getSchemaName(), dataOptions.getTableName(), orgId, keyPrefix));
-                PhoenixTestBuilder.SchemaBuilder.ConnectOptions
-                        connectOptions = new PhoenixTestBuilder.SchemaBuilder.ConnectOptions();
+                ConnectOptions
+                        connectOptions = new ConnectOptions();
                 connectOptions.setUseGlobalConnectionOnly(true);
 
                 schemaBuilder
@@ -1154,7 +1320,7 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
             }
 
             // Define the test data.
-            PhoenixTestBuilder.DataSupplier dataSupplier = new PhoenixTestBuilder.DataSupplier() {
+            DataSupplier dataSupplier = new DataSupplier() {
 
                 @Override public List<Object> getValues(int rowIndex) {
                     Random rnd = new Random();
@@ -1177,8 +1343,8 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
             long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
             // Create a test data reader/writer for the above schema.
-            PhoenixTestBuilder.DataWriter dataWriter = new PhoenixTestBuilder.BasicDataWriter();
-            PhoenixTestBuilder.DataReader dataReader = new PhoenixTestBuilder.BasicDataReader();
+            DataWriter dataWriter = new BasicDataWriter();
+            DataReader dataReader = new BasicDataReader();
 
             List<String> columns = isMultiTenant ?
                     Lists.newArrayList("ZID", "COL1", "COL2", "COL3",
@@ -1257,89 +1423,411 @@ public abstract class BaseViewTTLIT extends LocalHBaseIT{
 
     }
 
-    private void deleteData(
-            boolean useGlobalConnection,
-            String tenantId,
-            String viewName,
-            long scnTimestamp) throws SQLException {
+    protected void testMajorCompactWithVariousViewsAndOptions() throws Exception {
 
-        Properties props = new Properties();
-        props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
-        String connectUrl = useGlobalConnection ?
-                getUrl() :
-                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
+        // View TTL is set in seconds (for e.g 10 secs)
+        int viewTTL = VIEW_TTL_10_SECS;
 
-        try (Connection deleteConnection = DriverManager.getConnection(connectUrl, props);
-                final Statement statement = deleteConnection.createStatement()) {
-            deleteConnection.setAutoCommit(true);
+        // Define the test schema
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
+        String tableProps = "MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
+        tableOptions.setTableProps(tableProps);
 
-            final String deleteIfExpiredStatement = String.format("select /*+NO_INDEX*/ count(*) from  %s", viewName);
-            Preconditions.checkNotNull(deleteIfExpiredStatement);
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
+        globalViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
 
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            // Optimize the query plan so that we potentially use secondary indexes
-            final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
-            final Scan scan = queryPlan.getContext().getScan();
+        GlobalViewIndexOptions
+                globalViewIndexOptions = GlobalViewIndexOptions.withDefaults();
 
-            PTable table = PhoenixRuntime.getTable(deleteConnection, tenantId, viewName);
-            byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
-            byte[] emptyColumnName =
-                    table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                            QueryConstants.EMPTY_COLUMN_BYTES :
-                            table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+        TenantViewOptions
+                tenantViewOptions = new TenantViewOptions();
+        tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
+        tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
 
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserver.TTL, Bytes.toBytes(Long.valueOf(table.getTTL())));
+        TenantViewIndexOptions
+                tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
+        // TODO handle Local Index cases
+        // Test cases :
+        // Local vs Global indexes, Tenant vs Global views, various column family options.
+        for (boolean isGlobalViewLocal : Lists.newArrayList(/* true, */false)) {
+            for (boolean isTenantViewLocal : Lists.newArrayList(/* true, */ false)) {
+                for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
-            PhoenixResultSet
-                    rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            while (rs.next());
+                    /**
+                     * TODO:
+                     * Need to revisit indexing code path,
+                     * as there are some left over rows after delete in these cases.
+                     */
+                    //if (!isGlobalViewLocal && !isTenantViewLocal) continue;
+
+                    resetEnvironmentEdgeManager();
+                    globalViewIndexOptions.setLocal(isGlobalViewLocal);
+                    tenantViewIndexOptions.setLocal(isTenantViewLocal);
+
+                    final SchemaBuilder
+                            schemaBuilder = new SchemaBuilder(getUrl());
+                    schemaBuilder.withTableOptions(tableOptions)
+                            .withGlobalViewOptions(globalViewOptions)
+                            .withGlobalViewIndexOptions(globalViewIndexOptions)
+                            .withTenantViewOptions(tenantViewOptions)
+                            .withTenantViewIndexOptions(tenantViewIndexOptions)
+                            .withOtherOptions(options)
+                            .buildWithNewTenant();
+
+                    // Define the test data.
+                    DataSupplier
+                            dataSupplier = new DataSupplier() {
+
+                        @Override public List<Object> getValues(int rowIndex) {
+                            Random rnd = new Random();
+                            String id = String.format(ID_FMT, rowIndex);
+                            String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                            String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                            return Lists.newArrayList(
+                                    new Object[] { id, col1, col2, col3, col4, col5, col6,
+                                            col7, col8, col9 });
+                        }
+                    };
+
+                    long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+                    // Create a test data reader/writer for the above schema.
+                    DataWriter
+                            dataWriter = new BasicDataWriter();
+                    DataReader
+                            dataReader = new BasicDataReader();
+
+                    List<String> columns =
+                            Lists.newArrayList("ID",
+                                    "COL1", "COL2", "COL3", "COL4", "COL5",
+                                    "COL6", "COL7", "COL8", "COL9");
+                    List<String> rowKeyColumns = Lists.newArrayList("ID");
+                    String tenantConnectUrl =
+                            getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
+                                    schemaBuilder.getDataOptions().getTenantId();
+                    try (Connection writeConnection = DriverManager
+                            .getConnection(tenantConnectUrl)) {
+                        writeConnection.setAutoCommit(true);
+                        dataWriter.setConnection(writeConnection);
+                        dataWriter.setDataSupplier(dataSupplier);
+                        dataWriter.setUpsertColumns(columns);
+                        dataWriter.setRowKeyColumns(rowKeyColumns);
+                        dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                        dataReader.setValidationColumns(columns);
+                        dataReader.setRowKeyColumns(rowKeyColumns);
+                        dataReader.setDML(String
+                                .format("SELECT %s from %s", Joiner.on(",").join(columns),
+                                        schemaBuilder.getEntityTenantViewName()));
+                        dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                        // Validate data before and after ttl expiration.
+                        upsertDataAndRunValidations(viewTTL, DEFAULT_NUM_ROWS, dataWriter,
+                                dataReader, schemaBuilder);
+                    }
+
+                    PTable table = schemaBuilder.getBaseTable();
+                    // validate multi-tenanted base table
+                    validateAfterMajorCompaction(
+                            table.getSchemaName().toString(),
+                            table.getTableName().toString(),
+                            false,
+                            earliestTimestamp,
+                            VIEW_TTL_10_SECS,
+                            false,
+                            0
+                    );
+
+                    // validate multi-tenanted index table
+                    validateAfterMajorCompaction(
+                            table.getSchemaName().toString(),
+                            table.getTableName().toString(),
+                            true,
+                            earliestTimestamp,
+                            VIEW_TTL_10_SECS,
+                            false,
+                            0
+                    );
+
+                }
+            }
         }
     }
 
+    protected void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
 
-    private void deleteIndexData(boolean useGlobalConnection,
-            String tenantId,
-            String indexName,
-            long scnTimestamp) throws SQLException {
+        // View TTL is set in seconds (for e.g 10 secs)
+        int viewTTL = VIEW_TTL_10_SECS;
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
+        tableOptions.getTableColumns().clear();
+        tableOptions.getTableColumnTypes().clear();
 
-        Properties props = new Properties();
-        props.setProperty("CurrentSCN", Long.toString(scnTimestamp));
-        String connectUrl = useGlobalConnection ?
-                getUrl() :
-                getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId;
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
 
-        try (Connection deleteConnection = DriverManager.getConnection(connectUrl, props);
-                final Statement statement = deleteConnection.createStatement()) {
-            deleteConnection.setAutoCommit(true);
+        TenantViewOptions
+                tenantViewOptions = new TenantViewOptions();
+        tenantViewOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
+        tenantViewOptions
+                .setTenantViewColumnTypes(asList("CHAR(15)", "VARCHAR", "VARCHAR", "VARCHAR"));
 
-            final String deleteIfExpiredStatement = String.format("select count(*) from %s", indexName);
-            Preconditions.checkNotNull(deleteIfExpiredStatement);
+        OtherOptions
+                testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
+        testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
+        testCaseWhenAllCFMatchAndAllDefault
+                .setTableCFs(Lists.newArrayList((String) null, null, null));
+        testCaseWhenAllCFMatchAndAllDefault
+                .setGlobalViewCFs(Lists.newArrayList((String) null, null, null));
+        testCaseWhenAllCFMatchAndAllDefault
+                .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
 
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            // Optimize the query plan so that we potentially use secondary indexes
-            final QueryPlan queryPlan = pstmt.optimizeQuery(deleteIfExpiredStatement);
-            final Scan scan = queryPlan.getContext().getScan();
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
+                .withTenantViewOptions(tenantViewOptions)
+                .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault);
 
-            PTable table = PhoenixRuntime.getTable(deleteConnection, tenantId, indexName);
+        long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        Set<Integer> hasTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3, 7 }));
+        Set<Integer> tenantSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4, 5, 6, 7 }));
+        int nonCompactedTenantSet = tenantSet.size() - hasTTLSet.size();
+        for (int tenant : tenantSet) {
+            // Set TTL only when tenant = 2
+            if (hasTTLSet.contains(tenant)) {
+                tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
+            }
+            // build schema for tenant
+            schemaBuilder.buildWithNewTenant();
+            // reset the TTL attribute for the next view
+            tenantViewOptions.setTableProps("");
 
-            byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
-            byte[] emptyColumnName =
-                    table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                            QueryConstants.EMPTY_COLUMN_BYTES :
-                            table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+            // Define the test data.
+            //final String groupById = String.format(ID_FMT, 0);
+            DataSupplier dataSupplier = new DataSupplier() {
 
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
-            scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserver.DELETE_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
-            scan.setAttribute(BaseScannerRegionObserver.TTL, Bytes.toBytes(Long.valueOf(table.getTTL())));
-            PhoenixResultSet
-                    rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            while (rs.next());
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String id = String.format(ID_FMT, rowIndex);
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    return Lists.newArrayList(
+                            new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
+                }
+            };
+
+            // Create a test data reader/writer for the above schema.
+            DataWriter dataWriter = new BasicDataWriter();
+            List<String> columns =
+                    Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
+            List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
+            String tenantConnectUrl =
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+                upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+                // Case : count(1) sql
+                DataReader dataReader = new BasicDataReader();
+                dataReader.setValidationColumns(Arrays.asList("num_rows"));
+                dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
+                dataReader.setDML(String
+                        .format("SELECT count(1) as num_rows from %s HAVING count(1) > 0",
+                                schemaBuilder.getEntityTenantViewName()));
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+
+                // Validate data before and after ttl expiration.
+                if (hasTTLSet.contains(tenant)) {
+                    validateExpiredRowsAreNotReturnedUsingCounts(viewTTL, dataReader, schemaBuilder);
+                } else {
+                    validateRowsAreNotMaskedUsingCounts(scnTimestamp, dataReader, schemaBuilder);
+                }
+
+                // Case : group by sql
+                dataReader.setValidationColumns(Arrays.asList("num_rows"));
+                dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
+                dataReader.setDML(String
+                        .format("SELECT count(1) as num_rows from %s GROUP BY ID HAVING count(1) > 0",
+                                schemaBuilder.getEntityTenantViewName()));
+
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // Validate data before and after ttl expiration.
+                if (hasTTLSet.contains(tenant)) {
+                    validateExpiredRowsAreNotReturnedUsingCounts(viewTTL, dataReader, schemaBuilder);
+                } else {
+                    validateRowsAreNotMaskedUsingCounts(scnTimestamp, dataReader, schemaBuilder);
+                }
+            }
         }
+
+
+        PTable table = schemaBuilder.getBaseTable();
+        // validate multi-tenanted base table
+        validateAfterMajorCompaction(
+                table.getSchemaName().toString(),
+                table.getTableName().toString(),
+                false,
+                earliestTimestamp,
+                VIEW_TTL_10_SECS,
+                false,
+                nonCompactedTenantSet * DEFAULT_NUM_ROWS
+        );
     }
 
+    protected void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
+        // View TTL is set in seconds (for e.g 10 secs)
+        int viewTTL = VIEW_TTL_10_SECS;
+        // Define the test schema.
+        // 1. Table with columns => (ORG_ID, KP, COL1, COL2, COL3), PK => (ORG_ID, KP)
+        // 2. GlobalView with columns => (ID, COL4, COL5, COL6), PK => (ID)
+        // 3. Tenant with columns => (ZID, COL7, COL8, COL9), PK => (ZID)
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+
+        TableOptions
+                tableOptions = TableOptions.withDefaults();
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
+        tableOptions.setTablePKColumns(Arrays.asList("OID", "OOID"));
+        tableOptions.setTablePKColumnTypes(Arrays.asList("CHAR(15)", "CHAR(15)"));
+
+        GlobalViewOptions
+                globalViewOptions = GlobalViewOptions.withDefaults();
+        DataOptions dataOptions = DataOptions.withDefaults();
+
+        TenantViewOptions
+                tenantViewWithOverrideOptions = TenantViewOptions.withDefaults();
+
+        schemaBuilder.withTableOptions(tableOptions)
+                .withTenantViewOptions(tenantViewWithOverrideOptions);
+
+        long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+
+        for (String keyPrefix : Arrays.asList("00D0t0001000001", "00D0t0002000001")) {
+            if (keyPrefix.compareTo("00D0t0001000001") == 0) {
+                dataOptions.setGlobalViewName(dataOptions.getGlobalViewName() + "_1");
+                dataOptions.setTenantViewName("Z01");
+                dataOptions.setKeyPrefix("00D0t0002000001");
+                // View TTL is set to 300s => 300000 ms
+                globalViewOptions.setTableProps("TTL=10");
+            } else {
+                dataOptions.setGlobalViewName(dataOptions.getGlobalViewName() + "_2");
+                dataOptions.setTenantViewName("Z02");
+                dataOptions.setKeyPrefix("00D0t0001000001");
+                globalViewOptions.setTableProps("TTL=NONE");
+            }
+
+            schemaBuilder
+                    .withDataOptions(dataOptions)
+                    .withGlobalViewOptions(globalViewOptions)
+                    .buildWithNewTenant();
+
+            // Define the test data.
+            DataSupplier
+                    dataSupplier = new DataSupplier() {
+
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String id = String.format(ID_FMT, rowIndex);
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col1 = String.format(COL1_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col2 = String.format(COL2_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col3 = String.format(COL3_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    return Lists.newArrayList(
+                            new Object[] { id, col1, col2, col3, col4, col5, col6,
+                                    zid, col7, col8, col9 });
+                }
+            };
+
+            // Create a test data reader/writer for the above schema.
+            DataWriter
+                    dataWriter = new BasicDataWriter();
+            DataReader
+                    dataReader = new BasicDataReader();
+
+            List<String> columns =
+                    Lists.newArrayList("ID",
+                            "COL1", "COL2", "COL3", "COL4", "COL5",
+                            "COL6", "ZID", "COL7", "COL8", "COL9");
+            List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
+            String tenantConnectUrl =
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' +
+                            schemaBuilder.getDataOptions().getTenantId();
+            try (Connection writeConnection = DriverManager
+                    .getConnection(tenantConnectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+                org.apache.phoenix.thirdparty.com.google.common.collect.Table<String, String, Object>
+                        upsertedData =
+                upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+                dataReader.setValidationColumns(columns);
+                dataReader.setRowKeyColumns(rowKeyColumns);
+                dataReader.setDML(String
+                        .format("SELECT %s from %s", Joiner.on(",").join(columns),
+                                schemaBuilder.getEntityTenantViewName()));
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+                long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+
+                if (keyPrefix.compareTo("00D0t0001000001") == 0) {
+                    // Validate data before and after ttl expiration.
+                    validateExpiredRowsAreNotReturnedUsingData(viewTTL, upsertedData,
+                            dataReader, schemaBuilder);
+                } else {
+                    validateRowsAreNotMaskedUsingCounts(
+                            scnTimestamp,
+                            dataReader,
+                            schemaBuilder);
+                }
+            }
+
+
+        }
+
+        PTable table = schemaBuilder.getBaseTable();
+        // validate multi-tenanted base table
+        validateAfterMajorCompaction(
+                table.getSchemaName().toString(),
+                table.getTableName().toString(),
+                false,
+                earliestTimestamp,
+                viewTTL,
+                false,
+                DEFAULT_NUM_ROWS
+        );
+
+
+    }
 
 }
