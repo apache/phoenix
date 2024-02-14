@@ -131,7 +131,7 @@ public class ValidateLastDDLTimestampUtil {
      * @return ValidateLastDDLTimestampRequest for the table in tableRef
      */
     private static RegionServerEndpointProtos.ValidateLastDDLTimestampRequest
-    getValidateDDLTimestampRequest(List<TableRef> tableRefs) {
+        getValidateDDLTimestampRequest(List<TableRef> tableRefs) {
 
         RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.Builder requestBuilder
                 = RegionServerEndpointProtos.ValidateLastDDLTimestampRequest.newBuilder();
@@ -172,7 +172,7 @@ public class ValidateLastDDLTimestampUtil {
     /**
      * For the given PTable, set the attributes on the LastDDLTimestampRequest.
      */
-    private static void setLastDDLTimestampRequestParameters (
+    private static void setLastDDLTimestampRequestParameters(
             RegionServerEndpointProtos.LastDDLTimestampRequest.Builder builder,
             PTableKey key, long lastDDLTimestamp) {
         String tableName = key.getTableName();
