@@ -1,4 +1,4 @@
-package org.apache.phoenix.prefix.table;
+package org.apache.phoenix.util.matcher;
 
 import java.util.*;
 import java.util.concurrent.locks.StampedLock;

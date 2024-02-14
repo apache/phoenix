@@ -1,4 +1,4 @@
-package org.apache.phoenix.prefix.table;
+package org.apache.phoenix.util.matcher;
 
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -12,23 +12,23 @@ public class TableTTLInfo implements Comparable {
 	private final byte[] physicalTableName;
 	private final byte[] tenantId;
 	private final byte[] entityName;
-	private final byte[] prefix;
+	private final byte[] matchPattern;
 	private final int ttl;
 
-	public TableTTLInfo(String physicalTableName, String tenantId, String entityName, String prefix, int ttl) {
+	public TableTTLInfo(String physicalTableName, String tenantId, String entityName, String matchPattern, int ttl) {
 		super();
 		this.physicalTableName = physicalTableName.getBytes(StandardCharsets.UTF_8);
 		this.tenantId = tenantId.getBytes(StandardCharsets.UTF_8);
 		this.entityName = entityName.getBytes(StandardCharsets.UTF_8);
-		this.prefix = prefix.getBytes(StandardCharsets.UTF_8);
+		this.matchPattern = matchPattern.getBytes(StandardCharsets.UTF_8);
 		this.ttl = ttl;
 	}
 
-	public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] entityName, byte[] prefix, int ttl) {
+	public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] entityName, byte[] matchPattern, int ttl) {
 		super();
 		this.physicalTableName = physicalTableName;
 		this.tenantId = tenantId;
-		this.prefix = prefix;
+		this.matchPattern = matchPattern;
 		this.entityName = entityName;
 		this.ttl = ttl;
 	}
@@ -44,8 +44,8 @@ public class TableTTLInfo implements Comparable {
 		return entityName;
 	}
 
-	public byte[] getPrefix() {
-		return prefix;
+	public byte[] getMatchPattern() {
+		return matchPattern;
 	}
 	public byte[] getPhysicalTableName() {
 		return physicalTableName;
@@ -89,7 +89,7 @@ public class TableTTLInfo implements Comparable {
 				"physicalTableName=" + Bytes.toString(physicalTableName) +
 				", tenantId=" + Bytes.toString(tenantId) +
 				", entityName=" + Bytes.toString(entityName) +
-				", prefix=" + Bytes.toStringBinary(prefix) +
+				", matchPattern=" + Bytes.toStringBinary(matchPattern) +
 				", ttl=" + ttl +
 				" }";
 	}
