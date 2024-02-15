@@ -352,7 +352,8 @@ public class MetaDataClient {
                     PHYSICAL_TABLE_NAME + "," +
                     SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME + "," +
-                    TTL + "," + ROW_KEY_MATCHER + "," +
+                    TTL + "," +
+                    ROW_KEY_MATCHER + "," +
                     INDEX_WHERE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -1730,7 +1731,7 @@ public class MetaDataClient {
                     PTableType.INDEX,
                     statement.ifNotExists(),
                     null,
-                    null,
+                    statement.getWhere(),
                     statement.getBindCount(),
                     null
             );
@@ -3242,7 +3243,8 @@ public class MetaDataClient {
                 tableUpsert.setInt(34, ttl);
             }
 
-            if (rowKeyMatcher == null) {
+            if ((rowKeyMatcher == null) ||
+                    Bytes.compareTo(rowKeyMatcher, HConstants.EMPTY_BYTE_ARRAY) == 0) {
                 tableUpsert.setNull(35, Types.VARBINARY);
             } else {
                 tableUpsert.setBytes(35, rowKeyMatcher);

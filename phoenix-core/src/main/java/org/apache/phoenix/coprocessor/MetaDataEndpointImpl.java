@@ -1433,9 +1433,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Cell rowKeyMatcherKv = tableKeyValues[ROW_KEY_MATCHER_INDEX];
         byte[] rowKeyMatcher = rowKeyMatcherKv != null
                 ? CellUtil.cloneValue(rowKeyMatcherKv)
-                : null;
+                : HConstants.EMPTY_BYTE_ARRAY;
         builder.setRowKeyMatcher(rowKeyMatcher != null ? rowKeyMatcher
-                : oldTable != null ? oldTable.getRowKeyMatcher() : null);
+                : oldTable != null ? oldTable.getRowKeyMatcher() : HConstants.EMPTY_BYTE_ARRAY);
 
 
         Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.end2end.prefix;
+package org.apache.phoenix.end2end;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -40,7 +40,6 @@ import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereOptimizer;
 import org.apache.phoenix.coprocessor.TableInfo;
-import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;

@@ -524,7 +524,7 @@ public class WhereOptimizer {
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
-            LOGGER.trace(String.format("RowKey Matcher info Hex-value = %s, StringBinary value = %s",
+            LOGGER.trace(String.format("RowKey Matcher info Hex-value = %s,StringBinary value = %s",
                     rowKeyMatcherHex, rowKeyMatcherStr));
 
         }
@@ -594,7 +594,7 @@ public class WhereOptimizer {
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
-            LOGGER.trace(String.format("RowKey Matcher info Hex-value = %s, StringBinary value = %s",
+            LOGGER.trace(String.format("RowKey Matcher info Hex-value = %s,StringBinary value = %s",
                     rowKeyMatcherHex, rowKeyMatcherStr));
 
         }
