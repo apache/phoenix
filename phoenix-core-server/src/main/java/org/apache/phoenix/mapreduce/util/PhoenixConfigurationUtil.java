@@ -410,7 +410,7 @@ public final class PhoenixConfigurationUtil {
     /**
      * Sets which HBase cluster a Phoenix MapReduce job should write to
      * @param configuration
-     * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will write to
+     * @param url Phoenix JDBC URL string for HBase cluster the MapReduce job will write to
      */
     public static void setOutputClusterUrl(final Configuration configuration,
             final String url) {
