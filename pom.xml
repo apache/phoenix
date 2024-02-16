@@ -1763,18 +1763,19 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.4.1 profile -->
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.4.1-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.5.4 profile -->
+      <!-- This WILL work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.5.4-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.4</hbase.profile>
-        <hbase.compat.version>2.4.1</hbase.compat.version>
-        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
+        <hbase.profile>2.5</hbase.profile>
+        <hbase.compat.version>2.5.4</hbase.compat.version>
+        <hadoop.version>3.2.3</hadoop.version>
+        <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
