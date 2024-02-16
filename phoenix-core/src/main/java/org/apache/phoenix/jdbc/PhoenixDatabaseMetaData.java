@@ -417,8 +417,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String STREAMING_TOPIC_NAME = "STREAMING_TOPIC_NAME";
     public static final byte[] STREAMING_TOPIC_NAME_BYTES = Bytes.toBytes(STREAMING_TOPIC_NAME);
 
-    public static final String ROW_KEY_PREFIX = "ROW_KEY_PREFIX";
-    public static final byte[] ROW_KEY_PREFIX_BYTES = Bytes.toBytes(ROW_KEY_PREFIX);
+    public static final String ROW_KEY_MATCHER = "ROW_KEY_MATCHER";
+    public static final byte[] ROW_KEY_MATCHER_BYTES = Bytes.toBytes(ROW_KEY_MATCHER);
 
     public static final String INDEX_WHERE = "INDEX_WHERE";
     public static final byte[] INDEX_WHERE_BYTES = Bytes.toBytes(INDEX_WHERE);

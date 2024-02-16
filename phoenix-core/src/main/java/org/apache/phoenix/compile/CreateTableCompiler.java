@@ -98,7 +98,7 @@ public class CreateTableCompiler {
         String viewStatementToBe = null;
         byte[][] viewColumnConstantsToBe = null;
         BitSet isViewColumnReferencedToBe = null;
-        byte[] rowKeyPrefix = ByteUtil.EMPTY_BYTE_ARRAY;
+        byte[] rowKeyMatcher = ByteUtil.EMPTY_BYTE_ARRAY;
 
         // Check whether column families having local index column family suffix or not if present
         // don't allow creating table.
@@ -186,7 +186,7 @@ public class CreateTableCompiler {
                 validateCreateViewCompilation(connection, parentToBe,
                     columnDefs, pkConstraint);
             } else if (where != null && viewTypeToBe == ViewType.UPDATABLE) {
-                rowKeyPrefix = WhereOptimizer.getRowKeyPrefix(context, create.getTableName(),
+                rowKeyMatcher = WhereOptimizer.getRowKeyMatcher(context, create.getTableName(),
                         parentToBe, where);
             }
             verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
@@ -218,7 +218,7 @@ public class CreateTableCompiler {
         final PTable parent = parentToBe;
 
         return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
-                viewStatement, viewType, rowKeyPrefix,
+                viewStatement, viewType, rowKeyMatcher,
                 viewColumnConstants, isViewColumnReferenced, connection);
     }
 
@@ -474,12 +474,12 @@ public class CreateTableCompiler {
         private final byte[][] viewColumnConstants;
         private final BitSet isViewColumnReferenced;
 
-        private final byte[] rowKeyPrefix;
+        private final byte[] rowKeyMatcher;
         private final PhoenixConnection connection;
 
         private CreateTableMutationPlan(StatementContext context, MetaDataClient client,
                 CreateTableStatement finalCreate, byte[][] splits, PTable parent,
-                String viewStatement, ViewType viewType, byte[] rowKeyPrefix,
+                String viewStatement, ViewType viewType, byte[] rowKeyMatcher,
                 byte[][] viewColumnConstants, BitSet isViewColumnReferenced,
                 PhoenixConnection connection) {
             super(context, CreateTableCompiler.this.operation);
@@ -489,7 +489,7 @@ public class CreateTableCompiler {
             this.parent = parent;
             this.viewStatement = viewStatement;
             this.viewType = viewType;
-            this.rowKeyPrefix = rowKeyPrefix;
+            this.rowKeyMatcher = rowKeyMatcher;
             this.viewColumnConstants = viewColumnConstants;
             this.isViewColumnReferenced = isViewColumnReferenced;
             this.connection = connection;
@@ -499,7 +499,7 @@ public class CreateTableCompiler {
         public MutationState execute() throws SQLException {
             try {
                 return client.createTable(finalCreate, splits, parent, viewStatement,
-                        viewType, MetaDataUtil.getViewIndexIdDataType(), rowKeyPrefix,
+                        viewType, MetaDataUtil.getViewIndexIdDataType(), rowKeyMatcher,
                         viewColumnConstants, isViewColumnReferenced);
             } finally {
                 if (client.getConnection() != connection) {

@@ -403,8 +403,8 @@ public class DelegateTable implements PTable {
     public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
 
     @Override
-    public byte[] getRowKeyPrefix() {
-        return delegate.getRowKeyPrefix();
+    public byte[] getRowKeyMatcher() {
+        return delegate.getRowKeyMatcher();
     }
 
     public String getIndexWhere() {

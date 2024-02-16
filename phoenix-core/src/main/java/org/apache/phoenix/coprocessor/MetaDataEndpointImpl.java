@@ -62,7 +62,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
@@ -374,8 +374,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
     private static final Cell TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, TTL_BYTES);
-    private static final Cell ROW_KEY_PREFIX_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
-            TABLE_FAMILY_BYTES, ROW_KEY_PREFIX_BYTES);
+    private static final Cell ROW_KEY_MATCHER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, ROW_KEY_MATCHER_BYTES);
     private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
 
@@ -416,8 +416,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             SCHEMA_VERSION_KV,
             EXTERNAL_SCHEMA_ID_KV,
             STREAMING_TOPIC_NAME_KV,
-            TTL_KV,
-            ROW_KEY_PREFIX_KV,
+            TTL_KV, ROW_KEY_MATCHER_KV,
             INDEX_WHERE_KV
     );
 
@@ -465,7 +464,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int STREAMING_TOPIC_NAME_INDEX =
         TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
     private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
-    private static final int ROW_KEY_PREFIX_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_PREFIX_KV);
+    private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
     private static final int INDEX_WHERE_INDEX =
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
     // KeyValues for Column
@@ -1431,12 +1430,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
 
-        Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
-        byte[] rowKeyPrefix = rowKeyPrefixKv != null
-                ? CellUtil.cloneValue(rowKeyPrefixKv)
-                : null;
-        builder.setRowKeyPrefix(rowKeyPrefix != null ? rowKeyPrefix
-                : oldTable != null ? oldTable.getRowKeyPrefix() : null);
+        Cell rowKeyMatcherKv = tableKeyValues[ROW_KEY_MATCHER_INDEX];
+        byte[] rowKeyMatcher = rowKeyMatcherKv != null
+                ? CellUtil.cloneValue(rowKeyMatcherKv)
+                : HConstants.EMPTY_BYTE_ARRAY;
+        builder.setRowKeyMatcher(rowKeyMatcher != null ? rowKeyMatcher
+                : oldTable != null ? oldTable.getRowKeyMatcher() : HConstants.EMPTY_BYTE_ARRAY);
 
 
         Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];
