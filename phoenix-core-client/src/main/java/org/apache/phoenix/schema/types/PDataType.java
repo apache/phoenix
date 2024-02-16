@@ -44,6 +44,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
+import org.bson.RawBsonDocument;
 
 /**
  * The data types of PColumns
@@ -1217,6 +1218,10 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                             return type;
                         }
                     } catch (SQLException e) { /* Passthrough to fail */ }
+                }
+            } else if (value instanceof RawBsonDocument) {
+                if (type == PJson.INSTANCE) {
+                    return type;
                 }
             } else {
                 if (type.getJavaClass().isInstance(value)) {

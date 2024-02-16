@@ -33,6 +33,8 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.bson.Document;
+import org.bson.RawBsonDocument;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -46,6 +48,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -597,6 +600,89 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             compareJson(rs.getString(9), basicJson, "$");
             assertEquals(rs.getString(10), "Basic");
 
+        }
+    }
+
+    @Test
+    public void testJsonWithSetGetObjectAPI() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, jsoncol json)";
+            conn.createStatement().execute(ddl);
+            // Set as String as get RawBsonDocument Object
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)");
+            stmt.setInt(1, 1);
+            stmt.setString(2, basicJson);
+            stmt.execute();
+            conn.commit();
+
+            String query ="SELECT * FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("1", rs.getString(1));
+            RawBsonDocument rawBson = (RawBsonDocument) rs.getObject(2);
+            compareJson(rawBson.toJson(), basicJson, "$");
+            assertFalse(rs.next());
+
+            // Set as RawJsonDocument and get the same.
+            /**
+             * {
+             *   "info": {
+             *     "type": 1,
+             *     "address": {
+             *       "town": "Bristol",
+             *       "county": "Avon",
+             *       "country": "England",
+             *       "exists": true
+             *     },
+             *     "tags": [
+             *       "Sport",
+             *       "Water polo"
+             *     ]
+             *   },
+             *   "type": "Basic",
+             *   "name": "AndersenFamily"
+             * }
+             */
+            Document info = new Document()
+                    .append("info", new Document()
+                            .append("type", 1)
+                            .append("address", new Document()
+                                    .append("town", "Bristol")
+                                    .append("county", "Avon")
+                                    .append("country", "England")
+                                    .append("exists", true))
+                            .append("tags", Arrays.asList("Sport", "Water polo")))
+                    .append("type", "Basic")
+                    .append("name", "AndersenFamily");
+            RawBsonDocument document = RawBsonDocument.parse(info.toJson());
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)");
+            stmt.setInt(1, 2);
+            stmt.setObject(2, document);
+            stmt.execute();
+            conn.commit();
+
+            query ="SELECT * FROM " + tableName + " WHERE pk = 2";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            RawBsonDocument rawBsonDocument = (RawBsonDocument) rs.getObject(2);
+            compareJson(rawBsonDocument.toJson(), info.toJson(), "$");
+            assertFalse(rs.next());
+
+            // Set as RawJson and get as String
+            stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?)");
+            stmt.setInt(1, 3);
+            stmt.setObject(2, document);
+            stmt.execute();
+            conn.commit();
+
+            query ="SELECT * FROM " + tableName + " WHERE pk = 3";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            String jsonStr = rs.getString(2);
+            compareJson(jsonStr, info.toJson(), "$");
+            assertFalse(rs.next());
         }
     }
 }
