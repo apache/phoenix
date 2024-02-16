@@ -1,8 +1,25 @@
-package org.apache.phoenix.end2end.prefix;
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.QueryServices;
@@ -15,7 +32,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class LongViewIndexEnabledBaseRowKeyPrefixIT extends BaseRowKeyPrefixTestIT {
+public class LongViewIndexEnabledBaseRowKeyMatcherIT extends BaseRowKeyMatcherTestIT {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -23,7 +40,8 @@ public class LongViewIndexEnabledBaseRowKeyPrefixIT extends BaseRowKeyPrefixTest
         conf.set(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
         conf.set(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
         conf.set(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB, "true");
-        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY, "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
+        conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
+                "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
 
         // Clear the cached singletons so we can inject our own.
         InstanceResolver.clearSingletons();

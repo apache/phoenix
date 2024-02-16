@@ -62,7 +62,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
@@ -386,8 +386,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private static final Cell TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, TTL_BYTES);
-    private static final Cell ROW_KEY_PREFIX_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
-            TABLE_FAMILY_BYTES, ROW_KEY_PREFIX_BYTES);
+    private static final Cell ROW_KEY_MATCHER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, ROW_KEY_MATCHER_BYTES);
+
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
             TABLE_TYPE_KV,
@@ -429,7 +430,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             MAX_LOOKBACK_AGE_KV,
             CDC_INCLUDE_KV,
             TTL_KV,
-            ROW_KEY_PREFIX_KV
+            ROW_KEY_MATCHER_KV
     );
 
     static {
@@ -481,7 +482,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private static final int MAX_LOOKBACK_AGE_INDEX = TABLE_KV_COLUMNS.indexOf(MAX_LOOKBACK_AGE_KV);
     private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
-    private static final int ROW_KEY_PREFIX_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_PREFIX_KV);
+    private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1477,12 +1478,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
 
-        Cell rowKeyPrefixKv = tableKeyValues[ROW_KEY_PREFIX_INDEX];
-        byte[] rowKeyPrefix = rowKeyPrefixKv != null
-                ? CellUtil.cloneValue(rowKeyPrefixKv)
-                : null;
-        builder.setRowKeyPrefix(rowKeyPrefix != null ? rowKeyPrefix
-                : oldTable != null ? oldTable.getRowKeyPrefix() : null);
+        Cell rowKeyMatcherKv = tableKeyValues[ROW_KEY_MATCHER_INDEX];
+        byte[] rowKeyMatcher = rowKeyMatcherKv != null
+                ? CellUtil.cloneValue(rowKeyMatcherKv)
+                : HConstants.EMPTY_BYTE_ARRAY;
+        builder.setRowKeyMatcher(rowKeyMatcher != null ? rowKeyMatcher
+                : oldTable != null ? oldTable.getRowKeyMatcher() : HConstants.EMPTY_BYTE_ARRAY);
 
 
         // Check the cell tag to see whether the view has modified this property

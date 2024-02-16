@@ -122,7 +122,7 @@ message PTable {
   optional int64 maxLookbackAge = 54;
   optional string CDCIncludeScopes=55;
   optional int32 ttl = 56;
-  optional bytes rowKeyPrefix = 57;
+  optional bytes rowKeyMatcher = 57;
 }
 
 message EncodedCQCounter {

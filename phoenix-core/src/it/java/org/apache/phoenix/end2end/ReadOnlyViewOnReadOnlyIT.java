@@ -46,12 +46,13 @@ public class ReadOnlyViewOnReadOnlyIT extends BaseTenantSpecificViewIndexIT {
             //base table
             String tableName = generateUniqueName();
             conn.createStatement().execute("CREATE TABLE IF NOT EXISTS  " + tableName + "  ("
+                    + "TID CHAR(15) NOT NULL,"
                     + " ID INTEGER NOT NULL,"
                     + " COL1 INTEGER NOT NULL,"
                     + " COL2 bigint NOT NULL,"
                     + " CREATED_DATE DATE,"
                     + " CREATION_TIME BIGINT,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2))"
+                    + " CONSTRAINT NAME_PK PRIMARY KEY (TID, ID, COL1, COL2))"
                     + " TTL = " + DEFAULT_TTL_FOR_TEST
                     + "," + UPDATE_CACHE_FREQUENCY + " = 100000000"
                     + ", MULTI_TENANT = true");

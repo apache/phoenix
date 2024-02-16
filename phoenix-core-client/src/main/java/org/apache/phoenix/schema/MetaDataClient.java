@@ -22,14 +22,12 @@ import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCH
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.schema.PTableType.CDC;
-import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
@@ -84,6 +82,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
@@ -368,7 +367,7 @@ public class MetaDataClient {
                     MAX_LOOKBACK_AGE + "," +
                     CDC_INCLUDE_TABLE + "," +
                     TTL + "," +
-                    ROW_KEY_PREFIX +
+                    ROW_KEY_MATCHER +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
@@ -1045,7 +1044,7 @@ public class MetaDataClient {
             String viewStatement,
             ViewType viewType,
             PDataType viewIndexIdType,
-            byte[] rowKeyPrefix,
+            byte[] rowKeyMatcher,
             byte[][] viewColumnConstants,
             BitSet isViewColumnReferenced
     ) throws SQLException {
@@ -1120,7 +1119,7 @@ public class MetaDataClient {
                 viewStatement,
                 viewType,
                 viewIndexIdType,
-                rowKeyPrefix,
+                rowKeyMatcher,
                 viewColumnConstants,
                 isViewColumnReferenced,
                 false,
@@ -2291,7 +2290,7 @@ public class MetaDataClient {
             String viewStatement,
             ViewType viewType,
             PDataType viewIndexIdType,
-            final byte[] rowKeyPrefix,
+            final byte[] rowKeyMatcher,
             final byte[][] viewColumnConstants,
             final BitSet isViewColumnReferenced,
             boolean allocateIndexId,
@@ -3200,10 +3199,9 @@ public class MetaDataClient {
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
                         .setLastDDLTimestamp(0L)
-                        .setRowKeyPrefix(rowKeyPrefix)
-                        .setTTL(TTL_NOT_DEFINED)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
+                        .setRowKeyMatcher(rowKeyMatcher)
                         .setTTL(TTL_NOT_DEFINED)
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
@@ -3477,10 +3475,11 @@ public class MetaDataClient {
                 tableUpsert.setInt(37, ttl);
             }
 
-            if (rowKeyPrefix == null) {
+            if ((rowKeyMatcher == null) ||
+                    Bytes.compareTo(rowKeyMatcher, HConstants.EMPTY_BYTE_ARRAY) == 0) {
                 tableUpsert.setNull(38, Types.VARBINARY);
             } else {
-                tableUpsert.setBytes(38, rowKeyPrefix);
+                tableUpsert.setBytes(38, rowKeyMatcher);
             }
 
             tableUpsert.execute();
@@ -3632,7 +3631,7 @@ public class MetaDataClient {
                         .setMaxLookbackAge(maxLookbackAge)
                         .setCDCIncludeScopes(cdcIncludeScopes)
                         .setTTL(ttl == null || ttl == TTL_NOT_DEFINED ? ttlFromHierarchy : ttl)
-                        .setRowKeyPrefix(rowKeyPrefix)
+                        .setRowKeyMatcher(rowKeyMatcher)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result, false);

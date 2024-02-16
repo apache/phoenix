@@ -413,6 +413,10 @@ public class DelegateTable implements PTable {
         return delegate.getCDCIncludeScopes();
     }
 
+    public byte[] getRowKeyMatcher() {
+        return delegate.getRowKeyMatcher();
+    }
+
     public String getIndexWhere() {
         return delegate.getIndexWhere();
     }
@@ -437,10 +441,6 @@ public class DelegateTable implements PTable {
     @Override
     public Long getMaxLookbackAge() {
         return delegate.getMaxLookbackAge();
-    }
-
-    public byte[] getRowKeyPrefix() {
-        return delegate.getRowKeyPrefix();
     }
 
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }

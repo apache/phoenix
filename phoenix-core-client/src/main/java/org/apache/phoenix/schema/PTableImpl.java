@@ -279,13 +279,13 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
+    private byte[] rowKeyMatcher;
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
     private Long maxLookbackAge;
     private Map<PTableKey, Long> ancestorLastDDLTimestampMap;
     private Set<CDCChangeScope> cdcIncludeScopes;
-    private byte[] rowKeyPrefix;
 
     public static class Builder {
         private PTableKey key;
@@ -354,7 +354,7 @@ public class PTableImpl implements PTable {
         private Long maxLookbackAge;
         private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
         private int ttl;
-        private byte[] rowKeyPrefix;
+        private byte[] rowKeyMatcher;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -765,9 +765,9 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setRowKeyPrefix(byte[] rowKeyPrefix) {
-            if (rowKeyPrefix != null) {
-                this.rowKeyPrefix = rowKeyPrefix;
+        public Builder setRowKeyMatcher(byte[] rowKeyMatcher) {
+            if (rowKeyMatcher != null) {
+                this.rowKeyMatcher = rowKeyMatcher;
             }
             return this;
         }
@@ -1092,7 +1092,7 @@ public class PTableImpl implements PTable {
         this.indexWhere = builder.indexWhere;
         this.maxLookbackAge = builder.maxLookbackAge;
         this.ancestorLastDDLTimestampMap = builder.ancestorLastDDLTimestampMap;
-        this.rowKeyPrefix = builder.rowKeyPrefix;
+        this.rowKeyMatcher = builder.rowKeyMatcher;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1175,7 +1175,7 @@ public class PTableImpl implements PTable {
                 .setCDCIncludeScopes(table.getCDCIncludeScopes())
                 .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap())
                 .setTTL(table.getTTL())
-                .setRowKeyPrefix(table.getRowKeyPrefix());
+                .setRowKeyMatcher(table.getRowKeyMatcher());
     }
 
     @Override
@@ -2130,9 +2130,9 @@ public class PTableImpl implements PTable {
             ttl = table.getTtl();
         }
 
-        byte[] rowKeyPrefix = null;
-        if (table.hasRowKeyPrefix()) {
-            rowKeyPrefix = table.getRowKeyPrefix().toByteArray();
+        byte[] rowKeyMatcher = null;
+        if (table.hasRowKeyMatcher()) {
+            rowKeyMatcher = table.getRowKeyMatcher().toByteArray();
         }
 
         try {
@@ -2194,7 +2194,7 @@ public class PTableImpl implements PTable {
                     .setIndexWhere(indexWhere)
                     .setMaxLookbackAge(maxLookbackAge)
                     .setTTL(ttl)
-                    .setRowKeyPrefix(rowKeyPrefix)
+                    .setRowKeyMatcher(rowKeyMatcher)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2344,8 +2344,8 @@ public class PTableImpl implements PTable {
 
         builder.setTtl(table.getTTL());
 
-        if (table.getRowKeyPrefix() != null) {
-            builder.setRowKeyPrefix(ByteStringer.wrap(table.getRowKeyPrefix()));
+        if (table.getRowKeyMatcher() != null) {
+            builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
         }
         return builder.build();
     }
@@ -2532,8 +2532,9 @@ public class PTableImpl implements PTable {
             return indexWhereColumns;
     }
 
-    public byte[] getRowKeyPrefix() {
-        return rowKeyPrefix;
+    @Override
+    public byte[] getRowKeyMatcher() {
+        return rowKeyMatcher;
     }
 
     private static final class KVColumnFamilyQualifier {
