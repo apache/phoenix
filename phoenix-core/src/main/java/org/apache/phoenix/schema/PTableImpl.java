@@ -213,7 +213,7 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
-    private byte[] rowKeyPrefix;
+    private byte[] rowKeyMatcher;
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
@@ -281,7 +281,7 @@ public class PTableImpl implements PTable {
         private String externalSchemaId;
         private String streamingTopicName;
         private int ttl;
-        private byte[] rowKeyPrefix;
+        private byte[] rowKeyMatcher;
         private String indexWhere;
 
         // Used to denote which properties a view has explicitly modified
@@ -693,9 +693,9 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setRowKeyPrefix(byte[] rowKeyPrefix) {
-            if (rowKeyPrefix != null) {
-                this.rowKeyPrefix = rowKeyPrefix;
+        public Builder setRowKeyMatcher(byte[] rowKeyMatcher) {
+            if (rowKeyMatcher != null) {
+                this.rowKeyMatcher = rowKeyMatcher;
             }
             return this;
         }
@@ -996,7 +996,7 @@ public class PTableImpl implements PTable {
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
-        this.rowKeyPrefix = builder.rowKeyPrefix;
+        this.rowKeyMatcher = builder.rowKeyMatcher;
         this.indexWhere = builder.indexWhere;
     }
 
@@ -1076,7 +1076,7 @@ public class PTableImpl implements PTable {
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
                 .setTTL(table.getTTL())
-                .setRowKeyPrefix(table.getRowKeyPrefix())
+                .setRowKeyMatcher(table.getRowKeyMatcher())
                 .setIndexWhere(table.getIndexWhere());
     }
 
@@ -2012,9 +2012,9 @@ public class PTableImpl implements PTable {
             ttl = table.getTtl();
         }
 
-        byte[] rowKeyPrefix = null;
-        if (table.hasRowKeyPrefix()) {
-            rowKeyPrefix = table.getRowKeyPrefix().toByteArray();
+        byte[] rowKeyMatcher = null;
+        if (table.hasRowKeyMatcher()) {
+            rowKeyMatcher = table.getRowKeyMatcher().toByteArray();
         }
 
         String indexWhere = null;
@@ -2077,7 +2077,7 @@ public class PTableImpl implements PTable {
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
                     .setTTL(ttl)
-                    .setRowKeyPrefix(rowKeyPrefix)
+                    .setRowKeyMatcher(rowKeyMatcher)
                     .setIndexWhere(indexWhere)
                     .build();
         } catch (SQLException e) {
@@ -2216,8 +2216,8 @@ public class PTableImpl implements PTable {
             builder.setStreamingTopicName(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getStreamingTopicName())));
         }
         builder.setTtl(table.getTTL());
-        if (table.getRowKeyPrefix() != null) {
-            builder.setRowKeyPrefix(ByteStringer.wrap(table.getRowKeyPrefix()));
+        if (table.getRowKeyMatcher() != null) {
+            builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
         }
         if (table.getIndexWhere() != null) {
             builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
@@ -2357,8 +2357,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public byte[] getRowKeyPrefix() {
-        return rowKeyPrefix;
+    public byte[] getRowKeyMatcher() {
+        return rowKeyMatcher;
     }
 
     public String getIndexWhere() {

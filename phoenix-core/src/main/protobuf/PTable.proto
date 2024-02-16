@@ -118,7 +118,7 @@ message PTable {
   optional PTable transformingNewTable=51;
   optional bytes streamingTopicName=52;
   optional int32 ttl = 53;
-  optional bytes rowKeyPrefix = 54;
+  optional bytes rowKeyMatcher = 54;
   optional bytes indexWhere=55;
 }
 

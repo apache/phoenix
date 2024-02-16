@@ -47,6 +47,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @Category(ParallelStatsDisabledTest.class)
@@ -66,6 +67,8 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     createTableWithOrWithOutTTLAsItsProperty(conn, true)));
             assertEquals("TTL is not set correctly at Phoenix level", DEFAULT_TTL_FOR_TEST,
                     table.getTTL());
+            assertTrue("RowKeyMatcher should be Null",
+                    (Bytes.compareTo(HConstants.EMPTY_BYTE_ARRAY, table.getRowKeyMatcher()) == 0));
         }
     }
 
@@ -183,7 +186,9 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             indexes = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, tableName)).getIndexes();
             for (PTable index : indexes) {
                 assertTTLValueOfIndex(PhoenixDatabaseMetaData.TTL_NOT_DEFINED, index);
-                assertNull(index.getRowKeyPrefix());
+                assertTrue(Bytes.compareTo(
+                        index.getRowKeyMatcher(), HConstants.EMPTY_BYTE_ARRAY) == 0
+                );
             }
 
             //Test setting TTL as index property not allowed while creating them or setting them explicitly.
