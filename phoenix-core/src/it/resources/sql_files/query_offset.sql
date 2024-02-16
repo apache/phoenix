@@ -16,9 +16,6 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.compat.hbase;
+SELECT COUNT(*) FROM SCHEMA_0002.TABLE_0002;
 
-public class HbaseCompatCapabilities {
-    // Currently every supported HBase version has the same capabilities, so there is
-    // nothing in here.
-}
+SELECT ID, COL1, COL2 FROM SCHEMA_0002.TABLE_0002 WHERE COL2 > 10 OFFSET 11;

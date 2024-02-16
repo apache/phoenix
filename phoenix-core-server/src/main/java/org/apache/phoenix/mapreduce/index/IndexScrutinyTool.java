@@ -262,9 +262,9 @@ public class IndexScrutinyTool extends Configured implements Tool {
             PhoenixConfigurationUtil.setScrutinySourceTable(configuration, sourceTable);
             PhoenixConfigurationUtil.setScrutinyOutputInvalidRows(configuration, outputInvalidRows);
             PhoenixConfigurationUtil.setScrutinyOutputMax(configuration, outputMaxRows);
-
-            final PTable pdataTable = PhoenixRuntime.getTable(connection, qDataTable);
-            final PTable pindexTable = PhoenixRuntime.getTable(connection, qIndexTable);
+            PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
+            final PTable pdataTable = phoenixConnection.getTable(qDataTable);
+            final PTable pindexTable = phoenixConnection.getTable(qIndexTable);
 
             // Randomize execution order, unless explicitly set
             configuration.setBooleanIfUnset(

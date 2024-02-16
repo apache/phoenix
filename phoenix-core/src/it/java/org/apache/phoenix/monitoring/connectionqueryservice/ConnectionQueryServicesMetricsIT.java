@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
@@ -45,6 +46,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
@@ -139,8 +141,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         clearAllConnectionQueryServiceMetrics();
     }
 
-    private String connUrlWithPrincipal(String principalName) {
-        return url + (principalName == null ? "" : PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + principalName);
+    private String connUrlWithPrincipal(String principalName) throws SQLException {
+        return ConnectionInfo.create(url, null, null).withPrincipal(principalName).toUrl();
     }
 
     @Test

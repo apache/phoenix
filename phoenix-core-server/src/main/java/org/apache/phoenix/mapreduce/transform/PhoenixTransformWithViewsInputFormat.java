@@ -66,7 +66,7 @@ public class PhoenixTransformWithViewsInputFormat<T extends DBWritable> extends 
                     SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES, configuration).toBytes())) {
                 String oldDataTableFullName = PhoenixConfigurationUtil.getIndexToolDataTableName(configuration);
                 String newDataTableFullName = getIndexToolIndexTableName(configuration);
-                PTable newDataTable = PhoenixRuntime.getTableNoCache(connection, newDataTableFullName);
+                PTable newDataTable = connection.getTableNoCache(newDataTableFullName);
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(oldDataTableFullName);
                 String tableName = SchemaUtil.getTableNameFromFullName(oldDataTableFullName);
                 byte[] schemaNameBytes = Strings.isNullOrEmpty(schemaName) ? null : schemaName.getBytes();

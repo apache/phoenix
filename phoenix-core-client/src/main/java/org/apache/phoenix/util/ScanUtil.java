@@ -61,6 +61,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.exception.ResultSetOutOfScanRangeException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
@@ -122,6 +123,10 @@ public class ScanUtil {
     public static final int UNKNOWN_CLIENT_VERSION = VersionUtil.encodeVersion(4, 4, 0);
 
     private static final byte[] ZERO_BYTE_ARRAY = new byte[1024];
+    private static final String RESULT_IS_OUT_OF_SCAN_START_KEY =
+            "Row key of the result is out of scan start key range";
+    private static final String RESULT_IS_OUT_OF_SCAN_STOP_KEY =
+            "Row key of the result is out of scan stop key range";
 
     private ScanUtil() {
     }
@@ -976,6 +981,9 @@ public class ScanUtil {
         byte[] clientVersionBytes = scan.getAttribute(BaseScannerRegionObserverConstants.CLIENT_VERSION);
         if (clientVersionBytes != null) {
             clientVersion = Bytes.toInt(clientVersionBytes);
+        } else {
+            LOGGER.warn("Scan attribute {} not found. Scan attributes: {}",
+                    BaseScannerRegionObserverConstants.CLIENT_VERSION, scan.getAttributesMap());
         }
         return clientVersion;
     }
@@ -994,7 +1002,8 @@ public class ScanUtil {
                 ((isServerSideMaskingSet != null) && (Boolean.parseBoolean(isServerSideMaskingSet))));
     }
 
-    public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table) {
+    public static boolean getStatsForParallelizationProp(PhoenixConnection conn, PTable table)
+            throws SQLException {
         Boolean useStats = table.useStatsForParallelization();
         if (useStats != null) {
             return useStats;
@@ -1154,7 +1163,7 @@ public class ScanUtil {
         String tableName = index.getParentTableName().getString();
         PTable dataTable;
         try {
-            dataTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(schemaName, tableName));
+            dataTable = conn.getTable(SchemaUtil.getTableName(schemaName, tableName));
             return dataTable;
         } catch (TableNotFoundException e) {
             // This index table must be being deleted
@@ -1223,7 +1232,7 @@ public class ScanUtil {
             if (indexTable.getViewIndexId() != null && indexTable.getName().getString().contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
                 String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
-                indexTable = PhoenixRuntime.getTable(phoenixConnection, indexName);
+                indexTable = phoenixConnection.getTable(indexName);
             }
             if (!dataTable.getIndexes().contains(indexTable)) {
                 return;
@@ -1284,8 +1293,8 @@ public class ScanUtil {
                 parentTableName = SchemaUtil.getTableNameFromFullName(parentViewName);
             }
             try {
-                dataTable = PhoenixRuntime.getTable(phoenixConnection,
-                        SchemaUtil.getTableName(parentSchemaName, parentTableName));
+                dataTable = phoenixConnection.getTable(SchemaUtil.getTableName(parentSchemaName,
+                        parentTableName));
             } catch (TableNotFoundException e) {
                 // This data table does not exists anymore. No need to set the scan attributes
                 return;
@@ -1339,6 +1348,8 @@ public class ScanUtil {
         }
 
         setScanAttributeForPaging(scan, phoenixConnection);
+        scan.setAttribute(BaseScannerRegionObserverConstants.SCAN_SERVER_RETURN_VALID_ROW_KEY,
+                Bytes.toBytes(true));
     }
 
     public static void setScanAttributeForPaging(Scan scan, PhoenixConnection phoenixConnection) {
@@ -1367,19 +1378,9 @@ public class ScanUtil {
         result.add(keyValue);
     }
 
-    public static void getDummyResult(List<Cell> result) {
-        getDummyResult(EMPTY_BYTE_ARRAY, result);
-    }
-
     public static Tuple getDummyTuple(byte[] rowKey) {
         List<Cell> result = new ArrayList<Cell>(1);
         getDummyResult(rowKey, result);
-        return new ResultTuple(Result.create(result));
-    }
-
-    public static Tuple getDummyTuple() {
-        List<Cell> result = new ArrayList<Cell>(1);
-        getDummyResult(result);
         return new ResultTuple(Result.create(result));
     }
 
@@ -1598,6 +1599,19 @@ public class ScanUtil {
         return null;
     }
 
+    /**
+     * Determine if the client is incompatible and therefore will not be able to parse the
+     * valid rowkey that server returns.
+     *
+     * @param scan Scan object.
+     * @return true if the client is incompatible and therefore will not be able to parse the
+     * valid rowkey that server returns.
+     */
+    public static boolean isIncompatibleClientForServerReturnValidRowKey(Scan scan) {
+        return scan.getAttribute(
+                BaseScannerRegionObserverConstants.SCAN_SERVER_RETURN_VALID_ROW_KEY) == null;
+    }
+
     // This method assumes that there is at most one instance of PageFilter in a scan
     public static PageFilter removePageFilter(Scan scan) {
         Filter filter = scan.getFilter();
@@ -1631,4 +1645,97 @@ public class ScanUtil {
         byte[] maxLookbackAge = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
         return maxLookbackAge != null ? Bytes.toLong(maxLookbackAge) : null;
     }
+
+    /**
+     * Verify whether the given row key is in the scan boundaries i.e. scan start and end keys.
+     *
+     * @param ptr row key.
+     * @param scan scan object used to retrieve the result set.
+     * @throws ResultSetOutOfScanRangeException if the row key is out of scan range.
+     */
+    public static void verifyKeyInScanRange(ImmutableBytesWritable ptr,
+                                            Scan scan)
+            throws ResultSetOutOfScanRangeException {
+        try {
+            if (scan.isReversed()) {
+                verifyScanRangesForReverseScan(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            } else {
+                verifyScanRanges(ptr, scan, scan.getStartRow(), scan.getStopRow());
+            }
+        } catch (ResultSetOutOfScanRangeException e) {
+            if (isLocalIndex(scan)) {
+                verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_START_ROW_SUFFIX),
+                        scan.getAttribute(SCAN_STOP_ROW_SUFFIX));
+                return;
+            }
+            if (scan.getAttribute(SCAN_ACTUAL_START_ROW) == null) {
+                throw e;
+            }
+            verifyScanRanges(ptr, scan, scan.getAttribute(SCAN_ACTUAL_START_ROW),
+                    scan.getStopRow());
+        }
+    }
+
+    private static void verifyScanRanges(ImmutableBytesWritable ptr,
+                                         Scan scan,
+                                         byte[] startRow,
+                                         byte[] stopRow)
+            throws ResultSetOutOfScanRangeException {
+        if (startRow != null
+                && Bytes.compareTo(startRow, HConstants.EMPTY_START_ROW) != 0) {
+            if (scan.includeStartRow()) {
+                if (Bytes.compareTo(startRow, ptr.get()) > 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(startRow, ptr.get()) >= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            }
+        }
+        if (stopRow != null
+                && Bytes.compareTo(stopRow, HConstants.EMPTY_END_ROW) != 0) {
+            if (scan.includeStopRow()) {
+                if (Bytes.compareTo(stopRow, ptr.get()) < 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(stopRow, ptr.get()) <= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            }
+        }
+    }
+
+    private static void verifyScanRangesForReverseScan(ImmutableBytesWritable ptr,
+                                                       Scan scan,
+                                                       byte[] startRow,
+                                                       byte[] stopRow)
+            throws ResultSetOutOfScanRangeException {
+        if (stopRow != null
+                && Bytes.compareTo(stopRow, HConstants.EMPTY_START_ROW) != 0) {
+            if (scan.includeStopRow()) {
+                if (Bytes.compareTo(stopRow, ptr.get()) > 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(stopRow, ptr.get()) >= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_START_KEY);
+                }
+            }
+        }
+        if (startRow != null
+                && Bytes.compareTo(startRow, HConstants.EMPTY_END_ROW) != 0) {
+            if (scan.includeStartRow()) {
+                if (Bytes.compareTo(startRow, ptr.get()) < 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            } else {
+                if (Bytes.compareTo(startRow, ptr.get()) <= 0) {
+                    throw new ResultSetOutOfScanRangeException(RESULT_IS_OUT_OF_SCAN_STOP_KEY);
+                }
+            }
+        }
+    }
+
 }

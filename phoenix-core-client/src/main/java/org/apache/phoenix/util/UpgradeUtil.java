@@ -608,9 +608,9 @@ public class UpgradeUtil {
                             newProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
                             PTable indexPTable = null;
                             try (PhoenixConnection tenantConnection = new PhoenixConnection(globalConnection, globalConnection.getQueryServices(), newProps)) {
-                                viewPTable = PhoenixRuntime.getTable(tenantConnection, fullViewName);
+                                viewPTable = tenantConnection.getTable(fullViewName);
                                 tenantConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
-                                indexPTable = PhoenixRuntime.getTable(tenantConnection, fullIndexName);
+                                indexPTable = tenantConnection.getTable(fullIndexName);
                             }
 
                             int offset = indexPTable.getBucketNum() != null ? 1 : 0;
@@ -686,7 +686,7 @@ public class UpgradeUtil {
                             }
                             globalConnection.commit();
                         } else {
-                            viewPTable = PhoenixRuntime.getTable(globalConnection, fullViewName);
+                            viewPTable = globalConnection.getTable(fullViewName);
                             globalConnection.createStatement().execute(String.format(disableIndexDDL, indexName, fullViewName));
                         }
                         String indexPhysicalTableName = MetaDataUtil.getViewIndexPhysicalName(viewPTable.getPhysicalName().getString());
@@ -1407,7 +1407,7 @@ public class UpgradeUtil {
                 String fullParentTableName =
                     SchemaUtil.getTableName(schemaName, parentTableName);
                 String indexName = rs.getString(COLUMN_FAMILY);
-                PTable table = PhoenixRuntime.getTable(metaConn, fullParentTableName);
+                PTable table = metaConn.getTable(fullParentTableName);
                 if (table == null) {
                     throw new TableNotFoundException(fullParentTableName);
                 }
@@ -1615,7 +1615,7 @@ public class UpgradeUtil {
             final PhoenixConnection conn) throws SQLException {
         PTable view;
         try {
-            view = PhoenixRuntime.getTable(conn, viewName);
+            view = conn.getTable(viewName);
         } catch (TableNotFoundException e) {
             // Ignore
             LOGGER.error("Error getting PTable for view: {}", viewName, e);
@@ -1662,7 +1662,7 @@ public class UpgradeUtil {
                         conn.getQueryServices().getProps())).getNameAsString();
                 try {
                     // Use this getTable API to get the latest PTable
-                    table = PhoenixRuntime.getTable(conn, null, fullTableName);
+                    table = conn.getTable(null, fullTableName);
                 } catch (TableNotFoundException e) {
                     // Ignore tables not mapped to a Phoenix Table
                     LOGGER.warn("Error getting PTable for HBase table: {}",
@@ -2158,7 +2158,7 @@ public class UpgradeUtil {
         List<PTable> tablesNeedingUpgrading = Lists.newArrayListWithExpectedSize(tablesToUpgrade.size());
         List<String> invalidTables = Lists.newArrayListWithExpectedSize(tablesToUpgrade.size());
         for (String fullTableName : tablesToUpgrade) {
-            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+            PTable table = conn.getTable(fullTableName);
             if (isInvalidTableToUpgrade(table)) {
                 invalidTables.add(fullTableName);
             } else {
@@ -2242,7 +2242,7 @@ public class UpgradeUtil {
                     conn = DriverManager.getConnection(url, props);
                     lastTenantId = tenantId;
                 }
-                PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+                PTable table = conn.unwrap(PhoenixConnection.class).getTable(fullTableName);
                 String tableTenantId =
                     table.getTenantId() == null ? null : table.getTenantId().getString();
                 if (Objects.equal(lastTenantId, tableTenantId) && !table.rowKeyOrderOptimizable()) {
@@ -2418,7 +2418,7 @@ public class UpgradeUtil {
             String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
             String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
             // Confirm table is not already upgraded
-            PTable table = PhoenixRuntime.getTable(conn, fullTableName);
+            PTable table = conn.getTable(fullTableName);
             
             // Upgrade is not required if schemaName is not present.
             if (schemaName.equals("") && !PTableType.VIEW
@@ -2902,7 +2902,7 @@ public class UpgradeUtil {
             throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
         ConnectionQueryServices cqs = conn.getQueryServices();
         Admin admin = cqs.getAdmin();
-        PTable table = PhoenixRuntime.getTable(conn, pTableName);
+        PTable table = conn.getTable(pTableName);
         TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
             pTableName, cqs.getProps()));
         return KeepDeletedCells.TRUE.equals(tableDesc.getColumnFamily(
@@ -2913,7 +2913,7 @@ public class UpgradeUtil {
             throws SQLException, org.apache.hadoop.hbase.TableNotFoundException, IOException {
         ConnectionQueryServices cqs = conn.getQueryServices();
         Admin admin = cqs.getAdmin();
-        PTable table = PhoenixRuntime.getTable(conn, pTableName);
+        PTable table = conn.getTable(pTableName);
         TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
             pTableName, cqs.getProps()));
         return tableDesc.getColumnFamily(

@@ -193,7 +193,7 @@ public class TestIndexWriter {
                 }
                 return null;
             }
-        }).when(table).batch(Mockito.anyListOf(Row.class), Mockito.any());
+        }).when(table).batch(Mockito.anyList(), Mockito.any());
     // add the tables to the set of tables, so its returned to the writer
     tables.put(new ImmutableBytesPtr(tableName), table);
 

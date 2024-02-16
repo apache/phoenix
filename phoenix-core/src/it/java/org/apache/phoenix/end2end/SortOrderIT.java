@@ -34,8 +34,10 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.GregorianCalendar;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.phoenix.schema.SortOrder;
@@ -44,6 +46,7 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -57,16 +60,23 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @Category(ParallelStatsDisabledTest.class)
 public class SortOrderIT extends ParallelStatsDisabledIT {
-    private String baseTableName;
-    
+    protected String baseTableName;
+    protected static final Set<String> TABLE_NAMES = new HashSet<>();
+
     @Before
     public void generateTableName() {
         baseTableName = generateUniqueName();
     }
-    
+
+    @After
+    public void tearDown() throws Exception {
+        TABLE_NAMES.clear();
+    }
+
     @Test
     public void noOrder() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (pk VARCHAR NOT NULL PRIMARY KEY)";
         runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}},
             table);
@@ -75,6 +85,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void noOrderCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid, code))";
         Object[][] rows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         runQueryTest(ddl, upsert("oid", "code"), rows, rows, table);
@@ -83,6 +94,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void ascOrderInlinePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (pk VARCHAR NOT NULL PRIMARY KEY ASC)";
         runQueryTest(ddl, "pk", new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"a"}, {"b"}, {"c"}},
             table);
@@ -91,6 +103,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void ascOrderCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid ASC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         Object[][] expectedRows = new Object[][]{{"o1", 3}, {"o1", 2}, {"o1", 1}};
@@ -100,6 +113,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descOrderInlinePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         for (String type : new String[]{"CHAR(2)", "VARCHAR"}) {
             String ddl = "CREATE table " + table + " (pk ${type} NOT NULL PRIMARY KEY DESC)".replace("${type}", type);
             runQueryTest(ddl, "pk", new Object[][]{{"aa"}, {"bb"}, {"cc"}}, new Object[][]{{"cc"}, {"bb"}, {"aa"}},
@@ -110,6 +124,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descOrderCompositePK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         Object[][] expectedRows = new Object[][]{{"o3", 3}, {"o2", 2}, {"o1", 1}};
@@ -119,6 +134,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descOrderCompositePK2() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         Object[][] expectedRows = new Object[][]{{"o1", 3}, {"o1", 2}, {"o1", 1}};
@@ -128,6 +144,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void equalityDescInlinePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (pk VARCHAR NOT NULL PRIMARY KEY DESC)";
         runQueryTest(ddl, upsert("pk"), new Object[][]{{"a"}, {"b"}, {"c"}}, new Object[][]{{"b"}}, new WhereCondition("pk", "=", "'b'"),
             table);
@@ -136,6 +153,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void equalityDescCompositePK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "=", "'o2'"),
@@ -145,6 +163,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void equalityDescCompositePK2() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o1", 2}}, new WhereCondition("code", "=", "2"),
@@ -154,6 +173,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void inDescCompositePK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o1", 2}}, new WhereCondition("code", "IN", "(2)"),
@@ -163,6 +183,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void inDescCompositePK2() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", 2}}, new WhereCondition("oid", "IN", "('o2')"),
@@ -172,6 +193,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void inDescCompositePK3() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid VARCHAR NOT NULL, code VARCHAR NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", "1"}, {"o2", "2"}, {"o3", "3"}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"o2", "2"}, {"o1", "1"}}, new WhereCondition("(oid, code)", "IN", "(('o2', '2'), ('o1', '1'))"),
@@ -181,6 +203,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void likeDescCompositePK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"a1", 1}, {"b2", 2}, {"c3", 3}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"b2", 2}}, new WhereCondition("oid", "LIKE", "('b%')"),
@@ -190,6 +213,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void likeDescCompositePK2() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code CHAR(2) NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"a1", "11"}, {"b2", "22"}, {"c3", "33"}};
         runQueryTest(ddl, upsert("oid", "code"), insertedRows, new Object[][]{{"b2", "22"}}, new WhereCondition("code", "LIKE", "('2%')"),
@@ -199,6 +223,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void greaterThanDescCompositePK3() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o1", 2}, {"o1", 3}};
         Object[][] expectedRows = new Object[][]{{"o1", 2}, {"o1", 1}};
@@ -209,6 +234,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void substrDescCompositePK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(3) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
         Object[][] insertedRows = new Object[][]{{"ao1", 1}, {"bo2", 2}, {"co3", 3}};
         Object[][] expectedRows = new Object[][]{{"co3", 3}, {"bo2", 2}};
@@ -219,6 +245,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void substrDescCompositePK2() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(4) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
         Object[][] insertedRows = new Object[][]{{"aaaa", 1}, {"bbbb", 2}, {"cccd", 3}};
         Object[][] expectedRows = new Object[][]{{"cccd", 3}};
@@ -229,6 +256,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void substrFixedLengthDescPK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(3) PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
@@ -239,6 +267,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void substrVarLengthDescPK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid VARCHAR PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
@@ -249,6 +278,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void likeVarLengthDescPK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid VARCHAR PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
@@ -259,6 +289,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void likeFixedLengthDescPK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(3) PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}};
         Object[][] expectedRows = new Object[][]{{"ab"}, {"a"} };
@@ -269,6 +300,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void decimalRangeDescPK1() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid DECIMAL PRIMARY KEY DESC)";
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute(ddl);
@@ -295,6 +327,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void lTrimDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{" o1 ", 1}, {"  o2", 2}, {"  o3", 3}};
         Object[][] expectedRows = new Object[][]{{"  o2", 2}};
@@ -305,6 +338,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void lPadDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid VARCHAR NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"aaaa", 1}, {"bbbb", 2}, {"cccc", 3}};
         Object[][] expectedRows = new Object[][]{{"bbbb", 2}};
@@ -315,6 +349,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void countDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (oid CHAR(2) NOT NULL, code INTEGER NOT NULL constraint pk primary key (oid DESC, code ASC))";
         Object[][] insertedRows = new Object[][]{{"o1", 1}, {"o2", 2}, {"o3", 3}};
         Object[][] expectedRows = new Object[][]{{3l}};
@@ -325,6 +360,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void sumDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
@@ -336,6 +372,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void avgDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
@@ -347,6 +384,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void minDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
@@ -358,6 +396,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void maxDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC))";
         Object[][] insertedRows = new Object[][]{{10, bdec(10.2), 21l}, {20, bdec(20.2), 32l}, {30, bdec(30.2), 43l}};
@@ -369,6 +408,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void havingSumDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (name CHAR(1) NOT NULL, code INTEGER NOT NULL " +
             "constraint pk primary key (name DESC, code DESC))";
         Object[][] insertedRows = new Object[][]{{"a", 10}, {"a", 20}, {"b", 100}}; 
@@ -380,6 +420,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void queryDescDateWithExplicitOrderBy() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (c1 CHAR(1) NOT NULL, c2 CHAR(1) NOT NULL, d1 \"DATE\" NOT NULL, c3 CHAR(1) NOT NULL " +
             "constraint pk primary key (c1, c2, d1 DESC, c3))";
         Object[] row1 = {"1", "2", date(10, 11, 2001), "3"};
@@ -392,6 +433,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void additionOnDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL, d1 DATE NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC, d1 DESC))";
         Object[][] insertedRows = new Object[][]{
@@ -405,6 +447,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void subtractionOnDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (n1 INTEGER NOT NULL, n2 DECIMAL(10, 2) NOT NULL, n3 BIGINT NOT NULL, d1 DATE NOT NULL " +
             "constraint pk primary key (n1 DESC, n2 DESC, n3 DESC, d1 DESC))";
         Object[][] insertedRows = new Object[][]{
@@ -418,6 +461,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void lessThanLeadingDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, \"DATE\" DATE NOT NULL constraint pk primary key (id DESC, \"DATE\"))";
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2012)}, {3, date(1, 1, 2013)}, {2, date(1, 1, 2011)}};
         Object[][] expectedRows = new Object[][]{{1, date(1, 1, 2012)}};
@@ -428,6 +472,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void lessThanTrailingDescCompositePK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (id INTEGER NOT NULL, \"DATE\" DATE NOT NULL constraint pk primary key (id DESC, \"DATE\"))";
         Object[][] insertedRows = new Object[][]{{1, date(1, 1, 2002)}, {3, date(1, 1, 2003)}, {2, date(1, 1, 2001)}};
         Object[][] expectedRows = new Object[][]{{2, date(1, 1, 2001)}};
@@ -438,6 +483,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descVarLengthPK() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (id VARCHAR PRIMARY KEY DESC)";
         Object[][] insertedRows = new Object[][]{{"a"}, {"ab"}, {"abc"}};
         Object[][] expectedRows = new Object[][]{{"abc"}, {"ab"}, {"a"}};
@@ -448,6 +494,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descVarLengthAscPKGT() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "baa"}, {5, "c"}, {6, "d"}};
         Object[][] expectedRows = new Object[][]{{3}, {4}, {5}, {6}};
@@ -458,6 +505,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descVarLengthDescPKGT() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "baa"}, {5, "c"}, {6, "d"}};
         Object[][] expectedRows = new Object[][]{{3}, {4}, {5}, {6}};
@@ -468,6 +516,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descVarLengthDescPKLTE() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2 desc))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "bb"}, {5, "bc"}, {6, "bba"}, {7, "c"}};
         Object[][] expectedRows = new Object[][]{{1}, {2}, {3}, {4}};
@@ -478,6 +527,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void descVarLengthAscPKLTE() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 INTEGER NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         Object[][] insertedRows = new Object[][]{{0, null}, {1, "a"}, {2, "b"}, {3, "ba"}, {4, "bb"}, {5, "bc"}, {6, "bba"}, {7, "c"}};
         Object[][] expectedRows = new Object[][]{{1}, {2}, {3}, {4}};
@@ -488,6 +538,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void varLengthAscLT() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1, k2))";
         Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}};
         Object[][] expectedRows = new Object[][]{{"a"}};
@@ -498,6 +549,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void varLengthDescLT() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
         Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}};
         Object[][] expectedRows = new Object[][]{{"a"}};
@@ -508,6 +560,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
     @Test
     public void varLengthDescGT() throws Exception {
         String table = generateUniqueName();
+        TABLE_NAMES.add(table);
         String ddl = "CREATE table " + table + " (k1 VARCHAR NOT NULL, k2 VARCHAR, CONSTRAINT pk PRIMARY KEY (k1 desc, k2))";
         Object[][] insertedRows = new Object[][]{{"a", ""}, {"b",""}, {"b","a"}, {"ba","a"}};
         Object[][] expectedRows = new Object[][]{{"ba"}};
@@ -548,6 +601,7 @@ public class SortOrderIT extends ParallelStatsDisabledIT {
 
     private void testCompareCompositeKey(Integer saltBuckets, PDataType dataType, SortOrder sortOrder, String whereClause, List<Integer> expectedResults, String orderBy) throws SQLException {
         String tableName = "t_" + saltBuckets + "_" + dataType + "_" + sortOrder + "_" + baseTableName;
+        TABLE_NAMES.add(tableName);
         String ddl = "create table if not exists " + tableName + " (k1 bigint not null, k2 " + dataType.getSqlTypeName() + (dataType.isFixedWidth() ? " not null" : "") + ", constraint pk primary key (k1,k2 " + sortOrder + "))" + (saltBuckets == null ? "" : (" SALT_BUCKETS= " + saltBuckets));
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute(ddl);

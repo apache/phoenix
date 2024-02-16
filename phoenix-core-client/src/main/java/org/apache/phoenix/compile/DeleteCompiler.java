@@ -91,7 +91,6 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -205,8 +204,9 @@ public class DeleteCompiler {
                     if (!isMaintainedOnClient(table)) {
                         // dataTable is a projected table and may not include all the indexed columns and so we need to get
                         // the actual data table
-                        dataTable = PhoenixRuntime.getTable(connection,
-                                SchemaUtil.getTableName(dataTable.getSchemaName().getString(), dataTable.getTableName().getString()));
+                        dataTable = connection.getTable(SchemaUtil
+                                .getTableName(dataTable.getSchemaName().getString(),
+                                        dataTable.getTableName().getString()));
                     }
                     scannedIndexMaintainer = IndexMaintainer.create(dataTable, table, connection);
                 }

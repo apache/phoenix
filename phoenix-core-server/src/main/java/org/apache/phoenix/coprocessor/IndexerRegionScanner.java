@@ -37,6 +37,7 @@ import java.util.concurrent.Future;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -73,6 +74,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -435,12 +437,33 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
                 mutations.clear();
             }
         }
-        byte[] rowCountBytes = PLong.INSTANCE.toBytes(Long.valueOf(rowCount));
+        byte[] rowCountBytes = PLong.INSTANCE.toBytes((long) rowCount);
         final Cell aggKeyValue;
         if (lastCell == null) {
-            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(UNGROUPED_AGG_ROW_KEY,
-                SINGLE_COLUMN_FAMILY,
-                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes,0, rowCountBytes.length);
+            byte[] rowKey;
+            byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                    region.getRegionInfo().getStartKey();
+            byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                    region.getRegionInfo().getEndKey();
+            final boolean isIncompatibleClient =
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+            if (!isIncompatibleClient) {
+                rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                if (rowKey == null) {
+                    if (scan.includeStartRow()) {
+                        rowKey = startKey;
+                    } else if (scan.includeStopRow()) {
+                        rowKey = endKey;
+                    } else {
+                        rowKey = HConstants.EMPTY_END_ROW;
+                    }
+                }
+            } else {
+                rowKey = UNGROUPED_AGG_ROW_KEY;
+            }
+            aggKeyValue = PhoenixKeyValueUtil.newKeyValue(rowKey,
+                    SINGLE_COLUMN_FAMILY,
+                    SINGLE_COLUMN, AGG_TIMESTAMP, rowCountBytes, 0, rowCountBytes.length);
         } else {
             aggKeyValue = PhoenixKeyValueUtil.newKeyValue(CellUtil.cloneRow(lastCell),
                 SINGLE_COLUMN_FAMILY,

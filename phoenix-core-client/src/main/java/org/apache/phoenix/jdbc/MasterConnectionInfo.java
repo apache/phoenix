@@ -67,10 +67,11 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
                 + toString();
     }
 
-    public static boolean isMaster(Configuration config) {
-        // Default is handled by the caller
-        return config != null && MASTER_REGISTRY_CLASS_NAME
-                .equals(config.get(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY));
+
+    @Override
+    public ConnectionInfo withPrincipal(String principal) {
+        return new MasterConnectionInfo(isConnectionless, principal, keytab, user,
+            haGroup, bootstrapServers);
     }
 
     /**
@@ -98,6 +99,12 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
         protected ConnectionInfo build() {
             return new MasterConnectionInfo(isConnectionless, principal, keytab, user, haGroup,
                     hostsList);
+        }
+
+        public static boolean isMaster(Configuration config, ReadOnlyProps props, Properties info) {
+            // Default is handled by the caller
+            return config != null && MASTER_REGISTRY_CLASS_NAME
+                    .equals(get(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY, config, props, info));
         }
     }
 }

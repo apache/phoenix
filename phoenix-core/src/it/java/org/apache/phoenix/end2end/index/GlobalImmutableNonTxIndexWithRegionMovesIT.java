@@ -15,26 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
+package org.apache.phoenix.end2end.index;
 
-import java.io.IOException;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.junit.experimental.categories.Category;
+import org.junit.runners.Parameterized.Parameters;
 
-import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
+import java.util.Arrays;
+import java.util.Collection;
 
-/**
- * {@link RpcScheduler} that first checks to see if this is an index or metadata update before
- * passing off the call to the delegate {@link RpcScheduler}.
- */
-public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
-    protected RpcScheduler delegate;
+@Category(NeedsOwnMiniClusterTest.class)
+public class GlobalImmutableNonTxIndexWithRegionMovesIT extends BaseIndexWithRegionMovesIT {
 
-    @Override
-    public boolean dispatch(CallRunner task) throws IOException, InterruptedException {
-        return compatDispatch(task);
+    public GlobalImmutableNonTxIndexWithRegionMovesIT(boolean columnEncoded) {
+        super(false, false, false, null, columnEncoded);
     }
 
-    public abstract boolean compatDispatch(CallRunner task)
-            throws IOException, InterruptedException;
-}
+    @Parameters(name="GlobalImmutableNonTxIndexWithRegionMovesIT_columnEncoded={0}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][]{{false}, {true}});
+    }
 
+}

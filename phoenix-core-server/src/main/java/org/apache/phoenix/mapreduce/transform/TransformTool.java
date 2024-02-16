@@ -387,12 +387,12 @@ public class TransformTool extends Configured implements Tool {
                 validateLastTransformTime();
             }
         }
-
-        pDataTable = PhoenixRuntime.getTable(
-                connection, SchemaUtil.getQualifiedTableName(schemaName, dataTable));
+        PhoenixConnection phoenixConnection = connection.unwrap(PhoenixConnection.class);
+        pDataTable = phoenixConnection.getTable(
+                SchemaUtil.getQualifiedTableName(schemaName, dataTable));
         if (indexTable != null) {
-            pIndexTable = PhoenixRuntime.getTable(
-                    connection, SchemaUtil.getQualifiedTableName(schemaName, indexTable));
+            pIndexTable = phoenixConnection.getTable(
+                    SchemaUtil.getQualifiedTableName(schemaName, indexTable));
             pOldTable = pIndexTable;
         } else {
             pOldTable = pDataTable;
@@ -402,8 +402,8 @@ public class TransformTool extends Configured implements Tool {
 
         validateTransform(pDataTable, pIndexTable, transformRecord);
         String newTableName = SchemaUtil.getTableNameFromFullName(transformRecord.getNewPhysicalTableName());
-        pNewTable = PhoenixRuntime.getTableNoCache(
-                connection, SchemaUtil.getQualifiedTableName(schemaName, newTableName));
+        pNewTable = phoenixConnection.getTableNoCache(
+                SchemaUtil.getQualifiedTableName(schemaName, newTableName));
 
 
         oldTableWithSchema = SchemaUtil.getQualifiedPhoenixTableName(schemaName, SchemaUtil.getTableNameFromFullName(pOldTable.getName().getString()));

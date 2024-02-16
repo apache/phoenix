@@ -63,7 +63,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 import java.io.IOException;
@@ -405,7 +404,8 @@ public class IndexUpgradeTool extends Configured implements Tool {
         for (Map.Entry<String, HashSet<String>> entry :tablesAndIndexes.entrySet()) {
             String dataTableFullName = entry.getKey();
             try {
-                PTable dataTable = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+                PTable dataTable = conn.unwrap(PhoenixConnection.class).getTableNoCache(
+                        dataTableFullName);
                 if (dataTable.isImmutableRows()) {
                     //add to list where immutable tables are processed in a different function
                     immutableList.add(dataTableFullName);
@@ -782,7 +782,7 @@ public class IndexUpgradeTool extends Configured implements Tool {
         try {
             for (String tableName : tables) {
                 HashSet<String> physicalIndexes = new HashSet<>();
-                dataTable = PhoenixRuntime.getTableNoCache(conn, tableName);
+                dataTable = conn.getTableNoCache(tableName);
                 String physicalTableName = dataTable.getPhysicalName().getString();
                 if (!dataTable.isTransactional() && dataTable.getType().equals(PTableType.TABLE)) {
                     for (PTable indexTable : dataTable.getIndexes()) {

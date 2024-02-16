@@ -54,7 +54,7 @@ public class PhoenixRecordWriter<T extends DBWritable>  extends RecordWriter<Nul
     public PhoenixRecordWriter(final Configuration configuration, Set<String> propsToIgnore) throws SQLException {
         Connection connection = null;
         try {
-            connection = ConnectionUtil.getOutputConnectionWithoutTheseProps(configuration, propsToIgnore);
+            connection = ConnectionUtil.getOutputConnection(configuration);
             this.batchSize = PhoenixConfigurationUtil.getBatchSize(configuration);
             final String upsertQuery = PhoenixConfigurationUtil.getUpsertStatement(configuration);
             this.statement = connection.prepareStatement(upsertQuery);

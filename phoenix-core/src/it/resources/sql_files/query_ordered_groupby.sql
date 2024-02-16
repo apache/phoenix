@@ -15,17 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
+SELECT COUNT(*) FROM SCHEMA_0001.TABLE_0001;
 
-import org.apache.hadoop.hbase.client.RowMutations;
-import org.apache.hadoop.hbase.client.Table;
-
-public abstract class CompatOmidTransactionTable implements Table {
-
-    @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        throw new UnsupportedOperationException();
-    }
-}
+SELECT DISTINCT ID1, MAX(COL2) FROM SCHEMA_0001.TABLE_0001 GROUP BY ID1, ID2 ORDER BY ID1, ID2;

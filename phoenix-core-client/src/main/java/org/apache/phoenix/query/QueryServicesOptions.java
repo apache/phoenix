@@ -141,20 +141,21 @@ import org.apache.phoenix.util.ReadOnlyProps;
  * @since 0.1
  */
 public class QueryServicesOptions {
-	public static final int DEFAULT_KEEP_ALIVE_MS = 60000;
-	public static final int DEFAULT_THREAD_POOL_SIZE = 128;
-	public static final int DEFAULT_QUEUE_SIZE = 5000;
-	public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
-	public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
-	public static final int DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
-	public static final int DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
-	public static final boolean DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED = true;
-	public static final boolean DEFAULT_CLIENT_JOIN_SPOOLING_ENABLED = true;
-	public static final boolean DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED = true;
+    public static final int DEFAULT_KEEP_ALIVE_MS = 60000;
+    public static final int DEFAULT_THREAD_POOL_SIZE = 128;
+    public static final int DEFAULT_QUEUE_SIZE = 5000;
+    public static final int UNLIMITED_QUEUE_SIZE = -1;
+    public static final int DEFAULT_THREAD_TIMEOUT_MS = 600000; // 10min
+    public static final int DEFAULT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+    public static final int DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+    public static final int DEFAULT_CLIENT_SPOOL_THRESHOLD_BYTES = 1024 * 1024 * 20; // 20m
+    public static final boolean DEFAULT_CLIENT_ORDERBY_SPOOLING_ENABLED = true;
+    public static final boolean DEFAULT_CLIENT_JOIN_SPOOLING_ENABLED = true;
+    public static final boolean DEFAULT_SERVER_ORDERBY_SPOOLING_ENABLED = true;
     public static final String DEFAULT_SPOOL_DIRECTORY = System.getProperty("java.io.tmpdir");
-	public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
-	public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
-	public static final long DEFAULT_MAX_SERVER_CACHE_SIZE = 1024*1024*100;  // 100 Mb
+    public static final int DEFAULT_MAX_MEMORY_PERC = 15; // 15% of heap
+    public static final int DEFAULT_MAX_TENANT_MEMORY_PERC = 100;
+    public static final long DEFAULT_MAX_SERVER_CACHE_SIZE = 1024 * 1024 * 100;  // 100 Mb
     public static final int DEFAULT_TARGET_QUERY_CONCURRENCY = 32;
     public static final int DEFAULT_MAX_QUERY_CONCURRENCY = 64;
     public static final String DEFAULT_DATE_FORMAT = DateUtil.DEFAULT_DATE_FORMAT;
@@ -178,7 +179,7 @@ public class QueryServicesOptions {
     public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and DELETE
     //Batch size in bytes for UPSERT, SELECT and DELETE. By default, 2MB
     public final static long DEFAULT_MUTATE_BATCH_SIZE_BYTES = 2097152;
-	// The only downside of it being out-of-sync is that the parallelization of the scan won't be as balanced as it could be.
+    // The only downside of it being out-of-sync is that the parallelization of the scan won't be as balanced as it could be.
     public static final int DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS = 30000; // 30 sec (with no activity)
     public static final int DEFAULT_MAX_SERVER_CACHE_PERSISTENCE_TIME_TO_LIVE_MS = 30 * 60000; // 30 minutes
     public static final int DEFAULT_SCAN_CACHE_SIZE = 1000;
@@ -406,7 +407,7 @@ public class QueryServicesOptions {
     public static final int DEFAULT_LOG_SALT_BUCKETS = 32;
     public static final int DEFAULT_SALT_BUCKETS = 0;
 
-	public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
+    public static final boolean DEFAULT_SYSTEM_CATALOG_SPLITTABLE = true;
 
     public static final String DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS = "org.apache.phoenix.query.DefaultGuidePostsCacheFactory";
 

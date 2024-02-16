@@ -74,7 +74,6 @@ import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -248,13 +247,13 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             String createDdl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
                 "CHANGE_DETECTION_ENABLED=true, SCHEMA_VERSION='OLD', SALT_BUCKETS=4";
             conn.createStatement().execute(createDdl);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             assertEquals("OLD", table.getSchemaVersion());
             String expectedSchemaId = String.format("global*%s*%s*OLD", schemaName, tableName);
             assertEquals(expectedSchemaId, table.getExternalSchemaId());
@@ -262,14 +261,14 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             String alterVersionDdl = "ALTER TABLE " + fullTableName + " SET SCHEMA_VERSION='NEW'";
             conn.createStatement().execute(alterVersionDdl);
 
-            PTable newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable newTable = conn.getTableNoCache(fullTableName);
             verifySchemaExport(newTable, getUtility().getConfiguration());
 
             String alterDdl = "ALTER TABLE " + fullTableName +
                 " ADD col3 VARCHAR NULL";
 
             conn.createStatement().execute(alterDdl);
-            newTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            newTable = conn.getTableNoCache(fullTableName);
             verifySchemaExport(newTable, getUtility().getConfiguration());
         }
     }
@@ -279,16 +278,16 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                 + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
                 + " SCHEMA_VERSION='OLD'";
             conn.createStatement().execute(createDdl);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             Assert.assertNull(table.getExternalSchemaId());
             String alterDdl = "ALTER TABLE " + fullTableName + " SET CHANGE_DETECTION_ENABLED=true";
             conn.createStatement().execute(alterDdl);
-            PTable alteredTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable alteredTable = conn.getTableNoCache(fullTableName);
             assertTrue(alteredTable.isChangeDetectionEnabled());
             verifySchemaExport(alteredTable, getUtility().getConfiguration());
         }
@@ -299,12 +298,12 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             String createDdl = "CREATE TABLE " + fullTableName + " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL,"
                 + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) "
                 + "CHANGE_DETECTION_ENABLED=false, SCHEMA_VERSION='OLD'";
             conn.createStatement().execute(createDdl);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             assertFalse(table.isChangeDetectionEnabled());
             assertNull(table.getExternalSchemaId());
         }
@@ -413,17 +412,18 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
         final String schemaName = generateUniqueName();
         final String tableName = generateUniqueName();
         final String dataTableFullName = SchemaUtil.getTableName(schemaName, tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+                props)) {
             CreateTableIT.testCreateTableSchemaVersionAndTopicNameHelper(conn, schemaName, tableName, "V1.0", null);
             final String version = "V1.1";
             final String alterSql = "ALTER TABLE " + dataTableFullName + " SET SCHEMA_VERSION='" + version + "'";
             conn.createStatement().execute(alterSql);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            PTable table = conn.getTableNoCache(dataTableFullName);
             assertEquals(version, table.getSchemaVersion());
             final String topicName = "MyTopicName";
             final String alterSql2 = "ALTER TABLE " + dataTableFullName + " SET STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(alterSql2);
-            table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+            table = conn.getTableNoCache(dataTableFullName);
             assertEquals(topicName, table.getStreamingTopicName());
         }
     }
@@ -1885,7 +1885,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
 
     private void assertMaxLookbackAge(String fullTableName, Long expectedMaxLookbackAge) throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            assertEquals(expectedMaxLookbackAge, PhoenixRuntime.getTableNoCache(conn, fullTableName).getMaxLookbackAge());
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(expectedMaxLookbackAge, pconn.getTableNoCache(fullTableName).getMaxLookbackAge());
         }
     }
 

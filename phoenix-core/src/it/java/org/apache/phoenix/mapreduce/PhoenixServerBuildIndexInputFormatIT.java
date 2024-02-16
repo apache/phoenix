@@ -22,6 +22,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool.SourceTable;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PTable;
@@ -92,8 +93,8 @@ public class PhoenixServerBuildIndexInputFormatIT  extends ParallelStatsDisabled
         String indexTableFullName = PhoenixConfigurationUtil.getIndexToolIndexTableName(conf);
         SourceTable sourceTable = PhoenixConfigurationUtil.getIndexToolSourceTable(conf);
         boolean fromIndex = sourceTable.equals(SourceTable.INDEX_TABLE_SOURCE);
-        PTable pDataTable = PhoenixRuntime.getTable(conn, dataTableFullName);
-        PTable pIndexTable = PhoenixRuntime.getTable(conn, indexTableFullName);
+        PTable pDataTable = conn.unwrap(PhoenixConnection.class).getTable(dataTableFullName);
+        PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(indexTableFullName);
 
         PhoenixServerBuildIndexInputFormat inputFormat = new PhoenixServerBuildIndexInputFormat();
         QueryPlan queryPlan = inputFormat.getQueryPlan(Job.getInstance(), conf);

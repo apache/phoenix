@@ -15,23 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
+SELECT COUNT(COL2) FROM SCHEMA_0003.TABLE_0003;
 
-import org.apache.hadoop.hbase.client.RowMutations;
-import org.apache.hadoop.hbase.client.Table;
-
-public abstract class CompatDelegateHTable implements Table {
-
-    protected final Table delegate;
-
-    public CompatDelegateHTable(Table delegate) {
-        this.delegate = delegate;
-    }
-
-    @Override
-    public void mutateRow(RowMutations rm) throws IOException {
-        delegate.mutateRow(rm);
-    }
-}
+SELECT ID, COL1, COL2 FROM SCHEMA_0003.TABLE_0003 WHERE COL2 > 25 ORDER BY COL2, COL1;

@@ -379,6 +379,7 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will read from
      */
+    @Deprecated
     public static void setInputCluster(final Configuration configuration,
             final String quorum) {
         Preconditions.checkNotNull(configuration);
@@ -390,12 +391,35 @@ public final class PhoenixConfigurationUtil {
      * @param configuration
      * @param quorum ZooKeeper quorum string for HBase cluster the MapReduce job will write to
      */
+    @Deprecated
     public static void setOutputCluster(final Configuration configuration,
             final String quorum) {
         Preconditions.checkNotNull(configuration);
         configuration.set(PhoenixConfigurationUtilHelper.MAPREDUCE_OUTPUT_CLUSTER_QUORUM, quorum);
     }
-        
+
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should read from
+     * @param configuration
+     * @param url Phoenix JDBC URL
+     */
+    public static void setInputClusterUrl(final Configuration configuration,
+            final String url) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(PhoenixConfigurationUtilHelper.MAPREDUCE_INPUT_CLUSTER_URL, url);
+    }
+
+    /**
+     * Sets which HBase cluster a Phoenix MapReduce job should write to
+     * @param configuration
+     * @param url Phoenix JDBC URL string for HBase cluster the MapReduce job will write to
+     */
+    public static void setOutputClusterUrl(final Configuration configuration,
+            final String url) {
+        Preconditions.checkNotNull(configuration);
+        configuration.set(PhoenixConfigurationUtilHelper.MAPREDUCE_OUTPUT_CLUSTER_URL, url);
+    }
+
     public static Class<?> getInputClass(final Configuration configuration) {
         return configuration.getClass(INPUT_CLASS, NullDBWritable.class);
     }
@@ -420,7 +444,8 @@ public final class PhoenixConfigurationUtil {
         }
         final String tableName = getOutputTableName(configuration);
         Preconditions.checkNotNull(tableName);
-        try (final Connection connection = ConnectionUtil.getOutputConnection(configuration)) {
+        try (PhoenixConnection connection = ConnectionUtil.getOutputConnection(configuration).
+                unwrap(PhoenixConnection.class)) {
             List<String> upsertColumnList =
                     PhoenixConfigurationUtil.getUpsertColumnNames(configuration);
             if(!upsertColumnList.isEmpty()) {
@@ -497,7 +522,8 @@ public final class PhoenixConfigurationUtil {
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
-        try (final Connection connection = ConnectionUtil.getInputConnection(configuration, props)){
+        try (PhoenixConnection connection = ConnectionUtil.
+                getInputConnection(configuration, props).unwrap(PhoenixConnection.class)) {
             final List<String> selectColumnList = getSelectColumnList(configuration);
             columnMetadataList =
                     PhoenixRuntime.generateColumnInfo(connection, tableName, selectColumnList);

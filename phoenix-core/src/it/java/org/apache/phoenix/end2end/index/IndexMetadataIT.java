@@ -577,7 +577,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
     public void testAsyncRebuildTimestamp() throws Exception {
         long startTimestamp = System.currentTimeMillis();
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(false);
         String testTable = generateUniqueName();
 
@@ -607,7 +607,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         assertEquals(indexName + "3", rs.getString(1));
         long asyncTimestamp = rs.getLong(2);
 		assertTrue("Async timestamp is recent timestamp", asyncTimestamp > startTimestamp);
-        PTable table = PhoenixRuntime.getTable(conn, indexName+"3");
+        PTable table = conn.getTable(indexName+"3");
         assertEquals(table.getTimeStamp(), asyncTimestamp);
         assertFalse(rs.next());
         conn.createStatement().execute("ALTER INDEX "+indexName+"3 ON " + testTable +" DISABLE");
@@ -992,7 +992,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals("Mismatch found for " + name, expectedUpdateCacheFreq, rs.getLong(1));
         assertEquals("Mismatch in UPDATE_CACHE_FREQUENCY for PTable of " + name,
-                expectedUpdateCacheFreq, PhoenixRuntime.getTableNoCache(conn, name)
+                expectedUpdateCacheFreq, conn.unwrap(PhoenixConnection.class).getTableNoCache(name)
                         .getUpdateCacheFrequency());
     }
 

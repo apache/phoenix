@@ -543,7 +543,8 @@ public abstract class BaseTest {
         utility = new HBaseTestingUtility(conf);
         try {
             long startTime = System.currentTimeMillis();
-            utility.startMiniCluster(NUM_SLAVES_BASE);
+            utility.startMiniCluster(overrideProps.getInt(
+                    QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, NUM_SLAVES_BASE));
             long startupTime = System.currentTimeMillis()-startTime;
             LOGGER.info("HBase minicluster startup complete in {} ms", startupTime);
             return getLocalClusterUrl(utility);
@@ -793,7 +794,7 @@ public abstract class BaseTest {
             expectedColumnEncoding, String tableName)
             throws Exception {
         PhoenixConnection phxConn = conn.unwrap(PhoenixConnection.class);
-        PTable table = PhoenixRuntime.getTableNoCache(phxConn, tableName);
+        PTable table = phxConn.getTableNoCache(tableName);
         assertEquals(expectedStorageScheme, table.getImmutableStorageScheme());
         assertEquals(expectedColumnEncoding, table.getEncodingScheme());
     }
@@ -947,7 +948,7 @@ public abstract class BaseTest {
                             rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                             rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
                     try {
-                        PhoenixRuntime.getTable(conn, fullTableName);
+                        conn.unwrap(PhoenixConnection.class).getTable(fullTableName);
                         fail("The following tables are not deleted that should be:" + getTableNames(rs));
                     } catch (TableNotFoundException e) {
                     }
@@ -2150,7 +2151,8 @@ public abstract class BaseTest {
 
     protected Long queryTableLevelMaxLookbackAge(String fullTableName) throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
-            return PhoenixRuntime.getTableNoCache(conn, fullTableName).getMaxLookbackAge();
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            return pconn.getTableNoCache(fullTableName).getMaxLookbackAge();
         }
     }
 }

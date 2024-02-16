@@ -65,7 +65,6 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +72,7 @@ import org.slf4j.LoggerFactory;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 abstract public class BaseScannerRegionObserver implements RegionObserver {
+
     private static final Logger LOGGER = LoggerFactory.getLogger(BaseScannerRegionObserver.class);
 
     /**
@@ -107,12 +107,35 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     Bytes.compareTo(upperExclusiveRegionKey, expectedUpperRegionKey) != 0) || 
                     (actualStartRow != null && Bytes.compareTo(actualStartRow, lowerInclusiveRegionKey) < 0);
         } else {
-            isStaleRegionBoundaries = Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
-                    ( Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) > 0 && upperExclusiveRegionKey.length != 0) ||
-                    (upperExclusiveRegionKey.length != 0 && upperExclusiveScanKey.length == 0);
+            if (scan.isReversed()) {
+                isStaleRegionBoundaries =
+                        Bytes.compareTo(upperExclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                                (Bytes.compareTo(lowerInclusiveScanKey, upperExclusiveRegionKey) >
+                                        0 && upperExclusiveRegionKey.length != 0) ||
+                                (upperExclusiveRegionKey.length != 0 &&
+                                        lowerInclusiveScanKey.length == 0);
+            } else {
+                isStaleRegionBoundaries =
+                        Bytes.compareTo(lowerInclusiveScanKey, lowerInclusiveRegionKey) < 0 ||
+                                (Bytes.compareTo(upperExclusiveScanKey, upperExclusiveRegionKey) >
+                                        0 && upperExclusiveRegionKey.length != 0) ||
+                                (upperExclusiveRegionKey.length != 0 &&
+                                        upperExclusiveScanKey.length == 0);
+            }
         }
         if (isStaleRegionBoundaries) {
-            Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
+            LOGGER.error("Throwing StaleRegionBoundaryCacheException due to mismatched scan "
+                            + "boundaries. Region: {} , lowerInclusiveScanKey: {} , "
+                            + "upperExclusiveScanKey: {} , lowerInclusiveRegionKey: {} , "
+                            + "upperExclusiveRegionKey: {} , scan reversed: {}",
+                    region.getRegionInfo().getRegionNameAsString(),
+                    Bytes.toStringBinary(lowerInclusiveScanKey),
+                    Bytes.toStringBinary(upperExclusiveScanKey),
+                    Bytes.toStringBinary(lowerInclusiveRegionKey),
+                    Bytes.toStringBinary(upperExclusiveRegionKey),
+                    scan.isReversed());
+            Exception cause = new StaleRegionBoundaryCacheException(
+                    region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
         if(isLocalIndex) {
@@ -293,8 +316,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
             // client may recreate scans with wrong region boundaries.
             if(t instanceof NotServingRegionException) {
+                LOGGER.error("postScannerOpen error for region {} . "
+                                + "Thorwing it as StaleRegionBoundaryCacheException",
+                        s.getRegionInfo().getRegionNameAsString(), t);
                 Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
+            } else {
+                LOGGER.error("postScannerOpen error for region {}",
+                        s.getRegionInfo().getRegionNameAsString(), t);
             }
             ClientUtil.throwIOException(c.getEnvironment().getRegion().getRegionInfo().getRegionNameAsString(), t);
             return null; // impossible
@@ -513,7 +542,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         PTable table;
         try(PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                 conf).unwrap(PhoenixConnection.class)) {
-            table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            table = conn.getTableNoCache(fullTableName);
         }
         catch (Exception e) {
             if (e instanceof TableNotFoundException) {

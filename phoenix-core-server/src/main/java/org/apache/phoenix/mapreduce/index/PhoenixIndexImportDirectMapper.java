@@ -113,7 +113,8 @@ public class PhoenixIndexImportDirectMapper extends
 
             String indexTableName =
                     PhoenixConfigurationUtil.getIndexToolIndexTableName(configuration);
-            PTable pIndexTable = PhoenixRuntime.getTable(connection, indexTableName);
+            PTable pIndexTable = connection.unwrap(PhoenixConnection.class).getTable(
+                    indexTableName);
 
             indexStatusUpdater = new IndexStatusUpdater(
                 SchemaUtil.getEmptyColumnFamily(pIndexTable),

@@ -120,7 +120,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TransactionUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -500,8 +499,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             try {
                 String tenantId = (index.getTenantId() != null) ? 
                         index.getTenantId().getString() : null;
-                parentTable = PhoenixRuntime.getTable(connection, 
-                        tenantId, index.getParentName().getString());
+                parentTable = connection.getTable(tenantId, index.getParentName().getString());
                 this.indexDataColumnCount = parentTable.getPKColumns().size();
             } catch (SQLException e) {
                 throw new RuntimeException(e);

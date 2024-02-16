@@ -397,7 +397,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             String createViewSql = "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + dataTableFullName +
                     " SCHEMA_VERSION='" + version + "', STREAMING_TOPIC_NAME='" + topicName + "'";
             conn.createStatement().execute(createViewSql);
-            PTable view = PhoenixRuntime.getTableNoCache(conn, viewFullName);
+            PTable view = conn.unwrap(PhoenixConnection.class).getTableNoCache(viewFullName);
             assertEquals(version, view.getSchemaVersion());
             assertEquals(topicName, view.getStreamingTopicName());
         }
@@ -421,7 +421,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
                 "MULTI_TENANT=true, CHANGE_DETECTION_ENABLED=true";
             conn.createStatement().execute(ddl);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             assertTrue(table.isChangeDetectionEnabled());
             AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
 
@@ -430,7 +430,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 " AS SELECT * FROM " + fullTableName + " CHANGE_DETECTION_ENABLED=true";
 
             conn.createStatement().execute(globalViewDdl);
-            globalView = PhoenixRuntime.getTableNoCache(conn, fullGlobalViewName);
+            globalView = conn.getTableNoCache(fullGlobalViewName);
             assertTrue(globalView.isChangeDetectionEnabled());
             PTable globalViewWithParents = ViewUtil.addDerivedColumnsFromParent(conn, globalView, table);
             //   base column count doesn't get set properly
@@ -446,7 +446,7 @@ public class ViewIT extends SplitSystemCatalogIT {
                 " (id3 VARCHAR PRIMARY KEY, col4 VARCHAR NULL) " +
                 " AS SELECT * FROM " + fullGlobalViewName + " CHANGE_DETECTION_ENABLED=true";
             tenantConn.createStatement().execute(tenantViewDdl);
-            PTable tenantView = PhoenixRuntime.getTableNoCache(tenantConn, fullTenantViewName);
+            PTable tenantView = tenantConn.getTableNoCache(fullTenantViewName);
             assertTrue(tenantView.isChangeDetectionEnabled());
             PTable tenantViewWithParents = ViewUtil.addDerivedColumnsFromParent(tenantConn, tenantView, globalView);
             AlterTableIT.verifySchemaExport(tenantViewWithParents, getUtility().getConfiguration());
@@ -513,7 +513,7 @@ public class ViewIT extends SplitSystemCatalogIT {
             String viewDdl = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName
                 + " CHANGE_DETECTION_ENABLED=true";
             conn.createStatement().execute(viewDdl);
-            PTable view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+            PTable view = conn.unwrap(PhoenixConnection.class).getTableNoCache(fullViewName);
             assertTrue(view.isChangeDetectionEnabled());
             assertEquals(DefaultSchemaRegistryRepository.getSchemaId(view),
                 view.getExternalSchemaId());
@@ -664,9 +664,9 @@ public class ViewIT extends SplitSystemCatalogIT {
             } catch (Exception ignore) {
             }
             // Check view inherits index, but child view doesn't
-            PTable table = PhoenixRuntime.getTable(conn, fullViewName);
+            PTable table = conn.unwrap(PhoenixConnection.class).getTable(fullViewName);
             assertEquals(1, table.getIndexes().size());
-            table = PhoenixRuntime.getTable(conn, fullChildViewName);
+            table = conn.unwrap(PhoenixConnection.class).getTable(fullChildViewName);
             assertEquals(0, table.getIndexes().size());
 
             ResultSet rs = stmt.executeQuery("select count(*) from "

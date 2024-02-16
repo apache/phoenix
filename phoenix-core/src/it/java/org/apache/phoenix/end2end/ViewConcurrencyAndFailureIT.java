@@ -57,6 +57,7 @@ import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost
         .PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ConcurrentTableMutationException;
 import org.apache.phoenix.schema.PTable;
@@ -156,7 +157,7 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
     @Test
     public void testChildViewCreationFails() throws Exception {
-        try (Connection conn = DriverManager.getConnection(getUrl());
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
                 Statement stmt = conn.createStatement()) {
 
             String fullTableName = SchemaUtil.getTableName(SCHEMA1,
@@ -185,15 +186,15 @@ public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 
             // the first child view should not exist
             try {
-                PhoenixRuntime.getTableNoCache(conn, failingViewName);
+                conn.getTableNoCache(failingViewName);
                 fail();
             } catch (TableNotFoundException ignored) {
             }
 
             // we should be able to load the table
-            PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            conn.getTableNoCache(fullTableName);
             // we should be able to load the second view
-            PhoenixRuntime.getTableNoCache(conn, succeedingViewName);
+            conn.getTableNoCache(succeedingViewName);
         }
     }
 

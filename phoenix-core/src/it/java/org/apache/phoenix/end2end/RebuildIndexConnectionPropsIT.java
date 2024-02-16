@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Field;
 import java.sql.DriverManager;
 import java.util.HashMap;
 import java.util.Map;
@@ -36,8 +37,11 @@ import org.apache.phoenix.coprocessor.MetaDataRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.query.DelegateQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -46,7 +50,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.mockito.internal.util.reflection.Whitebox;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class RebuildIndexConnectionPropsIT extends BaseTest {
@@ -106,12 +109,18 @@ public class RebuildIndexConnectionPropsIT extends BaseTest {
                     Long.toString(NUM_RPC_RETRIES),
                     rebuildQueryServicesConfig.get(HConstants.HBASE_CLIENT_RETRIES_NUMBER));
                 ConnectionQueryServices rebuildQueryServices = rebuildIndexConnection.getQueryServices();
-                Connection rebuildIndexHConnection =
-                        (Connection) Whitebox.getInternalState(Whitebox.getInternalState(rebuildQueryServices,
-                        "parent"), "connection");
+
+                Field parentField = DelegateQueryServices.class.getDeclaredField("parent");
+                parentField.setAccessible(true);
+                QueryServices parent = (QueryServices) parentField.get(rebuildQueryServices);
+
+                Field connectionField =
+                        ConnectionQueryServicesImpl.class.getDeclaredField("connection");
+                connectionField.setAccessible(true);
+                Connection rebuildIndexHConnection = (Connection) connectionField.get(parent);
                 Connection regularHConnection =
-                        (Connection) Whitebox.getInternalState(
-                            regularConnection.getQueryServices(), "connection");
+                        (Connection) connectionField.get(regularConnection.getQueryServices());
+
                 // assert that a new HConnection was created
                 assertFalse(
                     regularHConnection.toString().equals(rebuildIndexHConnection.toString()));

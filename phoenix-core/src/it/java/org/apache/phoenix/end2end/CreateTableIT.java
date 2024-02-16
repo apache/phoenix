@@ -782,13 +782,13 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         String schemaName = generateUniqueName();
         String tableName = generateUniqueName();
         String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
             String ddl = "CREATE TABLE " + fullTableName +
                 " (id char(1) NOT NULL," + " col1 integer NOT NULL," + " col2 bigint NOT NULL," +
                 " CONSTRAINT NAME_PK PRIMARY KEY (id, col1, col2)) " +
                 "CHANGE_DETECTION_ENABLED=true";
             conn.createStatement().execute(ddl);
-            PTable table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
+            PTable table = conn.getTableNoCache(fullTableName);
             assertTrue(table.isChangeDetectionEnabled());
             AlterTableIT.verifySchemaExport(table, getUtility().getConfiguration());
         }
@@ -1231,7 +1231,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             ddl += ", STREAMING_TOPIC_NAME='" + topicName + "'";
         }
         conn.createStatement().execute(ddl);
-        PTable table = PhoenixRuntime.getTableNoCache(conn, dataTableFullName);
+        PTable table = conn.unwrap(PhoenixConnection.class).getTableNoCache(dataTableFullName);
         assertEquals(dataTableVersion, table.getSchemaVersion());
         if (topicName != null) {
             assertEquals(topicName, table.getStreamingTopicName());
@@ -1768,7 +1768,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     public static long getLastDDLTimestamp(Connection conn, String tableFullName) throws SQLException {
-        PTable table = PhoenixRuntime.getTableNoCache(conn, tableFullName);
+        PTable table = conn.unwrap(PhoenixConnection.class).getTableNoCache(tableFullName);
         assertNotNull("PTable is null!", table);
         assertNotNull("DDL timestamp is null!", table.getLastDDLTimestamp());
         return table.getLastDDLTimestamp();

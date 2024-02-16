@@ -19,6 +19,10 @@ package org.apache.phoenix.index;
 
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.UPGRADE_OP;
+import static org.apache.phoenix.util.PhoenixRuntime.CONNECTIONLESS;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
+import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
 
 import java.sql.Connection;
 import java.util.Arrays;
@@ -33,6 +37,9 @@ import org.apache.hadoop.hbase.HConstants;
 
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexUpgradeTool;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.ConnectionlessTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -45,7 +52,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 
 @RunWith(Parameterized.class)
-public class IndexUpgradeToolTest {
+public class IndexUpgradeToolTest extends BaseConnectionlessQueryTest{
     private static final String INPUT_LIST = "TEST.MOCK1,TEST1.MOCK2,TEST.MOCK3";
     private final boolean upgrade;
     private static final String DUMMY_STRING_VALUE = "anyValue";
@@ -170,7 +177,11 @@ public class IndexUpgradeToolTest {
     }
 
     private void setupConfForConnectionlessQuery(Configuration conf) {
-        conf.set(HConstants.ZOOKEEPER_QUORUM, PhoenixRuntime.CONNECTIONLESS);
+        String connectionlessUrl = PhoenixRuntime.JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR
+        + CONNECTIONLESS + JDBC_PROTOCOL_TERMINATOR
+        + PHOENIX_TEST_DRIVER_URL_PARAM + JDBC_PROTOCOL_TERMINATOR;
+        PhoenixConfigurationUtil.setInputClusterUrl(conf, connectionlessUrl);
+        PhoenixConfigurationUtil.setOutputClusterUrl(conf, connectionlessUrl);
         conf.unset(HConstants.ZOOKEEPER_CLIENT_PORT);
         conf.unset(HConstants.ZOOKEEPER_ZNODE_PARENT);
     }

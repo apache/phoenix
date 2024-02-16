@@ -20,10 +20,12 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
+import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
  * Iterates through tuples up to a limit
@@ -32,32 +34,53 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 public class OffsetResultIterator extends DelegateResultIterator {
     private int rowCount;
-    private int offset;
+    private final int offset;
+    private Tuple lastScannedTuple;
     private long pageSizeMs = Long.MAX_VALUE;
+    private boolean isIncompatibleClient = false;
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset) {
         super(delegate);
         this.offset = offset == null ? -1 : offset;
+        this.lastScannedTuple = null;
     }
 
-    public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs) {
+    public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs,
+                                boolean isIncompatibleClient) {
         this(delegate, offset);
         this.pageSizeMs = pageSizeMs;
+        this.isIncompatibleClient = isIncompatibleClient;
     }
+
     @Override
     public Tuple next() throws SQLException {
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         while (rowCount < offset) {
             Tuple tuple = super.next();
-            if (tuple == null) { return null; }
+            if (tuple == null) {
+                return null;
+            }
             if (tuple.size() == 0 || isDummy(tuple)) {
-                // while rowCount < offset absorb the dummy and call next on the underlying scanner
+                if (!isIncompatibleClient) {
+                    return tuple;
+                }
+                // While rowCount < offset absorb the dummy and call next on the underlying scanner.
+                // This is applicable to old client.
                 continue;
             }
             rowCount++;
-            // no page timeout check at this level because we cannot correctly resume
-            // scans for OFFSET queries until the offset is reached
+            lastScannedTuple = tuple;
+            if (!isIncompatibleClient) {
+                if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+                    return getDummyTuple(lastScannedTuple);
+                }
+            }
         }
-        return super.next();
+        Tuple result = super.next();
+        if (result != null) {
+            lastScannedTuple = result;
+        }
+        return result;
     }
 
     @Override
@@ -80,6 +103,14 @@ public class OffsetResultIterator extends DelegateResultIterator {
     }
 
     public Integer getRemainingOffset() {
-        return (offset - rowCount) > 0 ? (offset - rowCount) : 0;
+        return Math.max(offset - rowCount, 0);
+    }
+
+    public Tuple getLastScannedTuple() {
+        return lastScannedTuple;
+    }
+
+    public void setRowCountToOffset() {
+        this.rowCount = this.offset;
     }
 }
