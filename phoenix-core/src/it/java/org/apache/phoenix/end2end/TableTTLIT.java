@@ -20,9 +20,12 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -240,12 +243,302 @@ public class TableTTLIT extends BaseTest {
                 conn.commit();
                 injectEdge.incrementValue(ttl * 1000 - 1000);
             }
-            flush(TableName.valueOf(tableName));
-            majorCompact(TableName.valueOf(tableName));
-            compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
-            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
         }
     }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteRows() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == MAX_COLUMN_INDEX - 3) {
+                    deleteRow(conn, tableName, "a");
+                    deleteRow(conn, noCompactTableName, "a");
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteVersionRows1() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == MAX_COLUMN_INDEX - 2) {
+                    deleteFamilyOperation(tableName, noCompactTableName, true);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteVersionRows2() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 3 || columnIndex == 5 || columnIndex == 7) {
+                    deleteFamilyOperation(tableName, noCompactTableName, true);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteVersionRows3() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 3 || columnIndex == 5) {
+                    deleteFamilyOperation(tableName, noCompactTableName, true);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteFamilyRows1() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == MAX_COLUMN_INDEX - 2) {
+                    deleteFamilyOperation(tableName, noCompactTableName, false);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteFamilyRows2() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 3 || columnIndex == 5 || columnIndex == 7) {
+                    deleteFamilyOperation(tableName, noCompactTableName, false);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteFamilyRows3() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 3 || columnIndex == 5) {
+                    deleteFamilyOperation(tableName, noCompactTableName, false);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteFamilyAndVersionRows1() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 3) {
+                    deleteFamilyOperation(tableName, noCompactTableName, false);
+                } else if (columnIndex == 6) {
+                    deleteFamilyOperation(tableName, noCompactTableName, true);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindowsWithDeleteFamilyAndVersionRows2() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            String noCompactTableName = generateUniqueName();
+            createTable(noCompactTableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 3) {
+                    deleteFamilyOperation(tableName, noCompactTableName, true);
+                } else if (columnIndex == 6) {
+                    deleteFamilyOperation(tableName, noCompactTableName, false);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            for (int columnIndex = 1; columnIndex <= MAX_COLUMN_INDEX; columnIndex++) {
+                String value = Integer.toString(RAND.nextInt(1000));
+                if (columnIndex == 4) {
+                    deleteFamilyOperation(tableName, noCompactTableName, false);
+                } else if (columnIndex == 7) {
+                    deleteFamilyOperation(tableName, noCompactTableName, true);
+                } else {
+                    updateColumn(conn, tableName, "a", columnIndex, value);
+                    updateColumn(conn, noCompactTableName, "a", columnIndex, value);
+                }
+                conn.commit();
+                injectEdge.incrementValue(ttl * 1000L - 1000);
+            }
+            injectEdge.incrementValue(1000);
+            compareRowsWithAndWithoutCompact(tableName, conn, noCompactTableName);
+        }
+    }
+
+    private void deleteFamilyOperation(String tableName, String noCompactTableName,
+                                       boolean isDeleteFamilyVersion)
+            throws SQLException, IOException {
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(
+                getUrl(),
+                new Properties());
+        injectEdge.incrementValue(1000 - ttl * 1000L);
+        try (Table table1 = cqs.getTable(tableName.getBytes());
+             Table table2 = cqs.getTable(noCompactTableName.getBytes())) {
+            Delete delete = new Delete(Bytes.toBytesBinary("a"));
+            if (isDeleteFamilyVersion) {
+                delete.addFamilyVersion(Bytes.toBytesBinary("0"),
+                        injectEdge.currentTime());
+            } else {
+                delete.addFamily(Bytes.toBytesBinary("0"),
+                        injectEdge.currentTime());
+            }
+            table1.delete(delete);
+            table2.delete(delete);
+        }
+    }
+
+    private void compareRowsWithAndWithoutCompact(String tableName, Connection conn,
+                                                  String noCompactTableName)
+            throws Exception {
+        flush(TableName.valueOf(tableName));
+        majorCompact(TableName.valueOf(tableName));
+        compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
+        injectEdge.incrementValue(1000);
+    }
+
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
         admin.flush(table);
@@ -306,6 +599,8 @@ public class TableTTLIT extends BaseTest {
 
         boolean hasRow1 = rs1.next();
         boolean hasRow2 = rs2.next();
+        LOG.debug("Table {} has rows: {} , Table {} has rows: {}", tableName1, hasRow1,
+                tableName2, hasRow2);
         Assert.assertEquals(hasRow1, hasRow2);
         if (hasRow1) {
             int i;
@@ -317,6 +612,8 @@ public class TableTTLIT extends BaseTest {
                 } else if (rs2.getString(i) != null) {
                     LOG.debug("VAL" + i + " " + rs2.getString(i) + " : " + rs1.getString(i));
                 }
+                LOG.debug("Value of column VAL{} for Table {} is {} and Table {} is {}", i,
+                        tableName1, rs1.getString(i), tableName2, rs2.getString(i));
                 Assert.assertEquals("VAL" + i,  rs2.getString(i), rs1.getString(i));
             }
         }
