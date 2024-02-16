@@ -183,7 +183,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         //In HBase 2.2.6 and HBase 2.3.0+, helps region server assignments when under an injected
         // edge clock. See HBASE-24511.
         serverProps.put("hbase.regionserver.rpc.retry.interval", Long.toString(0));
-        // Need to set dispatcher delay to 0 to account for injected edge else queue will get stuck
+        // Need to set dispatcher delay to 0 to account for injected edge else queue might get stuck
         serverProps.put("hbase.procedure.remote.dispatcher.delay.msec", Integer.toString(0));
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(4);
         clientProps.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
