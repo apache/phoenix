@@ -1652,19 +1652,20 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.4.1 profile -->
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.4.1-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.5.4 profile -->
+      <!-- This will work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.5.4-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.4</hbase.profile>
-        <hbase.compat.version>2.4.1</hbase.compat.version>
-        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
-        <zookeeper.version>3.5.7</zookeeper.version>
+        <hbase.profile>2.5</hbase.profile>
+        <hbase.compat.version>2.5.4</hbase.compat.version>
+        <hadoop.version>3.2.3</hadoop.version>
+        <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
+        <zookeeper.version>3.8.3</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1758,7 +1759,7 @@
       </properties>
     </profile>
     <profile>
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <!-- This will work with the public HBase artifacts -->
       <id>phoenix-hbase-compat-2.5.0</id>
       <activation>
         <property>
@@ -1776,7 +1777,7 @@
       </properties>
     </profile>
     <profile>
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
+      <!-- This will work with the public HBase artifacts -->
       <id>phoenix-hbase-compat-2.5.4</id>
       <activation>
         <property>
