@@ -1481,7 +1481,7 @@ public class UpgradeUtil {
         ReadOnlyProps readOnlyProps = oldMetaConnection.getQueryServices().getProps();
         TableName sysCat = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME, readOnlyProps);
 
-        LOGGER.debug(String.format("SYSTEM CATALOG tabled use for copying TTL values: %s", sysCat.toString()));
+        LOGGER.debug(String.format("SYSTEM CATALOG table use for copying TTL values: %s", sysCat.toString()));
         Configuration conf = oldMetaConnection.getQueryServices().getConfiguration();
         try (org.apache.hadoop.hbase.client.Connection moveTTLConnection =  getHBaseConnection(conf, options);
              Table sysCatalogTable = moveTTLConnection.getTable(sysCat);
