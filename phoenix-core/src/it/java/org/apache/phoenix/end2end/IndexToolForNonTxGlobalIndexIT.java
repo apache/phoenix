@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
@@ -1482,42 +1483,59 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     @Test
     public void testMissingIndexRowsBeyondTableLevelMaxLookback() throws Exception {
+        if (! mutable) {
+            return;
+        }
         String schemaName = generateUniqueName();
         String dataTableName = generateUniqueName();
         String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
         String indexTableName = generateUniqueName();
         int maxLookbackAge = 12000;
+        int delta = 5;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.createStatement().execute("CREATE TABLE " + fullDataTableName
                     + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, CODE VARCHAR) MAX_LOOKBACK_AGE=" + maxLookbackAge);
-            // Insert a row
-            conn.createStatement()
-                    .execute("upsert into " + fullDataTableName + " values (1, 'Phoenix', 'A')");
-            conn.commit();
-            conn.createStatement()
-                    .execute("upsert into " + fullDataTableName + " values (2, 'Phoenix', 'B')");
-            conn.commit();
-            String dataTableSql = "SELECT * FROM " + fullDataTableName;
-            ResultSet rs = conn.createStatement().executeQuery(dataTableSql);
-            Assert.assertTrue(rs.next());
-            Assert.assertTrue(rs.next());
-            conn.createStatement()
-                    .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC " + this.indexDDLOptions,
-                            indexTableName, fullDataTableName));
-            conn.commit();
             ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
             customEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(customEdge);
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
-            customEdge.incrementValue(maxLookbackAge + 1);
-            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() < startTime + MAX_LOOKBACK_AGE * 1000);
-            IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
-                    IndexTool.IndexVerifyType.BEFORE);
-            assertEquals(2, indexTool.getJob().getCounters()
-                            .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT)
-                            .getValue());
+            customEdge.incrementValue(delta);
+            // Insert a row
+            conn.createStatement()
+                    .execute("upsert into " + fullDataTableName + " values (1, 'Phoenix', 'A')");
+            conn.commit();
+            customEdge.incrementValue(delta);
+            conn.createStatement()
+                    .execute("upsert into " + fullDataTableName + " values (2, 'Phoenix', 'B')");
+            conn.commit();
+            customEdge.incrementValue(delta);
+            String dataTableSql = "SELECT * FROM " + fullDataTableName;
+            ResultSet rs = conn.createStatement().executeQuery(dataTableSql);
+            Assert.assertTrue(rs.next());
+            Assert.assertTrue(rs.next());
+            customEdge.incrementValue(delta);
+            conn.createStatement()
+                    .execute(String.format("CREATE INDEX %s ON %s (NAME) INCLUDE (CODE) ASYNC " + this.indexDDLOptions,
+                            indexTableName, fullDataTableName));
+            customEdge.incrementValue(delta);
+            IndexTool indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
+                    null, 0, IndexTool.IndexVerifyType.ONLY);
+            CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
             assertEquals(2,
-                    indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+                    mrJobCounters.findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(0, mrJobCounters.findCounter(
+                    BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT.name()).getValue());
+            customEdge.incrementValue(maxLookbackAge + 1);
+            indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null,
+                    0, IndexTool.IndexVerifyType.BEFORE);
+            mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+            assertEquals(2, mrJobCounters.findCounter(
+                    BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(0,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                    startTime + MAX_LOOKBACK_AGE * 1000);
         }
     }
 

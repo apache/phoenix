@@ -77,14 +77,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.*;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
@@ -99,14 +92,14 @@ import static org.junit.Assert.fail;
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRepairRegionScannerIT.class);
-    private final String tableDDLOptions;
+    private String tableDDLOptions;
     private final String indexDDLOptions;
     private boolean mutable;
+    StringBuilder optionBuilder = new StringBuilder();
     @Rule
     public ExpectedException exceptionRule = ExpectedException.none();
 
     public IndexRepairRegionScannerIT(boolean mutable, boolean singleCellIndex) {
-        StringBuilder optionBuilder = new StringBuilder();
         StringBuilder indexOptionBuilder = new StringBuilder();
         this.mutable = mutable;
         if (!mutable) {
@@ -840,6 +833,76 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
                 null, schemaName,
                 dataTableName, indexTableName,
                 indexTableFullName, 0);
+        }
+    }
+
+    @Test
+    public void testInvalidIndexRowWithTableLevelMaxLookback() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        final int NROWS = 4;
+        final int maxLookbackAge = 12000;
+        if ((optionBuilder.length() > 0 && optionBuilder.toString().trim().startsWith("SPLIT ON"))
+                || optionBuilder.length() == 0) {
+            optionBuilder.insert(0, "MAX_LOOKBACK_AGE=" + maxLookbackAge + " ");
+        }
+
+        else {
+            optionBuilder.insert(0, "MAX_LOOKBACK_AGE=" + maxLookbackAge + ", ");
+        }
+        tableDDLOptions = optionBuilder.toString();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) " + tableDDLOptions);
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName, dataTableFullName));
+
+            PreparedStatement dataPreparedStatement =
+                    conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
+            for (int i = 1; i <= NROWS; i++) {
+                dataPreparedStatement.setInt(1, i);
+                dataPreparedStatement.setInt(2, i + 1);
+                dataPreparedStatement.setInt(3, i * 2);
+                dataPreparedStatement.execute();
+            }
+            conn.commit();
+
+            ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
+            customEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(customEdge);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("UPSERT INTO " + dataTableFullName + " VALUES(3, 100, 200)");
+            conn.commit();
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            customEdge.incrementValue(5);
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
+                    indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
+            CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+            assertEquals(2,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(0,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("UPSERT INTO " + dataTableFullName + " VALUES(2, 102, 202)");
+            conn.commit();
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            customEdge.incrementValue(maxLookbackAge + 1);
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
+                    indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
+            mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+            assertEquals(0,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
         }
     }
 
