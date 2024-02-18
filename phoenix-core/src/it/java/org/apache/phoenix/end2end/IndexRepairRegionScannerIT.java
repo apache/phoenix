@@ -22,8 +22,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -48,7 +46,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -69,7 +66,6 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -287,12 +283,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         if (expectedPITRows > 0) {
             assertArrayEquals(expectedPhase, rows.get(0).getPhaseValue());
         }
-    }
-
-    static private void resetIndexRegionObserverFailPoints() {
-        IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
-        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
-        IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
     }
 
     static private void commitWithException(Connection conn) {
@@ -905,30 +895,4 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
         }
     }
-
-    public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
-            IOException, InterruptedException {
-        Scan scan = new Scan();
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
-                getAdmin();
-        org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
-        Table table = hbaseConn.getTable(tableName);
-        boolean deletedRows = false;
-        try (ResultScanner scanner = table.getScanner(scan)) {
-            for (Result r : scanner) {
-                Delete del = new Delete(r.getRow());
-                table.delete(del);
-                deletedRows = true;
-            }
-        } catch (Exception e) {
-            //if the table doesn't exist, we have no rows to delete. Easier to catch
-            //than to pre-check for existence
-        }
-        //don't flush/compact if we didn't write anything, because we'll hang forever
-        if (deletedRows) {
-            getUtility().getAdmin().flush(tableName);
-            TestUtil.majorCompact(getUtility(), tableName);
-        }
-    }
-
 }
