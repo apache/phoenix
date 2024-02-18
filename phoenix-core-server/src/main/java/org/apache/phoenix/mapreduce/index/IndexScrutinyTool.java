@@ -429,6 +429,9 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 }
             }
 
+            PTable pDataTable = connection.unwrap(PhoenixConnection.class).getTable(qDataTable);
+            validateTimestamp(configuration, ts, pDataTable.getMaxLookbackAge());
+
             String outputFormatOption = cmdLine.getOptionValue(OUTPUT_FORMAT_OPTION.getOpt());
             OutputFormat outputFormat =
                     outputFormatOption != null
@@ -445,13 +448,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 Configuration outputConfiguration = HBaseConfiguration.create(configuration);
                 outputConfiguration.unset(PhoenixRuntime.TENANT_ID_ATTRIB);
                 try (Connection outputConn = ConnectionUtil.getOutputConnection(outputConfiguration)) {
-                    outputConn.createStatement().execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
-                    outputConn.createStatement().
-                        execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
-                    outputConn.createStatement()
-                            .execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
-                    outputConn.createStatement().
-                        execute(IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
+                    createScrutinyToolTables(outputConn);
                 }
             }
 
@@ -473,7 +470,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
                 jobs.add(jobFactory.createSubmittableJob(schemaName, indexTable, dataTable,
                     sourceTable, mapperClass));
             }
-            validateTimestamp(configuration, ts);
 
             if (!isForeground) {
                 LOGGER.info("Running Index Scrutiny in Background - Submit async and exit");
@@ -518,18 +514,15 @@ public class IndexScrutinyTool extends Configured implements Tool {
         }
     }
 
-    private void validateTimestamp(Configuration configuration, long ts) {
-        Configuration jobConf = this.jobs.get(0).getConfiguration();
-        long maxLookBackAge = MetaDataUtil.getMaxLookbackAge(configuration,
-                PhoenixConfigurationUtil.getMaxLookbackAge(jobConf));
+    private void validateTimestamp(Configuration configuration, long ts, Long dataTableMaxLookback) {
+        long maxLookBackAge = MetaDataUtil.getMaxLookbackAge(configuration, dataTableMaxLookback);
         if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
             long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){
                 throw new IllegalArgumentException("Index scrutiny can't look back past the configured" +
-                    "max lookback age: " + maxLookBackAge / 1000 + " seconds");
+                    " max lookback age: " + maxLookBackAge / 1000 + " seconds");
             }
         }
-
     }
 
     @VisibleForTesting
@@ -542,4 +535,13 @@ public class IndexScrutinyTool extends Configured implements Tool {
         System.exit(result);
     }
 
+    public static void createScrutinyToolTables(Connection conn) throws Exception {
+        conn.createStatement().execute(IndexScrutinyTableOutput.OUTPUT_TABLE_DDL);
+        conn.createStatement().
+                execute(IndexScrutinyTableOutput.OUTPUT_TABLE_BEYOND_LOOKBACK_DDL);
+        conn.createStatement()
+                .execute(IndexScrutinyTableOutput.OUTPUT_METADATA_DDL);
+        conn.createStatement().
+                execute(IndexScrutinyTableOutput.OUTPUT_METADATA_BEYOND_LOOKBACK_COUNTER_DDL);
+    }
 }
