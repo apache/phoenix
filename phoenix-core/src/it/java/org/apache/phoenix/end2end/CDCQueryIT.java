@@ -611,8 +611,10 @@ public class CDCQueryIT extends CDCBaseIT {
                 }
             }
 
-            try (ResultSet rs = conn.createStatement().executeQuery(
-                    "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
+            PreparedStatement pstmt = conn.prepareStatement(
+                    "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > ?");
+            pstmt.setTimestamp(1, ts4);
+            try (ResultSet rs = pstmt.executeQuery()) {
                 assertEquals(false, rs.next());
             }
         }

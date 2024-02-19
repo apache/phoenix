@@ -1181,7 +1181,7 @@ public class ScanUtil {
             }
             // TODO: Is context.getCDCTableRef().getTable() same as the one we are setting in
             //  QueryOptimizer.getApplicablePlansForSingleFlatQuery()?
-            PTable dataTable = context.getCDCDataTableRef().getTable() != null ?
+            PTable dataTable = context.getCDCDataTableRef() != null ?
                     context.getCDCDataTableRef().getTable() :
                     ScanUtil.getDataTable(indexTable, phoenixConnection);
             if (dataTable == null) {
@@ -1312,7 +1312,7 @@ public class ScanUtil {
 
         setScanAttributeForPaging(scan, phoenixConnection);
 
-        if (CDCUtil.isCDCIndex(table.getName().getString())) {
+        if (context.getCDCTableRef() != null) {
             scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(
                     context.getCDCDataTableRef().getTable(),
                     context.getEncodedCdcIncludeScopes()).toByteArray());

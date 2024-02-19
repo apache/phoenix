@@ -252,7 +252,7 @@ public class QueryOptimizer {
             cdcIndex = indexBuilder.build();
             indexTableRef.setTable(cdcIndex);
             SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select,
-                    FromCompiler.getResolver(indexTableRef));
+                    FromCompiler.getResolver(dataPlan.getTableRef()));
 
             PTableImpl.Builder cdcBuilder = PTableImpl.builderFromExisting(table);
             cdcBuilder.setColumns(table.getColumns());
