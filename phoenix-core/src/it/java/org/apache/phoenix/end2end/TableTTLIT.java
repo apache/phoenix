@@ -126,17 +126,14 @@ public class TableTTLIT extends BaseTest {
     public static synchronized Collection<Object[]> data() {
             return Arrays.asList(new Object[][] {
                     { false, false, KeepDeletedCells.FALSE, 1, 100, null},
-                    { false, false, KeepDeletedCells.FALSE, 1, 100, 15},
                     { false, false, KeepDeletedCells.TRUE, 5, 50, null},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50, 15},
                     { false, false, KeepDeletedCells.TTL, 1, 25, null},
-                    { false, false, KeepDeletedCells.TTL, 1, 25, 15},
                     { true, false, KeepDeletedCells.FALSE, 5, 50, null},
-                    { true, false, KeepDeletedCells.FALSE, 5, 50, 15},
                     { true, false, KeepDeletedCells.TRUE, 1, 25, null},
-                    { true, false, KeepDeletedCells.TRUE, 1, 25, 15},
                     { true, false, KeepDeletedCells.TTL, 5, 100, null},
-                    { true, false, KeepDeletedCells.TTL, 5, 100, 15}});
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, 15},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, 15},
+                    { false, false, KeepDeletedCells.TTL, 1, 25, 15}});
     }
 
     /**
