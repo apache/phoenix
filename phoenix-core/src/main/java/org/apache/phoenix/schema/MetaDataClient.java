@@ -2089,7 +2089,7 @@ public class MetaDataClient {
      */
     private Integer checkAndGetTTLFromHierarchy(PTable parent) throws SQLException {
         return parent != null ? (parent.getType() == TABLE ? parent.getTTL()
-                : (parent.getType() == VIEW ? getTTLFromViewHierarchy(parent) : TTL_NOT_DEFINED))
+                : (parent.getType() == VIEW && parent.getViewType() != MAPPED ? getTTLFromViewHierarchy(parent) : TTL_NOT_DEFINED))
                 : TTL_NOT_DEFINED;
     }
 

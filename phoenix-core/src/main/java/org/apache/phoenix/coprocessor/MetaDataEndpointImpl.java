@@ -89,6 +89,7 @@ import static org.apache.phoenix.query.QueryConstants.VIEW_MODIFIED_PROPERTY_TAG
 import static org.apache.phoenix.schema.PTable.LinkType.PARENT_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
+import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -688,7 +689,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             if (request.getClientVersion() < MIN_SPLITTABLE_SYSTEM_CATALOG
                     && table.getType() == PTableType.VIEW
-                    && table.getViewType() != ViewType.MAPPED) {
+                    && table.getViewType() != MAPPED) {
                 try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = PhoenixRuntime.getTableNoCache(connection, table.getParentName().getString());
                     table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
@@ -1419,11 +1420,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         ttlKv.getValueOffset(), SortOrder.getDefault());
         ttl = ttlKv != null ? ttl : oldTable != null
                 ? oldTable.getTTL() : TTL_NOT_DEFINED;
-        if (tableType == VIEW && ttl == TTL_NOT_DEFINED) {
+        if (tableType == VIEW && viewType != MAPPED && ttl == TTL_NOT_DEFINED) {
             //Scan SysCat to get TTL from Parent View/Table
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-            ttl = getTTLFromHierarchy(viewKey, clientTimeStamp);
+            ttl = getTTLFromHierarchy(viewKey, clientTimeStamp, false);
 
             // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
         }
@@ -1475,7 +1476,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
 
         PTable transformingNewTable = null;
-        boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
+        boolean isRegularView = (tableType == PTableType.VIEW && viewType != MAPPED);
         boolean isThisAViewIndex = false;
         for (List<Cell> columnCellList : allColumnCellList) {
 
@@ -1560,12 +1561,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         }
                     }
                 } else if (linkType == VIEW_INDEX_PARENT_TABLE) {
-                    byte[] indexKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
-                            schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
                     byte[] viewKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
                             parentSchemaName == null ? null : parentSchemaName.getBytes(),
                             parentTableName.getBytes());
-                    ttl = getTTLFromHierarchy(viewKey, clientTimeStamp);
+                    //parentViewType should not be Mapped
+                    ttl = getTTLFromHierarchy(viewKey, clientTimeStamp, true);
                     isThisAViewIndex = true;
                 }
             } else {
@@ -1627,7 +1627,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @throws SQLException
      */
 
-    private int getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp) throws IOException, SQLException {
+    private int getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp, boolean checkForMappedView) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
@@ -1639,6 +1639,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         do {
 
             if (result == null) {
+                return TTL_NOT_DEFINED;
+            }
+
+            //return TTL_NOT_DEFINED for Index on a Mapped View.
+            if (checkForMappedView && checkIfViewIsMappedView(result)) {
                 return TTL_NOT_DEFINED;
             }
 
@@ -1664,7 +1669,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             PARENT_TENANT_ID_BYTES);
                     byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
                             parentViewSchemaName, parentViewName);
-                    return getTTLFromHierarchy(parentViewKey, clientTimeStamp);
+                    return getTTLFromHierarchy(parentViewKey, clientTimeStamp, false);
                 }
 
                 //Store tableKey to use if we don't find TTL at current level and from
@@ -1681,6 +1686,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         //Return TTL defined at Table level for the given hierarchy as we didn't find TTL any of the views.
         return getTTLForTable(tableKey, clientTimeStamp);
 
+    }
+
+    private boolean checkIfViewIsMappedView(Result result) {
+        byte[] viewTypeBytes = result.getValue(TABLE_FAMILY_BYTES, VIEW_TYPE_BYTES);
+        if (viewTypeBytes != null && ViewType.fromSerializedValue(viewTypeBytes[0]) == MAPPED) {
+            return true;
+        }
+        return false;
     }
 
     /***
