@@ -25,6 +25,7 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;

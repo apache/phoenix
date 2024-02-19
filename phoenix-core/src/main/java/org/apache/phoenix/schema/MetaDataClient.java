@@ -1749,10 +1749,11 @@ public class MetaDataClient {
                         SortOrder.getDefault())}));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
         ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
-        if (TableProperty.SALT_BUCKETS.getValue(tableProps) != null) {
-            indexProps.put(QueryConstants.ALL_FAMILY_PROPERTIES_KEY, new Pair<>(
-                    TableProperty.SALT_BUCKETS.getPropertyName(),
-                    TableProperty.SALT_BUCKETS.getValue(tableProps)));
+        // Transfer properties to index and let create index recognize those that are relevant,
+        // (e.g. SALT_BUCKETS and COLUMN_ENCODED_BYTES) and let the others get ignored.
+        for (Map.Entry<String, Object> propSet: tableProps.entrySet()) {
+            indexProps.put(QueryConstants.ALL_FAMILY_PROPERTIES_KEY, new Pair<>(propSet.getKey(),
+                    propSet.getValue()));
         }
         CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
                         statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
@@ -1776,12 +1777,8 @@ public class MetaDataClient {
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
-        ColumnName timeIdxCol = FACTORY.columnName(PhoenixRowTimestampFunction.NAME + "()");
-        columnDefs.add(FACTORY.columnDef(timeIdxCol, PDate.INSTANCE.getSqlTypeName(), false, null, false,
-                PDate.INSTANCE.getMaxLength(null), PDate.INSTANCE.getScale(null), false,
-                SortOrder.getDefault(), "", null, false));
-        pkColumnDefs.add(FACTORY.columnDefInPkConstraint(timeIdxCol, SortOrder.getDefault(), false));
-        for (PColumn pcol : pkColumns) {
+        for (int i = 0; i < pkColumns.size(); ++i) {
+            PColumn pcol = pkColumns.get(i);
             columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
                     pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
                     pcol.getScale(), false, pcol.getSortOrder(), "", null, false));
@@ -1791,6 +1788,10 @@ public class MetaDataClient {
         columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME),
                 PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,
                 null, false, SortOrder.getDefault(), "", null, false));
+        tableProps = new HashMap<>();
+        if (dataTable.isMultiTenant()) {
+            tableProps.put(MULTI_TENANT.toString(), Boolean.TRUE);
+        }
         CreateTableStatement tableStatement = FACTORY.createTable(
                 FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),
                 statement.getProps(), columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
@@ -2569,7 +2570,19 @@ public class MetaDataClient {
                 columns = new LinkedHashMap<PColumn,PColumn>(colDefs.size());
                 pkColumns = newLinkedHashSetWithExpectedSize(colDefs.size() + 1); // in case salted
             }
-            
+
+            if (tableType == PTableType.CDC) {
+                if (parent.getType() == VIEW) {
+                    physicalNames = Collections.singletonList(
+                            PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(
+                                    parent.getBaseTableLogicalName(), isNamespaceMapped)));
+                }
+                else {
+                    physicalNames = Collections.singletonList(
+                            PNameFactory.newName(CDCUtil.getCDCIndexName(tableName)));
+                }
+            }
+
             // Don't add link for mapped view, as it just points back to itself and causes the drop to
             // fail because it looks like there's always a view associated with it.
             if (!physicalNames.isEmpty()) {

@@ -26,6 +26,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -65,30 +66,44 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+// NOTE: To debug the query execution, add the below condition or the equivalent where you need a
+// breakpoint.
+//      if (<table>.getTableName().getString().equals("N000002") ||
+//                 <table>.getTableName().getString().equals("__CDC__N000002")) {
+//          "".isEmpty();
+//      }
 @RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
 public class CDCQueryIT extends CDCBaseIT {
+    // Offset of the first column, depending on whether PHOENIX_ROW_TIMESTAMP() is in the schema
+    // or not.
+    private static final int COL_OFFSET = 0;
     private final boolean forView;
     private final boolean dataFirst;
     private final PTable.QualifierEncodingScheme encodingScheme;
+    private final boolean multitenant;
+    private final int nSaltBuckets;
     private ManualEnvironmentEdge injectEdge;
 
     public CDCQueryIT(Boolean forView, Boolean dataFirst,
-                      PTable.QualifierEncodingScheme encodingScheme) {
+                      PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
+                      Integer nSaltBuckets) {
         this.forView = forView;
         this.dataFirst = dataFirst;
         this.encodingScheme = encodingScheme;
+        this.multitenant = multitenant;
+        this.nSaltBuckets = nSaltBuckets;
     }
 
-    @Parameterized.Parameters(name = "forView={0} dataFirst={1}, encodingScheme={2}")
+    @Parameterized.Parameters(name = "forView={0} dataFirst={1}, encodingScheme={2}, " +
+            "multitenant={3}, nSaltBuckets={4}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { Boolean.valueOf(false), Boolean.valueOf(false), TWO_BYTE_QUALIFIERS },
-                // testSelect() is getting stuck.
-                //{ Boolean.valueOf(false), Boolean.valueOf(true), TWO_BYTE_QUALIFIERS },
-                { Boolean.valueOf(false), Boolean.valueOf(false), NON_ENCODED_QUALIFIERS },
-                // Getting: TableNotFoundException: ERROR 1012 (42M03): Table undefined.
-                { Boolean.valueOf(true), Boolean.valueOf(false), TWO_BYTE_QUALIFIERS },
+                { Boolean.FALSE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, 0 },
+                { Boolean.FALSE, Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, 0 },
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 0 },
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4 },
+                { Boolean.TRUE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, 0 },
         });
     }
 
@@ -99,10 +114,11 @@ public class CDCQueryIT extends CDCBaseIT {
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
     }
 
-    private void assertResultSet(ResultSet rs, Set<PTable.CDCChangeScope> cdcChangeScopeSet) throws Exception{
+    private void assertResultSet(ResultSet rs, Set<PTable.CDCChangeScope> cdcChangeScopeSet)
+            throws Exception{
         Gson gson = new Gson();
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row1 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -122,11 +138,11 @@ public class CDCQueryIT extends CDCBaseIT {
             row1.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        assertEquals(row1, gson.fromJson(rs.getString(3),
+        assertEquals(row1, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
+        assertEquals(2, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row2 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -146,10 +162,10 @@ public class CDCQueryIT extends CDCBaseIT {
             row2.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        assertEquals(row2, gson.fromJson(rs.getString(3),
+        assertEquals(row2, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row3 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -170,11 +186,11 @@ public class CDCQueryIT extends CDCBaseIT {
             preImage.put("V2", 1000d);
             row3.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row3, gson.fromJson(rs.getString(3),
+        assertEquals(row3, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row4 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
@@ -192,11 +208,11 @@ public class CDCQueryIT extends CDCBaseIT {
             preImage.put("V2", 1000d);
             row4.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row4, gson.fromJson(rs.getString(3),
+        assertEquals(row4, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row5 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -216,11 +232,11 @@ public class CDCQueryIT extends CDCBaseIT {
             row5.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        assertEquals(row5, gson.fromJson(rs.getString(3),
+        assertEquals(row5, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row6 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
@@ -238,11 +254,11 @@ public class CDCQueryIT extends CDCBaseIT {
             preImage.put("V2", 1002d);
             row6.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row6, gson.fromJson(rs.getString(3),
+        assertEquals(row6, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
+        assertEquals(2, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row7 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -264,11 +280,11 @@ public class CDCQueryIT extends CDCBaseIT {
             preImage.put("V2", 2000d);
             row7.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row7, gson.fromJson(rs.getString(3),
+        assertEquals(row7, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row8 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -288,11 +304,11 @@ public class CDCQueryIT extends CDCBaseIT {
             Map<String, Double> preImage = new HashMap<>();
             row8.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row8, gson.fromJson(rs.getString(3),
+        assertEquals(row8, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row9 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
@@ -310,11 +326,11 @@ public class CDCQueryIT extends CDCBaseIT {
             preImage.put("V2", 1003d);
             row9.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row9, gson.fromJson(rs.getString(3),
+        assertEquals(row9, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row10 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
@@ -334,11 +350,11 @@ public class CDCQueryIT extends CDCBaseIT {
             Map<String, Double> preImage = new HashMap<>();
             row10.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row10, gson.fromJson(rs.getString(3),
+        assertEquals(row10, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row11 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
@@ -356,7 +372,7 @@ public class CDCQueryIT extends CDCBaseIT {
             preImage.put("V2", 1004d);
             row11.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row11, gson.fromJson(rs.getString(3),
+        assertEquals(row11, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(false, rs.next());
@@ -365,173 +381,238 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testSelectCDC() throws Exception {
-        Connection conn = newConnection();
+        String cdcName, cdc_sql;
         String tableName = generateUniqueName();
-        createTable(conn, "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 " +
-                "INTEGER, v2 INTEGER)", encodingScheme);
-        if (forView) {
-            String viewName = generateUniqueName();
-            createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
-                    encodingScheme);
-            tableName = viewName;
-        }
-        String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        if (! dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
-        }
-        EnvironmentEdgeManager.injectEdge(injectEdge);
-        injectEdge.setValue(System.currentTimeMillis());
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
-        conn.commit();
-        injectEdge.incrementValue(100);
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        // NOTE: To debug the query execution, add the below condition where you need a breakpoint.
-        //      if (<table>.getTableName().getString().equals("N000002") ||
-        //                 <table>.getTableName().getString().equals("__CDC__N000002")) {
-        //          "".isEmpty();
-        //      }
-        if (dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
-        }
-
-        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
-        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName +
-                " WHERE \"PHOENIX_ROW_TIMESTAMP()\" < NOW()"), null);
-        assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * " +
-                "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
-                        Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
-        assertResultSet(conn.createStatement().executeQuery("SELECT " +
-                "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
-
-        HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
-            put("SELECT 'dummy', k FROM " + cdcName, new int [] {1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1});
-            put("SELECT * FROM " + cdcName +
-                    " ORDER BY k ASC", new int [] {1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2});
-            put("SELECT * FROM " + cdcName +
-                    " ORDER BY k DESC", new int [] {2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-            put("SELECT * FROM " + cdcName +
-                    " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC", new int [] {1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1});
-        }};
-        for (Map.Entry<String, int[]> testQuery: testQueries.entrySet()) {
-            try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
-                for (int k:  testQuery.getValue()) {
-                    assertEquals(true, rs.next());
-                    assertEquals(k, rs.getInt(2));
-                }
-                assertEquals(false, rs.next());
+        try (Connection conn = newConnection()) {
+            createTable(conn, "CREATE TABLE  " + tableName + " (" +
+                    (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
+                    "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, CONSTRAINT PK PRIMARY KEY " +
+                    (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant);
+            if (forView) {
+                String viewName = generateUniqueName();
+                createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
+                        encodingScheme, false);
+                tableName = viewName;
+            }
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            if (!dataFirst) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
             }
         }
 
-        try (ResultSet rs = conn.createStatement().executeQuery(
-                "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
-            assertEquals(false, rs.next());
+        String tenantId = "1000";
+        String[] tenantids = {tenantId};
+        if (multitenant) {
+            tenantids = new String[] {tenantId, "2000"};
+        }
+        for (String tid: tenantids) {
+            try (Connection conn = newConnection(tid)) {
+                EnvironmentEdgeManager.injectEdge(injectEdge);
+                injectEdge.setValue(System.currentTimeMillis());
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (1, 100, 1000)");
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (2, 200, 2000)");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1) VALUES (1, 101)");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("DELETE FROM " + tableName +
+                        " WHERE k=1");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (1, 102, 1002)");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("DELETE FROM " + tableName +
+                        " WHERE k=1");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (2, 201, NULL)");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (1, 103, 1003)");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (1, 104, 1004)");
+                conn.commit();
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+                conn.commit();
+                EnvironmentEdgeManager.reset();
+            }
+        }
+        if (dataFirst) {
+            try (Connection conn = newConnection()) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
+            }
+        }
+
+        try (Connection conn = newConnection(null)) {
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            // TODO: Check RS, existence of CDC shouldn't cause the regular query path to fail.
+        }
+
+        try (Connection conn = newConnection(tenantId)) {
+            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
+            assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * " +
+                    "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
+                    Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+            assertResultSet(conn.createStatement().executeQuery("SELECT " +
+                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
+
+            HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
+                put("SELECT 'dummy', k FROM " + cdcName, new int[]{1, 2, 1, 1, 1, 1, 2, 1, 1, 1,
+                        1});
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcName +
+                        " ORDER BY k ASC", new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2});
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcName +
+                        " ORDER BY k DESC", new int[]{2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+                //put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcName +
+                //        " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC", new int[]{1, 1, 1, 1, 2, 1, 1, 1,
+                //        2, 1});
+            }};
+            for (Map.Entry<String, int[]> testQuery : testQueries.entrySet()) {
+                try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
+                    for (int i = 0; i < testQuery.getValue().length; ++i) {
+                        int k = testQuery.getValue()[i];
+                        assertEquals(true, rs.next());
+                        assertEquals("Index: " + i + " for query: " + testQuery.getKey(),
+                                k, rs.getInt(2));
+                    }
+                    assertEquals(false, rs.next());
+                }
+            }
         }
     }
 
     @Test
     public void testSelectTimeRangeQueries() throws Exception {
-        Connection conn = newConnection();
+        String cdcName, cdc_sql;
         String tableName = generateUniqueName();
-        createTable(conn, "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 " +
-                "INTEGER)", encodingScheme);
-        if (forView) {
-            String viewName = generateUniqueName();
-            createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
-                    encodingScheme);
-            tableName = viewName;
+        try (Connection conn = newConnection()) {
+            createTable(conn, "CREATE TABLE  " + tableName + " (" +
+                    (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
+                    "k INTEGER NOT NULL, v1 INTEGER, CONSTRAINT PK PRIMARY KEY " +
+                    (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant);
+            if (forView) {
+                String viewName = generateUniqueName();
+                createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
+                        encodingScheme, false);
+                tableName = viewName;
+            }
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            if (!dataFirst) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
+            }
         }
-        String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null);
-        if (! dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
-        }
+
         Timestamp ts1 = new Timestamp(System.currentTimeMillis());
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(ts1.getTime());
         EnvironmentEdgeManager.injectEdge(injectEdge);
         injectEdge.setValue(System.currentTimeMillis());
         injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
-        conn.commit();
+
+        String tenantId = multitenant ? "1000" : null;
+        String[] tenantids = {tenantId};
+        if (multitenant) {
+            tenantids = new String[] {tenantId, "2000"};
+        }
+
+        for (String tid: tenantids) {
+            try (Connection conn = newConnection(tid)) {
+                conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 100)");
+                conn.commit();
+            }
+        }
+
         injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
-        conn.commit();
+
+        for (String tid: tenantids) {
+            try (Connection conn = newConnection(tid)) {
+                conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (2, 200)");
+                conn.commit();
+            }
+        }
+
         injectEdge.incrementValue(100);
         cal.add(Calendar.MILLISECOND, 300);
         Timestamp ts2 = new Timestamp(cal.getTime().getTime());
         injectEdge.incrementValue(100);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (3, 300)");
-        conn.commit();
+
+        for (String tid: tenantids) {
+            try (Connection conn = newConnection(tid)) {
+                conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+                conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (3, 300)");
+                conn.commit();
+            }
+        }
+
         injectEdge.incrementValue(100);
         cal.add(Calendar.MILLISECOND, 200);
         Timestamp ts3 = new Timestamp(cal.getTime().getTime());
-        dumpTable(CDCUtil.getCDCIndexName(cdcName));
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k = 2");
+        //dumpTable(CDCUtil.getCDCIndexName(cdcName));
+
+        for (String tid: tenantids) {
+            try (Connection conn = newConnection(tid)) {
+                conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+                conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k = 2");
+                conn.commit();
+            }
+        }
+
         injectEdge.incrementValue(100);
         cal.add(Calendar.MILLISECOND, 100);
         Timestamp ts4 = new Timestamp(cal.getTime().getTime());
-        conn.commit();
+        EnvironmentEdgeManager.reset();
+
         if (dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+            try (Connection conn = newConnection()) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
+            }
         }
 
-//        dumpTable(CDCUtil.getCDCIndexName(cdcName));
-//        String sql = "SELECT * FROM " + cdcName + " WHERE \"PHOENIX_ROW_TIMESTAMP()\" <= ?";
-//        PreparedStatement stmt2 = conn.prepareStatement(sql);
-//        //assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() <= ?"), null);
-//
-//        stmt2.setTimestamp(1, ts2);
-//        ResultSet rs2 = stmt2.executeQuery();
-//        assertEquals(true, rs2.next());
-        String sel_sql = "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND " +
-                "PHOENIX_ROW_TIMESTAMP() <= ?";
-
-        Object[] testDataSets = new Object[] {
-                new Object[] {ts1, ts2, new int[] {1, 2}}/*,
-                new Object[] {ts2, ts3, new int[] {1, 3}},
-                new Object[] {ts3, ts4, new int[] {1}}*/
-        };
-        PreparedStatement stmt = conn.prepareStatement(sel_sql);
-        for (int i = 0; i < testDataSets.length; ++i) {
-            Object[] testData = (Object[]) testDataSets[i];
-            stmt.setTimestamp(1, (Timestamp) testData[0]);
-            stmt.setTimestamp(2, (Timestamp) testData[1]);
-            try (ResultSet rs = stmt.executeQuery()) {
-                for (int k:  (int[]) testData[2]) {
-                    assertEquals(true, rs.next());
-                    assertEquals(k, rs.getInt(2));
+        try (Connection conn = newConnection(tenantId)) {
+            String sel_sql = "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? " +
+                    "AND PHOENIX_ROW_TIMESTAMP() <= ?";
+            Object[] testDataSets = new Object[] {
+                    new Object[] {ts1, ts2, new int[] {1, 2}},
+                    new Object[] {ts2, ts3, new int[] {1, 3}},
+                    new Object[] {ts3, ts4, new int[] {1, 2}},
+                    new Object[] {ts1, ts4, new int[] {1, 2, 1, 3, 1, 2}},
+            };
+            PreparedStatement stmt = conn.prepareStatement(sel_sql);
+            for (int i = 0; i < testDataSets.length; ++i) {
+                Object[] testData = (Object[]) testDataSets[i];
+                stmt.setTimestamp(1, (Timestamp) testData[0]);
+                stmt.setTimestamp(2, (Timestamp) testData[1]);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    for (int j = 0; j < ((int[]) testData[2]).length; ++j) {
+                        int k = ((int[]) testData[2])[j];
+                        assertEquals(" Index: " + j + " Test data set: " + i,
+                                true, rs.next());
+                        assertEquals(" Index: " + j + " Test data set: " + i,
+                                k, rs.getInt(1 + COL_OFFSET));
+                    }
+                    assertEquals("Test data set: " + i, false, rs.next());
                 }
+            }
+
+            try (ResultSet rs = conn.createStatement().executeQuery(
+                    "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > NOW()")) {
                 assertEquals(false, rs.next());
             }
         }
@@ -539,62 +620,78 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testSelectCDCWithDDL() throws Exception {
-        Connection conn = newConnection();
         String tableName = generateUniqueName();
-        createTable(conn, "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v0 " +
-                "INTEGER, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, v3 INTEGER)", encodingScheme);
-        if (forView) {
-            String viewName = generateUniqueName();
-            createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
-                    encodingScheme);
-            tableName = viewName;
+        String datatableName = tableName;
+        String cdcName, cdc_sql;
+        try (Connection conn = newConnection()) {
+            createTable(conn, "CREATE TABLE  " + tableName + " (" +
+                    (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
+                    "k INTEGER NOT NULL, v0 INTEGER, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, " +
+                    "v3 INTEGER, CONSTRAINT PK PRIMARY KEY " +
+                    (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant);
+            if (forView) {
+                String viewName = generateUniqueName();
+                createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
+                        encodingScheme, false);
+                tableName = viewName;
+            }
+
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            if (!dataFirst) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
+            }
+            conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
         }
 
-        String cdcName = generateUniqueName();
-        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        if (! dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+        String tenantId = multitenant ? "1000" : null;
+        try (Connection conn = newConnection(tenantId)) {
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
+            conn.commit();
+            Thread.sleep(10);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+            conn.commit();
+        }
+        try (Connection conn = newConnection()) {
+            conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v3");
+        }
+        try (Connection conn = newConnection(tenantId)) {
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+            conn.commit();
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
+            conn.commit();
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+            conn.commit();
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
+            conn.commit();
+            Thread.sleep(10);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
+            conn.commit();
+            Thread.sleep(10);
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+            conn.commit();
+            Thread.sleep(10);
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
+            conn.commit();
+            Thread.sleep(10);
+            conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
+            conn.commit();
+        }
+        try (Connection conn = newConnection()) {
+            conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v1v2");
+            conn.createStatement().execute("ALTER TABLE " + datatableName + " ADD v4 INTEGER");
         }
 
-        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v0");
-        conn.commit();
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 200, 2000)");
-        conn.commit();
-        Thread.sleep(10);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
-        conn.commit();
-        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v3");
-        conn.commit();
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 102, 1002)");
-        conn.commit();
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (2, 201, NULL)");
-        conn.commit();
-        Thread.sleep(10);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 103, 1003)");
-        conn.commit();
-        Thread.sleep(10);
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        Thread.sleep(10);
-        conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 104, 1004)");
-        conn.commit();
-        Thread.sleep(10);
-        conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
-        conn.commit();
-        conn.createStatement().execute("ALTER TABLE " + tableName + " DROP COLUMN v1v2");
-        conn.commit();
-        conn.createStatement().execute("ALTER TABLE " + tableName + " ADD v4 INTEGER");
-        conn.commit();
         if (dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+            try (Connection conn = newConnection()) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
+            }
         }
 
-        assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
+        try (Connection conn = newConnection(tenantId)) {
+            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
+        }
     }
 
     private void assertCDCBinaryAndDateColumn(ResultSet rs,
@@ -602,7 +699,7 @@ public class CDCQueryIT extends CDCBaseIT {
                                               List<Date> dateColumnValues,
                                               Timestamp timestamp) throws Exception {
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
 
         Gson gson = new Gson();
         Map<String, Object> row1 = new HashMap<String, Object>(){{
@@ -622,12 +719,13 @@ public class CDCQueryIT extends CDCBaseIT {
         row1.put(CDC_CHANGE_IMAGE, changeImage);
         row1.put(CDC_PRE_IMAGE, new HashMap<String, String>() {{
         }});
-        assertEquals(row1, gson.fromJson(rs.getString(3),
+        assertEquals(row1, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
-        HashMap<String, Object> row2Json = gson.fromJson(rs.getString(3), HashMap.class);
+        assertEquals(2, rs.getInt(1  + COL_OFFSET));
+        HashMap<String, Object> row2Json = gson.fromJson(rs.getString(2  + COL_OFFSET),
+                HashMap.class);
         String row2BinaryColStr = (String) ((Map)((Map)row2Json.get(CDC_CHANGE_IMAGE))).get("A_BINARY");
         byte[] row2BinaryCol = Base64.getDecoder().decode(row2BinaryColStr);
 
@@ -637,7 +735,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testCDCBinaryAndDateColumn() throws Exception {
-        Connection conn = newConnection();
         String tableName = generateUniqueName();
         List<byte []> byteColumnValues = new ArrayList<>();
         byteColumnValues.add( new byte[] {0,0,0,0,0,0,0,0,0,1});
@@ -646,21 +743,28 @@ public class CDCQueryIT extends CDCBaseIT {
         dateColumnValues.add(Date.valueOf("2024-02-01"));
         dateColumnValues.add(Date.valueOf("2024-01-31"));
         Timestamp timestampColumnValue = Timestamp.valueOf("2024-01-31 12:12:14");
-        try {
-            createTable(conn, "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " " +
-                    "a_binary binary(10), d Date, t TIMESTAMP)", encodingScheme);
+        String cdcName, cdc_sql;
+        try (Connection conn = newConnection()) {
+            createTable(conn, "CREATE TABLE  " + tableName + " (" +
+                    (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
+                    "k INTEGER NOT NULL, a_binary binary(10), d Date, t TIMESTAMP, " +
+                    "CONSTRAINT PK PRIMARY KEY " +
+                    (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant);
             if (forView) {
                 String viewName = generateUniqueName();
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
-                        encodingScheme);
+                        encodingScheme, false);
                 tableName = viewName;
             }
-            String cdcName = generateUniqueName();
-            String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            if (! dataFirst) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            if (!dataFirst) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
             }
+        }
 
+        String tenantId = multitenant ? "1000" : null;
+        try (Connection conn = newConnection(tenantId)) {
             String upsertQuery = "UPSERT INTO " + tableName + " (k, a_binary, d, t) VALUES (?, ?, ?, ?)";
             PreparedStatement stmt = conn.prepareStatement(upsertQuery);
             stmt.setInt(1, 1);
@@ -674,15 +778,18 @@ public class CDCQueryIT extends CDCBaseIT {
             stmt.setTimestamp(4, timestampColumnValue);
             stmt.execute();
             conn.commit();
-            if (dataFirst) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
-            }
+        }
 
+        if (dataFirst) {
+            try (Connection conn = newConnection()) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
+            }
+        }
+
+        try (Connection conn = newConnection(tenantId)) {
             assertCDCBinaryAndDateColumn(conn.createStatement().executeQuery
                     ("SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * " + "FROM " + cdcName),
                     byteColumnValues, dateColumnValues, timestampColumnValue);
-        } finally {
-            conn.close();
         }
     }
 
@@ -702,10 +809,9 @@ public class CDCQueryIT extends CDCBaseIT {
         String cdc_sql = "CREATE CDC " + cdcName
                 + " ON " + tableName;
         if (! dataFirst) {
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
         }
         IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
-        assertCDCState(conn, cdcName, null, 3);
         EnvironmentEdgeManager.injectEdge(injectEdge);
         injectEdge.setValue(System.currentTimeMillis());
         conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1, v2) VALUES (1, 100, 1000)");
@@ -749,10 +855,10 @@ public class CDCQueryIT extends CDCBaseIT {
         conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k=1");
         commitWithException(conn);
         IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+        EnvironmentEdgeManager.reset();
 
         if (dataFirst) {
-            EnvironmentEdgeManager.reset();
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme);
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets);
         }
 
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);

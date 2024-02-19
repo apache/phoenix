@@ -69,6 +69,7 @@ import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableRef;
@@ -220,15 +221,48 @@ public class QueryOptimizer {
         }
 
         PTable table = dataPlan.getTableRef().getTable();
+        //if (table.getType() == PTableType.CDC) {
+        //    Set<PTable.CDCChangeScope> cdcIncludeScopes = table.getCDCIncludeScopes();
+        //    String cdcHint = select.getHint().getHint(Hint.CDC_INCLUDE);
+        //    if (cdcHint != null && cdcHint.startsWith(HintNode.PREFIX)) {
+        //        cdcIncludeScopes = CDCUtil.makeChangeScopeEnumsFromString(cdcHint.substring(1,
+        //                cdcHint.length() - 1));
+        //    }
+        //    dataPlan.getContext().setCDCIncludeScopes(cdcIncludeScopes);
+        //    return Arrays.asList(dataPlan);
+        //}
         if (table.getType() == PTableType.CDC) {
-            Set<PTable.CDCChangeScope> cdcIncludeScopes = table.getCDCIncludeScopes();
-            String cdcHint = select.getHint().getHint(Hint.CDC_INCLUDE);
-            if (cdcHint != null && cdcHint.startsWith(HintNode.PREFIX)) {
-                cdcIncludeScopes = CDCUtil.makeChangeScopeEnumsFromString(cdcHint.substring(1,
-                        cdcHint.length() - 1));
+            NamedTableNode indexTable = FACTORY.namedTable(null,
+                    FACTORY.table(table.getSchemaName().getString(),
+                            CDCUtil.getCDCIndexName(table.getTableName().getString())),
+                    select.getTableSamplingRate());
+            ColumnResolver resolver = FromCompiler.getResolver(indexTable,
+                    statement.getConnection());
+            TableRef indexTableRef = resolver.getTables().get(0);
+            PTable cdcIndex = indexTableRef.getTable();
+            PTableImpl.Builder indexBuilder = PTableImpl.builderFromExisting(cdcIndex);
+            List<PColumn> idxColumns = cdcIndex.getColumns();
+            if (cdcIndex.getBucketNum() != null) {
+                // If salted, it will get added by the builder, so avoid duplication.
+                idxColumns = idxColumns.subList(1, idxColumns.size());
             }
-            dataPlan.getContext().setCDCIncludeScopes(cdcIncludeScopes);
-            return Arrays.asList(dataPlan);
+            indexBuilder.setColumns(idxColumns);
+            indexBuilder.setParentName(table.getName());
+            indexBuilder.setParentTableName(table.getName());
+            cdcIndex = indexBuilder.build();
+            indexTableRef.setTable(cdcIndex);
+            SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select,
+                    FromCompiler.getResolver(indexTableRef));
+
+            PTableImpl.Builder cdcBuilder = PTableImpl.builderFromExisting(table);
+            cdcBuilder.setColumns(table.getColumns());
+            cdcBuilder.setIndexes(Collections.singletonList(cdcIndex));
+            table = cdcBuilder.build();
+            dataPlan.getTableRef().setTable(table);
+            QueryPlan queryPlan = addPlan(statement, select, cdcIndex, targetColumns,
+                    parallelIteratorFactory, dataPlan, false, translatedIndexSelect, resolver,
+                    true);
+            return Arrays.asList(queryPlan);
         }
 
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
@@ -351,16 +385,25 @@ public class QueryOptimizer {
     }
     
     private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan, boolean isHinted) throws SQLException {
-        int nColumns = dataPlan.getProjector().getColumnCount();
         String tableAlias = dataPlan.getTableRef().getTableAlias();
-		String alias = tableAlias==null ? null : '"' + tableAlias + '"'; // double quote in case it's case sensitive
+        String alias = tableAlias == null ? null : '"' + tableAlias + '"'; // double quote in case it's case sensitive
         String schemaName = index.getParentSchemaName().getString();
-        schemaName = schemaName.length() == 0 ? null :  '"' + schemaName + '"';
+        schemaName = schemaName.length() == 0 ? null : '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';
-        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName),select.getTableSamplingRate());
+        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName), select.getTableSamplingRate());
         SelectStatement indexSelect = FACTORY.select(select, table);
         ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
+        return addPlan(statement, select, index, targetColumns, parallelIteratorFactory, dataPlan,
+                isHinted, indexSelect, resolver, false);
+    }
+
+    private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
+                              List<? extends PDatum> targetColumns,
+                              ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan,
+                              boolean isHinted, SelectStatement indexSelect,
+                              ColumnResolver resolver, boolean forCDC) throws SQLException {
+        int nColumns = dataPlan.getProjector().getColumnCount();
         // We will or will not do tuple projection according to the data plan.
         boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
         // Check index state of now potentially updated index table to make sure it's active
@@ -388,7 +431,22 @@ public class QueryOptimizer {
                 SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
-                QueryPlan plan = compiler.compile();
+                PTable dataTable = dataPlan.getTableRef().getTable();
+                QueryPlan plan;
+                if (forCDC) {
+                    NamedTableNode cdcDataTableName = FACTORY.namedTable(null,
+                            FACTORY.table(dataTable.getSchemaName().getString(),
+                                    dataTable.getParentTableName().getString()),
+                            select.getTableSamplingRate());
+                    ColumnResolver dataTableResolver = FromCompiler.getResolver(cdcDataTableName,
+                            statement.getConnection());
+                    TableRef cdcDataTableRef = dataTableResolver.getTables().get(0);
+                    plan = compiler.compileCDCSelect(dataPlan.getTableRef(), cdcDataTableRef,
+                            dataPlan);
+                }
+                else {
+                    plan = compiler.compile();
+                }
                 if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                     // Indexed columns should also be added to the data columns to join for
                     // uncovered global indexes. This is required to verify index rows against
@@ -396,30 +454,35 @@ public class QueryOptimizer {
                     plan.getContext().setUncoveredIndex(true);
                     PhoenixConnection connection = statement.getConnection();
                     IndexMaintainer maintainer;
-                    PTable dataTable;
-                    if (indexTable.getViewIndexId() != null
-                            && indexTable.getName().getString().contains(
-                                    QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-                        // MetaDataClient modifies the index table name for view indexes if the
-                        // parent view of an index has a child view. We need to recreate a PTable
-                        // object with the correct table name to get the index maintainer
-                        int lastIndexOf = indexTable.getName().getString().lastIndexOf(
-                                QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-                        String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
-                        PTable newIndexTable = PhoenixRuntime.getTable(connection, indexName);
-                        dataTable = PhoenixRuntime.getTable(connection, SchemaUtil.getTableName(
-                                newIndexTable.getParentSchemaName().getString(),
-                                indexTable.getParentTableName().getString()));
-                        maintainer = newIndexTable.getIndexMaintainer(dataTable,
-                                statement.getConnection());
+                    PTable newIndexTable;
+                    if (forCDC) {
+                        newIndexTable = indexTable;
                     } else {
-                        dataTable = PhoenixRuntime.getTable(connection,
-                                SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
-                                        indexTable.getParentTableName().getString()));
-                        maintainer = indexTable.getIndexMaintainer(dataTable, connection);
+                        String dataTableName;
+                        if (indexTable.getViewIndexId() != null
+                                && indexTable.getName().getString().contains(
+                                QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                            // MetaDataClient modifies the index table name for view indexes if the
+                            // parent view of an index has a child view. We need to recreate a PTable
+                            // object with the correct table name to get the index maintainer
+                            int lastIndexOf = indexTable.getName().getString().lastIndexOf(
+                                    QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                            String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
+                            newIndexTable = PhoenixRuntime.getTable(connection, indexName);
+                            dataTableName = SchemaUtil.getTableName(
+                                    newIndexTable.getParentSchemaName().getString(),
+                                    indexTable.getParentTableName().getString());
+                            dataTable = PhoenixRuntime.getTable(connection, dataTableName);
+                        } else {
+                            newIndexTable = indexTable;
+                            dataTableName = SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
+                                    indexTable.getParentTableName().getString());
+                            dataTable = PhoenixRuntime.getTable(connection, dataTableName);
+                        }
                     }
+                    maintainer = newIndexTable.getIndexMaintainer(dataTable, connection);
                     Set<org.apache.hadoop.hbase.util.Pair<String, String>> indexedColumns =
-                            maintainer.getIndexedColumnInfo();
+                            maintainer.getIndexedColumnInfo(); // TODO: Why is PHOENIX_ROW_TIMESTAMP() not showing up?
                     for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
                         // The first member of the pair is the column family. For the data table PK columns, the column
                         // family is set to null. The data PK columns should not be added to the set of data columns

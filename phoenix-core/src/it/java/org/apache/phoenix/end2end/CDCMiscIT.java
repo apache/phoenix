@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -63,6 +64,7 @@ public class CDCMiscIT extends CDCBaseIT {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String tableName = generateUniqueName();
+        String datatableName = tableName;
         conn.createStatement().execute(
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
                         + " v2 DATE)");
@@ -103,19 +105,20 @@ public class CDCMiscIT extends CDCBaseIT {
         createCDCAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
-                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName);
+                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName,
+                datatableName);
 
         cdcName = generateUniqueName();
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INDEX_TYPE=l";
         createCDCAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 2);
-        assertPTable(cdcName, null, tableName);
+        assertPTable(cdcName, null, tableName, datatableName);
 
         // Indexes on views don't support salt buckets and is currently silently ignored.
         if (! forView) {
             cdcName = generateUniqueName();
-            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " SALT_BUCKETS = 4";
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql);
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, 4);
             assertSaltBuckets(cdcName, 4);
         }
 
@@ -134,16 +137,43 @@ public class CDCMiscIT extends CDCBaseIT {
         conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName);
 
         PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
+        assertEquals(true, indexTable.isMultiTenant());
         List<PColumn> idxPkColumns = indexTable.getPKColumns();
         assertEquals(":TENANTID", idxPkColumns.get(0).getName().getString());
         assertEquals(": PHOENIX_ROW_TIMESTAMP()", idxPkColumns.get(1).getName().getString());
         assertEquals(":K", idxPkColumns.get(2).getName().getString());
 
         PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
+        assertEquals(true, cdcTable.isMultiTenant());
         List<PColumn> cdcPkColumns = cdcTable.getPKColumns();
-        assertEquals("PHOENIX_ROW_TIMESTAMP()", cdcPkColumns.get(0).getName().getString());
-        assertEquals("TENANTID", cdcPkColumns.get(1).getName().getString());
+        assertEquals("TENANTID", cdcPkColumns.get(0).getName().getString());
+        assertEquals("PHOENIX_ROW_TIMESTAMP()", cdcPkColumns.get(1).getName().getString());
         assertEquals("K", cdcPkColumns.get(2).getName().getString());
+    }
+
+    @Test
+    public void testCreateWithNonDefaultColumnEncoding() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE)");
+        if (forView) {
+            String viewName = generateUniqueName();
+            conn.createStatement().execute(
+                    "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
+            tableName = viewName;
+        }
+        String cdcName = generateUniqueName();
+
+        conn.createStatement().execute("CREATE CDC " + cdcName + " ON " + tableName +
+                " COLUMN_ENCODED_BYTES=" +
+                String.valueOf(NON_ENCODED_QUALIFIERS.getSerializedMetadataValue()));
+        PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
+        assertEquals(indexTable.getEncodingScheme(), NON_ENCODED_QUALIFIERS);
+        PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
+        assertEquals(cdcTable.getEncodingScheme(), NON_ENCODED_QUALIFIERS);
     }
 
     public void testDropCDC () throws SQLException {

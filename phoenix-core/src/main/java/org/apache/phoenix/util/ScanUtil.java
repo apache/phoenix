@@ -20,7 +20,6 @@ package org.apache.phoenix.util;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_DEF;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
@@ -1130,7 +1129,7 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
-            PhoenixConnection phoenixConnection) throws SQLException {
+                                                           PhoenixConnection phoenixConnection, StatementContext context) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
@@ -1174,25 +1173,24 @@ public class ScanUtil {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
             scan.setAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE, TRUE_BYTES);
         } else {
-            if (table.getType() != PTableType.CDC && (table.getType() != PTableType.INDEX ||
-                    !IndexUtil.isGlobalIndex(indexTable))) {
+            if (table.getType() != PTableType.INDEX || !IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
             if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                 return;
             }
-            PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
+            // TODO: Is context.getCDCTableRef().getTable() same as the one we are setting in
+            //  QueryOptimizer.getApplicablePlansForSingleFlatQuery()?
+            PTable dataTable = context.getCDCDataTableRef().getTable() != null ?
+                    context.getCDCDataTableRef().getTable() :
+                    ScanUtil.getDataTable(indexTable, phoenixConnection);
             if (dataTable == null) {
                 // This index table must be being deleted. No need to set the scan attributes
                 return;
             }
             // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
             // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
-            if (table.getType() == PTableType.CDC) {
-                indexTable = PhoenixRuntime.getTable(phoenixConnection,
-                        CDCUtil.getCDCIndexName(table.getName().getString()));
-            }
-            else if (indexTable.getViewIndexId() != null &&
+            if (indexTable.getViewIndexId() != null &&
                     indexTable.getName().getString().contains(
                             QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
@@ -1296,7 +1294,7 @@ public class ScanUtil {
     public static void setScanAttributesForClient(Scan scan, PTable table,
                                                   StatementContext context) throws SQLException {
         PhoenixConnection phoenixConnection = context.getConnection();
-        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
+        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection, context);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
@@ -1314,19 +1312,14 @@ public class ScanUtil {
 
         setScanAttributeForPaging(scan, phoenixConnection);
 
-        if (table.getType() == PTableType.CDC) {
-            PTable dataTable = PhoenixRuntime.getTable(phoenixConnection,
-                    SchemaUtil.getTableName(table.getSchemaName().getString(),
-                            table.getParentTableName().getString()));
-            scan.setAttribute(CDC_DATA_TABLE_NAME,
-                    table.getParentName().getBytes());
-
-            PColumn cdcJsonCol = table.getColumnForColumnName(CDC_JSON_COL_NAME);
+        if (CDCUtil.isCDCIndex(table.getName().getString())) {
+            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(
+                    context.getCDCDataTableRef().getTable(),
+                    context.getEncodedCdcIncludeScopes()).toByteArray());
+            PTable cdcTable = context.getCDCTableRef().getTable();
+            PColumn cdcJsonCol = cdcTable.getColumnForColumnName(CDC_JSON_COL_NAME);
             scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
             CDCUtil.initForRawScan(scan);
-
-            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(dataTable,
-                    context.getEncodedCdcIncludeScopes()).toByteArray());
         }
     }
 

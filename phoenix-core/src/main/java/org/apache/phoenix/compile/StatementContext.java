@@ -85,7 +85,10 @@ public class StatementContext {
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
     private String cdcIncludeScopes;
-    
+    private TableRef cdcTableRef;
+    private QueryPlan cdcDataPlan;
+    private TableRef cdcDataTableRef;
+
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }
@@ -386,4 +389,28 @@ public class StatementContext {
     public void setCDCIncludeScopes(Set<PTable.CDCChangeScope> cdcIncludeScopes) {
         this.cdcIncludeScopes = CDCUtil.makeChangeScopeStringFromEnums(cdcIncludeScopes);
     }
+
+    public TableRef getCDCDataTableRef() {
+        return cdcDataTableRef;
+    }
+
+    public void setCDCDataTableRef(TableRef cdcDataTableRef) {
+        this.cdcDataTableRef = cdcDataTableRef;
+    }
+
+    public TableRef getCDCTableRef() {
+        return cdcTableRef;
+    }
+
+    public void setCDCTableRef(TableRef cdcTableRef) {
+        this.cdcTableRef = cdcTableRef;
+    }
+
+    //public QueryPlan getCDCDataPlan() {
+    //    return cdcDataPlan;
+    //}
+
+    //public void setCDCDataPlan(QueryPlan cdcDataPlan) {
+    //    this.cdcDataPlan = cdcDataPlan;
+    //}
 }

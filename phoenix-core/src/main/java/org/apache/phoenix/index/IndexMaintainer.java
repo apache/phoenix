@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.index;
 
+import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.io.ByteArrayInputStream;
@@ -455,7 +456,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
         this.isUncovered = index.getIndexType() == IndexType.UNCOVERED_GLOBAL;
         this.encodingScheme = index.getEncodingScheme();
-      
+        this.isCDCIndex = CDCUtil.isCDCIndex(index);
+
         // null check for b/w compatibility
         this.encodingScheme = index.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : index.getEncodingScheme();
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
@@ -656,6 +658,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
             }
         }
+        if (isCDCIndex && dataTable.getType() == PTableType.CDC) {
+            PColumn cdcJsonCol = dataTable.getColumnForColumnName(CDC_JSON_COL_NAME);
+            indexedColumnsInfo.add(new Pair<>(cdcJsonCol.getFamilyName().getString(),
+                    cdcJsonCol.getName().getString()));
+        }
         this.estimatedExpressionSize = expressionIndexCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
         for (int i = 0; i < index.getColumnFamilies().size(); i++) {
             PColumnFamily family = index.getColumnFamilies().get(i);
@@ -676,7 +683,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             this.indexWhere = index.getIndexWhereExpression(connection);
             this.indexWhereColumns = index.getIndexWhereColumns(connection);
         }
-        this.isCDCIndex = CDCUtil.isCDCIndex(index);
 
         initCachedState();
     }

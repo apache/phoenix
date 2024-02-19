@@ -84,6 +84,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.SQLCloseables;
@@ -316,7 +317,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ScanUtil.setCustomAnnotations(scan,
                 customAnnotations == null ? null : customAnnotations.getBytes());
         // Set index related scan attributes.
-        if (table.getType() == PTableType.INDEX || table.getType() == PTableType.CDC) {
+        if (table.getType() == PTableType.INDEX) {
             if (table.getIndexType() == IndexType.LOCAL) {
                 ScanUtil.setLocalIndex(scan);
             } else if (context.isUncoveredIndex()) {
@@ -334,8 +335,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 // Set data columns to be join back from data table.
                 PTable parentTable = context.getCurrentTable().getTable();
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
-                if (parentTable.getType() == PTableType.CDC) {
-                    dataTable = parentTable;
+                if (context.getCDCTableRef() != null) {
+                    dataTable = context.getCDCTableRef().getTable();
                 }
                 else {
                     String parentTableName = parentTable.getParentTableName().getString();
@@ -353,7 +354,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                if (table.getIndexType() == IndexType.LOCAL) {
+                if (table.getIndexType() == IndexType.LOCAL || context.getCDCTableRef() != null) {
                     // Set index maintainer of the local index.
                     serializeIndexMaintainerIntoScan(scan, dataTable);
                     // Set view constants if exists.
@@ -386,7 +387,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         PName name = context.getCurrentTable().getTable().getName();
         List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
         for (PTable index : dataTable.getIndexes()) {
-            if (index.getName().equals(name) && index.getIndexType() == IndexType.LOCAL) {
+            if (index.getName().equals(name) && (
+                    index.getIndexType() == IndexType.LOCAL ||
+                    dataTable.getType() == PTableType.CDC)) {
                 indexes.add(index);
                 break;
             }

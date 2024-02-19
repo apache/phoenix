@@ -1795,9 +1795,7 @@ public class PTableImpl implements PTable {
                 return SchemaUtil.getPhysicalHBaseTableName(schemaName,
                         physicalTableNameColumnInSyscat, isNamespaceMapped);
             }
-            return SchemaUtil.getPhysicalHBaseTableName(schemaName, getType() == PTableType.CDC ?
-                    PNameFactory.newName(CDCUtil.getCDCIndexName(tableName.getString())) :
-                    tableName, isNamespaceMapped);
+            return SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMapped);
         } else {
             return PNameFactory.newName(physicalNames.get(0).getBytes());
         }
@@ -2194,6 +2192,10 @@ public class PTableImpl implements PTable {
         }
         if (table.getViewStatement() != null) {
             builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
+        }
+        if (table.getTableName().getString().equals("N000002") ||
+                table.getTableName().getString().equals("N000003")) {
+            "".isEmpty();
         }
         for (int i = 0; i < table.getPhysicalNames().size(); i++) {
             builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));

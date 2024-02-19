@@ -61,7 +61,6 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_DEF;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
