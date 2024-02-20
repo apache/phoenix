@@ -91,25 +91,16 @@ public class MergeViewIndexIdSequencesTool extends Configured implements Tool {
     @Override
     public int run(String[] args) throws Exception {
         int status = 0;
-        PhoenixConnection conn = null;
-        try {
-            parseOptions(args);
+        parseOptions(args);
 
-            final Configuration config = HBaseConfiguration.addHbaseResources(getConf());
-
-            conn = ConnectionUtil.getInputConnection(config).
-                    unwrap(PhoenixConnection.class);
-
+        final Configuration config = HBaseConfiguration.addHbaseResources(getConf());
+        try (PhoenixConnection conn = ConnectionUtil.getInputConnection(config).
+                    unwrap(PhoenixConnection.class)) {
             UpgradeUtil.mergeViewIndexIdSequences(conn);
-
         } catch (Exception e) {
             LOGGER.error("Get an error while running MergeViewIndexIdSequencesTool, "
                     + e.getMessage());
             status = 1;
-        } finally {
-            if (conn != null) {
-                conn.close();
-            }
         }
         return status;
     }

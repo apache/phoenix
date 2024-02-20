@@ -432,6 +432,7 @@ public class OrphanViewTool extends Configured implements Tool {
             }
         } finally {
             if (newConn) {
+                // TODO can this be rewritten with try-with-resources ?
                 tryClosingConnection(tenantConnection);
             }
         }
@@ -949,6 +950,7 @@ public class OrphanViewTool extends Configured implements Tool {
                     ExceptionUtils.getStackTrace(ex));
             return -1;
         } finally {
+            // TODO use try-with-resources at least for the Connection ?
             closeConnectionAndFiles(connection);
         }
     }
