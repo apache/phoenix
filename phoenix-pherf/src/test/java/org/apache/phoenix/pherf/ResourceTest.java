@@ -18,20 +18,14 @@
 
 package org.apache.phoenix.pherf;
 
-import org.apache.phoenix.pherf.util.ResourceList;
-import org.apache.phoenix.pherf.PherfConstants;
-import org.junit.Test;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Path;
 import java.util.Collection;
-import java.util.Properties;
 
-import static org.hamcrest.CoreMatchers.hasItem;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
-import static org.hamcrest.CoreMatchers.containsString;
-import static org.hamcrest.CoreMatchers.hasItem;
-import static org.junit.Assert.assertTrue;
+import org.apache.phoenix.pherf.util.ResourceList;
+import org.junit.Test;
 
 public class ResourceTest {
     @Test
@@ -60,7 +54,7 @@ public class ResourceTest {
                 list.getResourceList(pattern);
         assertTrue("Resource file list was empty", paths.size() > 0);
         for (Path path : paths) {
-            assertThat(path.toString(), containsString(assertStr));
+            assertTrue(path.toString().contains(assertStr));
         }
         return paths;
     }

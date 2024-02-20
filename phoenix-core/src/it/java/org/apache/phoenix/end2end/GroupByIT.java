@@ -378,4 +378,55 @@ public class GroupByIT extends BaseQueryIT {
             conn.close();
         }
     }
+
+    @Test
+    public void testGroupByHavingWithAlias2() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(false);
+        try {
+            conn = DriverManager.getConnection(getUrl(), props);
+            conn.setAutoCommit(false);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName + " (a_string varchar not null, col1 " +
+                    "integer not null, col2 varchar, col3 integer"
+                    + " CONSTRAINT pk PRIMARY KEY (a_string, col1))";
+            createTestTable(getUrl(), ddl);
+
+            String dml = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            stmt.setString(1, "a1xyz");
+            stmt.setInt(2, 40);
+            stmt.setString(3, "col2xyz1");
+            stmt.setInt(4, 50);
+            stmt.execute();
+            stmt.setString(1, "b1xyz");
+            stmt.setInt(2, 20);
+            stmt.setString(3, "col2xyz2");
+            stmt.setInt(4, 60);
+            stmt.execute();
+            stmt.setString(1, "c1xyz");
+            stmt.setInt(2, 30);
+            stmt.setString(3, "col2xyz3");
+            stmt.setInt(4, 70);
+            stmt.execute();
+            conn.commit();
+
+            String query = "SELECT a_string, col1, sum(col1) as sumCol1 FROM " + tableName
+                    + " GROUP BY a_string, col1 HAVING sumCol1 > 20 ORDER BY sumCol1";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("c1xyz", rs.getString(1));
+            assertEquals(30, rs.getInt(2));
+            assertEquals(30, rs.getInt(3));
+            assertTrue(rs.next());
+            assertEquals("a1xyz", rs.getString(1));
+            assertEquals(40, rs.getInt(2));
+            assertEquals(40, rs.getInt(3));
+            assertFalse(rs.next());
+        } finally {
+            conn.close();
+        }
+    }
+
 }

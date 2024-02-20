@@ -28,7 +28,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.InstanceResolver;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
-import org.hamcrest.CoreMatchers;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -39,7 +38,7 @@ import java.util.Map;
 import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_SAMPLES;
 import static org.apache.phoenix.monitoring.NoOpGlobalMetricImpl.NO_VALUE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixMetricsDisabledIT extends BaseTest {
@@ -74,7 +73,7 @@ public class PhoenixMetricsDisabledIT extends BaseTest {
     @Test
     public void testResetGlobalPhoenixMetrics() {
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
-            assertThat(m, CoreMatchers.<GlobalMetric>instanceOf(NoOpGlobalMetricImpl.class));
+            assertTrue(m instanceof NoOpGlobalMetricImpl);
             assertEquals(NO_VALUE, m.getValue());
             assertEquals(NO_SAMPLES, m.getNumberOfSamples());
         }

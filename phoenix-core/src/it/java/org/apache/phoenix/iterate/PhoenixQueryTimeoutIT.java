@@ -21,21 +21,36 @@ import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLTimeoutException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
-import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -43,10 +58,25 @@ import org.junit.experimental.categories.Category;
  * Tests to validate that user specified property phoenix.query.timeoutMs
  * works as expected.
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
+    private static final ExecutorService EXECUTOR_SERVICE =
+            Executors.newSingleThreadExecutor(new ThreadFactoryBuilder().setDaemon(true)
+                    .setNameFormat("query-timeout-tests-%d").build());
+
     private String tableName;
+
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        Map<String, String> props = new HashMap<>();
+        props.put(
+                BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                Integer.toString(60 * 60)); // An hour
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+        props.put(QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, String.valueOf(2));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
 
     @Before
     public void createTableAndInsertRows() throws Exception {
@@ -86,7 +116,26 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
             // Expected
         }
     }
-    
+
+    @Test
+    public void testCustomQueryTimeoutWithVeryLowTimeoutWithRegionMoves() throws Exception {
+        // Arrange
+        PreparedStatement ps = loadDataAndPrepareQuery(1, 1);
+
+        // Act + Assert
+        try {
+            ResultSet rs = ps.executeQuery();
+            moveRegionsOfTable(tableName);
+            // Trigger HBase scans by calling rs.next
+            while (rs.next()) {
+                moveRegionsOfTable(tableName);
+            }
+            fail("Expected query to timeout with a 1 ms timeout");
+        } catch (Exception e) {
+            // Expected
+        }
+    }
+
     @Test
     public void testCustomQueryTimeoutWithNormalTimeout() throws Exception {
         // Arrange
@@ -104,6 +153,24 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         } catch (Exception e) {
             fail("Expected query to succeed");
         }
+    }
+
+    @Test
+    public void testCustomQueryTimeoutWithNormalTimeoutWithRegionMoves() throws Exception {
+        // Arrange
+        PreparedStatement ps = loadDataAndPrepareQuery(30000, 30);
+
+        ResultSet rs = ps.executeQuery();
+        // Trigger HBase scans by calling rs.next
+        int count = 0;
+        moveRegionsOfTable(tableName);
+        while (rs.next()) {
+            if (count % 200 == 0) {
+                moveRegionsOfTable(tableName);
+            }
+            count++;
+        }
+        assertEquals("Unexpected number of records returned", 1000, count);
     }
 
     @Test
@@ -170,6 +237,47 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
         assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
         return ps;
+    }
+
+    private static void moveRegionsOfTable(String tableName)
+            throws IOException {
+        Admin admin = getUtility().getAdmin();
+        List<ServerName> servers =
+                new ArrayList<>(admin.getRegionServers());
+        ServerName server1 = servers.get(0);
+        ServerName server2 = servers.get(1);
+        EXECUTOR_SERVICE.execute(() -> {
+            List<RegionInfo> regionsOnServer1;
+            try {
+                regionsOnServer1 = admin.getRegions(server1);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            List<RegionInfo> regionsOnServer2;
+            try {
+                regionsOnServer2 = admin.getRegions(server2);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            regionsOnServer1.forEach(regionInfo -> {
+                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                    try {
+                        admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+            regionsOnServer2.forEach(regionInfo -> {
+                if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
+                    try {
+                        admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            });
+        });
     }
 
     private PreparedStatement loadDataAndPreparePagedQuery(int timeoutMs, int timeoutSecs) throws Exception {

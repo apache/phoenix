@@ -223,8 +223,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                 assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i], rs.getString(1));
                 i++;
             }
-            // no paging when serial offset
-            assertServerPagingMetric(tablename, rs, false);
+            assertServerPagingMetric(tablename, rs, true);
 
             // Testing query with offset + filter
             int filterCond = 10;
@@ -239,8 +238,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                         STRINGS[offset + filterCond + i], rs.getString(1));
                 i++;
             }
-            // no paging when serial offset
-            assertServerPagingMetric(tablename, rs, false);
+            assertServerPagingMetric(tablename, rs, true);
 
             limit = 35;
             rs = conn.createStatement().executeQuery("SELECT t_id from " + tablename + " union all SELECT t_id from "
@@ -255,8 +253,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
                 assertTrue(rs.next());
                 assertEquals(STRINGS[i - 1], rs.getString(1));
             }
-            // no paging when serial offset
-            assertServerPagingMetric(tablename, rs, false);
+            assertServerPagingMetric(tablename, rs, true);
             limit = 1;
             offset = 1;
             rs = conn.createStatement()

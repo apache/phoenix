@@ -32,6 +32,8 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -39,6 +41,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
 import org.apache.phoenix.cache.TenantCache;
@@ -70,6 +73,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -78,8 +82,13 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
+
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(NonAggregateRegionScannerFactory.class);
 
     public NonAggregateRegionScannerFactory(RegionCoprocessorEnvironment env) {
         this.env = env;
@@ -161,10 +170,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     useNewValueColumnQualifier);
         }
         if (scanOffset != null) {
-            innerScanner = getOffsetScanner(innerScanner, new OffsetResultIterator(
-                            new RegionScannerResultIterator(innerScanner, getMinMaxQualifiersFromScan(scan), encodingScheme),
-                            scanOffset, getPageSizeMsForRegionScanner(scan)),
-                    scan.getAttribute(QueryConstants.LAST_SCAN) != null);
+            final boolean isIncompatibleClient =
+                    ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+            innerScanner = getOffsetScanner(
+                    innerScanner,
+                    new OffsetResultIterator(
+                            new RegionScannerResultIterator(
+                                    innerScanner,
+                                    getMinMaxQualifiersFromScan(scan),
+                                    encodingScheme),
+                            scanOffset,
+                            getPageSizeMsForRegionScanner(scan),
+                            isIncompatibleClient),
+                    scan.getAttribute(QueryConstants.LAST_SCAN) != null,
+                    isIncompatibleClient,
+                    scan);
         }
         boolean spoolingEnabled =
                 env.getConfiguration().getBoolean(
@@ -217,10 +237,13 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 orderByExpression.readFields(input);
                 orderByExpressions.add(orderByExpression);
             }
-            PTable.QualifierEncodingScheme encodingScheme = EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-            ResultIterator inner = new RegionScannerResultIterator(s, EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
+            PTable.QualifierEncodingScheme encodingScheme =
+                    EncodedColumnsUtil.getQualifierEncodingScheme(scan);
+            ResultIterator inner = new RegionScannerResultIterator(s,
+                    EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
             return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
-                    thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize, getPageSizeMsForRegionScanner(scan));
+                    thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
+                    getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -268,18 +291,71 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
     }
 
-
     private RegionScanner getOffsetScanner(final RegionScanner s,
-                                           final OffsetResultIterator iterator, final boolean isLastScan) throws IOException {
+                                           final OffsetResultIterator iterator,
+                                           final boolean isLastScan,
+                                           final boolean incompatibleClient,
+                                           final Scan scan)
+            throws IOException {
         final Tuple firstTuple;
         final Region region = getRegion();
         region.startRegionOperation();
+        final byte[] initStartRowKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                (scan.isReversed() ? region.getRegionInfo().getEndKey() :
+                        region.getRegionInfo().getStartKey());
+        byte[] prevScanStartRowKey =
+                scan.getAttribute(BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW);
+        // If the region has moved after server has returned dummy or valid row to client,
+        // prevScanStartRowKey would be different from actual scan start rowkey.
+        // If the region moves after dummy was returned, we do not need to set row count to
+        // offset. However, if the region moves after valid row was returned, we do need to
+        // set row count to offset because we return valid row only after offset num of rows
+        // are skipped.
+        if (Bytes.compareTo(prevScanStartRowKey, initStartRowKey) != 0 && Bytes.compareTo(
+                ByteUtil.concat(prevScanStartRowKey, ByteUtil.ZERO_BYTE),
+                initStartRowKey) != 0) {
+            iterator.setRowCountToOffset();
+        }
         try {
             Tuple tuple = iterator.next();
             if (tuple == null && !isLastScan) {
-                List<Cell> kvList = new ArrayList<Cell>(1);
-                KeyValue kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
-                        QueryConstants.OFFSET_COLUMN, PInteger.INSTANCE.toBytes(iterator.getRemainingOffset()));
+                List<Cell> kvList = new ArrayList<>(1);
+                KeyValue kv;
+                byte[] remainingOffset =
+                        PInteger.INSTANCE.toBytes(iterator.getRemainingOffset());
+                if (incompatibleClient) {
+                    kv = new KeyValue(
+                            QueryConstants.OFFSET_ROW_KEY_BYTES,
+                            QueryConstants.OFFSET_FAMILY,
+                            QueryConstants.OFFSET_COLUMN,
+                            remainingOffset);
+                } else {
+                    Tuple lastScannedTuple = iterator.getLastScannedTuple();
+                    if (lastScannedTuple != null) {
+                        kv = getOffsetKvWithLastScannedRowKey(remainingOffset, lastScannedTuple);
+                    } else {
+                        byte[] rowKey;
+                        byte[] startKey = scan.getStartRow().length > 0 ? scan.getStartRow() :
+                                region.getRegionInfo().getStartKey();
+                        byte[] endKey = scan.getStopRow().length > 0 ? scan.getStopRow() :
+                                region.getRegionInfo().getEndKey();
+                        rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+                        if (rowKey == null) {
+                            if (scan.includeStartRow()) {
+                                rowKey = startKey;
+                            } else if (scan.includeStopRow()) {
+                                rowKey = endKey;
+                            } else {
+                                rowKey = HConstants.EMPTY_END_ROW;
+                            }
+                        }
+                        kv = new KeyValue(
+                                rowKey,
+                                QueryConstants.OFFSET_FAMILY,
+                                QueryConstants.OFFSET_COLUMN,
+                                remainingOffset);
+                    }
+                }
                 kvList.add(kv);
                 Result r = Result.create(kvList);
                 firstTuple = new ResultTuple(r);
@@ -292,8 +368,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         } finally {
             region.closeRegionOperation();
         }
+
         return new BaseRegionScanner(s) {
             private Tuple tuple = firstTuple;
+            private byte[] previousResultRowKey;
 
             @Override
             public boolean isFilterDone() {
@@ -303,13 +381,41 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             @Override
             public boolean next(List<Cell> results) throws IOException {
                 try {
-                    if (isFilterDone()) { return false; }
-                    for (int i = 0; i < tuple.size(); i++) {
-                        results.add(tuple.getValue(i));
+                    if (isFilterDone()) {
+                        return false;
                     }
-                    tuple = iterator.next();
+                    Tuple nextTuple = iterator.next();
+                    if (tuple.size() > 0 && !isDummy(tuple)) {
+                        for (int i = 0; i < tuple.size(); i++) {
+                            results.add(tuple.getValue(i));
+                            if (i == 0) {
+                                previousResultRowKey = CellUtil.cloneRow(tuple.getValue(i));
+                            }
+                        }
+                    } else {
+                        if (nextTuple == null) {
+                            byte[] remainingOffset =
+                                    PInteger.INSTANCE.toBytes(iterator.getRemainingOffset());
+                            KeyValue kv;
+                            if (incompatibleClient) {
+                                kv = new KeyValue(
+                                        QueryConstants.OFFSET_ROW_KEY_BYTES,
+                                        QueryConstants.OFFSET_FAMILY,
+                                        QueryConstants.OFFSET_COLUMN,
+                                        remainingOffset);
+                            } else {
+                                kv = getOffsetKvWithLastScannedRowKey(remainingOffset, tuple);
+                            }
+                            results.add(kv);
+                        } else {
+                            updateDummyWithPrevRowKey(results, initStartRowKey,
+                                    previousResultRowKey);
+                        }
+                    }
+                    tuple = nextTuple;
                     return !isFilterDone();
                 } catch (Throwable t) {
+                    LOGGER.error("Error while iterating Offset scanner.", t);
                     ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
                     return false;
                 }
@@ -321,15 +427,45 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     s.close();
                 } finally {
                     try {
-                        if (iterator != null) {
-                            iterator.close();
-                        }
+                        iterator.close();
                     } catch (SQLException e) {
                         ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), e);
                     }
                 }
             }
         };
+    }
+
+    /**
+     * Add dummy cell to the result list based on either the previous rowkey returned to the
+     * client or the start rowkey of the scan or region start key.
+     *
+     * @param result result row.
+     * @param initStartRowKey scan start rowkey.
+     * @param previousResultRowKey previous result rowkey returned to client.
+     */
+    private void updateDummyWithPrevRowKey(final List<Cell> result,
+                                           final byte[] initStartRowKey,
+                                           final byte[] previousResultRowKey) {
+        result.clear();
+        if (previousResultRowKey != null) {
+            getDummyResult(previousResultRowKey, result);
+        } else {
+            getDummyResult(initStartRowKey, result);
+        }
+    }
+
+    private static KeyValue getOffsetKvWithLastScannedRowKey(byte[] value, Tuple tuple) {
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        tuple.getKey(ptr);
+        byte[] rowKey = new byte[ptr.getLength()];
+        System.arraycopy(ptr.get(), ptr.getOffset(), rowKey, 0,
+                rowKey.length);
+        return new KeyValue(
+                rowKey,
+                QueryConstants.OFFSET_FAMILY,
+                QueryConstants.OFFSET_COLUMN,
+                value);
     }
 
     /**
@@ -375,7 +511,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         return false;
                     }
                     if (isDummy(tuple)) {
-                        getDummyResult(results);
+                        ScanUtil.getDummyResult(CellUtil.cloneRow(tuple.getValue(0)), results);
                     } else {
                         for (int i = 0; i < tuple.size(); i++) {
                             results.add(tuple.getValue(i));

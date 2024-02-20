@@ -136,6 +136,36 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
 
+    /**
+     * The scan attribute to provide the scan start rowkey for analyze table queries.
+     */
+    public static final String SCAN_ANALYZE_ACTUAL_START_ROW = "_ScanAnalyzeActualStartRow";
+
+    /**
+     * The scan attribute to provide the scan stop rowkey for analyze table queries.
+     */
+    public static final String SCAN_ANALYZE_ACTUAL_STOP_ROW = "_ScanAnalyzeActualStopRow";
+
+    /**
+     * The scan attribute to provide the scan start rowkey include boolean value for analyze table
+     * queries.
+     */
+    public static final String SCAN_ANALYZE_INCLUDE_START_ROW = "_ScanAnalyzeIncludeStartRow";
+
+    /**
+     * The scan attribute to provide the scan stop rowkey include boolean value for analyze table
+     * queries.
+     */
+    public static final String SCAN_ANALYZE_INCLUDE_STOP_ROW = "_ScanAnalyzeIncludeStopRow";
+
+    /**
+     * The scan attribute to determine whether client changes are compatible to consume
+     * new format changes sent by the server. This attribute is mainly used to address
+     * data integrity issues related to region moves (PHOENIX-7106).
+     */
+    public static final String SCAN_SERVER_RETURN_VALID_ROW_KEY = "_ScanServerValidRowKey";
+
+
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
     // In case of Index Write failure, we need to determine that Index mutation

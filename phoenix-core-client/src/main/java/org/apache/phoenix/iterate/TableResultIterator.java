@@ -19,6 +19,7 @@ package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.CLOSED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.LOCK_NOT_ACQUIRED;
 import static org.apache.phoenix.iterate.TableResultIterator.RenewLeaseStatus.NOT_RENEWED;
@@ -46,6 +47,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes
     .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
+import org.apache.phoenix.exception.ResultSetOutOfScanRangeException;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -59,6 +61,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.Closeables;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.TupleUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -209,8 +212,27 @@ public class TableResultIterator implements ResultIterator {
                 if (lastTuple != null) {
                     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                     lastTuple.getKey(ptr);
+                    try {
+                        ScanUtil.verifyKeyInScanRange(ptr, scan);
+                    } catch (ResultSetOutOfScanRangeException e) {
+                        LOGGER.error("Row key {} of table {} is out of scan range. Scan start "
+                                        + "key: {} , end key: {} , _ScanActualStartRow: {} , "
+                                        + "_ScanStartRowSuffix: {} , _ScanStopRowSuffix: {} , "
+                                        + "scan attributes: {}",
+                                Bytes.toStringBinary(ptr.get()),
+                                htable.getName(),
+                                Bytes.toStringBinary(scan.getStartRow()),
+                                Bytes.toStringBinary(scan.getStopRow()),
+                                Bytes.toStringBinary(scan.getAttribute(SCAN_ACTUAL_START_ROW)),
+                                Bytes.toStringBinary(scan.getAttribute(SCAN_START_ROW_SUFFIX)),
+                                Bytes.toStringBinary(scan.getAttribute(SCAN_STOP_ROW_SUFFIX)),
+                                scan.getAttributesMap(),
+                                e);
+                        throw e;
+                    }
                 }
             } catch (SQLException e) {
+                LOGGER.error("Error while scanning table {} , scan {}", htable, scan);
                 try {
                     throw ClientUtil.parseServerException(e);
                 } catch(HashJoinCacheNotFoundException e1) {
@@ -256,7 +278,7 @@ public class TableResultIterator implements ResultIterator {
                     }
                 }
             }
-            return lastTuple;
+            return TupleUtil.getAggregateGroupTuple(lastTuple);
         } finally {
             renewLeaseLock.unlock();
         }
@@ -271,8 +293,18 @@ public class TableResultIterator implements ResultIterator {
             ResultIterator delegate = this.scanIterator;
             if (delegate == UNINITIALIZED_SCANNER) {
                 try {
+                    // It is important to update the scan boundaries for the reverse scan
+                    // and set the scan as reverse at the client side rather than update it
+                    // at the server side. Updating reverse scan boundaries at the server side
+                    // can lead to incorrect results if the region moves in the middle of the
+                    // ongoing scans.
+                    if (ScanUtil.isReversed(scan)) {
+                        ScanUtil.setupReverseScan(scan);
+                    }
                     this.scanIterator =
-                            new ScanningResultIterator(htable.getScanner(scan), scan, scanMetricsHolder, plan.getContext(), isMapReduceContext, maxQueryEndTime);
+                            new ScanningResultIterator(htable.getScanner(scan), scan,
+                                    scanMetricsHolder, plan.getContext(), isMapReduceContext,
+                                    maxQueryEndTime);
                 } catch (IOException e) {
                     Closeables.closeQuietly(htable);
                     throw ClientUtil.parseServerException(e);

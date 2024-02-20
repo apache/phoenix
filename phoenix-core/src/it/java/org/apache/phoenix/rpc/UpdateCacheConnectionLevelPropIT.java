@@ -41,8 +41,8 @@ import java.sql.Statement;
 import java.util.Properties;
 
 import org.mockito.Mockito;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.isNull;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;

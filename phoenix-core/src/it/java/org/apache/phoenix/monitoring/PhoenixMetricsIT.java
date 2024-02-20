@@ -51,10 +51,10 @@ import static org.apache.phoenix.monitoring.MetricType.UPSERT_COMMIT_TIME;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.DriverManager;
@@ -93,10 +93,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.hamcrest.CoreMatchers;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.mockito.internal.util.reflection.Whitebox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -167,7 +165,7 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     public void testResetGlobalPhoenixMetrics() throws Exception {
         resetGlobalMetrics();
         for (GlobalMetric m : PhoenixRuntime.getGlobalPhoenixClientMetrics()) {
-            assertThat(m, CoreMatchers.<GlobalMetric>instanceOf(GlobalMetricImpl.class));
+            assertTrue(m instanceof GlobalMetricImpl);
             assertEquals(0, m.getValue());
             assertEquals(0, m.getNumberOfSamples());
         }
@@ -928,12 +926,21 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
         }
     }
 
-    private void changeInternalStateForTesting(PhoenixResultSet rs) {
+    private void changeInternalStateForTesting(PhoenixResultSet rs) throws NoSuchFieldException,
+            SecurityException, IllegalArgumentException, IllegalAccessException {
         // get and set the internal state for testing purposes.
+        // TODO use a spy ?
         ReadMetricQueue testMetricsQueue = new TestReadMetricsQueue(LogLevel.OFF,true);
-        StatementContext ctx = (StatementContext)Whitebox.getInternalState(rs, "context");
-        Whitebox.setInternalState(ctx, "readMetricsQueue", testMetricsQueue);
-        Whitebox.setInternalState(rs, "readMetricsQueue", testMetricsQueue);
+
+        Field rsQueueField = PhoenixResultSet.class.getDeclaredField("readMetricsQueue");
+        rsQueueField.setAccessible(true);
+        rsQueueField.set(rs, testMetricsQueue);
+
+        StatementContext ctx = rs.getContext();
+        Field ctxQueueField = StatementContext.class.getDeclaredField("readMetricsQueue");
+        ctxQueueField.setAccessible(true);
+        // Default realm for MiniKDC
+        ctxQueueField.set(ctx, testMetricsQueue);
     }
 
     private void assertReadMetricValuesForSelectSql(ArrayList<Long> numRows, ArrayList<Long> numExpectedTasks,
