@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
@@ -248,8 +249,8 @@ public class QueryCompiler {
         }
     }
 
-    public QueryPlan compileCDCSelect(TableRef cdcTableRef, TableRef cdcDataTableRef,
-                                      QueryPlan cdcDataPlan) throws SQLException {
+    public QueryPlan compileCDCSelect(TableRef cdcTableRef, TableRef cdcDataTableRef)
+            throws SQLException {
         PTable cdcTable = cdcTableRef.getTable();
         Set<PTable.CDCChangeScope> cdcIncludeScopes = cdcTable.getCDCIncludeScopes();
         String cdcHint = select.getHint().getHint(Hint.CDC_INCLUDE);
@@ -262,7 +263,6 @@ public class QueryCompiler {
                 sequenceManager);
         context.setCDCDataTableRef(cdcDataTableRef);
         context.setCDCTableRef(cdcTableRef);
-        //context.setCDCDataPlan(cdcDataPlan);
         context.setCDCIncludeScopes(cdcIncludeScopes);
         return compileSingleQuery(context, select, false, true);
     }
@@ -719,14 +719,6 @@ public class QueryCompiler {
             if (projectedTable != null) {
                 context.setResolver(FromCompiler.getResolverForProjectedTable(projectedTable, context.getConnection(), select.getUdfParseNodes()));
             }
-
-            //if (CDCUtil.isCDCIndex(context.getCurrentTable().getTable())) {
-            //    // This will get the data column added to the context so that projection can get
-            //    // serialized..
-            //    context.getDataColumnPosition(
-            //            context.getCurrentTable().getTable().getColumnForColumnName(
-            //                    QueryConstants.CDC_JSON_COL_NAME));
-            //}
         }
         
         ColumnResolver resolver = context.getResolver();

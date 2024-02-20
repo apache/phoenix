@@ -77,7 +77,7 @@ import static org.junit.Assert.fail;
 public class CDCQueryIT extends CDCBaseIT {
     // Offset of the first column, depending on whether PHOENIX_ROW_TIMESTAMP() is in the schema
     // or not.
-    private static final int COL_OFFSET = 0;
+    private static final int COL_OFFSET = 1;
     private final boolean forView;
     private final boolean dataFirst;
     private final PTable.QualifierEncodingScheme encodingScheme;

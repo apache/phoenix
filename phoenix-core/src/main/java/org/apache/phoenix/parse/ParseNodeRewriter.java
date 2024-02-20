@@ -18,22 +18,23 @@
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
-import org.apache.phoenix.util.SchemaUtil;
 
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * 
@@ -74,14 +75,29 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
                  new ParseNodeRewriter(columnResolver, selectStament.getSelect().size());
          return ParseNodeRewriter.rewrite(selectStament, parseNodeRewriter);
     }
+
     /**
      * Rewrite the select statement by switching any constants to the right hand side
      * of the expression.
      * @param statement the select statement
      * @return new select statement
-     * @throws SQLException 
+     * @throws SQLException
      */
-    public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter) throws SQLException {
+    public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter)
+            throws SQLException {
+        return rewrite(statement, rewriter, false);
+    }
+
+    /**
+     * Rewrite the select statement by switching any constants to the right hand side
+     * of the expression.
+     *
+     * @param statement the select statement
+     * @param forCDC
+     * @return new select statement
+     * @throws SQLException
+     */
+    public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter, boolean forCDC) throws SQLException {
         Map<String,ParseNode> aliasMap = rewriter.getAliasMap();
         TableNode from = statement.getFrom();
         TableNode normFrom = from == null ? null : from.accept(new TableNodeRewriter(rewriter));

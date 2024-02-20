@@ -86,7 +86,6 @@ public class StatementContext {
     private boolean isUncoveredIndex;
     private String cdcIncludeScopes;
     private TableRef cdcTableRef;
-    private QueryPlan cdcDataPlan;
     private TableRef cdcDataTableRef;
 
     public StatementContext(PhoenixStatement statement) {
@@ -405,12 +404,4 @@ public class StatementContext {
     public void setCDCTableRef(TableRef cdcTableRef) {
         this.cdcTableRef = cdcTableRef;
     }
-
-    //public QueryPlan getCDCDataPlan() {
-    //    return cdcDataPlan;
-    //}
-
-    //public void setCDCDataPlan(QueryPlan cdcDataPlan) {
-    //    this.cdcDataPlan = cdcDataPlan;
-    //}
 }

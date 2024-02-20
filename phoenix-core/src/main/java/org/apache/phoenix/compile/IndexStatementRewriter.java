@@ -72,7 +72,7 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
      * @throws SQLException 
      */
     public static SelectStatement translate(SelectStatement statement, ColumnResolver dataResolver) throws SQLException {
-        return translate(statement, dataResolver, null);
+        return translate(statement, dataResolver, null, false);
     }
     
     /**
@@ -84,8 +84,12 @@ public class IndexStatementRewriter extends ParseNodeRewriter {
      * @return new select statement or the same one if nothing was rewritten.
      * @throws SQLException 
      */
-    public static SelectStatement translate(SelectStatement statement, ColumnResolver dataResolver, Map<TableRef, TableRef> multiTableRewriteMap) throws SQLException {
-        return rewrite(statement, new IndexStatementRewriter(dataResolver, multiTableRewriteMap, false));
+    public static SelectStatement translate(SelectStatement statement,
+                                            ColumnResolver dataResolver,
+                                            Map<TableRef, TableRef> multiTableRewriteMap,
+                                            boolean forCDC) throws SQLException {
+        return rewrite(statement, new IndexStatementRewriter(dataResolver, multiTableRewriteMap,
+                false), forCDC);
     }
 
     @Override

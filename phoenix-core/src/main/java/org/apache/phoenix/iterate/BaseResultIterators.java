@@ -963,10 +963,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         byte[] stopRegionBoundaryKey = stopKey;
         int columnsInCommon = 0;
         ScanRanges prefixScanRanges = ScanRanges.EVERYTHING;
-        if (table.getTableName().getString().equals("N000002") ||
-                   table.getTableName().getString().equals("__CDC__N000002")) {
-            "".isEmpty();
-        }
         boolean traverseAllRegions = isSalted || isLocalIndex;
         if (isLocalIndex) {
             // TODO: when implementing PHOENIX-4585, we should change this to an assert

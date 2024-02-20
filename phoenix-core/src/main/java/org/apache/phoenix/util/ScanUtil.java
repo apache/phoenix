@@ -1179,8 +1179,6 @@ public class ScanUtil {
             if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                 return;
             }
-            // TODO: Is context.getCDCTableRef().getTable() same as the one we are setting in
-            //  QueryOptimizer.getApplicablePlansForSingleFlatQuery()?
             PTable dataTable = context.getCDCDataTableRef() != null ?
                     context.getCDCDataTableRef().getTable() :
                     ScanUtil.getDataTable(indexTable, phoenixConnection);

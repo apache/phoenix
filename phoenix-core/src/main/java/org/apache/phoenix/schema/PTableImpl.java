@@ -2193,10 +2193,6 @@ public class PTableImpl implements PTable {
         if (table.getViewStatement() != null) {
             builder.setViewStatement(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(table.getViewStatement())));
         }
-        if (table.getTableName().getString().equals("N000002") ||
-                table.getTableName().getString().equals("N000003")) {
-            "".isEmpty();
-        }
         for (int i = 0; i < table.getPhysicalNames().size(); i++) {
             builder.addPhysicalNames(ByteStringer.wrap(table.getPhysicalNames().get(i).getBytes()));
         }
