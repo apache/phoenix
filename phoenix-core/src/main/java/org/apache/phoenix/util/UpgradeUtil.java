@@ -1521,6 +1521,9 @@ public class UpgradeUtil {
                             String tableName = SchemaUtil.getTableName(rr.getValue(
                                             DEFAULT_COLUMN_FAMILY_BYTES, TABLE_SCHEM_BYTES),
                                     rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TABLE_NAME_BYTES));
+                            if (tableName == null) {
+                                continue;
+                            }
                             TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
                                     tableName, readOnlyProps));
                             int ttl = tableDesc.getColumnFamily(DEFAULT_COLUMN_FAMILY_BYTES).
