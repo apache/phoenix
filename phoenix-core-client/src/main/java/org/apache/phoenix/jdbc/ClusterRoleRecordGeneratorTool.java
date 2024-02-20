@@ -66,13 +66,18 @@ public class ClusterRoleRecordGeneratorTool extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-        String fileName = getConf().get(PHOENIX_HA_GENERATOR_FILE_ATTR);
-        File file = StringUtils.isEmpty(fileName)
-                ? File.createTempFile("phoenix.ha.cluster.role.records", ".json")
-                : new File(fileName);
-        JacksonUtil.getObjectWriterPretty().writeValue(file, listAllRecordsByZk());
-        System.out.println("Created JSON file '" + file + "'");
-        return 0;
+        try {
+            String fileName = getConf().get(PHOENIX_HA_GENERATOR_FILE_ATTR);
+            File file = StringUtils.isEmpty(fileName)
+                    ? File.createTempFile("phoenix.ha.cluster.role.records", ".json")
+                    : new File(fileName);
+            JacksonUtil.getObjectWriterPretty().writeValue(file, listAllRecordsByZk());
+            System.out.println("Created JSON file '" + file + "'");
+            return 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1;
+        }
     }
 
     List<ClusterRoleRecord> listAllRecordsByZk() throws IOException {
