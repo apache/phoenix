@@ -140,6 +140,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     }
 
     // One entry per cluster here
+    // TODO that's not true, we can have multiple connections with different configs / principals
     private final Cache<ConnectionInfo, ConnectionQueryServices> connectionQueryServicesCache =
         initializeConnectionCache();
 
@@ -311,8 +312,18 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
                 services = null;
             }
         }
+
+        if (connectionQueryServicesCache != null) {
+            try {
+                for (ConnectionQueryServices cqsi : connectionQueryServicesCache.asMap().values()) {
+                    cqsi.close();
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to close ConnectionQueryServices instance", e);
+            }
+        }
     }
-    
+
     private enum LockMode {
         READ, WRITE
     };

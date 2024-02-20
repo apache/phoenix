@@ -66,19 +66,24 @@ public class SchemaTool extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-        populateToolAttributes(args);
-        SchemaProcessor processor=null;
-        if(Mode.SYNTH.equals(mode)) {
-            processor = new SchemaSynthesisProcessor(ddlFile);
-        } else if(Mode.EXTRACT.equals(mode)) {
-            conf = HBaseConfiguration.addHbaseResources(getConf());
-            processor = new SchemaExtractionProcessor(tenantId, conf, pSchemaName, pTableName);
-        } else {
-            throw new Exception(mode+" is not accepted, provide [synth or extract]");
+        try {
+            populateToolAttributes(args);
+            SchemaProcessor processor=null;
+            if(Mode.SYNTH.equals(mode)) {
+                processor = new SchemaSynthesisProcessor(ddlFile);
+            } else if(Mode.EXTRACT.equals(mode)) {
+                conf = HBaseConfiguration.addHbaseResources(getConf());
+                processor = new SchemaExtractionProcessor(tenantId, conf, pSchemaName, pTableName);
+            } else {
+                throw new Exception(mode+" is not accepted, provide [synth or extract]");
+            }
+            output = processor.process();
+            LOGGER.info("Effective DDL with " + mode.toString() +": " + output);
+            return 0;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1;
         }
-        output = processor.process();
-        LOGGER.info("Effective DDL with " + mode.toString() +": " + output);
-        return 0;
     }
 
     public String getOutput() {
