@@ -23,6 +23,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
@@ -85,6 +86,7 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1521,7 +1523,10 @@ public class UpgradeUtil {
                             String tableName = SchemaUtil.getTableName(rr.getValue(
                                             DEFAULT_COLUMN_FAMILY_BYTES, TABLE_SCHEM_BYTES),
                                     rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TABLE_NAME_BYTES));
-                            if (tableName == null) {
+                            if (tableName == null || Arrays.equals(rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES,
+                                    TABLE_SCHEM_BYTES), SYSTEM_SCHEMA_NAME_BYTES)) {
+                                //We do not support system table ttl through phoenix ttl, and it will be moved to a
+                                //constant value in future commit.
                                 continue;
                             }
                             TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
