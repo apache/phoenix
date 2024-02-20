@@ -96,13 +96,18 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
     @Override
     public int run(String[] args) throws Exception {
-        parseArgs(args);
-        preJobTask();
-        configureJob();
-        TableMapReduceUtil.initCredentials(job);
-        int ret = runJob();
-        postJobTask();
-        return ret;
+        try {
+            parseArgs(args);
+            preJobTask();
+            configureJob();
+            TableMapReduceUtil.initCredentials(job);
+            int ret = runJob();
+            postJobTask();
+            return ret;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1;
+        }
     }
 
     /**

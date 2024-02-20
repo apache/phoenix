@@ -183,7 +183,12 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
         } catch (IllegalStateException e) {
             printHelpAndExit(e.getMessage(), getOptions());
         }
-        return loadData(conf, cmdLine);
+        try {
+            return loadData(conf, cmdLine);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1;
+        }
     }
 
 
@@ -216,85 +221,95 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
             PhoenixTextInputFormat.setSkipHeader(conf);
         }
 
-        final Connection conn = QueryUtil.getConnection(conf);
-        if (LOGGER.isDebugEnabled()) {
-            LOGGER.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
-                    qualifiedTableName);
-        }
-        List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
-        Preconditions.checkNotNull(importColumns);
-        Preconditions.checkArgument(!importColumns.isEmpty(), "Column info list is empty");
-        FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
-        boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
-        conf.setBoolean(FormatToBytesWritableMapper.IGNORE_INVALID_ROW_CONFKEY, ignoreInvalidRows);
-        conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY,
-                SchemaUtil.getEscapedFullTableName(qualifiedTableName));
-        // give subclasses their hook
-        configureOptions(cmdLine, importColumns, conf);
-        String sName = SchemaUtil.normalizeIdentifier(schemaName);
-        String tName = SchemaUtil.normalizeIdentifier(tableName);
-
-        String tn = SchemaUtil.getEscapedTableName(sName, tName);
-        ResultSet rsempty = conn.createStatement().executeQuery("SELECT * FROM " + tn + " LIMIT 1");
-        boolean tableNotEmpty = rsempty.next();
-        rsempty.close();
-
-        try {
-            validateTable(conn, sName, tName);
-        } finally {
-            conn.close();
-        }
-
         final String inputPaths = cmdLine.getOptionValue(INPUT_PATH_OPT.getOpt());
         final Path outputPath;
-        if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
-            outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
-        } else {
-            outputPath = new Path("/tmp/" + UUID.randomUUID());
-        }
-
         List<TargetTableRef> tablesToBeLoaded = new ArrayList<TargetTableRef>();
-        PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
-        tablesToBeLoaded.add(new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
         boolean hasLocalIndexes = false;
-        boolean hasGlobalIndexes = false;
-        for(PTable index: table.getIndexes()) {
-            if (index.getIndexType() == IndexType.LOCAL) {
-                hasLocalIndexes =
-                        qualifiedIndexTableName == null ? true : index.getTableName().getString()
-                                .equals(qualifiedIndexTableName);
-                if (hasLocalIndexes && hasGlobalIndexes) break;
+
+        try (Connection conn = QueryUtil.getConnection(conf)) {
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Reading columns from {} :: {}", ((PhoenixConnection) conn).getURL(),
+                    qualifiedTableName);
             }
-            if (index.getIndexType() == IndexType.GLOBAL) {
-                hasGlobalIndexes = true;
-                if (hasLocalIndexes && hasGlobalIndexes) break;
+            List<ColumnInfo> importColumns = buildImportColumns(conn, cmdLine, qualifiedTableName);
+            Preconditions.checkNotNull(importColumns);
+            Preconditions.checkArgument(!importColumns.isEmpty(), "Column info list is empty");
+            FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
+            boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
+            conf.setBoolean(FormatToBytesWritableMapper.IGNORE_INVALID_ROW_CONFKEY,
+                ignoreInvalidRows);
+            conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY,
+                SchemaUtil.getEscapedFullTableName(qualifiedTableName));
+            // give subclasses their hook
+            configureOptions(cmdLine, importColumns, conf);
+            String sName = SchemaUtil.normalizeIdentifier(schemaName);
+            String tName = SchemaUtil.normalizeIdentifier(tableName);
+
+            String tn = SchemaUtil.getEscapedTableName(sName, tName);
+            ResultSet rsempty =
+                    conn.createStatement().executeQuery("SELECT * FROM " + tn + " LIMIT 1");
+            boolean tableNotEmpty = rsempty.next();
+            rsempty.close();
+
+            try {
+                validateTable(conn, sName, tName);
+            } finally {
+                conn.close();
             }
-        }
 
-        if(hasGlobalIndexes && tableNotEmpty && !cmdLine.hasOption(ENABLE_CORRUPT_INDEXES.getOpt())){
-            throw new IllegalStateException("Bulk Loading error: Bulk loading is disabled for non" +
-                    " empty tables with global indexes, because it will corrupt the global index table in most cases.\n" +
-                    "Use the --corruptindexes option to override this check.");
-        }
+            if (cmdLine.hasOption(OUTPUT_PATH_OPT.getOpt())) {
+                outputPath = new Path(cmdLine.getOptionValue(OUTPUT_PATH_OPT.getOpt()));
+            } else {
+                outputPath = new Path("/tmp/" + UUID.randomUUID());
+            }
 
-        // using conn after it's been closed... o.O
-        tablesToBeLoaded.addAll(getIndexTables(conn, qualifiedTableName));
-
-        // When loading a single index table, check index table name is correct
-        if (qualifiedIndexTableName != null){
-            TargetTableRef targetIndexRef = null;
-            for (TargetTableRef tmpTable : tablesToBeLoaded){
-                if (tmpTable.getLogicalName().compareToIgnoreCase(qualifiedIndexTableName) == 0) {
-                    targetIndexRef = tmpTable;
-                    break;
+            PTable table = PhoenixRuntime.getTable(conn, qualifiedTableName);
+            tablesToBeLoaded.add(
+                new TargetTableRef(qualifiedTableName, table.getPhysicalName().getString()));
+            boolean hasGlobalIndexes = false;
+            for (PTable index : table.getIndexes()) {
+                if (index.getIndexType() == IndexType.LOCAL) {
+                    hasLocalIndexes =
+                            qualifiedIndexTableName == null ? true
+                                    : index.getTableName().getString()
+                                            .equals(qualifiedIndexTableName);
+                    if (hasLocalIndexes && hasGlobalIndexes) break;
+                }
+                if (index.getIndexType() == IndexType.GLOBAL) {
+                    hasGlobalIndexes = true;
+                    if (hasLocalIndexes && hasGlobalIndexes) break;
                 }
             }
-            if (targetIndexRef == null){
-                throw new IllegalStateException("Bulk Loader error: index table " +
-                        qualifiedIndexTableName + " doesn't exist");
+
+            if (hasGlobalIndexes && tableNotEmpty
+                    && !cmdLine.hasOption(ENABLE_CORRUPT_INDEXES.getOpt())) {
+                throw new IllegalStateException(
+                        "Bulk Loading error: Bulk loading is disabled for non"
+                                + " empty tables with global indexes, because it will corrupt the"
+                                + " global index table in most cases.\n"
+                                + "Use the --corruptindexes option to override this check.");
             }
-            tablesToBeLoaded.clear();
-            tablesToBeLoaded.add(targetIndexRef);
+
+            // using conn after it's been closed... o.O
+            tablesToBeLoaded.addAll(getIndexTables(conn, qualifiedTableName));
+
+            // When loading a single index table, check index table name is correct
+            if (qualifiedIndexTableName != null) {
+                TargetTableRef targetIndexRef = null;
+                for (TargetTableRef tmpTable : tablesToBeLoaded) {
+                    if (tmpTable.getLogicalName()
+                            .compareToIgnoreCase(qualifiedIndexTableName) == 0) {
+                        targetIndexRef = tmpTable;
+                        break;
+                    }
+                }
+                if (targetIndexRef == null) {
+                    throw new IllegalStateException("Bulk Loader error: index table "
+                            + qualifiedIndexTableName + " doesn't exist");
+                }
+                tablesToBeLoaded.clear();
+                tablesToBeLoaded.add(targetIndexRef);
+            }
         }
 
         return submitJob(conf, tableName, inputPaths, outputPath, tablesToBeLoaded, hasLocalIndexes);
