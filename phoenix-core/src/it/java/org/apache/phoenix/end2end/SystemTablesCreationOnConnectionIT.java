@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_HBASE_TABLE_NAME;
@@ -51,6 +52,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
+import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.UpgradeRequiredException;
@@ -69,6 +71,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -174,6 +177,10 @@ public class SystemTablesCreationOnConnectionIT {
         }
     }
 
+    @BeforeClass
+    public static synchronized void registerTestDriver() throws SQLException {
+        DriverManager.registerDriver(new PhoenixTestDriver());
+    }
     @Before
     public void resetVariables() {
         setOldTimestampToInduceUpgrade = false;
@@ -661,6 +668,7 @@ public class SystemTablesCreationOnConnectionIT {
         conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, isNamespaceMappingEnabled);
         // Avoid multiple clusters trying to bind to the master's info port (16010)
         conf.setInt(HConstants.MASTER_INFO_PORT, -1);
+        conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, PhoenixRegionServerEndpoint.class.getName());
         testUtil.startMiniCluster(1);
     }
 
