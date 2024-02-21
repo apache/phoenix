@@ -361,6 +361,8 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_SERVER_PAGE_SIZE_MS = "phoenix.server.page.size.ms";
     // Phoenix TTL implemented by CompactionScanner and TTLRegionScanner is enabled
     public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
+    //Property to know whether TTL at View Level is enabled
+    public static final String PHOENIX_VIEW_TTL_ENABLED = "phoenix.view.ttl.enabled";
 
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view

@@ -17,8 +17,14 @@
  */
 package org.apache.phoenix.util;
 
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME_BYTES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.CURRENT_CLIENT_VERSION;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.getVersion;
@@ -80,6 +86,7 @@ import java.sql.Types;
 import java.text.Format;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -1467,6 +1474,127 @@ public class UpgradeUtil {
         LOGGER.info(String.format("Finished copying ttl values link rows from PHOENIX_TTL column " +
                 "to TTL column on %s ",
                 SYSTEM_CATALOG_NAME));
+
+    }
+
+    public static void moveHBaseLevelTTLToSYSCAT(PhoenixConnection oldMetaConnection,
+                                                 Map<String, String> options) throws IOException {
+        long numOfTableThatHasTTLMoved = 0;
+        ReadOnlyProps readOnlyProps = oldMetaConnection.getQueryServices().getProps();
+        TableName sysCat = SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME, readOnlyProps);
+
+        LOGGER.debug(String.format("SYSTEM CATALOG table use for copying TTL values: %s", sysCat.toString()));
+        Configuration conf = oldMetaConnection.getQueryServices().getConfiguration();
+        try (org.apache.hadoop.hbase.client.Connection moveTTLConnection =  getHBaseConnection(conf, options);
+             Table sysCatalogTable = moveTTLConnection.getTable(sysCat);
+             Admin admin = moveTTLConnection.getAdmin()) {
+            //Scan SYSCAT for all tables...
+                boolean pageMore = false;
+                byte[] lastRowKey = null;
+
+                do {
+                    Scan scan = new Scan();
+                    scan.addFamily(DEFAULT_COLUMN_FAMILY_BYTES);
+                    // Push down the filter to hbase to avoid transfer
+                    SingleColumnValueFilter tableFilter = new SingleColumnValueFilter(
+                            DEFAULT_COLUMN_FAMILY_BYTES,
+                            TABLE_TYPE_BYTES, CompareOperator.EQUAL,
+                            PTableType.TABLE.getSerializedValue().getBytes(StandardCharsets.UTF_8));
+
+                    tableFilter.setFilterIfMissing(true);
+                    // Limit number of records
+                    PageFilter pf = new PageFilter(DEFAULT_SCAN_PAGE_SIZE);
+
+                    scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL, pf, tableFilter));
+                    if (pageMore) {
+                        scan.withStartRow(lastRowKey, false);
+                    }
+                    // Collect the row keys to process them in batch
+                    try (ResultScanner scanner = sysCatalogTable.getScanner(scan)) {
+                        int count = 0;
+                        List<byte[]> rowKeys = new ArrayList<>();
+                        List<Put> puts = new ArrayList<>();
+                        for (Result rr = scanner.next(); rr != null; rr = scanner.next()) {
+                            count++;
+                            lastRowKey = rr.getRow();
+                            byte[] tmpKey = new byte[lastRowKey.length];
+                            System.arraycopy(lastRowKey, 0, tmpKey, 0, tmpKey.length);
+                            rowKeys.add(tmpKey);
+                            String tableName = SchemaUtil.getTableName(rr.getValue(
+                                            DEFAULT_COLUMN_FAMILY_BYTES, TABLE_SCHEM_BYTES),
+                                    rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TABLE_NAME_BYTES));
+                            if (tableName == null || Arrays.equals(rr.getValue(DEFAULT_COLUMN_FAMILY_BYTES,
+                                    TABLE_SCHEM_BYTES), SYSTEM_SCHEMA_NAME_BYTES)) {
+                                //We do not support system table ttl through phoenix ttl, and it will be moved to a
+                                //constant value in future commit.
+                                continue;
+                            }
+                            TableDescriptor tableDesc = admin.getDescriptor(SchemaUtil.getPhysicalTableName(
+                                    tableName, readOnlyProps));
+                            int ttl = tableDesc.getColumnFamily(DEFAULT_COLUMN_FAMILY_BYTES).
+                                    getTimeToLive();
+                            if (ttl != ColumnFamilyDescriptorBuilder.DEFAULT_TTL) {
+                                //As we have ttl defined fot this table create a Put to set TTL.
+                                long rowTS = rr.rawCells()[0].getTimestamp();
+                                Put put = new Put(tmpKey);
+                                put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
+                                        EMPTY_COLUMN_VALUE_BYTES);
+                                put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
+                                        PInteger.INSTANCE.toBytes(ttl));
+                                puts.add(put);
+
+                                //Set TTL to Default at CF level when Phoenix level ttl is enabled
+                                if (oldMetaConnection.getQueryServices().getConfiguration().getBoolean(
+                                        QueryServices.PHOENIX_TABLE_TTL_ENABLED, DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
+                                    ColumnFamilyDescriptor columnFamilyDescriptor = ColumnFamilyDescriptorBuilder
+                                            .newBuilder(DEFAULT_COLUMN_FAMILY_BYTES).setTimeToLive(
+                                                    ColumnFamilyDescriptorBuilder.DEFAULT_TTL).build();
+                                    TableDescriptor tableDescriptor = TableDescriptorBuilder.newBuilder(
+                                            admin.getDescriptor(SchemaUtil.getPhysicalTableName(
+                                            tableName, readOnlyProps))).modifyColumnFamily(
+                                                    columnFamilyDescriptor).build();
+                                    admin.modifyTable(tableDescriptor);
+                                }
+                            }
+                        }
+
+                        if (!puts.isEmpty()) {
+                            Object[] putResults = new Object[puts.size()];
+                            try (Table moveTTLTable = moveTTLConnection.getTable(sysCat)) {
+                                // Process a batch of ttl values
+                                moveTTLTable.batch(puts, putResults);
+                                int numMoved = 0;
+                                for (Object putResult : putResults) {
+                                    if (java.util.Objects.nonNull(putResult)) {
+                                        numMoved++;
+                                    }
+                                }
+                                numOfTableThatHasTTLMoved += numMoved;
+                            } catch (Exception e) {
+                                LOGGER.error(String.format(
+                                        "Failed moving ttl value batch from ColumnDescriptor to TTL" +
+                                                " column on %s with Exception :",
+                                        SYSTEM_CATALOG_NAME), e);
+                            }
+                        }
+
+                        pageMore = count != 0;
+                        LOGGER.info(String.format("moveTTLValues From ColumnDescriptor to TTL Column is " +
+                                        "in progress => numOfTableHasTTLMoved: %d",
+                                numOfTableThatHasTTLMoved));
+
+                    }
+                } while (pageMore);
+            } catch (IOException ioe) {
+                LOGGER.error(String.format(
+                        "Failed moving ttl value batch from ColumnDescriptor to TTL" +
+                                " column in %s with Exception :",
+                        SYSTEM_CATALOG_NAME), ioe);
+                throw ioe;
+            }
+            LOGGER.info(String.format("Finished moving ttl value batch from ColumnDescriptor to TTL " +
+                            "column on %s ",
+                    SYSTEM_CATALOG_NAME));
 
     }
 
