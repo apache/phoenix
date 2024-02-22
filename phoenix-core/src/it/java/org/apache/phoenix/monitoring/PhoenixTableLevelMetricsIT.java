@@ -37,6 +37,7 @@ import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -119,6 +120,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.getOverAllReadRequestMetric
 import static org.apache.phoenix.util.PhoenixRuntime.getPhoenixTableClientMetrics;
 import static org.apache.phoenix.util.PhoenixRuntime.getRequestReadMetricInfo;
 import static org.apache.phoenix.util.PhoenixRuntime.getWriteMetricInfoForMutationsSinceLastReset;
+import static org.apache.phoenix.util.QueryUtil.IS_SERVER_CONNECTION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -180,6 +182,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Add our own driver
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixMetricsTestingDriver.class.getName());
+        props.put(IS_SERVER_CONNECTION, Boolean.toString(true));
         initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -1274,14 +1277,22 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 assertTrue(metricExists);
                 metricExists = false;
                 //assert BaseTable is not being queried
-                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
-                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
-                        metricExists = true;
-                        assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
-                        break;
-                    }
+                // when UCF=never and we are validating last_ddl_timestamps,
+                // there will be no metrics for base table (like getTable RPC times/counts).
+                if (QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY == Long.MAX_VALUE
+                        && QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
+                    assertFalse(getPhoenixTableClientMetrics().containsKey(dataTable));
                 }
-                assertTrue(metricExists);
+                else {
+                    for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
+                        if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                            metricExists = true;
+                            assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
+                            break;
+                        }
+                    }
+                    assertTrue(metricExists);
+                }
             }
         }
     }
