@@ -36,6 +36,7 @@ import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
@@ -59,6 +60,7 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_NAME;
@@ -89,6 +91,8 @@ public class TransformClient {
             PhoenixDatabaseMetaData.NEW_METADATA + " , " +
             PhoenixDatabaseMetaData.TRANSFORM_FUNCTION +
             " FROM " + PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_NAME;
+
+    private static final String TRANSFORMED_TABLE_SUFFIX_SEPARATOR = "_";
 
     public static SystemTransformRecord getTransformRecord(
             PName schema, PName logicalTableName, PName logicalParentName, PName tenantId, PhoenixConnection connection) throws SQLException {
@@ -176,8 +180,33 @@ public class TransformClient {
 
     private static String generateNewTableName(String schema, String logicalTableName, long seqNum) {
         // TODO: Support schema versioning as well.
-        String newName = String.format("%s_%d", SchemaUtil.getTableName(schema, logicalTableName), seqNum);
+        String newName = String.format("%s" + TRANSFORMED_TABLE_SUFFIX_SEPARATOR + "%d", SchemaUtil.getTableName(schema, logicalTableName), seqNum);
         return newName;
+    }
+
+    public static String getLogicalTableName(String physicalTableFullName, PhoenixConnection conn) throws Exception {
+        int index = physicalTableFullName.lastIndexOf(TRANSFORMED_TABLE_SUFFIX_SEPARATOR);
+        if (index < 0) {
+            return physicalTableFullName;
+        }
+        String logicalTableFullName = physicalTableFullName.substring(0, index);
+        PTable logicalTable;
+        try {
+            logicalTable = conn.getTableNoCache(logicalTableFullName);
+        }
+        catch (TableNotFoundException e) {
+            return physicalTableFullName;
+        }
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(physicalTableFullName);
+        String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalTableFullName);
+        String schemaNameOfLogicalTable = SchemaUtil.getSchemaNameFromFullName(logicalTableFullName);
+        PName physicalTableNameOfLogicalPTable = logicalTable.getPhysicalName(true);
+        if (! Objects.equals(schemaNameOfLogicalTable, schemaName)
+            || physicalTableNameOfLogicalPTable == null
+            || ! Objects.equals(physicalTableNameOfLogicalPTable.getString(), physicalTableName)) {
+            return physicalTableFullName;
+        }
+        return logicalTableFullName;
     }
 
     public static PTable addTransform(PhoenixConnection connection, String tenantId, PTable table, MetaDataClient.MetaProperties changingProperties,

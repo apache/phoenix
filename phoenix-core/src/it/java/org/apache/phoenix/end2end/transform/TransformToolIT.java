@@ -50,7 +50,6 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -1182,7 +1181,6 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
                     PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
 
             conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET COLUMN_ENCODED_BYTES=2");
-            TestUtil.dumpTable(conn, TableName.valueOf("SYSTEM.TRANSFORM"));
             SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName,
                     null, null, conn.unwrap(PhoenixConnection.class));
             assertNotNull(record);

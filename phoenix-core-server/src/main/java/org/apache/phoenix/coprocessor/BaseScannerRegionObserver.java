@@ -61,11 +61,11 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -539,22 +539,24 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
         String fullTableName = tableName.getNameAsString();
         Configuration conf = c.getEnvironment().getConfiguration();
-        PTable table;
+        Long maxLookbackAge;
         try(PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                 conf).unwrap(PhoenixConnection.class)) {
-            table = conn.getTableNoCache(fullTableName);
+            // Need to check this upfront as SYSCAT can have a Phoenix table level record for new transformed table
+            // and we need to skip such records. Also avoids FULL SCAN over SYSCAT.
+            fullTableName = TransformClient.getLogicalTableName(fullTableName, conn);
+            maxLookbackAge = conn.getTableNoCache(fullTableName).getMaxLookbackAge();
         }
         catch (Exception e) {
             if (e instanceof TableNotFoundException) {
-                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
-                        + fullTableName);
-                // non-Phoenix HBase tables won't be found, do nothing
-            } else {
+                LOGGER.error("No Phoenix table found with name " + fullTableName, e);
+            }
+            else {
                 LOGGER.error("Unable to fetch table level max lookback age for " + fullTableName, e);
             }
             return MetaDataUtil.getMaxLookbackAge(conf, null);
         }
-        return MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
+        return MetaDataUtil.getMaxLookbackAge(conf, maxLookbackAge);
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {

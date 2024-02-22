@@ -24,15 +24,25 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
+import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.transform.SystemTransformRecord;
+import org.apache.phoenix.schema.transform.Transform;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.end2end.transform.TransformToolIT;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -43,19 +53,24 @@ import org.junit.experimental.categories.Category;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class MaxLookbackIT extends BaseTest {
@@ -448,74 +463,6 @@ public class MaxLookbackIT extends BaseTest {
         }
     }
 
-    @Test
-    public void testExpiredVersionsAreNotFlushedWithTableLevelMaxLookback() throws Exception {
-        ttl = 8;
-        long maxLookbackAge = 12;
-        optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
-                append(maxLookbackAge * 1000);
-        tableDDLOptions = optionBuilder.toString();
-        Configuration conf = getUtility().getConfiguration();
-        //disable automatic memstore flushes
-        long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
-                HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
-        conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
-        try(Connection conn = DriverManager.getConnection(getUrl())) {
-            String dataTableName = generateUniqueName();
-            String indexName = generateUniqueName();
-            createTable(dataTableName);
-            populateTable(dataTableName);
-            createIndex(dataTableName, indexName, 1);
-            TableName dataTable = TableName.valueOf(dataTableName);
-            TableName indexTable = TableName.valueOf(indexName);
-            assertTableHasTtl(conn, dataTable, ttl);
-            assertTableHasTtl(conn, indexTable, ttl);
-            injectEdge.setValue(System.currentTimeMillis());
-            EnvironmentEdgeManager.injectEdge(injectEdge);
-            injectEdge.incrementValue(1);
-            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
-            injectEdge.incrementValue(1);
-            populateTable(dataTableName);
-            injectEdge.incrementValue(1);
-            //first make sure we inserted correctly
-            String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
-            String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
-            assertRowExistsAtSCN(getUrl(), sql, afterFirstInsertSCN, true);
-            assertExplainPlan(conn, indexSql, dataTableName, indexName);
-            assertRowExistsAtSCN(getUrl(),indexSql, afterFirstInsertSCN, true);
-            int originalDataTableRawCellCountPerRow = 8;
-            int originalIndexTableRawCellCountPerRow = 6;
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
-            long timeToAdvance = (maxLookbackAge * 1000) -
-                    (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
-            if (timeToAdvance > 0) {
-                injectEdge.incrementValue(timeToAdvance);
-            }
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
-            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
-                    afterFirstInsertSCN + ttl * 1000);
-            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
-                    afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
-            flush(dataTable);
-            flush(indexTable);
-            int newDataTableRawCellCountPerRow = 4;
-            int newIndexTableRawCellCount = 3;
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), newDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), newIndexTableRawCellCount);
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), newDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), newIndexTableRawCellCount);
-        }
-        finally {
-            conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
-        }
-    }
-
     @Test(timeout=60000)
     public void testRecentMaxVersionsNotCompactedAway() throws Exception {
         int versions = 2;
@@ -593,6 +540,88 @@ public class MaxLookbackIT extends BaseTest {
             assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), 3);
         }
     }
+
+    @Test
+    public void testFlushOverTransformedTable() throws Exception {
+        ttl = 8;
+        int maxLookbackAge = 12;
+        optionBuilder.append("IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=NONE, " +
+                "MAX_LOOKBACK_AGE=").append(maxLookbackAge * 1000).append(", TTL=").append(ttl);
+        tableDDLOptions = optionBuilder.toString();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        int delta = 1;
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Configuration conf = getUtility().getConfiguration();
+        //disable automatic memstore flushes
+        long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
+                HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
+        conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            try {
+                IndexTool.createIndexToolTables(conn);
+                int numOfRows = 2;
+                TransformToolIT.createTableAndUpsertRows(conn, dataTableFullName, numOfRows, tableDDLOptions);
+                assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                        PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS, dataTableFullName);
+
+                conn.createStatement().execute("ALTER TABLE " + dataTableFullName + " SET COLUMN_ENCODED_BYTES=2");
+                SystemTransformRecord record = Transform.getTransformRecord(schemaName, dataTableName,
+                        null, null, conn.unwrap(PhoenixConnection.class));
+                String newPhysicalTableFullName = record.getNewPhysicalTableName();
+                assertNotNull(record);
+                assertMetadata(conn, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+                        PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, newPhysicalTableFullName);
+                List<String> args = TransformToolIT.getArgList(schemaName, dataTableName, null, null, null,
+                        null, false, false, false, false,
+                        false);
+                TransformToolIT.runTransformTool(args.toArray(new String[0]), 0);
+                args.add("-fco");
+                TransformToolIT.runTransformTool(args.toArray(new String[0]), 0);
+                record = Transform.getTransformRecord(schemaName, dataTableName,
+                        null, null, conn.unwrap(PhoenixConnection.class));
+                assertEquals(PTable.TransformStatus.COMPLETED.name(), record.getTransformStatus());
+                PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+                String physicalTableNamePostTransform = pconn.getTableNoCache(dataTableFullName).getPhysicalName(
+                        true).getString();
+                assertEquals(SchemaUtil.getTableNameFromFullName(newPhysicalTableFullName), physicalTableNamePostTransform);
+
+                ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
+                customEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+                EnvironmentEdgeManager.injectEdge(customEdge);
+                customEdge.incrementValue(maxLookbackAge * 1000);
+
+                String upsertQuery = String.format("UPSERT INTO %s VALUES(?, ?, ?)", dataTableFullName);
+                PreparedStatement stmt = conn.prepareStatement(upsertQuery);
+                IndexToolIT.upsertRow(stmt, ++numOfRows);
+                customEdge.incrementValue(delta);
+                TableName newPhysicalTable = TableName.valueOf(newPhysicalTableFullName);
+                assertRawRowCount(conn, newPhysicalTable, numOfRows);
+                customEdge.incrementValue(ttl * 1000);
+                flush(newPhysicalTable);
+                // Initial two rows got expired but most recent one didn't
+                assertRawRowCount(conn, newPhysicalTable, numOfRows - 2);
+                customEdge.incrementValue(delta);
+                IndexToolIT.upsertRow(stmt, ++numOfRows);
+                customEdge.incrementValue(delta);
+                assertRawRowCount(conn, newPhysicalTable, numOfRows - 2);
+                customEdge.incrementValue(maxLookbackAge * 1000);
+                flush(newPhysicalTable);
+                // Most recent row won't be flushed as it got expired
+                assertRawRowCount(conn, newPhysicalTable, numOfRows - 3);
+            }
+            finally {
+                deleteAllRows(conn,
+                        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES));
+                deleteAllRows(conn,
+                        TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
+                conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
+            }
+        }
+    }
+
 
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
