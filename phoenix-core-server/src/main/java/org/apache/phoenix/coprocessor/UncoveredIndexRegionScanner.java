@@ -20,6 +20,7 @@ package org.apache.phoenix.coprocessor;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -44,9 +45,11 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,6 +98,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected int indexRowCount = 0;
     protected final long pageSizeMs;
     protected byte[] lastIndexRowKey = null;
+    private byte[] previousResultRowKey = null;
+    private final byte[] initStartRowKey;
+    private final boolean includeInitStartRowKey;
 
     public UncoveredIndexRegionScanner(final RegionScanner innerScanner,
                                              final Region region,
@@ -138,6 +144,11 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         this.ptr = ptr;
         this.tupleProjector = tupleProjector;
         this.pageSizeMs = pageSizeMs;
+        // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
+        // for reverse scan.
+        this.initStartRowKey =
+                ServerUtil.getScanStartRowKeyFromScanOrRegionBoundaries(scan, region);
+        this.includeInitStartRowKey = scan.includeStartRow();
     }
 
     @Override
@@ -381,6 +392,8 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 if (state == State.SCANNING_INDEX) {
                     hasMore = scanIndexTableRows(result, startTime);
                     if (isDummy(result)) {
+                        updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey,
+                                scan);
                         return hasMore;
                     }
                     state = State.SCANNING_DATA;
@@ -390,9 +403,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     indexRowIterator = indexRows.iterator();
                 }
                 if (state == State.READY) {
-                    return getNextCoveredIndexRow(result);
+                    boolean moreRows = getNextCoveredIndexRow(result);
+                    if (!result.isEmpty()) {
+                        previousResultRowKey = CellUtil.cloneRow(result.get(0));
+                    }
+                    return moreRows;
                 } else {
-                    getDummyResult(lastIndexRowKey, result);
+                    updateDummyWithPrevRowKey(result, initStartRowKey, includeInitStartRowKey,
+                            scan);
                     return true;
                 }
             }
@@ -404,4 +422,58 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             region.closeRegionOperation();
         }
     }
+
+    /**
+     * Add dummy cell to the result list based on either the previous rowkey returned to the
+     * client or the start rowkey and start rowkey include params.
+     *
+     * @param result result to add the dummy cell to.
+     * @param initStartRowKey scan start rowkey.
+     * @param includeInitStartRowKey scan start rowkey included.
+     * @param scan scan object.
+     */
+    private void updateDummyWithPrevRowKey(List<Cell> result, byte[] initStartRowKey,
+                                           boolean includeInitStartRowKey, Scan scan) {
+        result.clear();
+        if (previousResultRowKey != null) {
+            getDummyResult(previousResultRowKey, result);
+        } else {
+            if (includeInitStartRowKey && initStartRowKey.length > 0) {
+                byte[] prevKey;
+                // In order to generate largest possible rowkey that is less than
+                // initStartRowKey, we need to check size of the region name that can be
+                // used by hbase client for meta lookup, in case meta cache is expired at client.
+                // Once we know regionLookupInMetaLen, use it to generate largest possible
+                // rowkey that is lower than initStartRowKey by using
+                // ByteUtil#previousKeyWithLength function, which appends "\\xFF" bytes to
+                // prev rowkey upto the length provided. e.g. for the given key
+                // "\\x01\\xC1\\x06", the previous key with length 5 would be
+                // "\\x01\\xC1\\x05\\xFF\\xFF" by padding 2 bytes "\\xFF".
+                // The length of the largest scan start rowkey should not exceed
+                // HConstants#MAX_ROW_LENGTH.
+                int regionLookupInMetaLen =
+                        RegionInfo.createRegionName(region.getTableDescriptor().getTableName(),
+                                new byte[1], HConstants.NINES, false).length;
+                if (Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1,
+                        1, ByteUtil.ZERO_BYTE, 0, 1) == 0) {
+                    // If initStartRowKey has last byte as "\\x00", we can discard the last
+                    // byte and send the key as dummy rowkey.
+                    prevKey = new byte[initStartRowKey.length - 1];
+                    System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
+                } else if (initStartRowKey.length <
+                        (HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen)) {
+                    prevKey = ByteUtil.previousKeyWithLength(ByteUtil.concat(initStartRowKey,
+                                    new byte[HConstants.MAX_ROW_LENGTH
+                                            - initStartRowKey.length - 1 - regionLookupInMetaLen]),
+                            HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen);
+                } else {
+                    prevKey = initStartRowKey;
+                }
+                getDummyResult(prevKey, result);
+            } else {
+                getDummyResult(initStartRowKey, result);
+            }
+        }
+    }
+
 }

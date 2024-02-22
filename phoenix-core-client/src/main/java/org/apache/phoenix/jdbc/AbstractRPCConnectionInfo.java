@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hbase.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 
 /**
@@ -199,9 +200,10 @@ public abstract class AbstractRPCConnectionInfo extends ConnectionInfo {
             }
             // At this point, masterPort is guaranteed not to be 0
 
+            isConnectionless = PhoenixRuntime.CONNECTIONLESS.equals(hostsList);
+
             if (isConnectionless) {
-                // We probably don't create connectionless MasterConnectionInfo objects
-                if (hostsList != null || port != null) {
+                if (port != null) {
                     throw getMalFormedUrlException(url);
                 } else {
                     return;

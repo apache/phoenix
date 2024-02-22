@@ -175,7 +175,11 @@ public class ConnectionlessTest {
     @Test
     public void testMultipleConnectionQueryServices() throws Exception {
         String url1 = getUrl();
-        String url2 = url1 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
+        // Non-ZK registries don't have heuristics to handle missing URL elements
+        String url2 =
+                url1 + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                        + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR
+                        + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn1 = DriverManager.getConnection(url1);
         try {
             assertEquals(StringUtil.EMPTY_STRING, conn1.getMetaData().getUserName());

@@ -46,7 +46,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -63,7 +63,7 @@ import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
 import static org.junit.Assert.*;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.when;
 
@@ -272,9 +272,9 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
     }
 
     private void initializeRebuildScannerAttributes() throws SQLException {
-        when(rebuildScanner.setIndexTableTTL(Matchers.anyInt())).thenCallRealMethod();
-        when(rebuildScanner.setIndexMaintainer(Matchers.<IndexMaintainer>any())).thenCallRealMethod();
-        when(rebuildScanner.setMaxLookBackInMills(Matchers.anyLong())).thenCallRealMethod();
+        when(rebuildScanner.setIndexTableTTL(ArgumentMatchers.anyInt())).thenCallRealMethod();
+        when(rebuildScanner.setIndexMaintainer(ArgumentMatchers.<IndexMaintainer>any())).thenCallRealMethod();
+        when(rebuildScanner.setMaxLookBackInMills(ArgumentMatchers.anyLong())).thenCallRealMethod();
         rebuildScanner.setIndexTableTTL(HConstants.FOREVER);
         indexMaintainer = pIndexTable.getIndexMaintainer(pDataTable, pconn);
         rebuildScanner.setIndexMaintainer(indexMaintainer);
@@ -286,17 +286,17 @@ public class VerifySingleIndexRowTest extends BaseConnectionlessQueryTest {
         //setup
         when(indexMaintainer.getIndexRowKey(put)).thenCallRealMethod();
         when(rebuildScanner.prepareIndexMutations(put, delete, indexKeyToMutationMap, mostRecentIndexRowKeys)).thenCallRealMethod();
-        when(rebuildScanner.verifySingleIndexRow(Matchers.<byte[]>any(), Matchers.<List>any(),Matchers.<List>any(), Matchers.<Set>any(), Matchers.<List>any(),
-                Matchers.<IndexToolVerificationResult.PhaseResult>any(), Matchers.anyBoolean())).thenCallRealMethod();
+        when(rebuildScanner.verifySingleIndexRow(ArgumentMatchers.<byte[]>any(), ArgumentMatchers.<List>any(),ArgumentMatchers.<List>any(), ArgumentMatchers.<Set>any(), ArgumentMatchers.<List>any(),
+                ArgumentMatchers.<IndexToolVerificationResult.PhaseResult>any(), ArgumentMatchers.anyBoolean())).thenCallRealMethod();
         doNothing().when(rebuildScanner)
-                .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
+                .logToIndexToolOutputTable(ArgumentMatchers.<byte[]>any(),ArgumentMatchers.<byte[]>any(),
                         Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
-                        Matchers.<byte[]>any(), Matchers.<byte[]>any(), Matchers.anyBoolean(),
+                        ArgumentMatchers.<byte[]>any(), ArgumentMatchers.<byte[]>any(), ArgumentMatchers.anyBoolean(),
                     Mockito.<IndexVerificationOutputRepository.IndexVerificationErrorType>any());
         doNothing().when(rebuildScanner)
-                .logToIndexToolOutputTable(Matchers.<byte[]>any(),Matchers.<byte[]>any(),
+                .logToIndexToolOutputTable(ArgumentMatchers.<byte[]>any(),ArgumentMatchers.<byte[]>any(),
                         Mockito.anyLong(),Mockito.anyLong(), Mockito.anyString(),
-                    Matchers.anyBoolean(),
+                    ArgumentMatchers.anyBoolean(),
                     Mockito.<IndexVerificationOutputRepository.IndexVerificationErrorType>any());
 
         //populate the local map to use to create actual mutations

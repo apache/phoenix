@@ -22,12 +22,20 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DELET
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DIVERGED_VIEW;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_OFFSET;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ORDERED_GROUP_BY;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ORDER_BY_NON_PK;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_UNORDERED_GROUP_BY;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DATA;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DELETE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_DIVERGED_VIEW;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_INDEX_REBUILD_ASYNC;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_OFFSET;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ORDERED_GROUP_BY;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ORDER_BY_NON_PK;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_UNORDERED_GROUP_BY;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.assertExpectedOutput;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.checkForPreConditions;
@@ -63,6 +71,7 @@ import org.apache.phoenix.schema.SystemTaskSplitPolicy;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -438,4 +447,85 @@ public class BackwardCompatibilityIT {
         executeQueryWithClientVersion(compatibleClientVersion, QUERY_VIEW_INDEX, zkQuorum);
         assertExpectedOutput(QUERY_VIEW_INDEX);
     }
+
+    @Test
+    public void testUnorderedGroupByAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_UNORDERED_GROUP_BY, zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_UNORDERED_GROUP_BY, url, NONE);
+        assertExpectedOutput(QUERY_UNORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testUnorderedGroupByAddDataByNewClientReadByOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_UNORDERED_GROUP_BY, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_UNORDERED_GROUP_BY, zkQuorum);
+        assertExpectedOutput(QUERY_UNORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testOrderedGroupByAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_ORDERED_GROUP_BY, zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_ORDERED_GROUP_BY, url, NONE);
+        assertExpectedOutput(QUERY_ORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testOrderedGroupByAddDataByNewClientReadByOldClient() throws Exception {
+        Assume.assumeTrue("compatible client version should be >= 5.1.3",
+                isClientCompatibleForOrderedGroupByQuery());
+        executeQueriesWithCurrentVersion(CREATE_ORDERED_GROUP_BY, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_ORDERED_GROUP_BY, zkQuorum);
+        assertExpectedOutput(QUERY_ORDERED_GROUP_BY);
+    }
+
+    @Test
+    public void testOffsetAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_OFFSET, zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_OFFSET, url, NONE);
+        assertExpectedOutput(QUERY_OFFSET);
+    }
+
+    @Test
+    public void testOffsetAddDataByNewClientReadByOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_OFFSET, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_OFFSET, zkQuorum);
+        assertExpectedOutput(QUERY_OFFSET);
+    }
+
+    @Test
+    public void testOrderByNonPkAddDataByOldClientReadByNewClient() throws Exception {
+        executeQueryWithClientVersion(compatibleClientVersion, CREATE_ORDER_BY_NON_PK,
+                zkQuorum);
+        executeQueriesWithCurrentVersion(QUERY_ORDER_BY_NON_PK, url, NONE);
+        assertExpectedOutput(QUERY_ORDER_BY_NON_PK);
+    }
+
+    @Test
+    public void testOrderByNonPkAddDataByNewClientReadByOldClient() throws Exception {
+        executeQueriesWithCurrentVersion(CREATE_ORDER_BY_NON_PK, url, NONE);
+        executeQueryWithClientVersion(compatibleClientVersion, QUERY_ORDER_BY_NON_PK,
+                zkQuorum);
+        assertExpectedOutput(QUERY_ORDER_BY_NON_PK);
+    }
+
+    private boolean isClientCompatibleForOrderedGroupByQuery() {
+        String[] clientVersion = compatibleClientVersion.getVersion().split("\\.");
+        int majorVersion = Integer.parseInt(clientVersion[0]);
+        int minorVersion = Integer.parseInt(clientVersion[1]);
+        int patchVersion = Integer.parseInt(clientVersion[2]);
+        if (majorVersion > 5) {
+            return true;
+        }
+        if (majorVersion < 5) {
+            return false;
+        }
+        if (minorVersion > 1) {
+            return true;
+        }
+        if (minorVersion < 1) {
+            return false;
+        }
+        return patchVersion >= 3;
+    }
+
 }

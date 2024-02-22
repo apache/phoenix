@@ -200,7 +200,8 @@ public interface QueryConstants {
     byte[] SYSTEM_SCHEMA_NAME_BYTES = Bytes.toBytes(SYSTEM_SCHEMA_NAME);
     String OFFSET_ROW_KEY = "_OFFSET_";
     byte[] OFFSET_ROW_KEY_BYTES = Bytes.toBytes(OFFSET_ROW_KEY);
-    ImmutableBytesPtr OFFSET_ROW_KEY_PTR = new ImmutableBytesPtr(OFFSET_ROW_KEY_BYTES);
+    String GROUPED_AGGREGATOR_VALUE = "_GA_";
+    byte[] GROUPED_AGGREGATOR_VALUE_BYTES = Bytes.toBytes(GROUPED_AGGREGATOR_VALUE);
 
     long AGG_TIMESTAMP = HConstants.LATEST_TIMESTAMP;
     /**

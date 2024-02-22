@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptor;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
@@ -154,6 +155,21 @@ public class ServerUtil {
             }
             rowLocks.clear();
         }
+    }
+
+    /**
+     * If scan start rowkey is empty, use region boundaries. Reverse region boundaries
+     * for reverse scan.
+     *
+     * @param scan Scan object for which we need to find start rowkey.
+     * @param region Region object.
+     * @return Scan start rowkey based on scan's start rowkey or region boundaries.
+     */
+    public static byte[] getScanStartRowKeyFromScanOrRegionBoundaries(Scan scan,
+                                                                      Region region) {
+        return scan.getStartRow().length > 0 ? scan.getStartRow() :
+                (scan.isReversed() ? region.getRegionInfo().getEndKey() :
+                        region.getRegionInfo().getStartKey());
     }
 
     public static enum ConnectionType {

@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -60,6 +61,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -83,6 +85,9 @@ public class ScanningResultIterator implements ResultIterator {
 
     private long dummyRowCounter = 0;
 
+    private final ScanningResultPostDummyResultCaller scanningResultPostDummyResultCaller;
+    private final ScanningResultPostValidResultCaller scanningResultPostValidResultCaller;
+
     public ScanningResultIterator(ResultScanner scanner, Scan scan, ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext, long maxQueryEndTime) {
         this.scanner = scanner;
         this.scanMetricsHolder = scanMetricsHolder;
@@ -91,6 +96,22 @@ public class ScanningResultIterator implements ResultIterator {
         scanMetricsEnabled = scan.isScanMetricsEnabled();
         this.isMapReduceContext = isMapReduceContext;
         this.maxQueryEndTime = maxQueryEndTime;
+        Class<? extends ScanningResultPostDummyResultCaller> dummyResultCallerClazz =
+                context.getConnection().getQueryServices().getConfiguration().getClass(
+                        QueryServices.PHOENIX_POST_DUMMY_PROCESS,
+                        ScanningResultPostDummyResultCaller.class,
+                        ScanningResultPostDummyResultCaller.class);
+        this.scanningResultPostDummyResultCaller =
+                ReflectionUtils.newInstance(dummyResultCallerClazz,
+                        context.getConnection().getQueryServices().getConfiguration());
+        Class<? extends ScanningResultPostValidResultCaller> validResultCallerClazz =
+                context.getConnection().getQueryServices().getConfiguration().getClass(
+                        QueryServices.PHOENIX_POST_VALID_PROCESS,
+                        ScanningResultPostValidResultCaller.class,
+                        ScanningResultPostValidResultCaller.class);
+        this.scanningResultPostValidResultCaller =
+                ReflectionUtils.newInstance(validResultCallerClazz,
+                        context.getConnection().getQueryServices().getConfiguration());
     }
 
     @Override
@@ -197,6 +218,7 @@ public class ScanningResultIterator implements ResultIterator {
                     close();
                     return null;
                 }
+                processAfterRetrievingDummyResult();
                 result = scanner.next();
             }
             if (result == null) {
@@ -205,10 +227,19 @@ public class ScanningResultIterator implements ResultIterator {
             }
             // TODO: use ResultTuple.setResult(result)?
             // Need to create a new one if holding on to it (i.e. OrderedResultIterator)
+            processAfterRetrievingValidResult();
             return new ResultTuple(result);
         } catch (IOException e) {
             throw ClientUtil.parseServerException(e);
         }
+    }
+
+    private void processAfterRetrievingDummyResult() {
+        scanningResultPostDummyResultCaller.postDummyProcess();
+    }
+
+    private void processAfterRetrievingValidResult() {
+        scanningResultPostValidResultCaller.postValidRowProcess();
     }
 
     @Override

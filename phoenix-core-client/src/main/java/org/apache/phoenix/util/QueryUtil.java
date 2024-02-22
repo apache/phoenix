@@ -83,7 +83,6 @@ import org.apache.phoenix.expression.function.SQLTableTypeFunction;
 import org.apache.phoenix.expression.function.SQLViewTypeFunction;
 import org.apache.phoenix.expression.function.SqlTypeNameFunction;
 import org.apache.phoenix.expression.function.TransactionProviderNameFunction;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -514,11 +513,17 @@ public final class QueryUtil {
 
     public static Integer getRemainingOffset(Tuple offsetTuple) {
         if (offsetTuple != null) {
-            ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr();
-            offsetTuple.getKey(rowKeyPtr);
-            if (QueryConstants.OFFSET_ROW_KEY_PTR.compareTo(rowKeyPtr) == 0) {
-                Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN);
-                return PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength(), PInteger.INSTANCE, SortOrder.ASC, null, null);
+            Cell cell = offsetTuple.getValue(QueryConstants.OFFSET_FAMILY,
+                    QueryConstants.OFFSET_COLUMN);
+            if (cell != null) {
+                return PInteger.INSTANCE.toObject(
+                        cell.getValueArray(),
+                        cell.getValueOffset(),
+                        cell.getValueLength(),
+                        PInteger.INSTANCE,
+                        SortOrder.ASC,
+                        null,
+                        null);
             }
         }
         return null;

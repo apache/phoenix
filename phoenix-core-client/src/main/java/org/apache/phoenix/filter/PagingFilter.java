@@ -46,9 +46,6 @@ public class PagingFilter extends FilterBase implements Writable {
     State state;
     private long pageSizeMs;
     private long startTime;
-    // tracks the row which we will visit next. It is not always a full row key and maybe
-    // just the row key prefix.
-    private Cell nextHintCell;
     // tracks the row we last visited
     private Cell currentCell;
     private Filter delegate = null;
@@ -71,20 +68,12 @@ public class PagingFilter extends FilterBase implements Writable {
         this.delegate = delegate;
     }
 
-    public byte[] getRowKeyAtStop() {
+    public byte[] getCurrentRowKeyToBeExcluded() {
         byte[] rowKeyAtStop = null;
-        if (nextHintCell != null) {
-            // if we have already seeked to the next cell use that when we resume the scan
-            rowKeyAtStop = CellUtil.cloneRow(nextHintCell);
-        } else if (currentCell != null) {
+        if (currentCell != null) {
             rowKeyAtStop = CellUtil.cloneRow(currentCell);
         }
         return rowKeyAtStop;
-    }
-
-    public boolean isNextRowInclusive() {
-        // since this can be a key prefix we have to set inclusive to true when resuming scan
-        return nextHintCell != null;
     }
 
     public boolean isStopped() {
@@ -94,7 +83,6 @@ public class PagingFilter extends FilterBase implements Writable {
     public void init() {
         state = State.INITIAL;
         currentCell = null;
-        nextHintCell = null;
     }
 
     @Override
@@ -118,10 +106,7 @@ public class PagingFilter extends FilterBase implements Writable {
     @Override
     public Cell getNextCellHint(Cell currentKV) throws IOException {
         if (delegate != null) {
-            Cell ret = delegate.getNextCellHint(currentKV);
-            // save the hint so that if the filter stops we know where to resume the scan
-            nextHintCell = ret;
-            return ret;
+            return delegate.getNextCellHint(currentKV);
         }
         return super.getNextCellHint(currentKV);
     }
@@ -129,8 +114,6 @@ public class PagingFilter extends FilterBase implements Writable {
     @Override
     public boolean filterRowKey(Cell cell) throws IOException {
         currentCell = cell;
-        // now that we have visited the row we need to reset the hint
-        nextHintCell = null;
         if (delegate != null) {
             return delegate.filterRowKey(cell);
         }
@@ -228,7 +211,6 @@ public class PagingFilter extends FilterBase implements Writable {
     @Override
     public Filter.ReturnCode filterCell(Cell c) throws IOException {
         currentCell = c;
-        nextHintCell = null;
         if (delegate != null) {
             return delegate.filterCell(c);
         }
