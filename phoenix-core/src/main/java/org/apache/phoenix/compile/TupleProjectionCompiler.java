@@ -92,19 +92,13 @@ public class TupleProjectionCompiler {
             ParseNode node = aliasedNode.getNode();
             if (node instanceof WildcardParseNode) {
                 if (((WildcardParseNode) node).isRewrite()) {
-                    TableRef parentTableRef;
-                    if (context.getCDCTableRef() != null) {
-                        parentTableRef = context.getCDCTableRef();
-                    }
-                    else {
-                        parentTableRef = FromCompiler.getResolver(
-                                NODE_FACTORY.namedTable(null,
-                                        TableName.create(table.getSchemaName().getString(),
-                                        table.getParentTableName().getString())),
-                                        context.getConnection()).resolveTable(
-                                table.getSchemaName().getString(),
-                                table.getParentTableName().getString());
-                    }
+                    TableRef parentTableRef = FromCompiler.getResolver(
+                            NODE_FACTORY.namedTable(null,
+                                    TableName.create(table.getSchemaName().getString(),
+                                    table.getParentTableName().getString())),
+                                    context.getConnection()).resolveTable(
+                            table.getSchemaName().getString(),
+                            table.getParentTableName().getString());
                     for (PColumn column : parentTableRef.getTable().getColumns()) {
                         // don't attempt to rewrite the parents SALTING COLUMN
                         if (column == SaltingUtil.SALTING_COLUMN) {

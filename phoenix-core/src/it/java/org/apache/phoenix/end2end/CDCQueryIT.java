@@ -18,15 +18,11 @@
 package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -35,10 +31,8 @@ import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.Date;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,10 +43,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 
-import static org.apache.phoenix.end2end.index.SingleCellIndexIT.dumpTable;
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
@@ -62,8 +54,6 @@ import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 // NOTE: To debug the query execution, add the below condition or the equivalent where you need a
@@ -519,18 +509,18 @@ public class CDCQueryIT extends CDCBaseIT {
             }
         }
 
-        Timestamp ts1 = new Timestamp(System.currentTimeMillis());
-        Calendar cal = Calendar.getInstance();
-        cal.setTimeInMillis(ts1.getTime());
         EnvironmentEdgeManager.injectEdge(injectEdge);
-        injectEdge.setValue(System.currentTimeMillis());
-        injectEdge.incrementValue(100);
 
         String tenantId = multitenant ? "1000" : null;
         String[] tenantids = {tenantId};
         if (multitenant) {
             tenantids = new String[] {tenantId, "2000"};
         }
+
+        Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+        Calendar cal = Calendar.getInstance();
+        cal.setTimeInMillis(ts1.getTime());
+        injectEdge.setValue(ts1.getTime());
 
         for (String tid: tenantids) {
             try (Connection conn = newConnection(tid)) {
@@ -549,33 +539,38 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         injectEdge.incrementValue(100);
-        cal.add(Calendar.MILLISECOND, 300);
+        cal.add(Calendar.MILLISECOND, 200);
         Timestamp ts2 = new Timestamp(cal.getTime().getTime());
         injectEdge.incrementValue(100);
 
         for (String tid: tenantids) {
             try (Connection conn = newConnection(tid)) {
                 conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+                conn.commit();
+                injectEdge.incrementValue(100);
                 conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (3, 300)");
                 conn.commit();
             }
         }
 
         injectEdge.incrementValue(100);
-        cal.add(Calendar.MILLISECOND, 200);
+        cal.add(Calendar.MILLISECOND, 300);
         Timestamp ts3 = new Timestamp(cal.getTime().getTime());
         //dumpTable(CDCUtil.getCDCIndexName(cdcName));
+        injectEdge.incrementValue(100);
 
         for (String tid: tenantids) {
             try (Connection conn = newConnection(tid)) {
                 conn.createStatement().execute("UPSERT INTO " + tableName + " (k, v1) VALUES (1, 101)");
+                conn.commit();
+                injectEdge.incrementValue(100);
                 conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k = 2");
                 conn.commit();
             }
         }
 
         injectEdge.incrementValue(100);
-        cal.add(Calendar.MILLISECOND, 100);
+        cal.add(Calendar.MILLISECOND, 300);
         Timestamp ts4 = new Timestamp(cal.getTime().getTime());
         EnvironmentEdgeManager.reset();
 
@@ -586,8 +581,9 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         try (Connection conn = newConnection(tenantId)) {
-            String sel_sql = "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() >= ? " +
-                    "AND PHOENIX_ROW_TIMESTAMP() <= ?";
+            String sel_sql =
+                    "SELECT to_char(phoenix_row_timestamp()), k, \"CDC JSON\" FROM " + cdcName +
+                            " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?";
             Object[] testDataSets = new Object[] {
                     new Object[] {ts1, ts2, new int[] {1, 2}},
                     new Object[] {ts2, ts3, new int[] {1, 3}},
@@ -595,6 +591,18 @@ public class CDCQueryIT extends CDCBaseIT {
                     new Object[] {ts1, ts4, new int[] {1, 2, 1, 3, 1, 2}},
             };
             PreparedStatement stmt = conn.prepareStatement(sel_sql);
+            // For debug: uncomment to see the exact results logged to console.
+            //for (int i = 0; i < testDataSets.length; ++i) {
+            //    Object[] testData = (Object[]) testDataSets[i];
+            //    stmt.setTimestamp(1, (Timestamp) testData[0]);
+            //    stmt.setTimestamp(2, (Timestamp) testData[1]);
+            //    try (ResultSet rs = stmt.executeQuery()) {
+            //        System.out.println("----- Test data set: " + i);
+            //        while (rs.next()) {
+            //            System.out.println("----- " + rs.getString(1) + " " + rs.getInt(2) + " "  + rs.getString(3));
+            //        }
+            //    }
+            //}
             for (int i = 0; i < testDataSets.length; ++i) {
                 Object[] testData = (Object[]) testDataSets[i];
                 stmt.setTimestamp(1, (Timestamp) testData[0]);
@@ -774,6 +782,7 @@ public class CDCQueryIT extends CDCBaseIT {
             stmt.setDate(3, dateColumnValues.get(0));
             stmt.setTimestamp(4, timestampColumnValue);
             stmt.execute();
+            conn.commit();
             stmt.setInt(1, 2);
             stmt.setBytes(2, byteColumnValues.get(1));
             stmt.setDate(3, dateColumnValues.get(1));

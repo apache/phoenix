@@ -228,13 +228,15 @@ public class QueryOptimizer {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
 
+        ColumnResolver indexResolver = null;
+        boolean forCDC = false;
         PTable table = dataPlan.getTableRef().getTable();
         if (table.getType() == PTableType.CDC) {
             NamedTableNode indexTableNode = FACTORY.namedTable(null,
                     FACTORY.table(table.getSchemaName().getString(),
                             CDCUtil.getCDCIndexName(table.getTableName().getString())),
                     select.getTableSamplingRate());
-            ColumnResolver indexResolver = FromCompiler.getResolver(indexTableNode,
+            indexResolver = FromCompiler.getResolver(indexTableNode,
                     statement.getConnection());
             TableRef indexTableRef = indexResolver.getTables().get(0);
             PTable cdcIndex = indexTableRef.getTable();
@@ -249,43 +251,13 @@ public class QueryOptimizer {
             indexBuilder.setParentTableName(table.getName());
             cdcIndex = indexBuilder.build();
             indexTableRef.setTable(cdcIndex);
-            List<AliasedNode> selectNodes = select.getSelect();
-            ParseNode selectNode = selectNodes.size() == 1 ? selectNodes.get(0).getNode() : null;
-            if (selectNode instanceof TerminalParseNode &&
-                    ((TerminalParseNode) selectNode).isWildcardNode()) {
-                List<AliasedNode> tmpSelectNodes = Lists.newArrayListWithExpectedSize(
-                        selectNodes.size() + 1);
-                tmpSelectNodes.add(FACTORY.aliasedNode(null,
-                        FACTORY.function(PhoenixRowTimestampFunction.NAME,
-                                Collections.emptyList())));
-                tmpSelectNodes.add(FACTORY.aliasedNode(null,
-                        ((TerminalParseNode) selectNode).getRewritten()));
-                selectNodes = tmpSelectNodes;
-            }
-            List<OrderByNode> orderByNodes = select.getOrderBy();
-            // For CDC queries, if no ORDER BY is specified, add default ordering.
-            if (orderByNodes.size() == 0) {
-                orderByNodes = Lists.newArrayListWithExpectedSize(1);
-                orderByNodes.add(FACTORY.orderBy(
-                        FACTORY.function(PhoenixRowTimestampFunction.NAME,
-                                Collections.emptyList()),
-                        false, SortOrder.getDefault() == SortOrder.ASC));
-            }
-            SelectStatement translatedIndexSelect = FACTORY.select(select.getFrom(), select.getHint(),
-                    select.isDistinct(), selectNodes, select.getWhere(),
-                    select.getGroupBy(), select.getHaving(), orderByNodes, select.getLimit(),
-                    select.getOffset(), select.getBindCount(), select.isAggregate(),
-                    select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
 
             PTableImpl.Builder cdcBuilder = PTableImpl.builderFromExisting(table);
             cdcBuilder.setColumns(table.getColumns());
             cdcBuilder.setIndexes(Collections.singletonList(cdcIndex));
             table = cdcBuilder.build();
             dataPlan.getTableRef().setTable(table);
-            QueryPlan queryPlan = addPlan(statement, select, cdcIndex, targetColumns,
-                    parallelIteratorFactory, dataPlan, false, translatedIndexSelect,
-                    indexResolver, true);
-            return Arrays.asList(queryPlan);
+            forCDC = true;
         }
 
         List<PTable>indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
@@ -308,21 +280,27 @@ public class QueryOptimizer {
             targetColumns = targetDatums;
         }
         
-        List<QueryPlan> plans = Lists.newArrayListWithExpectedSize(1 + indexes.size());
+        List<QueryPlan> plans = Lists.newArrayListWithExpectedSize((forCDC ? 0 : 1) +
+                indexes.size());
         SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
-        plans.add(dataPlan);
-        QueryPlan hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
-        if (hintedPlan != null) {
-            PTable index = hintedPlan.getTableRef().getTable();
-            if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
-                    || isPartialIndexUsable(select, dataPlan, index))) {
-                return Collections.singletonList(hintedPlan);
+        QueryPlan hintedPlan = null;
+        // We can't have hints work with CDC queries so skip looking for hinted plans.
+        if (! forCDC) {
+            plans.add(dataPlan);
+            hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
+            if (hintedPlan != null) {
+                PTable index = hintedPlan.getTableRef().getTable();
+                if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
+                        || isPartialIndexUsable(select, dataPlan, index))) {
+                    return Collections.singletonList(hintedPlan);
+                }
+                plans.add(0, hintedPlan);
             }
-            plans.add(0, hintedPlan);
         }
         
         for (PTable index : indexes) {
-            QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan, false);
+            QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns,
+                    parallelIteratorFactory, dataPlan, false, indexResolver);
             if (plan != null &&
                     (index.getIndexWhere() == null
                             || isPartialIndexUsable(select, dataPlan, index))) {
@@ -387,7 +365,8 @@ public class QueryOptimizer {
                     // Hinted index is applicable, so return it's index
                     PTable index = indexes.get(indexPos);
                     indexes.remove(indexPos);
-                    QueryPlan plan = addPlan(statement, select, index, targetColumns, parallelIteratorFactory, dataPlan, true);
+                    QueryPlan plan = addPlan(statement, select, index, targetColumns,
+                            parallelIteratorFactory, dataPlan, true, null);
                     if (plan != null) {
                         return plan;
                     }
@@ -407,7 +386,11 @@ public class QueryOptimizer {
         return -1;
     }
     
-    private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan, boolean isHinted) throws SQLException {
+    private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
+                              List<? extends PDatum> targetColumns,
+                              ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan,
+                              boolean isHinted, ColumnResolver indexResolver)
+                              throws SQLException {
         String tableAlias = dataPlan.getTableRef().getTableAlias();
         String alias = tableAlias == null ? null : '"' + tableAlias + '"'; // double quote in case it's case sensitive
         String schemaName = index.getParentSchemaName().getString();
@@ -416,16 +399,17 @@ public class QueryOptimizer {
         String tableName = '"' + index.getTableName().getString() + '"';
         TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName), select.getTableSamplingRate());
         SelectStatement indexSelect = FACTORY.select(select, table);
-        ColumnResolver resolver = FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
+        ColumnResolver resolver = indexResolver != null ? indexResolver :
+                FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
         return addPlan(statement, select, index, targetColumns, parallelIteratorFactory, dataPlan,
-                isHinted, indexSelect, resolver, false);
+                isHinted, indexSelect, resolver);
     }
 
     private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
                               List<? extends PDatum> targetColumns,
                               ParallelIteratorFactory parallelIteratorFactory, QueryPlan dataPlan,
                               boolean isHinted, SelectStatement indexSelect,
-                              ColumnResolver resolver, boolean forCDC) throws SQLException {
+                              ColumnResolver resolver) throws SQLException {
         int nColumns = dataPlan.getProjector().getColumnCount();
         // We will or will not do tuple projection according to the data plan.
         boolean isProjected = dataPlan.getContext().getResolver().getTables().get(0).getTable().getType() == PTableType.PROJECTED;
@@ -452,30 +436,9 @@ public class QueryOptimizer {
                 }
                 // translate nodes that match expressions that are indexed to the associated column parse node
                 SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
-                // For CDC, rewritten statement from above gets the startRow/endRow scan
-                // attributes set, but order by is dropped from the plan. Using without rewrite
-                // preserves the order by, but doesn't get the startRow/endRow set.
-                //SelectStatement rewrittenIndexSelect = forCDC ? indexSelect :
-                //        ParseNodeRewriter.rewrite(indexSelect,
-                //                new  IndexExpressionParseNodeRewriter(index, null,
-                //                        statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
-                PTable dataTable = dataPlan.getTableRef().getTable();
-                QueryPlan plan;
-                if (forCDC) {
-                    NamedTableNode cdcDataTableName = FACTORY.namedTable(null,
-                            FACTORY.table(dataTable.getSchemaName().getString(),
-                                    dataTable.getParentTableName().getString()),
-                            select.getTableSamplingRate());
-                    ColumnResolver dataTableResolver = FromCompiler.getResolver(cdcDataTableName,
-                            statement.getConnection());
-                    TableRef cdcDataTableRef = dataTableResolver.getTables().get(0);
-                    plan = compiler.compileCDCSelect(dataPlan.getTableRef(), cdcDataTableRef);
-                }
-                else {
-                    plan = compiler.compile();
-                }
+                QueryPlan plan = compiler.compile();
                 if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                     // Indexed columns should also be added to the data columns to join for
                     // uncovered global indexes. This is required to verify index rows against
@@ -483,9 +446,11 @@ public class QueryOptimizer {
                     plan.getContext().setUncoveredIndex(true);
                     PhoenixConnection connection = statement.getConnection();
                     IndexMaintainer maintainer;
-                    PTable newIndexTable;
-                    if (forCDC) {
+                    PTable newIndexTable, dataTable;
+                    if (dataPlan.getTableRef().getTable().getType() == PTableType.CDC) {
+                        // Use the cooked table objects as they have the right links.
                         newIndexTable = indexTable;
+                        dataTable = dataPlan.getTableRef().getTable();
                     } else {
                         String dataTableName;
                         if (indexTable.getViewIndexId() != null
@@ -532,7 +497,7 @@ public class QueryOptimizer {
                         || (indexState == PIndexState.PENDING_DISABLE
                         && isUnderPendingDisableThreshold(indexTableRef.getCurrentTime(),
                         indexTable.getIndexDisableTimestamp()))) {
-                    if (forCDC || plan.getProjector().getColumnCount() == nColumns) {
+                    if (plan.getProjector().getColumnCount() == nColumns) {
                         return plan;
                     } else {
                         String schemaNameStr = index.getSchemaName() == null ? null
