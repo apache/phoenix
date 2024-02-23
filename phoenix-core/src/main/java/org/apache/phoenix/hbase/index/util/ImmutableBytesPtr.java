@@ -123,4 +123,16 @@ public class ImmutableBytesPtr extends ImmutableBytesWritable {
         return copyBytesIfNecessary(cell.getFamilyArray(), cell.getFamilyOffset(),
                 cell.getFamilyLength());
     }
+
+    public static byte[] cloneCellQualifierIfNecessary(Cell cell) {
+        return ImmutableBytesPtr.copyBytesIfNecessary(
+                cell.getQualifierArray(), cell.getQualifierOffset(),
+                cell.getQualifierLength());
+    }
+
+    public static byte[] cloneCellValueIfNecessary(Cell cell) {
+        return ImmutableBytesPtr.copyBytesIfNecessary(
+                cell.getValueArray(), cell.getValueOffset(),
+                cell.getValueLength());
+    }
 }

@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -115,11 +114,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             List<Cell> indexRow = indexRowIterator.next();
             // firstCell: Picking the earliest cell in the index row so that
             // timestamp of the cell and the row will be same.
-            Cell firstCell = indexRow.get(indexRow.size() - 1);
+            Cell firstIndexCell = indexRow.get(indexRow.size() - 1);
+            byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(firstIndexCell);
             ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
-                    indexToDataRowKeyMap.get(ImmutableBytesPtr.cloneCellRowIfNecessary(firstCell)));
+                    indexToDataRowKeyMap.get(indexRowKey));
             Result dataRow = dataRows.get(dataRowKey);
-            Long indexCellTS = firstCell.getTimestamp();
+            Long indexCellTS = firstIndexCell.getTimestamp();
             Map<String, Object> preImageObj = null;
             Map<String, Object> changeImageObj = null;
             // FIXME: The below boolean flags should probably be translated to util methods on
@@ -148,6 +148,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             this.cdcDataTableInfo.getColumnInfoList();
                     cellLoop:
                     for (Cell cell : dataRow.rawCells()) {
+                        byte[] cellFam = ImmutableBytesPtr.cloneCellFamilyIfNecessary(cell);
+                        byte[] cellQual = ImmutableBytesPtr.cloneCellQualifierIfNecessary(cell);
                         if (cell.getType() == Cell.Type.DeleteFamily) {
                             if (indexCellTS == cell.getTimestamp()) {
                                 isIndexCellDeleteRow = true;
@@ -160,12 +162,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             }
                         } else if ((cell.getType() == Cell.Type.DeleteColumn
                                 || cell.getType() == Cell.Type.Put)
-                                && !Arrays.equals(cell.getQualifierArray(), emptyCQ)) {
+                                && !Arrays.equals(cellQual, emptyCQ)) {
                             while (true) {
                                 CDCTableInfo.CDCColumnInfo currentColumnInfo =
                                         cdcColumnInfoList.get(columnListIndex);
                                 int columnComparisonResult = CDCUtil.compareCellFamilyAndQualifier(
-                                        cell.getFamilyArray(), cell.getQualifierArray(),
+                                        cellFam, cellQual,
                                         currentColumnInfo.getColumnFamily(),
                                         currentColumnInfo.getColumnQualifier());
                                 if (columnComparisonResult > 0) {
@@ -209,25 +211,25 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         }
                     }
                     if (isChangeDataTableCellPresent || isIndexCellDeleteRow) {
-                        Result cdcRow = getCDCImage(dataRowKey, preImageObj, changeImageObj,
-                                isIndexCellDeleteRow, indexCellTS, firstCell,
+                        Result cdcRow = getCDCImage(indexRowKey, preImageObj, changeImageObj,
+                                isIndexCellDeleteRow, indexCellTS, firstIndexCell,
                                 isChangeImageInScope, isPreImageInScope, isPostImageInScope);
                         if (cdcRow != null && tupleProjector != null) {
-                            if (firstCell.getType() == Cell.Type.DeleteFamily) {
+                            if (firstIndexCell.getType() == Cell.Type.DeleteFamily) {
                                 // result is of type EncodedColumnQualiferCellsList for queries with
                                 // Order by clause. It fails when Delete Family cell is added to it
                                 // as it expects column qualifier bytes which is not available.
                                 // Adding empty PUT cell as a placeholder.
                                 result.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
-                                        .setRow(dataRowKey.copyBytesIfNecessary())
+                                        .setRow(indexRowKey)
                                         .setFamily(ImmutableBytesPtr.cloneCellFamilyIfNecessary(
-                                                firstCell))
+                                                firstIndexCell))
                                         .setQualifier(indexMaintainer.getEmptyKeyValueQualifier())
-                                        .setTimestamp(firstCell.getTimestamp())
+                                        .setTimestamp(firstIndexCell.getTimestamp())
                                         .setType(Cell.Type.Put)
                                         .setValue(EMPTY_BYTE_ARRAY).build());
                             } else {
-                                result.add(firstCell);
+                                result.add(firstIndexCell);
                             }
                             IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
                                     tupleProjector, ptr);
@@ -265,10 +267,10 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return cdcColumnName;
     }
 
-    private Result getCDCImage(ImmutableBytesPtr dataRowKey, Map<String, Object> preImageObj,
-            Map<String, Object> changeImageObj, boolean isIndexCellDeleteRow, Long indexCellTS,
-            Cell firstCell, boolean isChangeImageInScope, boolean isPreImageInScope,
-            boolean isPostImageInScope) {
+    private Result getCDCImage(byte[] indexRowKey, Map<String, Object> preImageObj,
+                               Map<String, Object> changeImageObj, boolean isIndexCellDeleteRow, Long indexCellTS,
+                               Cell firstCell, boolean isChangeImageInScope, boolean isPreImageInScope,
+                               boolean isPostImageInScope) {
         Map<String, Object> rowValueMap = new HashMap<>();
 
         if (isPreImageInScope) {
@@ -298,7 +300,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 gson.toJson(rowValueMap).getBytes(StandardCharsets.UTF_8);
         CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
         Result cdcRow = Result.create(Arrays.asList(builder
-                .setRow(dataRowKey.copyBytesIfNecessary())
+                .setRow(indexRowKey)
                 .setFamily(ImmutableBytesPtr.cloneCellFamilyIfNecessary(firstCell))
                 .setQualifier(cdcDataTableInfo.getCdcJsonColQualBytes())
                 .setTimestamp(indexCellTS)
@@ -310,16 +312,17 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     }
 
     private Object getColumnValue(Cell cell, PDataType dataType) {
+        byte[] cellValue = ImmutableBytesPtr.cloneCellValueIfNecessary(cell);
         if (dataType.getSqlType() == Types.BINARY) {
-            return Base64.getEncoder().encodeToString(cell.getValueArray());
+            return Base64.getEncoder().encodeToString(cellValue);
         } else if (dataType.getSqlType() == Types.DATE
                 || dataType.getSqlType() == Types.TIMESTAMP
                 || dataType.getSqlType() == Types.TIME
                 || dataType.getSqlType() == Types.TIME_WITH_TIMEZONE
                 || dataType.getSqlType() == Types.TIMESTAMP_WITH_TIMEZONE) {
-            return dataType.toObject(cell.getValueArray()).toString();
+            return dataType.toObject(cellValue).toString();
         } else {
-            return dataType.toObject(cell.getValueArray());
+            return dataType.toObject(cellValue);
         }
     }
 }
