@@ -233,7 +233,7 @@ public class MutationState implements SQLCloseable {
             phoenixTransactionContext = txContext.newTransactionContext(txContext, subTask);
         }
         this.indexRegionObserverEnabledAllTables = Boolean.parseBoolean(
-                this.connection.getQueryServices().getProps().get(
+                this.connection.getQueryServices().getConfiguration().get(
                     INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB,
                     DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES));
     }
