@@ -19,6 +19,7 @@
 package org.apache.phoenix.index;
 
 import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.generated.CDCInfoProtos;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -29,8 +30,11 @@ import org.apache.phoenix.util.CDCUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+
+import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 
 
 /**
@@ -41,22 +45,23 @@ public class CDCTableInfo {
     private byte[] defaultColumnFamily;
     private String cdcIncludeScopes;
     private PTable.QualifierEncodingScheme qualifierEncodingScheme;
+
+    private final byte[] cdcJsonColQualBytes;
+
     public CDCTableInfo(byte[] defaultColumnFamily,
                         List<CDCColumnInfo> columnInfoList, String cdcIncludeScopes,
-                        PTable.QualifierEncodingScheme qualifierEncodingScheme) {
+                        PTable.QualifierEncodingScheme qualifierEncodingScheme,
+                        byte[] cdcJsonColQualBytes) {
         Collections.sort(columnInfoList);
         this.columnInfoList = columnInfoList;
         this.defaultColumnFamily = defaultColumnFamily;
         this.cdcIncludeScopes = cdcIncludeScopes;
         this.qualifierEncodingScheme = qualifierEncodingScheme;
+        this.cdcJsonColQualBytes = cdcJsonColQualBytes;
     }
 
     public List<CDCColumnInfo> getColumnInfoList() {
         return columnInfoList;
-    }
-
-    public void setColumnInfoList(List<CDCColumnInfo> columnInfoList) {
-        this.columnInfoList = columnInfoList;
     }
 
     public byte[] getDefaultColumnFamily() {
@@ -67,20 +72,12 @@ public class CDCTableInfo {
         return qualifierEncodingScheme;
     }
 
-    public void setQualifierEncodingScheme(PTable.QualifierEncodingScheme qualifierEncodingScheme) {
-        this.qualifierEncodingScheme = qualifierEncodingScheme;
-    }
-
-    public void setDefaultColumnFamily(byte[] defaultColumnFamily) {
-        this.defaultColumnFamily = defaultColumnFamily;
-    }
-
     public String getCdcIncludeScopes() {
         return cdcIncludeScopes;
     }
 
-    public void setCdcIncludeScopes(String cdcIncludeScopes) {
-        this.cdcIncludeScopes = cdcIncludeScopes;
+    public byte[] getCdcJsonColQualBytes() {
+        return cdcJsonColQualBytes;
     }
 
     public static CDCTableInfo createFromProto(CDCInfoProtos.CDCTableDef table) {
@@ -100,29 +97,35 @@ public class CDCTableInfo {
         for (CDCInfoProtos.CDCColumnDef curColumnProto : table.getColumnsList()) {
             columns.add(CDCColumnInfo.createFromProto(curColumnProto));
         }
-        return new CDCTableInfo(defaultColumnFamily, columns,
-                table.getCdcIncludeScopes(), qualifierEncodingScheme);
+        return new CDCTableInfo(defaultColumnFamily, columns, table.getCdcIncludeScopes(),
+                qualifierEncodingScheme, table.getCdcJsonColQualBytes().toByteArray());
     }
 
-    public static CDCInfoProtos.CDCTableDef toProto(PTable table, String cdcIncludeScopes) {
+    public static CDCInfoProtos.CDCTableDef toProto(StatementContext context)
+            throws SQLException {
+        PTable cdcTable = context.getCDCTableRef().getTable();
+        PTable dataTable = context.getCDCDataTableRef().getTable();
         CDCInfoProtos.CDCTableDef.Builder builder = CDCInfoProtos.CDCTableDef.newBuilder();
-        if (table.getDefaultFamilyName() != null) {
+        if (dataTable.getDefaultFamilyName() != null) {
             builder.setDefaultFamilyName(
-                    ByteStringer.wrap(table.getDefaultFamilyName().getBytes()));
+                    ByteStringer.wrap(dataTable.getDefaultFamilyName().getBytes()));
         }
+        String cdcIncludeScopes = context.getEncodedCdcIncludeScopes();
         if (cdcIncludeScopes != null) {
             builder.setCdcIncludeScopes(cdcIncludeScopes);
         }
-        if (table.getEncodingScheme() != null) {
-            builder.setQualifierEncodingScheme(ByteStringer
-                    .wrap(new byte[] { table.getEncodingScheme().getSerializedMetadataValue() }));
+        if (dataTable.getEncodingScheme() != null) {
+            builder.setQualifierEncodingScheme(ByteStringer.wrap(
+                    new byte[] { dataTable.getEncodingScheme().getSerializedMetadataValue() }));
         }
-        for (PColumn column : table.getColumns()) {
+        for (PColumn column : dataTable.getColumns()) {
             if (column.getFamilyName() == null) {
                 continue;
             }
             builder.addColumns(CDCColumnInfo.toProto(column));
         }
+        PColumn cdcJsonCol = cdcTable.getColumnForColumnName(CDC_JSON_COL_NAME);
+        builder.setCdcJsonColQualBytes(ByteStringer.wrap(cdcJsonCol.getColumnQualifierBytes()));
         return builder.build();
     }
 
@@ -151,22 +154,6 @@ public class CDCTableInfo {
             return columnFamily;
         }
 
-        public void setColumnFamily(byte[] columnFamily) {
-            this.columnFamily = columnFamily;
-        }
-
-        public void setColumnQualifier(byte[] columnQualifier) {
-            this.columnQualifier = columnQualifier;
-        }
-
-        public void setColumnName(String columnName) {
-            this.columnName = columnName;
-        }
-
-        public void setColumnType(PDataType columnType) {
-            this.columnType = columnType;
-        }
-
         public byte[] getColumnQualifier() {
             return columnQualifier;
         }
@@ -178,12 +165,9 @@ public class CDCTableInfo {
         public PDataType getColumnType() {
             return columnType;
         }
+
         public String getColumnFamilyName() {
             return columnFamilyName;
-        }
-
-        public void setColumnFamilyName(String columnFamilyName) {
-            this.columnFamilyName = columnFamilyName;
         }
 
         @Override

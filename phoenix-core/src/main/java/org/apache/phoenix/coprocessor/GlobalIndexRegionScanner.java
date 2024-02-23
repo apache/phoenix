@@ -1433,7 +1433,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return indexMutations.size();
     }
 
-    static boolean adjustScanFilter(Scan scan) {
+    public static boolean adjustScanFilter(Scan scan) {
         // For rebuilds we use count (*) as query for regular tables which ends up setting the FirstKeyOnlyFilter on scan
         // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
         // For rebuilds we need all columns and all versions

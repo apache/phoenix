@@ -785,7 +785,7 @@ public class QueryOptimizer {
         }
 
         SelectStatement indexSelect = IndexStatementRewriter.translate(FACTORY.select(select,
-                newFrom), resolver, replacement, false);
+                newFrom), resolver, replacement);
         for (TableRef indexTableRef : replacement.values()) {
             // replace expressions with corresponding matching columns for functional indexes
             indexSelect = ParseNodeRewriter.rewrite(indexSelect, new IndexExpressionParseNodeRewriter(indexTableRef.getTable(), indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes()));

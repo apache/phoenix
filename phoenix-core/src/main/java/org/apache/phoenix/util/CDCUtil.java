@@ -33,6 +33,8 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
+
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "__CDC__";
     public static final String CDC_INDEX_TYPE_LOCAL = "L";

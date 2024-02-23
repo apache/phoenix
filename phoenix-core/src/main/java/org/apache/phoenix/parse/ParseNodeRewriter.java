@@ -79,25 +79,12 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
     /**
      * Rewrite the select statement by switching any constants to the right hand side
      * of the expression.
-     * @param statement the select statement
-     * @return new select statement
-     * @throws SQLException
-     */
-    public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter)
-            throws SQLException {
-        return rewrite(statement, rewriter, false);
-    }
-
-    /**
-     * Rewrite the select statement by switching any constants to the right hand side
-     * of the expression.
      *
      * @param statement the select statement
-     * @param forCDC
      * @return new select statement
      * @throws SQLException
      */
-    public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter, boolean forCDC) throws SQLException {
+    public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter) throws SQLException {
         Map<String,ParseNode> aliasMap = rewriter.getAliasMap();
         TableNode from = statement.getFrom();
         TableNode normFrom = from == null ? null : from.accept(new TableNodeRewriter(rewriter));

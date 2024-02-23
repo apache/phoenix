@@ -824,11 +824,6 @@ public class QueryCompiler {
                 projector,
                 innerPlan,
                 where);
-        // FIXME: For CDC, order by via optimizer code path is not getting compiled, so just use
-        // the one from the unoptimized plan.
-        if (orderBy.getOrderByExpressions().size() == 0 && context.getCDCTableRef() != null) {
-            orderBy = dataPlans.values().iterator().next().getOrderBy();
-        }
         context.getAggregationManager().compile(context, groupBy);
         // Final step is to build the query plan
         if (!asSubquery) {

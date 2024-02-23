@@ -19,7 +19,9 @@ package org.apache.phoenix.hbase.index.util;
 
 import java.io.DataInput;
 import java.io.IOException;
+import java.util.Arrays;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -102,10 +104,23 @@ public class ImmutableBytesPtr extends ImmutableBytesWritable {
     return copyBytesIfNecessary(this);
     }
 
-  public static byte[] copyBytesIfNecessary(ImmutableBytesWritable ptr) {
-    if (ptr.getOffset() == 0 && ptr.getLength() == ptr.get().length) {
-      return ptr.get();
+    public static byte[] copyBytesIfNecessary(ImmutableBytesWritable ptr) {
+        return copyBytesIfNecessary(ptr.get(), ptr.getOffset(), ptr.getLength());
     }
-    return ptr.copyBytes();
-  }
+
+    public static byte[] copyBytesIfNecessary(byte[] bytes, int offset, int length) {
+        if (offset == 0 && length == bytes.length) {
+            return bytes;
+        }
+        return Arrays.copyOfRange(bytes, offset, offset + length);
+    }
+
+    public static byte[] cloneCellRowIfNecessary(Cell cell) {
+        return copyBytesIfNecessary(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+    }
+
+    public static byte[] cloneCellFamilyIfNecessary(Cell cell) {
+        return copyBytesIfNecessary(cell.getFamilyArray(), cell.getFamilyOffset(),
+                cell.getFamilyLength());
+    }
 }

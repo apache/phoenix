@@ -586,7 +586,7 @@ public class IndexUtil {
                         tupleProjector.getValueBitSet(), ptr);
         Cell firstCell = result.get(0);
         Cell keyValue =
-                PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),
+                PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(), // FIXME: This does DEEP_COPY of cell, do we need that?
                         firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
         result.add(keyValue);
