@@ -192,6 +192,7 @@ public class QueryCompiler {
         if (scn == null) {
             return;
         }
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, conn);
         List<TableRef> involvedTables = resolver.getTables();
         Long maxLookBackAgeInMillis = null;
         for(TableRef tableRef: involvedTables) {
