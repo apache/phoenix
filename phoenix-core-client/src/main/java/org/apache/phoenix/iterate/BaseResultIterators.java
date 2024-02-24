@@ -37,6 +37,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.Arrays;
@@ -72,6 +73,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.HashJoinCacheNotFoundException;
 import org.apache.phoenix.coprocessorclient.UngroupedAggregateRegionObserverHelper;
+import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.ScanPlan;
@@ -940,7 +942,14 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             if (scanRanges.getPointLookupCount() == 1) {
                 // leverage bloom filter for single key point lookup by turning scan to
                 // Get Scan#isGetScan()
-                scanFromContext.withStopRow(scanFromContext.getStartRow(), true);
+                try {
+                    scanFromContext = new Scan(context.getScan());
+                } catch (IOException e) {
+                    LOGGER.error("Failure to construct point lookup scan", e);
+                    throw new PhoenixIOException(e);
+                }
+                scanFromContext.withStopRow(scanFromContext.getStartRow(),
+                    scanFromContext.includeStartRow());
             }
             scans.add(scanFromContext);
             parallelScans.add(scans);
