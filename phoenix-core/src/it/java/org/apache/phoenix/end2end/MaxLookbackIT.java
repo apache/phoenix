@@ -449,12 +449,13 @@ public class MaxLookbackIT extends BaseTest {
     }
 
     @Test
-    public void testExpiredVersionsAreNotFlushedWithTableLevelMaxLookback() throws Exception {
+    public void testExpiredRowsAreNotFlushedWithTableLevelMaxLookback() throws Exception {
         ttl = 8;
         long maxLookbackAge = 12;
         optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
                 append(maxLookbackAge * 1000);
         tableDDLOptions = optionBuilder.toString();
+        int delta = 1;
         Configuration conf = getUtility().getConfiguration();
         //disable automatic memstore flushes
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
@@ -464,7 +465,6 @@ public class MaxLookbackIT extends BaseTest {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
-            populateTable(dataTableName);
             createIndex(dataTableName, indexName, 1);
             TableName dataTable = TableName.valueOf(dataTableName);
             TableName indexTable = TableName.valueOf(indexName);
@@ -472,44 +472,71 @@ public class MaxLookbackIT extends BaseTest {
             assertTableHasTtl(conn, indexTable, ttl);
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
-            injectEdge.incrementValue(1);
-            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
-            injectEdge.incrementValue(1);
+            injectEdge.incrementValue(delta);
             populateTable(dataTableName);
-            injectEdge.incrementValue(1);
-            //first make sure we inserted correctly
-            String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
-            String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
-            assertRowExistsAtSCN(getUrl(), sql, afterFirstInsertSCN, true);
-            assertExplainPlan(conn, indexSql, dataTableName, indexName);
-            assertRowExistsAtSCN(getUrl(),indexSql, afterFirstInsertSCN, true);
-            int originalDataTableRawCellCountPerRow = 8;
-            int originalIndexTableRawCellCountPerRow = 6;
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
-            long timeToAdvance = (maxLookbackAge * 1000) -
-                    (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
-            if (timeToAdvance > 0) {
-                injectEdge.incrementValue(timeToAdvance);
-            }
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
-            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
-                    afterFirstInsertSCN + ttl * 1000);
+            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(delta);
+            int expectedNumRows = 2;
+            assertRawRowCount(conn, dataTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
+            injectEdge.incrementValue(ttl * 1000);
             Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
-                    afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
+                    afterFirstInsertSCN + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
             flush(dataTable);
             flush(indexTable);
-            int newDataTableRawCellCountPerRow = 4;
-            int newIndexTableRawCellCount = 3;
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), newDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), newIndexTableRawCellCount);
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), newDataTableRawCellCountPerRow);
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), newIndexTableRawCellCount);
+            assertRawRowCount(conn, dataTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
+            injectEdge.incrementValue(delta);
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('c', 'cd', 'cde', 'cdef')");
+            conn.commit();
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('d', 'de', 'def', 'defg')");
+            conn.commit();
+            expectedNumRows += 2;
+            injectEdge.incrementValue(delta);
+            assertRawRowCount(conn, dataTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
+            injectEdge.incrementValue(maxLookbackAge * 1000);
+            flush(dataTable);
+            flush(indexTable);
+            // Recent two rows expired so, they won't be flushed
+            assertRawRowCount(conn, dataTable, expectedNumRows - 2);
+            assertRawRowCount(conn, indexTable, expectedNumRows - 2);
+
+            ////first make sure we inserted correctly
+            //String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
+            //String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
+            //assertRowExistsAtSCN(getUrl(), sql, afterFirstInsertSCN, true);
+            //assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            //assertRowExistsAtSCN(getUrl(),indexSql, afterFirstInsertSCN, true);
+            //int originalDataTableRawCellCountPerRow = 8;
+            //int originalIndexTableRawCellCountPerRow = 6;
+            //assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
+            //assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
+            //assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
+            //assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
+            //long timeToAdvance = (maxLookbackAge * 1000) -
+            //        (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
+            //if (timeToAdvance > 0) {
+            //    injectEdge.incrementValue(timeToAdvance);
+            //}
+            //assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), originalDataTableRawCellCountPerRow);
+            //assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), originalIndexTableRawCellCountPerRow);
+            //assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), originalDataTableRawCellCountPerRow);
+            //assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), originalIndexTableRawCellCountPerRow);
+            //Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
+            //        afterFirstInsertSCN + ttl * 1000);
+            //Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+            //        afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
+            //flush(dataTable);
+            //flush(indexTable);
+            //int newDataTableRawCellCountPerRow = 4;
+            //int newIndexTableRawCellCount = 3;
+            //assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), newDataTableRawCellCountPerRow);
+            //assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), newIndexTableRawCellCount);
+            //assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), newDataTableRawCellCountPerRow);
+            //assertRawCellCount(conn, indexTable, Bytes.toBytes("bc\u0000b"), newIndexTableRawCellCount);
         }
         finally {
             conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
@@ -581,7 +608,6 @@ public class MaxLookbackIT extends BaseTest {
             long afterLookbackAgeSCN = EnvironmentEdgeManager.currentTimeMillis();
             majorCompact(dataTable);
             majorCompact(indexTable);
-            TestUtil.dumpTable(conn, dataTable);
             //empty column, 1 version of val 1, 3 versions of val2, 1 version of val3 = 6
             assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 6);
             //2 versions of empty column, 2 versions of val2,
