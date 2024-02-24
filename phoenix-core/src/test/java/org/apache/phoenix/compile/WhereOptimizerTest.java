@@ -2511,8 +2511,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
             byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
-            byte[] stopRow =  ByteUtil.nextKey(startRow);
-            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow);
         }
     }
 
@@ -2525,12 +2524,11 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
             byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
-            byte[] stopRow =  ByteUtil.nextKey(startRow);
-            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow);
         }
     }
 
-    private static void validateScanRangesForPointLookup(QueryPlan optimizedPlan, byte[] startRow, byte[] stopRow) {
+    private static void validateScanRangesForPointLookup(QueryPlan optimizedPlan, byte[] startRow) {
         StatementContext context = optimizedPlan.getContext();
         ScanRanges scanRanges = context.getScanRanges();
         assertTrue(scanRanges.isPointLookup());
@@ -2539,8 +2537,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         Scan scanFromContext = context.getScan();
         assertArrayEquals(startRow, scanFromContext.getStartRow());
         assertTrue(scanFromContext.includeStartRow());
-        assertArrayEquals(stopRow, scanFromContext.getStopRow());
-        assertFalse(scanFromContext.includeStopRow());
+        assertArrayEquals(startRow, scanFromContext.getStopRow());
+        assertTrue(scanFromContext.includeStopRow());
 
         List<List<Scan>> scans = optimizedPlan.getScans();
         assertEquals(1, scans.size());
