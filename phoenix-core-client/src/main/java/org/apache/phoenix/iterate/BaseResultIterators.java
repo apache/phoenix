@@ -37,7 +37,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.EOFException;
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.Arrays;
@@ -939,7 +938,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             List<Scan> scans = Lists.newArrayListWithExpectedSize(1);
             Scan scanFromContext = context.getScan();
             if (scanRanges.getPointLookupCount() == 1) {
-                // leverage bloom filter for single key point lookup by turning scan to Get Scan#isGetScan()
+                // leverage bloom filter for single key point lookup by turning scan to
+                // Get Scan#isGetScan()
                 scanFromContext.withStopRow(scanFromContext.getStartRow(), true);
             }
             scans.add(scanFromContext);
