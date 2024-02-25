@@ -33,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 
@@ -43,21 +44,21 @@ import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 public class CDCTableInfo {
     private List<CDCColumnInfo> columnInfoList;
     private byte[] defaultColumnFamily;
-    private String cdcIncludeScopes;
+    private Set<PTable.CDCChangeScope> includeScopes;
     private PTable.QualifierEncodingScheme qualifierEncodingScheme;
 
     private final byte[] cdcJsonColQualBytes;
 
     public CDCTableInfo(byte[] defaultColumnFamily,
-                        List<CDCColumnInfo> columnInfoList, String cdcIncludeScopes,
+                        List<CDCColumnInfo> columnInfoList, Set<PTable.CDCChangeScope> includeScopes,
                         PTable.QualifierEncodingScheme qualifierEncodingScheme,
                         byte[] cdcJsonColQualBytes) {
         Collections.sort(columnInfoList);
         this.columnInfoList = columnInfoList;
         this.defaultColumnFamily = defaultColumnFamily;
-        this.cdcIncludeScopes = cdcIncludeScopes;
         this.qualifierEncodingScheme = qualifierEncodingScheme;
         this.cdcJsonColQualBytes = cdcJsonColQualBytes;
+        this.includeScopes = includeScopes;
     }
 
     public List<CDCColumnInfo> getColumnInfoList() {
@@ -72,8 +73,8 @@ public class CDCTableInfo {
         return qualifierEncodingScheme;
     }
 
-    public String getCdcIncludeScopes() {
-        return cdcIncludeScopes;
+    public Set<PTable.CDCChangeScope> getIncludeScopes() {
+        return includeScopes;
     }
 
     public byte[] getCdcJsonColQualBytes() {
@@ -97,7 +98,14 @@ public class CDCTableInfo {
         for (CDCInfoProtos.CDCColumnDef curColumnProto : table.getColumnsList()) {
             columns.add(CDCColumnInfo.createFromProto(curColumnProto));
         }
-        return new CDCTableInfo(defaultColumnFamily, columns, table.getCdcIncludeScopes(),
+        String includeScopesStr = table.getCdcIncludeScopes();
+        Set<PTable.CDCChangeScope> changeScopeSet;
+        try {
+            changeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(includeScopesStr);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        return new CDCTableInfo(defaultColumnFamily, columns, changeScopeSet,
                 qualifierEncodingScheme, table.getCdcJsonColQualBytes().toByteArray());
     }
 

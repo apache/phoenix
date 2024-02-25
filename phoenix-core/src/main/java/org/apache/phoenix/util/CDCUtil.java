@@ -83,12 +83,7 @@ public class CDCUtil {
     }
 
     public static String getCDCIndexName(String cdcName) {
-        return CDC_INDEX_PREFIX + cdcName;
-    }
-
-    public static String getCDCNameFromIndexName(String indexName) {
-        assert(indexName.startsWith(CDC_INDEX_PREFIX));
-        return indexName.substring(CDC_INDEX_PREFIX.length());
+        return CDC_INDEX_PREFIX + cdcName.toUpperCase();
     }
 
     public static boolean isCDCIndex(String indexName) {

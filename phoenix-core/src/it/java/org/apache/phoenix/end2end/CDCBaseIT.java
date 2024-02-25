@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -20,23 +21,25 @@ import java.util.Set;
 
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexPhysicalName;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 
 public class CDCBaseIT extends ParallelStatsDisabledIT {
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, false, 0);
+        createTable(conn, table_sql, encodingScheme, false, null);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, multitenant, 0);
+        createTable(conn, table_sql, encodingScheme, multitenant, null);
     }
 
     protected void createTable(Connection conn, String table_sql,
-                               PTable.QualifierEncodingScheme encodingScheme, boolean multitenant, int nSaltBuckets)
+                               PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
+                               Integer nSaltBuckets)
             throws Exception {
         List<String> props = new ArrayList<>();
         if (encodingScheme != null && encodingScheme.getSerializedMetadataValue() !=
@@ -47,23 +50,24 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         if (multitenant) {
             props.add("MULTI_TENANT=true");
         }
-        if (nSaltBuckets != 0) {
+        if (nSaltBuckets != null) {
             props.add("SALT_BUCKETS=" + nSaltBuckets);
         }
-        conn.createStatement().execute(table_sql + " " + String.join(", ", props));
+        table_sql = table_sql + " " + String.join(", ", props);
+        conn.createStatement().execute(table_sql);
     }
 
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
+    protected void createCDCAndWait(Connection conn, String schemaName, String tableName, String cdcName,
                                     String cdc_sql) throws Exception {
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, 0);
+        createCDCAndWait(conn, schemaName, tableName, cdcName, cdc_sql, null, 0);
     }
 
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
+    protected void createCDCAndWait(Connection conn, String schemaName, String tableName, String cdcName,
                                     String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
-                                    int nSaltBuckets) throws Exception {
+                                    Integer nSaltBuckets) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
         createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets);
-        IndexToolIT.runIndexTool(false, null, tableName,
+        IndexToolIT.runIndexTool(false, schemaName, tableName,
                 "\""+CDCUtil.getCDCIndexName(cdcName)+"\"");
         TestUtil.waitForIndexState(conn, CDCUtil.getCDCIndexName(cdcName), PIndexState.ACTIVE);
     }
@@ -100,13 +104,33 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                         getViewIndexPhysicalName(datatableName));
     }
 
-    protected void assertSaltBuckets(String cdcName, Integer nbuckets) throws SQLException {
+    protected void assertCDCSaltBuckets(String cdcName, Integer nbuckets) throws SQLException {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
-        assertEquals(nbuckets, cdcTable.getBucketNum());
-        PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
-        assertEquals(nbuckets, indexTable.getBucketNum());
+        assertSaltBuckets(cdcTable, nbuckets);
+        assertSaltBuckets(conn, CDCUtil.getCDCIndexName(cdcName), nbuckets);
+    }
+
+    protected void assertSaltBuckets(Connection conn, String tableName, Integer nbuckets)
+            throws SQLException {
+        PTable table = PhoenixRuntime.getTable(conn, tableName);
+        assertSaltBuckets(table, nbuckets);
+    }
+
+    protected void assertSaltBuckets(PTable table, Integer nbuckets) {
+        if (nbuckets == null || nbuckets == 0) {
+            assertNull(table.getBucketNum());
+        } else {
+            assertEquals(nbuckets, table.getBucketNum());
+        }
+    }
+
+    protected void assertNoResults(Connection conn, String cdcName) throws SQLException {
+        try (Statement stmt = conn.createStatement()) {
+            ResultSet rs = stmt.executeQuery("select * from " + cdcName);
+            assertFalse(rs.next());
+        }
     }
 
     protected Connection newConnection() throws SQLException {
@@ -115,7 +139,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected Connection newConnection(String tenantId) throws SQLException {
         Properties props = new Properties();
-        // FIXME: Uncomment these only while debugging.
+        // Uncomment these only while debugging.
         //props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         //props.put("hbase.client.scanner.timeout.period", "6000000");
         //props.put("phoenix.query.timeoutMs", "6000000");

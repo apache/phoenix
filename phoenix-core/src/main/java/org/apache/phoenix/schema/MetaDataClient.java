@@ -1435,11 +1435,10 @@ public class MetaDataClient {
      *    listed as an index column.
      * @param statement
      * @param splits
-     * @param indexPKExpresionsType If non-{@code null}, all PK expressions should be of this specific type.
      * @return MutationState from population of index table from data table
      * @throws SQLException
      */
-    public MutationState createIndex(CreateIndexStatement statement, byte[][] splits, PDataType indexPKExpresionsType) throws SQLException {
+    public MutationState createIndex(CreateIndexStatement statement, byte[][] splits) throws SQLException {
         IndexKeyConstraint ik = statement.getIndexConstraint();
         TableName indexTableName = statement.getIndexTableName();
 
@@ -1553,9 +1552,6 @@ public class MetaDataClient {
                 }
                 if (expression.isStateless()) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.STATELESS_EXPRESSION_NOT_ALLOWED_IN_INDEX).build().buildException();
-                }
-                if (indexPKExpresionsType != null && expression.getDataType() != indexPKExpresionsType) {
-                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCORRECT_DATATYPE_FOR_EXPRESSION).build().buildException();
                 }
                 unusedPkColumns.remove(expression);
 
@@ -1741,30 +1737,27 @@ public class MetaDataClient {
                 statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
 
-        NamedNode indexName = FACTORY.indexName(CDCUtil.getCDCIndexName(
-                statement.getCdcObjName().getName()));
-        IndexKeyConstraint indexKeyConstraint =
-                FACTORY.indexKey(Arrays.asList(new Pair[]{Pair.newPair(
-                        FACTORY.function(PhoenixRowTimestampFunction.NAME, Collections.emptyList()),
-                        SortOrder.getDefault())}));
         IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
-        ListMultimap<String, Pair<String, Object>> indexProps = ArrayListMultimap.create();
-        // Transfer properties to index and let create index recognize those that are relevant,
-        // (e.g. SALT_BUCKETS and COLUMN_ENCODED_BYTES) and let the others get ignored.
-        for (Map.Entry<String, Object> propSet: tableProps.entrySet()) {
-            indexProps.put(QueryConstants.ALL_FAMILY_PROPERTIES_KEY, new Pair<>(propSet.getKey(),
-                    propSet.getValue()));
+        PhoenixStatement pstmt = new PhoenixStatement(connection);
+        String dataTableFullName = SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
+                statement.getDataTable().getTableName());
+        String createIndexSql = "CREATE " +
+                (indexType == IndexType.LOCAL ? "LOCAL " : "UNCOVERED ") +
+                "INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "") +
+                "\"" + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName()) + "\"" +
+                " ON " + dataTableFullName + " (" + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
+        List<String> indexProps = new ArrayList<>();
+        Object saltBucketNum = TableProperty.SALT_BUCKETS.getValue(tableProps);
+        if (saltBucketNum != null) {
+            indexProps.add("SALT_BUCKETS=" + saltBucketNum);
         }
-        CreateIndexStatement indexStatement = FACTORY.createIndex(indexName, FACTORY.namedTable(null,
-                        statement.getDataTable(), (Double) null), indexKeyConstraint, null, null,
-                        indexProps, statement.isIfNotExists(), indexType, true, 0,
-                        new HashMap<>(), null);
-        MutationState indexMutationState;
+        Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+        if (columnEncodedBytes != null) {
+            indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
+        }
+        createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
         try {
-            // TODO: Should we also allow PTimestamp here, in fact PTimestamp is the right type,
-            // but we are forced to support PDate because of incorrect type for
-            // PHOENIX_ROW_TIMESTAMP (see PHOENIX-6807)?
-            indexMutationState = createIndex(indexStatement, null, PDate.INSTANCE);
+            pstmt.execute(createIndexSql);
         } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
                 throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
@@ -1777,7 +1770,8 @@ public class MetaDataClient {
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
-        for (int i = 0; i < pkColumns.size(); ++i) {
+        int pkOffset = dataTable.getBucketNum() != null ? 1 : 0;
+        for (int i = pkOffset; i < pkColumns.size(); ++i) {
             PColumn pcol = pkColumns.get(i);
             columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
                     pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
@@ -1790,17 +1784,17 @@ public class MetaDataClient {
                 null, false, SortOrder.getDefault(), "", null, false));
         tableProps = new HashMap<>();
         if (dataTable.isMultiTenant()) {
-            tableProps.put(MULTI_TENANT.toString(), Boolean.TRUE);
+            tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
         }
         CreateTableStatement tableStatement = FACTORY.createTable(
                 FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),
-                statement.getProps(), columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
+                null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
         createTableInternal(tableStatement, null, dataTable, null, null, null,
                 null, null, false, null,
                 null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
-        return indexMutationState;
+        return new MutationState(0, 0, connection);
     }
 
     /**
@@ -2025,7 +2019,7 @@ public class MetaDataClient {
         }
         return false;
     }
-    
+
     /**
      * While adding or dropping columns we write a cell to the SYSTEM.MUTEX table with the rowkey of the
      * physical table to prevent conflicting concurrent modifications. For eg two client adding a column
@@ -2307,7 +2301,7 @@ public class MetaDataClient {
             }
 
             // Can't set any of these on views or shared indexes on views
-            if (tableType != PTableType.VIEW && !allocateIndexId) {
+            if (tableType != PTableType.VIEW && tableType != PTableType.CDC && !allocateIndexId) {
                 saltBucketNum = (Integer) TableProperty.SALT_BUCKETS.getValue(tableProps);
                 if (saltBucketNum != null) {
                     if (saltBucketNum < 0 || saltBucketNum > SaltingUtil.MAX_BUCKET_NUM) {
@@ -2413,8 +2407,8 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if (TableProperty.TTL.getValue(commonFamilyProps) != null 
-                    && transactionProvider != null 
+            if (TableProperty.TTL.getValue(commonFamilyProps) != null
+                    && transactionProvider != null
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
                 .setMessage(transactionProvider.name())
@@ -2544,7 +2538,7 @@ public class MetaDataClient {
                     }
                     pkColumns = newLinkedHashSet(parent.getPKColumns());
 
-                    // Add row linking view to its parent 
+                    // Add row linking view to its parent
                     try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK)) {
                         linkStatement.setString(1, tenantIdStr);
                         linkStatement.setString(2, schemaName);
@@ -2643,7 +2637,7 @@ public class MetaDataClient {
                 /*
                  * We can't control what column qualifiers are used in HTable mapped to Phoenix views. So we are not
                  * able to encode column names.
-                 */  
+                 */
                 if (viewType != MAPPED) {
                     /*
                      * For regular phoenix views, use the storage scheme of the physical table since they all share the
@@ -2661,14 +2655,14 @@ public class MetaDataClient {
             // System tables have hard-coded column qualifiers. So we can't use column encoding for them.
             else if (!SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))|| SchemaUtil.isLogTable(schemaName, tableName)) {
                 /*
-                 * Indexes inherit the storage scheme of the parent data tables. Otherwise, we always attempt to 
-                 * create tables with encoded column names. 
-                 * 
-                 * Also of note is the case with shared indexes i.e. local indexes and view indexes. In these cases, 
-                 * column qualifiers for covered columns don't have to be unique because rows of the logical indexes are 
+                 * Indexes inherit the storage scheme of the parent data tables. Otherwise, we always attempt to
+                 * create tables with encoded column names.
+                 *
+                 * Also of note is the case with shared indexes i.e. local indexes and view indexes. In these cases,
+                 * column qualifiers for covered columns don't have to be unique because rows of the logical indexes are
                  * partitioned by the virtue of indexId present in the row key. As such, different shared indexes can use
                  * potentially overlapping column qualifiers.
-                 * 
+                 *
                  */
                 if (parent != null) {
                     Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
@@ -2916,7 +2910,7 @@ public class MetaDataClient {
                         column.getFamilyName());
                 }
             }
-            
+
             // We need a PK definition for a TABLE or mapped VIEW
             if (!wasPKDefined && pkColumnsNames.isEmpty() && tableType != PTableType.VIEW && viewType != ViewType.MAPPED) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
@@ -3008,7 +3002,7 @@ public class MetaDataClient {
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
-            
+
             // Update column qualifier counters
             if (EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme)) {
                 // Store the encoded column counter for phoenix entities that have their own hbase

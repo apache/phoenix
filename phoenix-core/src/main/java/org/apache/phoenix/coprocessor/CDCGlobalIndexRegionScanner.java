@@ -69,7 +69,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     private static final Logger LOGGER =
             LoggerFactory.getLogger(CDCGlobalIndexRegionScanner.class);
     private CDCTableInfo cdcDataTableInfo;
-    private Set<PTable.CDCChangeScope> cdcChangeScopeSet;
+
     public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner,
                                        final Region region,
                                        final Scan scan,
@@ -86,12 +86,6 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         CDCUtil.initForRawScan(dataTableScan);
         cdcDataTableInfo = CDCTableInfo.createFromProto(CDCInfoProtos.CDCTableDef
                 .parseFrom(scan.getAttribute(CDC_DATA_TABLE_DEF)));
-        try {
-            cdcChangeScopeSet = CDCUtil.makeChangeScopeEnumsFromString(
-                    cdcDataTableInfo.getCdcIncludeScopes());
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     @Override
@@ -124,12 +118,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             Map<String, Object> changeImageObj = null;
             // FIXME: The below boolean flags should probably be translated to util methods on
             //  the Enum class itself.
-            boolean isChangeImageInScope = this.cdcChangeScopeSet.size() == 0
-                    || (this.cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE));
+            boolean isChangeImageInScope = this.cdcDataTableInfo.getIncludeScopes().size() == 0
+                    || (this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.CHANGE));
             boolean isPreImageInScope =
-                    this.cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE);
+                    this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.PRE);
             boolean isPostImageInScope =
-                    this.cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST);
+                    this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.POST);
             if (isPreImageInScope || isPostImageInScope) {
                 preImageObj = new HashMap<>();
             }
@@ -137,8 +131,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 changeImageObj = new HashMap<>();
             }
             Long lowerBoundTsForPreImage = 0L;
-            boolean isChangeDataTableCellPresent = false;
-            boolean isIndexCellDeleteRow = false;
+            boolean foundDataTableCellForUpsert = false;
+            boolean foundIndexCellForRowDelete = false;
             byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(
                     cdcDataTableInfo.getQualifierEncodingScheme()).getFirst();
             try {
@@ -152,7 +146,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         byte[] cellQual = ImmutableBytesPtr.cloneCellQualifierIfNecessary(cell);
                         if (cell.getType() == Cell.Type.DeleteFamily) {
                             if (indexCellTS == cell.getTimestamp()) {
-                                isIndexCellDeleteRow = true;
+                                foundIndexCellForRowDelete = true;
                             } else if (indexCellTS > cell.getTimestamp()
                                     && lowerBoundTsForPreImage == 0L) {
                                 // Cells with timestamp less than the lowerBoundTsForPreImage
@@ -198,7 +192,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                                         .get(columnListIndex).getColumnType()));
                                     }
                                 } else if (cell.getTimestamp() == indexCellTS) {
-                                    isChangeDataTableCellPresent = true;
+                                    foundDataTableCellForUpsert = true;
                                     if (isChangeImageInScope || isPostImageInScope) {
                                         changeImageObj.put(getColumnDisplayName(currentColumnInfo),
                                                 this.getColumnValue(cell, cdcColumnInfoList
@@ -210,9 +204,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                             }
                         }
                     }
-                    if (isChangeDataTableCellPresent || isIndexCellDeleteRow) {
+                    if (foundDataTableCellForUpsert || foundIndexCellForRowDelete) {
                         Result cdcRow = getCDCImage(indexRowKey, preImageObj, changeImageObj,
-                                isIndexCellDeleteRow, indexCellTS, firstIndexCell,
+                                foundIndexCellForRowDelete, indexCellTS, firstIndexCell,
                                 isChangeImageInScope, isPreImageInScope, isPostImageInScope);
                         if (cdcRow != null && tupleProjector != null) {
                             if (firstIndexCell.getType() == Cell.Type.DeleteFamily) {
