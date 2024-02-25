@@ -715,7 +715,9 @@ public class PTableImpl implements PTable {
         }
 
         public Builder setMaxLookbackAge(Long maxLookbackAge) {
-            propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge));
+            if (maxLookbackAge != null) {
+                propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge));
+            }
             this.maxLookbackAge = maxLookbackAge;
             return this;
         }
