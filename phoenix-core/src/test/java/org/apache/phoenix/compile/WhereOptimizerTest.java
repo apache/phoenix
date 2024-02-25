@@ -2502,6 +2502,56 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertArrayEquals(stopRow, scan.getStopRow());
     }
 
+    @Test
+    public void testScanRangeForPointLookup() throws SQLException {
+        String tenantId = "000000000000001";
+        String entityId = "002333333333333";
+        String query = String.format("select * from atable where organization_id='%s' and entity_id='%s'",
+                tenantId, entityId);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
+            byte[] stopRow =  ByteUtil.nextKey(startRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+        }
+    }
+
+    @Test
+    public void testScanRangeForPointLookupRVC() throws SQLException {
+        String tenantId = "000000000000001";
+        String entityId = "002333333333333";
+        String query = String.format("select * from atable where (organization_id, entity_id) IN (('%s','%s'))",
+                tenantId, entityId);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
+            byte[] stopRow =  ByteUtil.nextKey(startRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+        }
+    }
+
+    private static void validateScanRangesForPointLookup(QueryPlan optimizedPlan, byte[] startRow, byte[] stopRow) {
+        StatementContext context = optimizedPlan.getContext();
+        ScanRanges scanRanges = context.getScanRanges();
+        assertTrue(scanRanges.isPointLookup());
+        assertEquals(1, scanRanges.getPointLookupCount());
+        // scan from StatementContext has scan range [start, next(start)]
+        Scan scanFromContext = context.getScan();
+        assertArrayEquals(startRow, scanFromContext.getStartRow());
+        assertTrue(scanFromContext.includeStartRow());
+        assertArrayEquals(stopRow, scanFromContext.getStopRow());
+        assertFalse(scanFromContext.includeStopRow());
+
+        List<List<Scan>> scans = optimizedPlan.getScans();
+        assertEquals(1, scans.size());
+        assertEquals(1, scans.get(0).size());
+        Scan scanFromIterator = scans.get(0).get(0);
+        // scan from iterator has same start and stop row [start, start] i.e a Get
+        assertTrue(scanFromIterator.isGetScan());
+        assertTrue(scanFromIterator.includeStartRow());
+        assertTrue(scanFromIterator.includeStopRow());
+    }
+
     private static StatementContext compileStatementTenantSpecific(String tenantId, String query, List<Object> binds) throws Exception {
     	PhoenixConnection pconn = getTenantSpecificConnection("tenantId").unwrap(PhoenixConnection.class);
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
