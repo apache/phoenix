@@ -147,7 +147,7 @@ function get_release_info {
   # Find the current version for the branch.
   # FIXME this only works with gitbox
   local version
-  version="$(curl -s "$ASF_REPO_WEBUI;a=blob_plain;f=pom.xml;hb=refs/heads/$GIT_BRANCH" |
+  version="$(curl -L -s "$ASF_REPO_WEBUI;a=blob_plain;f=pom.xml;hb=refs/heads/$GIT_BRANCH" |
     parse_version)"
   echo "Current branch VERSION is $version."
 
