@@ -1262,7 +1262,7 @@ public class ViewUtil {
                         if (isIndexTable) {
                             for (PTable index : pTable.getIndexes()) {
                                 logger.debug(String.format(
-                                        "index-name = %s, ttl = %d, row-key-prefix = %d",
+                                        "index-name = %s, ttl = %d, row-key-matcher = %d",
                                         index.getName(), index.getTTL(), index.getViewIndexId()));
                                 PDataType viewIndexIdType = index.getviewIndexIdType();
                                 byte[]
@@ -1284,13 +1284,13 @@ public class ViewUtil {
                             }
                         } else {
                             logger.debug(
-                                    String.format("table-name = %s, ttl = %d, row-key-prefix = %s",
+                                    String.format("table-name = %s, ttl = %d, row-key-matcher = %s",
                                             pTable.getName(), pTable.getTTL(),
-                                            Bytes.toStringBinary(pTable.getRowKeyPrefix())));
+                                            Bytes.toStringBinary(pTable.getRowKeyMatcher())));
                             tableTTLInfoList.add(
                                     new TableTTLInfo(pTable.getPhysicalName().getBytes(),
                                             tenantIdBytes, pTable.getTableName().getBytes(),
-                                            pTable.getRowKeyPrefix(), pTable.getTTL()));
+                                            pTable.getRowKeyMatcher(), pTable.getTTL()));
                         }
                     }
                 }

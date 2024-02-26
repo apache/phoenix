@@ -221,6 +221,7 @@ public class QueryServicesOptions {
     public static final boolean DEFAULT_INDEX_FAILURE_THROW_EXCEPTION = true;
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_INTERVAL = 60000; // 60 secs
     public static final long DEFAULT_INDEX_REBUILD_TASK_INITIAL_DELAY = 10000; // 10 secs
+    public static final long DEFAULT_START_TRUNCATE_TASK_DELAY = 20000; // 20 secs
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_BACKWARD_TIME = 1; // 1 ms
     public static final long DEFAULT_INDEX_FAILURE_HANDLING_REBUILD_OVERLAP_FORWARD_TIME = 60000 * 3; // 3 mins
     // 30 min rpc timeout * 5 tries, with 2100ms total pause time between retries
@@ -419,6 +420,8 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
     public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
     public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
+    public static final boolean DEFAULT_PHOENIX_VIEW_TTL_ENABLED = true;
+
     public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
     public static final boolean DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX = true;
 

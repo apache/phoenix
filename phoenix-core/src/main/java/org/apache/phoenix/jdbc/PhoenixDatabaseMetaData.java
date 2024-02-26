@@ -139,6 +139,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
+    public static final byte[] TABLE_SCHEM_BYTES = Bytes.toBytes(TABLE_SCHEM);
     public static final String LOGICAL_TABLE_NAME = "LOGICAL_TABLE_NAME";
     public static final String LOGICAL_PARENT_NAME = "LOGICAL_PARENT_NAME";
     public static final String REMARKS = "REMARKS";
@@ -417,8 +418,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String STREAMING_TOPIC_NAME = "STREAMING_TOPIC_NAME";
     public static final byte[] STREAMING_TOPIC_NAME_BYTES = Bytes.toBytes(STREAMING_TOPIC_NAME);
 
-    public static final String ROW_KEY_PREFIX = "ROW_KEY_PREFIX";
-    public static final byte[] ROW_KEY_PREFIX_BYTES = Bytes.toBytes(ROW_KEY_PREFIX);
+    public static final String ROW_KEY_MATCHER = "ROW_KEY_MATCHER";
+    public static final byte[] ROW_KEY_MATCHER_BYTES = Bytes.toBytes(ROW_KEY_MATCHER);
 
     public static final String INDEX_WHERE = "INDEX_WHERE";
     public static final byte[] INDEX_WHERE_BYTES = Bytes.toBytes(INDEX_WHERE);

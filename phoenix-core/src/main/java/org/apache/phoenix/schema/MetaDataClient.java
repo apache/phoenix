@@ -241,7 +241,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_PREFIX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
@@ -353,7 +353,7 @@ public class MetaDataClient {
                     SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME + "," +
                     TTL + "," +
-                    ROW_KEY_PREFIX + "," +
+                    ROW_KEY_MATCHER + "," +
                     INDEX_WHERE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
                 "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -968,7 +968,7 @@ public class MetaDataClient {
             String viewStatement,
             ViewType viewType,
             PDataType viewIndexIdType,
-            byte[] rowKeyPrefix,
+            byte[] rowKeyMatcher,
             byte[][] viewColumnConstants,
             BitSet isViewColumnReferenced
     ) throws SQLException {
@@ -1043,7 +1043,7 @@ public class MetaDataClient {
                 viewStatement,
                 viewType,
                 viewIndexIdType,
-                rowKeyPrefix,
+                rowKeyMatcher,
                 viewColumnConstants,
                 isViewColumnReferenced,
                 false,
@@ -1128,6 +1128,12 @@ public class MetaDataClient {
         return connection.getQueryServices().getConfiguration().
                 getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+    }
+
+    private boolean isViewTTLEnabled() {
+        return connection.getQueryServices().getConfiguration().
+                getBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
     }
 
     public MutationState updateStatistics(UpdateStatisticsStatement updateStatisticsStmt)
@@ -1731,7 +1737,7 @@ public class MetaDataClient {
                     PTableType.INDEX,
                     statement.ifNotExists(),
                     null,
-                    null,
+                    statement.getWhere(),
                     statement.getBindCount(),
                     null
             );
@@ -2089,7 +2095,7 @@ public class MetaDataClient {
      */
     private Integer checkAndGetTTLFromHierarchy(PTable parent) throws SQLException {
         return parent != null ? (parent.getType() == TABLE ? parent.getTTL()
-                : (parent.getType() == VIEW ? getTTLFromViewHierarchy(parent) : TTL_NOT_DEFINED))
+                : (parent.getType() == VIEW && parent.getViewType() != MAPPED ? getTTLFromViewHierarchy(parent) : TTL_NOT_DEFINED))
                 : TTL_NOT_DEFINED;
     }
 
@@ -2117,7 +2123,7 @@ public class MetaDataClient {
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
             final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-            final byte[] rowKeyPrefix,
+            final byte[] rowKeyMatcher,
             final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced,
             boolean allocateIndexId, IndexType indexType, Date asyncCreatedDate,
             Map<String,Object> tableProps,
@@ -2180,6 +2186,14 @@ public class MetaDataClient {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.ILLEGAL_DATA)
                             .setMessage(String.format("entity = %s, TTL value should be > 0",
                                     tableName))
+                            .build()
+                            .buildException();
+                }
+                if (!isViewTTLEnabled() && tableType == VIEW) {
+                    throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                            VIEW_TTL_NOT_ENABLED)
+                            .setSchemaName(schemaName)
+                            .setTableName(tableName)
                             .build()
                             .buildException();
                 }
@@ -2990,7 +3004,7 @@ public class MetaDataClient {
                         .setIndexes(Collections.<PTable>emptyList())
                         .setPhysicalNames(ImmutableList.<PName>of())
                         .setColumns(columns.values())
-                        .setRowKeyPrefix(rowKeyPrefix)
+                        .setRowKeyMatcher(rowKeyMatcher)
                         .setTTL(TTL_NOT_DEFINED)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
@@ -3245,10 +3259,11 @@ public class MetaDataClient {
                 tableUpsert.setInt(34, ttl);
             }
 
-            if (rowKeyPrefix == null) {
+            if ((rowKeyMatcher == null) ||
+                    Bytes.compareTo(rowKeyMatcher, HConstants.EMPTY_BYTE_ARRAY) == 0) {
                 tableUpsert.setNull(35, Types.VARBINARY);
             } else {
-                tableUpsert.setBytes(35, rowKeyPrefix);
+                tableUpsert.setBytes(35, rowKeyMatcher);
             }
             if (tableType == INDEX && statement.getWhereClause() != null) {
                 tableUpsert.setString(36, statement.getWhereClause().toString());
@@ -3398,7 +3413,7 @@ public class MetaDataClient {
                         result.getTable().getExternalSchemaId() : null)
                         .setStreamingTopicName(streamingTopicName)
                         .setTTL(ttl == null || ttl == TTL_NOT_DEFINED ? ttlFromHierarchy : ttl)
-                        .setRowKeyPrefix(rowKeyPrefix)
+                        .setRowKeyMatcher(rowKeyMatcher)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
                         .build();
@@ -5679,6 +5694,14 @@ public class MetaDataClient {
                         .build()
                         .buildException();
             }
+
+            if (!isViewTTLEnabled() && table.getType() == PTableType.VIEW) {
+                throw new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.VIEW_TTL_NOT_ENABLED)
+                        .build()
+                        .buildException();
+            }
+
             if (table.getType() != PTableType.TABLE && (table.getType() != PTableType.VIEW ||
                     table.getViewType() != UPDATABLE)) {
                 throw new SQLExceptionInfo.Builder(

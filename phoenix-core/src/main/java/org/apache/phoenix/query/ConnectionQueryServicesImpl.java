@@ -75,6 +75,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCC
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
@@ -1096,9 +1097,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private boolean isPhoenixTTLEnabled() {
-        boolean ttl = config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+         return config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
-        return ttl;
     }
 
 
@@ -3461,12 +3461,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     private void copyDataFromPhoenixTTLtoTTL(PhoenixConnection oldMetaConnection) throws IOException {
-        // Increase the timeouts so that the scan queries during Copy Data do not timeout
+        //If ViewTTL is enabled then only copy values from PHOENIX_TTL Column to TTL Column
+        if (oldMetaConnection.getQueryServices().getConfiguration().getBoolean(PHOENIX_VIEW_TTL_ENABLED,
+                DEFAULT_PHOENIX_VIEW_TTL_ENABLED)) {
+            // Increase the timeouts so that the scan queries during Copy Data do not timeout
+            // on large SYSCAT Tables
+            Map<String, String> options = new HashMap<>();
+            options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            copyTTLValuesFromPhoenixTTLColumnToTTLColumn(oldMetaConnection, options);
+        }
+
+    }
+
+    private void moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(PhoenixConnection oldMetaConnection) throws IOException {
+        // Increase the timeouts so that the scan queries during Copy Data does not timeout
         // on large SYSCAT Tables
         Map<String, String> options = new HashMap<>();
         options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
         options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
-        copyTTLValuesFromPhoenixTTLColumnToTTLColumn(oldMetaConnection, options);
+        UpgradeUtil.moveHBaseLevelTTLToSYSCAT(oldMetaConnection, options);
     }
 
     // Available for testing
@@ -4208,14 +4222,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     PhoenixDatabaseMetaData.TTL + " " + PInteger.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection,
                     PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 - 1,
-                    PhoenixDatabaseMetaData.ROW_KEY_PREFIX + " " +
-                            PVarbinary.INSTANCE.getSqlTypeName());
+                    PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " + PVarbinary.INSTANCE.getSqlTypeName());
             metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
                     MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0,
                     PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
-            //Copy Data From PHOENIX_TTL column to TTL as PHOENIX_TTL column will be removed in
-            //later release.
-            copyDataFromPhoenixTTLtoTTL(metaConnection);
+            //Values in PHOENIX_TTL column will not be used for further release as PHOENIX_TTL column is being deprecated
+            //and will be removed in later release. To copy copyDataFromPhoenixTTLtoTTL(metaConnection) can be used but
+            //as that feature was not fully built we are not moving old value to new column
+
+            //move TTL values stored in descriptor to SYSCAT TTL column.
+            moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

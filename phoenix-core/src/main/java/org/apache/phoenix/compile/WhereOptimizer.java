@@ -491,7 +491,7 @@ public class WhereOptimizer {
         return keyRanges;
     }
 
-    public static byte[] getRowKeyPrefix(
+    public static byte[] getRowKeyMatcher(
             final StatementContext context,
             final TableName tableNameNode,
             final PTable parentTable,
@@ -522,28 +522,28 @@ public class WhereOptimizer {
         }
         ScanRanges scanRange = ScanRanges.createSingleSpan(
                 schema, rowKeySlotRangesList, null, false);
-        byte[] rowKeyPrefix = scanRange.getScanRange().getLowerRange();
+        byte[] rowKeyMatcher = scanRange.getScanRange().getLowerRange();
         // TODO : make it a TRACE log before submission
         if (LOGGER.isTraceEnabled()) {
-            String rowKeyPrefixStr = Bytes.toStringBinary(rowKeyPrefix);
-            String rowKeyPrefixHex = Bytes.toHex(rowKeyPrefix);
-            byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
-            assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
+            String rowKeyMatcherStr = Bytes.toStringBinary(rowKeyMatcher);
+            String rowKeyMatcherHex = Bytes.toHex(rowKeyMatcher);
+            byte[] rowKeyMatcherFromHex = Bytes.fromHex(rowKeyMatcherHex);
+            assert Bytes.compareTo(rowKeyMatcher, rowKeyMatcherFromHex) == 0;
             LOGGER.trace(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
                             + "primary-keys = %d, key-ranges: size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
-            LOGGER.trace(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
-                    rowKeyPrefixHex, rowKeyPrefixStr));
+            LOGGER.trace(String.format("RowKey Matcher info Hex-value = %s,StringBinary value = %s",
+                    rowKeyMatcherHex, rowKeyMatcherStr));
 
         }
-        return rowKeyPrefix;
+        return rowKeyMatcher;
     }
 
 
     @VisibleForTesting
-    public static byte[] getRowKeyPrefix(
+    public static byte[] getRowKeyMatcher(
             final PhoenixConnection connection,
             final TableName tableNameNode,
             final PTable parentTable,
@@ -590,25 +590,25 @@ public class WhereOptimizer {
 
         ScanRanges scanRange = ScanRanges.createSingleSpan(
                 schema, rowKeySlotRangesList, null, false);
-        byte[] rowKeyPrefix = scanRange.getScanRange().getLowerRange();
+        byte[] rowKeyMatcher = scanRange.getScanRange().getLowerRange();
 
         // TODO : make it a TRACE log before submission
         if (LOGGER.isTraceEnabled()) {
-            String rowKeyPrefixStr = Bytes.toStringBinary(rowKeyPrefix);
-            String rowKeyPrefixHex = Bytes.toHex(rowKeyPrefix);
-            byte[] rowKeyPrefixFromHex = Bytes.fromHex(rowKeyPrefixHex);
-            assert Bytes.compareTo(rowKeyPrefix, rowKeyPrefixFromHex) == 0;
+            String rowKeyMatcherStr = Bytes.toStringBinary(rowKeyMatcher);
+            String rowKeyMatcherHex = Bytes.toHex(rowKeyMatcher);
+            byte[] rowKeyMatcherFromHex = Bytes.fromHex(rowKeyMatcherHex);
+            assert Bytes.compareTo(rowKeyMatcher, rowKeyMatcherFromHex) == 0;
 
             LOGGER.trace(String.format("View info view-name = %s, view-stmt-name (parent) = %s, "
                             + "primary-keys = %d, key-ranges:  size = %d, list = %s ",
                     tableNameNode.toString(), parentTable.getName().toString(),
                     parentTable.getPKColumns().size(), rowKeySlotRangesList.size(),
                     rowKeySlotRangesList.isEmpty() ? "null" : rowKeySlotRangesList.toString()));
-            LOGGER.trace(String.format("RowKey Prefix info Hex-value = %s, StringBinary value = %s",
-                    rowKeyPrefixHex, rowKeyPrefixStr));
+            LOGGER.trace(String.format("RowKey Matcher info Hex-value = %s,StringBinary value = %s",
+                    rowKeyMatcherHex, rowKeyMatcherStr));
 
         }
-        return rowKeyPrefix;
+        return rowKeyMatcher;
 
     }
 
