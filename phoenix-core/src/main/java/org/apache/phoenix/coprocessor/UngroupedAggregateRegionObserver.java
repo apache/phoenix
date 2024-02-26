@@ -111,6 +111,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -594,14 +595,21 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     InternalScanner internalScanner = scanner;
                     if (request.isMajor()) {
                         boolean isDisabled = false;
-                        final String fullTableName = tableName.getNameAsString();
+                        boolean isMultiTenantIndexTable = false;
+                        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                            isMultiTenantIndexTable = true;
+                        }
+                        final String fullTableName = isMultiTenantIndexTable ?
+                                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(), MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
+                                tableName.getNameAsString();
+
                         PTable table = null;
                         try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                 compactionConfig).unwrap(PhoenixConnection.class)) {
                             table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
                         } catch (Exception e) {
                             if (e instanceof TableNotFoundException) {
-                                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
+                                LOGGER.info("Ignoring HBase table that is not a Phoenix table: "
                                         + fullTableName);
                                 // non-Phoenix HBase tables won't be found, do nothing
                             } else {
@@ -636,20 +644,12 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
+                            LOGGER.info("Modifying major compaction scanner to use phoenix-compactions: "
+                                    + fullTableName);
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
                                             getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
-                                            SchemaUtil.getEmptyColumnFamily(table),
-                                            table.getEncodingScheme()
-                                                    == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                                                    QueryConstants.EMPTY_COLUMN_BYTES :
-                                                    table.getEncodingScheme().
-                                                            encode(QueryConstants.
-                                                                    ENCODED_EMPTY_COLUMN_NAME),
-                                            table.getTTL() == TTL_NOT_DEFINED
-                                                    ? DEFAULT_TTL : table.getTTL(),
-                                            table.getType() == PTableType.SYSTEM
-                                            );
+                                            table);
                         }
                     }
                     try {

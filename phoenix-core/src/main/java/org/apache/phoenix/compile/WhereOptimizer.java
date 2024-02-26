@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -43,9 +44,13 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -70,6 +75,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -78,6 +85,7 @@ import org.slf4j.LoggerFactory;
 import java.math.BigInteger;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -90,6 +98,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Properties;
 import java.util.Set;
 
 /**
@@ -501,6 +510,7 @@ public class WhereOptimizer {
         if (keySlots == null) {
             return ByteUtil.EMPTY_BYTE_ARRAY;
         }
+
         for (KeyExpressionVisitor.KeySlot slot : keySlots.getSlots()) {
             if (slot != null) {
                 if (schema.getField(slot.getPKPosition()).getSortOrder() == SortOrder.DESC) {
@@ -1944,7 +1954,7 @@ public class WhereOptimizer {
          * to produce the start and stop scan range.
          *
          */
-        static final class KeySlot {
+        public static final class KeySlot {
             private final int pkPosition; // Position in primary key
             private final int pkSpan; // Will be > 1 for RVC
             private final KeyPart keyPart; // Used to produce the KeyRanges below

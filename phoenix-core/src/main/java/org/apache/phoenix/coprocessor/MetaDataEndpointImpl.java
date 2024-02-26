@@ -1561,6 +1561,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         }
                     }
                 } else if (linkType == VIEW_INDEX_PARENT_TABLE) {
+
                     byte[] viewKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
                             parentSchemaName == null ? null : parentSchemaName.getBytes(),
                             parentTableName.getBytes());
@@ -1626,6 +1627,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @throws IOException
      * @throws SQLException
      */
+
 
     private int getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp, boolean checkForMappedView) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
