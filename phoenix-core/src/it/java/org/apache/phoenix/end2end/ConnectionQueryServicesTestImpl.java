@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
@@ -24,11 +25,13 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.protobuf.RpcController;
+import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -120,5 +123,18 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
             txService = txServices[provider.ordinal()] = TransactionServiceManager.startTransactionService(provider, config, connectionInfo, port);
         }
         return super.initTransactionClient(provider);
+    }
+
+    public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
+            throws Throwable {
+        boolean invalidateCacheEnabled =
+                config.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
+                        DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED);
+        if (!invalidateCacheEnabled) {
+            LOGGER.info("Skip invalidating server metadata cache since conf property"
+                    + " phoenix.metadata.invalidate.cache.enabled is set to false");
+            return;
+        }
+        invalidateServerMetadataCacheHelper(requests);
     }
 }
