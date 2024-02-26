@@ -120,8 +120,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
-            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)  COLUMN_ENCODED_BYTES=0";
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
             stmt.setInt(1, 1);
@@ -135,7 +134,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
             conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
             conn.createStatement().execute("UPSERT INTO " + tableName + " SELECT pk, col, JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from " + tableName);
-
+            conn.commit();
             String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
                     "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info'), " +
                     "JSON_VALUE(jsoncol, '$.info.tags[2]') " +
@@ -170,7 +169,6 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
             String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol json)";
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
@@ -213,7 +211,6 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
             String ddl = "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol json)";
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
@@ -244,11 +241,10 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String indexName = "IDX_" + generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
             String
                     ddl =
                     "create table if not exists " + tableName +
-                            " (pk integer primary key, col integer, jsoncol.jsoncol json)";
+                            " (pk integer primary key, col integer, jsoncol.jsoncol json) COLUMN_ENCODED_BYTES=0";
             conn.createStatement().execute(ddl);
             conn.createStatement().execute(
                     "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (1,2, '" + basicJson + "')");
@@ -260,6 +256,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                     "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (4,5, '" + getJsonString(BASIC_JSON, "$[3]") + "')");
             conn.createStatement().execute(
                     "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (5,6, '" + getJsonString(BASIC_JSON, "$[4]") + "')");
+            conn.commit();
             conn.createStatement().execute(
                     "CREATE INDEX " + indexName + " ON " + tableName
                             + " (JSON_VALUE(JSONCOL,'$.type'), JSON_VALUE(JSONCOL,'$.info.address.town')) include (col)");
@@ -273,13 +270,14 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             IndexToolIT.assertExplainPlan(false, actualExplainPlan, tableName, indexName);
             // Validate the total count of rows
             String countSql = "SELECT COUNT(1) FROM " + tableName;
-            rs = conn.createStatement().executeQuery( countSql);
+            rs = conn.createStatement().executeQuery(countSql);
             assertTrue(rs.next());
             assertEquals(5, rs.getInt(1));
             // Delete the rows
             String deleteQuery = "DELETE FROM " + tableName + " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Normal'";
-            boolean deleted = conn.createStatement().execute(deleteQuery);
-            rs = conn.createStatement().executeQuery( countSql);
+            conn.createStatement().execute(deleteQuery);
+            conn.commit();
+            rs = conn.createStatement().executeQuery(countSql);
             assertTrue(rs.next());
             assertEquals(3, rs.getInt(1));
             // Do a count now for the deleted rows, the count should be 0
@@ -393,7 +391,6 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     private void checkInvalidJsonIndexExpression(Properties props, String tableName,
             String indexName, String indexExpression) {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
             String
                     ddl =
                     "create table if not exists " + tableName + " (pk integer primary key, col integer, jsoncol.jsoncol json)";
@@ -402,6 +399,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                     "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES (1,2, '" + basicJson + "')");
             conn.createStatement()
                     .execute("CREATE INDEX " + indexName + " ON " + tableName + indexExpression);
+            conn.commit();
         } catch (SQLException e) {
             assertEquals(
                     SQLExceptionCode.JSON_FRAGMENT_NOT_ALLOWED_IN_INDEX_EXPRESSION.getErrorCode(),

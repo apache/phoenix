@@ -725,6 +725,7 @@ public class UpsertCompiler {
         if (valueNodes == null || isFunctionEvalNeeded) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
+            runOnServer = runOnServer || isFunctionEvalNeeded;
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;

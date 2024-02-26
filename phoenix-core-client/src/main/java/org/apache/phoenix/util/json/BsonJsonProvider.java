@@ -161,6 +161,8 @@ public class BsonJsonProvider extends AbstractJsonProvider {
     }
 
     /**
+     * Refer to this link for background on the implementation :
+     * https://github.com/spring-projects/spring-data-mongodb/blob/main/spring-data-mongodb/src/main/java/org/springframework/data/mongodb/util/BsonUtils.java#L66
      * @param source
      * @return
      */
