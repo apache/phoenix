@@ -107,6 +107,9 @@ if (( $# > 0 )); then
   error "Arguments can only be provided with option flags, invalid args: $*"
 fi
 export DEBUG
+if [ "$DEBUG" = "1" ]; then
+  set -x
+fi
 
 if [ -z "$WORKDIR" ] || [ ! -d "$WORKDIR" ]; then
   error "Work directory (-d) must be defined and exist. Run with -h for help."
@@ -223,6 +226,7 @@ ASF_PASSWORD=$ASF_PASSWORD
 RELEASE_STEP=$RELEASE_STEP
 API_DIFF_TAG=$API_DIFF_TAG
 HOST_OS=$HOST_OS
+DEBUG=$DEBUG
 EOF
 
 JAVA_MOUNT=()
