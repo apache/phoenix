@@ -84,13 +84,18 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
-    private static final String tmpPath = System.getProperty("java.io.tmpdir");
-
+    private static String tmpPath;
+    @Before
+    public void setup () throws Exception {
+        tmpPath = System.getProperty("java.io.tmpdir");
+    }
     @Test
     public void testStartKeyStopKey() throws SQLException {
         Properties props = new Properties();

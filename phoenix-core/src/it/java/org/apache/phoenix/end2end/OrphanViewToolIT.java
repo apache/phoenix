@@ -59,20 +59,17 @@ import org.slf4j.LoggerFactory;
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class OrphanViewToolIT extends BaseOwnClusterIT {
+    private static String tmpPath;
+    private static  String viewFileName;
+    private static  String physicalLinkFileName;
+    private static  String parentLinkFileName;
+    private static  String childLinkFileName;
     private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);
-
     private final boolean isMultiTenant;
-
     private static final long fanout = 2;
     private static final long childCount = fanout;
     private static final long grandChildCount = fanout * fanout;
     private static final long grandGrandChildCount = fanout * fanout * fanout;
-
-    private static final String tmpPath = System.getProperty("java.io.tmpdir");
-    private static final String viewFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.VIEW];
-    private static final String physicalLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
-    private static final String parentLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
-    private static final String childLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
 
     protected static String SCHEMA1 = "SCHEMA1";
     protected static String SCHEMA2 = "SCHEMA2";
@@ -134,6 +131,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        tmpPath = System.getProperty("java.io.tmpdir");
+        viewFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.VIEW];
+        physicalLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
+        parentLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
+        childLinkFileName = tmpPath + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
     }
 
     @AfterClass
