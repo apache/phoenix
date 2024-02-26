@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.2.0 - Unreleased (as of 2024-02-25)
+## Release 5.2.0 - Unreleased (as of 2024-02-26)
 
 
 
@@ -424,5 +424,6 @@
 | [PHOENIX-6394](https://issues.apache.org/jira/browse/PHOENIX-6394) | PostCommit Jenkins job detects incorrect HBase profile to rebuild with 2.3 and 2.4 |  Major | . |
 | [PHOENIX-6359](https://issues.apache.org/jira/browse/PHOENIX-6359) | New module to support HBase 2.4.1+ releases |  Major | . |
 | [PHOENIX-6371](https://issues.apache.org/jira/browse/PHOENIX-6371) | Script to verify release candidate |  Major | . |
+
 
 
