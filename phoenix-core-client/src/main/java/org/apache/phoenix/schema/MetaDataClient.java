@@ -768,7 +768,18 @@ public class MetaDataClient {
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
             // i.e. explicitly set to 0. We should ideally be checking for something like
             // hasUpdateCacheFrequency().
-            if (table.getUpdateCacheFrequency() != 0L) {
+            //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
+            //QueryOptimizer needs that to decide whether the index can be used
+            if (PIndexState.PENDING_DISABLE.equals(table.getIndexState())) {
+                effectiveUpdateCacheFreq =
+                        (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                            connection.getQueryServices().getProps().get(
+                                QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
+                                QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
+                ucfInfoForLogging = "pending-disable-index-level";
+            }
+            else if (table.getUpdateCacheFrequency()
+                    != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
                 ucfInfoForLogging = "table-level";
             } else {
