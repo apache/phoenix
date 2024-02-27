@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.2.0 - Unreleased (as of 2024-02-26)
+## Release 5.2.0 - Unreleased (as of 2024-02-27)
 
 
 
