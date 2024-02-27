@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hbase.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -36,6 +35,7 @@ import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.query.QueryServicesTestImpl;
@@ -182,6 +182,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         // Add our own driver
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixMetricsTestingDriver.class.getName());
+        props.put(IS_SERVER_CONNECTION, Boolean.toString(true));
         initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -1553,10 +1554,10 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     /**
      * Custom QueryServices object which we can use to inject failures and delays
      */
-    private static class PhoenixMetricsTestingQueryServices extends ConnectionQueryServicesTestImpl {
+    private static class PhoenixMetricsTestingQueryServices extends ConnectionQueryServicesImpl {
 
         PhoenixMetricsTestingQueryServices(QueryServices services,
-                ConnectionInfo connectionInfo, Properties info) throws SQLException {
+                ConnectionInfo connectionInfo, Properties info) {
             super(services, connectionInfo, info);
         }
 

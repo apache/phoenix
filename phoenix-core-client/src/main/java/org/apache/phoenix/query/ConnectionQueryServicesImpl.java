@@ -6253,7 +6253,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     /**
-     * Check if server cache invalidation is enabled and we are using a server connection.
+     * Invalidate metadata cache from all region servers for the given list of
+     * InvalidateServerMetadataCacheRequest.
+     * @throws Throwable
      */
     public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
@@ -6269,17 +6271,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             LOGGER.warn(INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE);
             throw new Exception(INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE);
         }
-        invalidateServerMetadataCacheHelper(requests);
-    }
-
-    /**
-     * Invalidate metadata cache from all region servers for the given list of
-     * InvalidateServerMetadataCacheRequest.
-     * @throws Throwable
-     */
-    public void invalidateServerMetadataCacheHelper(List<InvalidateServerMetadataCacheRequest>
-                                                            requests)
-            throws Throwable {
 
         metricsMetadataCachingSource.incrementMetadataCacheInvalidationOperationsCount();
         Admin admin = getInvalidateMetadataCacheConnection().getAdmin();
