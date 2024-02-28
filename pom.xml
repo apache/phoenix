@@ -103,6 +103,7 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
     <test.tmp.dir>${project.build.directory}</test.tmp.dir>
+    <shadeSources>true</shadeSources>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
