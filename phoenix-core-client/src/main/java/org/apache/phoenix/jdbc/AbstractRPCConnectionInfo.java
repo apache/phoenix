@@ -45,8 +45,8 @@ public abstract class AbstractRPCConnectionInfo extends ConnectionInfo {
     }
 
     protected AbstractRPCConnectionInfo(boolean isConnectionless, String principal, String keytab,
-            User user, String haGroup) {
-        super(isConnectionless, principal, keytab, user, haGroup);
+            User user, String haGroup, Boolean isServerConnection) {
+        super(isConnectionless, principal, keytab, user, haGroup, isServerConnection);
     }
 
     @Override

@@ -37,8 +37,8 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
             "org.apache.hadoop.hbase.client.MasterRegistry";
 
     protected MasterConnectionInfo(boolean isConnectionless, String principal, String keytab,
-            User user, String haGroup, String bootstrapServers) {
-        super(isConnectionless, principal, keytab, user, haGroup);
+            User user, String haGroup, String bootstrapServers, Boolean isServerConnection) {
+        super(isConnectionless, principal, keytab, user, haGroup, isServerConnection);
         this.bootstrapServers = bootstrapServers;
     }
 
@@ -71,7 +71,7 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
     @Override
     public ConnectionInfo withPrincipal(String principal) {
         return new MasterConnectionInfo(isConnectionless, principal, keytab, user,
-            haGroup, bootstrapServers);
+            haGroup, bootstrapServers, isServerConnection);
     }
 
     /**
@@ -98,7 +98,7 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
         @Override
         protected ConnectionInfo build() {
             return new MasterConnectionInfo(isConnectionless, principal, keytab, user, haGroup,
-                    hostsList);
+                    hostsList, isServerConnection);
         }
 
         public static boolean isMaster(Configuration config, ReadOnlyProps props, Properties info) {
