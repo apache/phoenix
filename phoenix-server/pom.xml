@@ -308,7 +308,7 @@
             <configuration>
               <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
-              <createSourcesJar>true</createSourcesJar>
+              <createSourcesJar>${shadeSources}</createSourcesJar>
               <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
               <artifactSet>
                 <includes>
