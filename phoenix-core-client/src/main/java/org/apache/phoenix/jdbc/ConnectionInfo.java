@@ -36,6 +36,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.slf4j.LoggerFactory;
 
@@ -87,15 +88,17 @@ public abstract class ConnectionInfo {
     protected final String keytab;
     protected final User user;
     protected final String haGroup;
+    protected final Boolean isServerConnection;
 
     protected ConnectionInfo(boolean isConnectionless, String principal, String keytab, User user,
-            String haGroup) {
+            String haGroup, Boolean isServerConnection) {
         super();
         this.isConnectionless = isConnectionless;
         this.principal = principal;
         this.keytab = keytab;
         this.user = user;
         this.haGroup = haGroup;
+        this.isServerConnection = isServerConnection;
     }
 
     protected static String unescape(String escaped) {
@@ -330,6 +333,7 @@ public abstract class ConnectionInfo {
         if (haGroup == null) {
             if (other.haGroup != null) return false;
         } else if (!haGroup.equals(other.haGroup)) return false;
+        if (!isServerConnection.equals(other.isServerConnection)) return false;
         return true;
     }
 
@@ -342,6 +346,7 @@ public abstract class ConnectionInfo {
         result = prime * result + ((haGroup == null) ? 0 : haGroup.hashCode());
         // `user` is guaranteed to be non-null
         result = prime * result + user.hashCode();
+        result = prime * result + isServerConnection.hashCode();
         return result;
     }
 
@@ -369,6 +374,7 @@ public abstract class ConnectionInfo {
         protected User user;
         protected String haGroup;
         protected boolean doNotLogin = false;
+        protected Boolean isServerConnection;
 
         // Only used for building, not part of ConnectionInfo
         protected final String url;
@@ -381,6 +387,8 @@ public abstract class ConnectionInfo {
             this.url = url;
             this.props = props;
             this.info = info;
+            this.isServerConnection
+                    = Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION));
         }
 
         protected abstract ConnectionInfo create() throws SQLException;

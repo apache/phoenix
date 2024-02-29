@@ -41,8 +41,8 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
             "org.apache.hadoop.hbase.client.RpcConnectionRegistry";
 
     protected RPCConnectionInfo(boolean isConnectionless, String principal, String keytab,
-            User user, String haGroup, String bootstrapServers) {
-        super(isConnectionless, principal, keytab, user, haGroup);
+            User user, String haGroup, String bootstrapServers, Boolean isServerConnection) {
+        super(isConnectionless, principal, keytab, user, haGroup, isServerConnection);
         this.bootstrapServers = bootstrapServers;
     }
 
@@ -101,7 +101,7 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
     @Override
     public ConnectionInfo withPrincipal(String principal) {
         return new RPCConnectionInfo(isConnectionless, principal, keytab, user,
-            haGroup, bootstrapServers);
+            haGroup, bootstrapServers, isServerConnection);
     }
 
     /**
@@ -183,7 +183,7 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
         @Override
         protected ConnectionInfo build() {
             return new RPCConnectionInfo(isConnectionless, principal, keytab, user, haGroup,
-                    hostsList);
+                    hostsList, isServerConnection);
         }
 
         public static boolean isRPC(Configuration config, ReadOnlyProps props, Properties info) {
