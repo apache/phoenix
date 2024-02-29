@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import org.apache.phoenix.end2end.ConnectionQueryServicesTestImpl;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -119,6 +120,24 @@ public class PhoenixTestDriverIT extends BaseTest {
         }
         catch (TableNotFoundException e) {
             // expected since this connection was created using a different CQSI.
+        }
+    }
+
+    /**
+     * Create 2 connections with same url and properties but one is a server connection.
+     * Verify that the connections are from different CQS objects.
+     */
+    @Test
+    public void testDifferentCQSForServerConnection() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config);
+        try (Connection conn1 = DriverManager.getConnection(url);
+             Connection conn2 = QueryUtil.getConnectionOnServer(props, config)) {
+            ConnectionQueryServices cqs1 = conn1.unwrap(PhoenixConnection.class).getQueryServices();
+            ConnectionQueryServices cqs2 = conn2.unwrap(PhoenixConnection.class).getQueryServices();
+            Assert.assertTrue(cqs1 instanceof ConnectionQueryServicesTestImpl);
+            Assert.assertTrue(cqs2 instanceof ConnectionQueryServicesTestImpl);
+            Assert.assertNotEquals("Server connection should have a different CQS.", cqs1, cqs2);
         }
     }
 }
