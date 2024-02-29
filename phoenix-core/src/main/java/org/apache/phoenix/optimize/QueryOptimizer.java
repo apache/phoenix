@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
@@ -90,6 +91,8 @@ import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+
+import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 
 public class QueryOptimizer {
     private static final ParseNodeFactory FACTORY = new ParseNodeFactory();
@@ -248,7 +251,7 @@ public class QueryOptimizer {
             }
             indexBuilder.setColumns(idxColumns);
             indexBuilder.setParentName(table.getName());
-            indexBuilder.setParentTableName(table.getName());
+            indexBuilder.setParentTableName(table.getTableName());
             cdcIndex = indexBuilder.build();
             indexTableRef.setTable(cdcIndex);
 
@@ -446,35 +449,36 @@ public class QueryOptimizer {
                     plan.getContext().setUncoveredIndex(true);
                     PhoenixConnection connection = statement.getConnection();
                     IndexMaintainer maintainer;
-                    PTable newIndexTable, dataTable;
-                    if (dataPlan.getTableRef().getTable().getType() == PTableType.CDC) {
-                        // Use the cooked table objects as they have the right links.
-                        newIndexTable = indexTable;
-                        dataTable = dataPlan.getTableRef().getTable();
+                    PTable newIndexTable;
+                    String dataTableName;
+                    if (indexTable.getViewIndexId() != null
+                            && indexTable.getName().getString().contains(
+                            QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
+                        // MetaDataClient modifies the index table name for view indexes if the
+                        // parent view of an index has a child view. We need to recreate a PTable
+                        // object with the correct table name to get the index maintainer
+                        int lastIndexOf = indexTable.getName().getString().lastIndexOf(
+                                QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+                        String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
+                        newIndexTable = PhoenixRuntime.getTable(connection, indexName);
+                        dataTableName = SchemaUtil.getTableName(
+                                newIndexTable.getParentSchemaName().getString(),
+                                indexTable.getParentTableName().getString());
                     } else {
-                        String dataTableName;
-                        if (indexTable.getViewIndexId() != null
-                                && indexTable.getName().getString().contains(
-                                QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
-                            // MetaDataClient modifies the index table name for view indexes if the
-                            // parent view of an index has a child view. We need to recreate a PTable
-                            // object with the correct table name to get the index maintainer
-                            int lastIndexOf = indexTable.getName().getString().lastIndexOf(
-                                    QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-                            String indexName = indexTable.getName().getString().substring(lastIndexOf + 1);
-                            newIndexTable = PhoenixRuntime.getTable(connection, indexName);
-                            dataTableName = SchemaUtil.getTableName(
-                                    newIndexTable.getParentSchemaName().getString(),
-                                    indexTable.getParentTableName().getString());
-                            dataTable = PhoenixRuntime.getTable(connection, dataTableName);
-                        } else {
-                            newIndexTable = indexTable;
-                            dataTableName = SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
-                                    indexTable.getParentTableName().getString());
-                            dataTable = PhoenixRuntime.getTable(connection, dataTableName);
-                        }
+                        newIndexTable = indexTable;
+                        dataTableName = SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
+                                indexTable.getParentTableName().getString());
                     }
-                    maintainer = newIndexTable.getIndexMaintainer(dataTable, connection);
+                    PTable dataTableFromDataPlan = dataPlan.getTableRef().getTable();
+                    PTable cdcTable = null;
+                    if (dataTableFromDataPlan.getType() == PTableType.CDC) {
+                        cdcTable = dataTableFromDataPlan;
+                        dataTableName = SchemaUtil.getTableName(
+                                indexTable.getParentSchemaName().getString(),
+                                dataTableFromDataPlan.getParentTableName().getString());
+                     }
+                    PTable dataTable = PhoenixRuntime.getTable(connection, dataTableName);
+                    maintainer = newIndexTable.getIndexMaintainer(dataTable, cdcTable, connection);
                     Set<org.apache.hadoop.hbase.util.Pair<String, String>> indexedColumns =
                             maintainer.getIndexedColumnInfo(); // TODO: Why is PHOENIX_ROW_TIMESTAMP() not showing up?
                     for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
@@ -486,6 +490,11 @@ public class QueryOptimizer {
                             // The following adds the column to the set
                             plan.getContext().getDataColumnPosition(pColumn);
                         }
+                    }
+                    if (dataTableFromDataPlan.getType() == PTableType.CDC) {
+                        PColumn cdcJsonCol = dataTableFromDataPlan.getColumnForColumnName(
+                                CDC_JSON_COL_NAME);
+                        plan.getContext().getDataColumnPosition(cdcJsonCol);
                     }
                 }
                 indexTableRef = plan.getTableRef();

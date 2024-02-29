@@ -25,6 +25,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -57,6 +58,8 @@ import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 // NOTE: To debug the query execution, add the below condition or the equivalent where you need a
@@ -77,29 +80,38 @@ public class CDCQueryIT extends CDCBaseIT {
     private final boolean multitenant;
     private final Integer indexSaltBuckets;
     private final Integer tableSaltBuckets;
+    private final boolean withSchemaName;
     private ManualEnvironmentEdge injectEdge;
 
     public CDCQueryIT(Boolean forView, Boolean dataFirst,
                       PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                      Integer indexSaltBuckets, Integer tableSaltBuckets) {
+                      Integer indexSaltBuckets, Integer tableSaltBuckets, boolean withSchemaName) {
         this.forView = forView;
         this.dataFirst = dataFirst;
         this.encodingScheme = encodingScheme;
         this.multitenant = multitenant;
         this.indexSaltBuckets = indexSaltBuckets;
         this.tableSaltBuckets = tableSaltBuckets;
+        this.withSchemaName = withSchemaName;
     }
 
     @Parameterized.Parameters(name = "forView={0} dataFirst={1}, encodingScheme={2}, " +
             "multitenant={3}, indexSaltBuckets={4}, tableSaltBuckets={5}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { Boolean.FALSE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null },
-                { Boolean.FALSE, Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null },
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 1, 1 },
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 4, 2 },
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null },
-                { Boolean.TRUE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null },
+                { Boolean.FALSE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
+                        Boolean.FALSE },
+                { Boolean.FALSE, Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
+                        Boolean.TRUE },
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 1, 1,
+                        Boolean.FALSE },
+                // Once PHOENIX-7239, change this to have different salt buckets for data and index.
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 1, 1,
+                        Boolean.TRUE },
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null,
+                        Boolean.FALSE },
+                { Boolean.TRUE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
+                        Boolean.FALSE },
         });
     }
 
@@ -455,7 +467,8 @@ public class CDCQueryIT extends CDCBaseIT {
     @Test
     public void testSelectCDC() throws Exception {
         String cdcName, cdc_sql;
-        String tableName = generateUniqueName();
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
                     (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
@@ -463,7 +476,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets);
             if (forView) {
-                String viewName = generateUniqueName();
+                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
@@ -471,7 +484,8 @@ public class CDCQueryIT extends CDCBaseIT {
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
@@ -485,36 +499,35 @@ public class CDCQueryIT extends CDCBaseIT {
 
         if (dataFirst) {
             try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
         //SingleCellIndexIT.dumpTable(tableName);
         //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
 
-        try (Connection conn = newConnection(null)) {
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
-            // TODO: Check RS, existence of CDC shouldn't cause the regular query path to fail.
-        }
-
+        String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
-            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName), null);
-            assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(PRE, POST) */ * " +
-                    "FROM " + cdcName), new HashSet<PTable.CDCChangeScope>(
-                    Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
+            null);
             assertResultSet(conn.createStatement().executeQuery("SELECT " +
-                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcName), null);
+                    "/*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
+                    new HashSet<PTable.CDCChangeScope>(
+                            Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
+            assertResultSet(conn.createStatement().executeQuery("SELECT " +
+                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName), null);
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
-                put("SELECT 'dummy', k FROM " + cdcName, new int[]{1, 2, 1, 1, 1, 1, 2, 1, 1, 1,
-                        1});
-                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcName +
+                put("SELECT 'dummy', k FROM " + cdcFullName,
+                        new int[]{1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1});
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcFullName +
                         " ORDER BY k ASC", new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2});
-                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcName +
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcFullName +
                         " ORDER BY k DESC", new int[]{2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-                //put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcName +
-                //        " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC", new int[]{1, 1, 1, 1, 2, 1, 1, 1,
-                //        2, 1});
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcFullName +
+                        " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC",
+                        new int[]{1, 1, 1, 1, 2, 1, 1, 1, 1, 2, 1});
             }};
             for (Map.Entry<String, int[]> testQuery : testQueries.entrySet()) {
                 try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
@@ -527,13 +540,24 @@ public class CDCQueryIT extends CDCBaseIT {
                     assertEquals(false, rs.next());
                 }
             }
+
+            // Existence of CDC shouldn't cause the regular query path to fail.
+            String uncovered_sql = "SELECT " + " /*+ INDEX(" + tableName + " " +
+                    CDCUtil.getCDCIndexName(cdcName) + ") */ k, v1 FROM " + tableName;
+            try (ResultSet rs = conn.createStatement().executeQuery(uncovered_sql)) {
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertEquals(201, rs.getInt(2));
+                assertFalse(rs.next());
+            }
         }
     }
 
     @Test
     public void testSelectTimeRangeQueries() throws Exception {
         String cdcName, cdc_sql;
-        String tableName = generateUniqueName();
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
                     (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
@@ -541,7 +565,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets);
             if (forView) {
-                String viewName = generateUniqueName();
+                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
@@ -549,7 +573,8 @@ public class CDCQueryIT extends CDCBaseIT {
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
@@ -612,7 +637,6 @@ public class CDCQueryIT extends CDCBaseIT {
             }
         }
 
-        // FIXME: Retry with real sleeps.
         injectEdge.incrementValue(100);
         cal.add(Calendar.MILLISECOND, 200 + 100 * tenantids.length);
         Timestamp ts4 = new Timestamp(cal.getTime().getTime());
@@ -620,15 +644,17 @@ public class CDCQueryIT extends CDCBaseIT {
 
         if (dataFirst) {
             try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
         //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
 
+        String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
             String sel_sql =
-                    "SELECT to_char(phoenix_row_timestamp()), k, \"CDC JSON\" FROM " + cdcName +
+                    "SELECT to_char(phoenix_row_timestamp()), k, \"CDC JSON\" FROM " + cdcFullName +
                             " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?";
             Object[] testDataSets = new Object[] {
                     new Object[] {ts1, ts2, new int[] {1, 2}},
@@ -667,7 +693,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
 
             PreparedStatement pstmt = conn.prepareStatement(
-                    "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > ?");
+                    "SELECT * FROM " + cdcFullName + " WHERE PHOENIX_ROW_TIMESTAMP() > ?");
             pstmt.setTimestamp(1, ts4);
             try (ResultSet rs = pstmt.executeQuery()) {
                 assertEquals(false, rs.next());
@@ -677,7 +703,8 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testSelectCDCWithDDL() throws Exception {
-        String tableName = generateUniqueName();
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         String datatableName = tableName;
         String cdcName, cdc_sql;
         try (Connection conn = newConnection()) {
@@ -688,7 +715,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets);
             if (forView) {
-                String viewName = generateUniqueName();
+                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
@@ -697,7 +724,8 @@ public class CDCQueryIT extends CDCBaseIT {
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
             conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
         }
@@ -712,13 +740,14 @@ public class CDCQueryIT extends CDCBaseIT {
 
         if (dataFirst) {
             try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql,
-                        encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
         try (Connection conn = newConnection(tenantId)) {
-            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcName),
+            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " +
+                            SchemaUtil.getTableName(schemaName, cdcName)),
             null);
         }
     }
@@ -764,7 +793,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     @Test
     public void testCDCBinaryAndDateColumn() throws Exception {
-        String tableName = generateUniqueName();
         List<byte []> byteColumnValues = new ArrayList<>();
         byteColumnValues.add( new byte[] {0,0,0,0,0,0,0,0,0,1});
         byteColumnValues.add(new byte[] {0,0,0,0,0,0,0,0,0,2});
@@ -773,6 +801,8 @@ public class CDCQueryIT extends CDCBaseIT {
         dateColumnValues.add(Date.valueOf("2024-01-31"));
         Timestamp timestampColumnValue = Timestamp.valueOf("2024-01-31 12:12:14");
         String cdcName, cdc_sql;
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
                     (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
@@ -781,7 +811,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets);
             if (forView) {
-                String viewName = generateUniqueName();
+                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
@@ -789,7 +819,8 @@ public class CDCQueryIT extends CDCBaseIT {
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
@@ -813,13 +844,15 @@ public class CDCQueryIT extends CDCBaseIT {
 
         if (dataFirst) {
             try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
             }
         }
 
         try (Connection conn = newConnection(tenantId)) {
             assertCDCBinaryAndDateColumn(conn.createStatement().executeQuery
-                    ("SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * " + "FROM " + cdcName),
+                    ("SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * FROM " +
+                    SchemaUtil.getTableName(schemaName, cdcName)),
                     byteColumnValues, dateColumnValues, timestampColumnValue);
         }
     }
@@ -831,7 +864,8 @@ public class CDCQueryIT extends CDCBaseIT {
             // index failure.
             return;
         }
-        String tableName = generateUniqueName();
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         String cdcName, cdc_sql;
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
@@ -841,14 +875,14 @@ public class CDCQueryIT extends CDCBaseIT {
                             (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets);
             if (forView) {
-                String viewName = generateUniqueName();
+                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
                         encodingScheme);
                 tableName = viewName;
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -860,7 +894,8 @@ public class CDCQueryIT extends CDCBaseIT {
         addChanges(tenantids, tableName, null, true);
 
         try (Connection conn = newConnection(tenantId)) {
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + cdcName);
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " +
+                    SchemaUtil.getTableName(schemaName, cdcName));
             assertEquals(false, rs.next());
         }
     }

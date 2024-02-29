@@ -354,7 +354,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
                 // Set key value schema of the data columns.
                 serializeSchemaIntoScan(scan, schema);
-                if (table.getIndexType() == IndexType.LOCAL || context.getCDCTableRef() != null) {
+                if (table.getIndexType() == IndexType.LOCAL) {
                     // Set index maintainer of the local index.
                     serializeIndexMaintainerIntoScan(scan, dataTable);
                     // Set view constants if exists.

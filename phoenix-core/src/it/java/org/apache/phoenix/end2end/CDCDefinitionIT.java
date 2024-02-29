@@ -18,13 +18,11 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.Ignore;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -150,7 +148,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
                 String cdcName = generateUniqueName();
                 String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-                createCDCAndWait(conn, null, tableName, cdcName, cdc_sql, null,
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, null,
                         saltingConfig[1]);
                 try {
                     assertCDCState(conn, cdcName, null, 3);
@@ -168,22 +166,20 @@ public class CDCDefinitionIT extends CDCBaseIT {
         }
     }
 
-    @Ignore // Timing out in IndexTool.
     @Test
     public void testCreateWithSchemaName() throws Exception {
         Properties props = new Properties();
         Connection conn = DriverManager.getConnection(getUrl(), props);
         String schemaName = generateUniqueName();
-        String tableName = generateUniqueName();
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         String datatableName = tableName;
         conn.createStatement().execute(
-                "CREATE TABLE  " + schemaName + "." + tableName + " ( k INTEGER PRIMARY KEY," +
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," +
                         " v1 INTEGER, v2 DATE)");
         if (forView) {
-            String viewName = generateUniqueName();
+            String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
             conn.createStatement().execute(
-                    "CREATE VIEW " + schemaName + "." + viewName + " AS SELECT * FROM " +
-                    schemaName + "."+ tableName);
+                    "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName);
             tableName = viewName;
         }
         String cdcName = generateUniqueName();
@@ -197,8 +193,8 @@ public class CDCDefinitionIT extends CDCBaseIT {
             assertEquals(SQLExceptionCode.TABLE_UNDEFINED.getErrorCode(), e.getErrorCode());
         }
 
-        cdc_sql = "CREATE CDC " + cdcName + " ON " + schemaName + "." + tableName;
-        createCDCAndWait(conn, schemaName, tableName, cdcName, cdc_sql);
+        cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, null, 3);
         assertPTable(cdcName, null, tableName, datatableName);
     }
@@ -318,7 +314,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         }
         String cdcName = generateUniqueName();
         String cdc_sql = "CREATE CDC  " + cdcName + " ON " + tableName;
-        createCDCAndWait(conn, null, tableName, cdcName, cdc_sql);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql);
         try {
             conn.createStatement().executeQuery("SELECT " +
                     "/*+ CDC_INCLUDE(DUMMY) */ * FROM " + cdcName);

@@ -1,12 +1,12 @@
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 
 import java.sql.Connection;
@@ -57,19 +57,23 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(table_sql);
     }
 
-    protected void createCDCAndWait(Connection conn, String schemaName, String tableName, String cdcName,
+    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
                                     String cdc_sql) throws Exception {
-        createCDCAndWait(conn, schemaName, tableName, cdcName, cdc_sql, null, 0);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, 0);
     }
 
-    protected void createCDCAndWait(Connection conn, String schemaName, String tableName, String cdcName,
+    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
                                     String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
                                     Integer nSaltBuckets) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
         createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets);
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
+        tableName = SchemaUtil.getTableNameFromFullName(tableName);
         IndexToolIT.runIndexTool(false, schemaName, tableName,
                 "\""+CDCUtil.getCDCIndexName(cdcName)+"\"");
-        TestUtil.waitForIndexState(conn, CDCUtil.getCDCIndexName(cdcName), PIndexState.ACTIVE);
+        String indexFullName = SchemaUtil.getTableName(schemaName,
+                CDCUtil.getCDCIndexName(cdcName));
+        TestUtil.waitForIndexState(conn, indexFullName, PIndexState.ACTIVE);
     }
 
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,
@@ -92,24 +96,19 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                                 String tableName, String datatableName)
             throws SQLException {
         Properties props = new Properties();
+        String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
         Connection conn = DriverManager.getConnection(getUrl(), props);
-        PTable table = PhoenixRuntime.getTable(conn, cdcName);
-        assertEquals(expIncludeScopes, table.getCDCIncludeScopes());
-        assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(table));
-        assertNull(table.getIndexState()); // Index state should be null for CDC.
-        assertNull(table.getIndexType()); // This is not an index.
-        assertEquals(tableName, table.getParentName().getString());
-        assertEquals(table.getPhysicalName().getString(),
-                tableName == datatableName ? CDCUtil.getCDCIndexName(cdcName) :
-                        getViewIndexPhysicalName(datatableName));
-    }
-
-    protected void assertCDCSaltBuckets(String cdcName, Integer nbuckets) throws SQLException {
-        Properties props = new Properties();
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
-        assertSaltBuckets(cdcTable, nbuckets);
-        assertSaltBuckets(conn, CDCUtil.getCDCIndexName(cdcName), nbuckets);
+        String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
+        PTable cdcTable = PhoenixRuntime.getTable(conn, cdcFullName);
+        assertEquals(expIncludeScopes, cdcTable.getCDCIncludeScopes());
+        assertEquals(expIncludeScopes, TableProperty.INCLUDE.getPTableValue(cdcTable));
+        assertNull(cdcTable.getIndexState()); // Index state should be null for CDC.
+        assertNull(cdcTable.getIndexType()); // This is not an index.
+        assertEquals(tableName, cdcTable.getParentName().getString());
+        String indexFullName = SchemaUtil.getTableName(schemaName,
+                CDCUtil.getCDCIndexName(cdcName));
+        assertEquals(cdcTable.getPhysicalName().getString(), tableName == datatableName ?
+                indexFullName : getViewIndexPhysicalName(datatableName));
     }
 
     protected void assertSaltBuckets(Connection conn, String tableName, Integer nbuckets)

@@ -2573,7 +2573,8 @@ public class MetaDataClient {
                 }
                 else {
                     physicalNames = Collections.singletonList(
-                            PNameFactory.newName(CDCUtil.getCDCIndexName(tableName)));
+                            PNameFactory.newName(SchemaUtil.getTableName(schemaName,
+                                    CDCUtil.getCDCIndexName(tableName))));
                 }
             }
 

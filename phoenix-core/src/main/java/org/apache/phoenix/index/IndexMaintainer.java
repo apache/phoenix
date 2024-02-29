@@ -145,13 +145,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private static final int EXPRESSION_NOT_PRESENT = -1;
     private static final int ESTIMATED_EXPRESSION_SIZE = 8;
-    
+
     public static IndexMaintainer create(PTable dataTable, PTable index,
+                                         PhoenixConnection connection) throws SQLException {
+        return create(dataTable, null, index, connection);
+    }
+
+    public static IndexMaintainer create(PTable dataTable, PTable cdcTable, PTable index,
             PhoenixConnection connection) throws SQLException {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
         }
-        IndexMaintainer maintainer = new IndexMaintainer(dataTable, index, connection);
+        IndexMaintainer maintainer = new IndexMaintainer(dataTable, cdcTable, index, connection);
         return maintainer;
     }
     
@@ -445,8 +450,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.dataRowKeySchema = dataRowKeySchema;
         this.isDataTableSalted = isDataTableSalted;
     }
-    
+
     private IndexMaintainer(final PTable dataTable, final PTable index,
+                            PhoenixConnection connection) throws SQLException {
+        this(dataTable, null, index, connection);
+    }
+
+    private IndexMaintainer(final PTable dataTable, final PTable cdcTable, final PTable index,
             PhoenixConnection connection) throws SQLException {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
@@ -501,7 +511,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexDataColumnCount = dataPKColumns.size();
         PTable parentTable = dataTable;
         // We need to get the PK column for the table on which the index is created
-        if (!dataTable.getName().equals(index.getParentName())) {
+        if (!dataTable.getName().equals(cdcTable != null ?
+                cdcTable.getParentName() : index.getParentName())) {
             try {
                 String tenantId = (index.getTenantId() != null) ? 
                         index.getTenantId().getString() : null;
@@ -657,11 +668,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             if (indexColumn.getSortOrder() == SortOrder.DESC) {
                 this.rowKeyMetaData.getDescIndexColumnBitSet().set(indexPos);
             }
-        }
-        if (isCDCIndex && dataTable.getType() == PTableType.CDC) {
-            PColumn cdcJsonCol = dataTable.getColumnForColumnName(CDC_JSON_COL_NAME);
-            indexedColumnsInfo.add(new Pair<>(cdcJsonCol.getFamilyName().getString(),
-                    cdcJsonCol.getName().getString()));
         }
         this.estimatedExpressionSize = expressionIndexCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
         for (int i = 0; i < index.getColumnFamilies().size(); i++) {
