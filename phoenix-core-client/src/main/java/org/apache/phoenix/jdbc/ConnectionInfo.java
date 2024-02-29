@@ -387,8 +387,8 @@ public abstract class ConnectionInfo {
             this.url = url;
             this.props = props;
             this.info = info;
-            this.isServerConnection
-                    = Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION));
+            this.isServerConnection = (info != null)
+                    && Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION));
         }
 
         protected abstract ConnectionInfo create() throws SQLException;
