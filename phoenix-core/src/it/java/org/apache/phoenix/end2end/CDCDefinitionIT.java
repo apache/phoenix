@@ -86,7 +86,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         }
 
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        createTable(conn, cdc_sql, null, false, null);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null, null);
         assertCDCState(conn, cdcName, null, 3);
         assertNoResults(conn, cdcName);
 
@@ -102,9 +102,8 @@ public class CDCDefinitionIT extends CDCBaseIT {
                 " INCLUDE (pre, post) INDEX_TYPE=g");
 
         cdcName = generateUniqueName();
-        cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName +
-                " INCLUDE (pre, post) INDEX_TYPE=g";
-        createTable(conn, cdc_sql, null, false, 0);
+        cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (pre, post)";
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, PTable.IndexType.UNCOVERED_GLOBAL);
         assertCDCState(conn, cdcName, "PRE,POST", 3);
         assertPTable(cdcName, new HashSet<>(
                 Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName,
@@ -113,7 +112,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
         cdcName = generateUniqueName();
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INDEX_TYPE=l";
-        createTable(conn, cdc_sql, null, false, 0);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, PTable.IndexType.LOCAL);
         assertCDCState(conn, cdcName, null, 2);
         assertPTable(cdcName, null, tableName, datatableName);
         assertNoResults(conn, cdcName);
@@ -149,7 +148,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
                 String cdcName = generateUniqueName();
                 String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, null,
-                        saltingConfig[1]);
+                        saltingConfig[1], null);
                 try {
                     assertCDCState(conn, cdcName, null, 3);
                     // Index inherits table salt buckets.

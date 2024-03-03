@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import com.google.gson.Gson;
-import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.schema.PTable;
@@ -485,7 +484,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -500,7 +499,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataFirst) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -509,6 +508,17 @@ public class CDCQueryIT extends CDCBaseIT {
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
+
+            // Existence of CDC shouldn't cause the regular query path to fail.
+            String uncovered_sql = "SELECT " + " /*+ INDEX(" + tableName + " " +
+                    CDCUtil.getCDCIndexName(cdcName) + ") */ k, v1 FROM " + tableName;
+            try (ResultSet rs = conn.createStatement().executeQuery(uncovered_sql)) {
+                assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertEquals(201, rs.getInt(2));
+                assertFalse(rs.next());
+            }
+
             assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
             null);
             assertResultSet(conn.createStatement().executeQuery("SELECT " +
@@ -540,16 +550,6 @@ public class CDCQueryIT extends CDCBaseIT {
                     assertEquals(false, rs.next());
                 }
             }
-
-            // Existence of CDC shouldn't cause the regular query path to fail.
-            String uncovered_sql = "SELECT " + " /*+ INDEX(" + tableName + " " +
-                    CDCUtil.getCDCIndexName(cdcName) + ") */ k, v1 FROM " + tableName;
-            try (ResultSet rs = conn.createStatement().executeQuery(uncovered_sql)) {
-                assertTrue(rs.next());
-                assertEquals(2, rs.getInt(1));
-                assertEquals(201, rs.getInt(2));
-                assertFalse(rs.next());
-            }
         }
     }
 
@@ -574,7 +574,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -645,7 +645,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataFirst) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -725,7 +725,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
             conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
         }
@@ -741,7 +741,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataFirst) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -820,7 +820,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataFirst) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -845,7 +845,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataFirst) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+                        indexSaltBuckets, null);
             }
         }
 
@@ -882,7 +882,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets, null);
         }
 
         String tenantId = multitenant ? "1000" : null;

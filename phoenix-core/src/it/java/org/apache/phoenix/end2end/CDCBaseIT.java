@@ -1,5 +1,6 @@
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -15,7 +16,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -25,6 +28,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 
 public class CDCBaseIT extends ParallelStatsDisabledIT {
+    protected void createTable(Connection conn, String table_sql)
+            throws Exception {
+        createTable(conn, table_sql, null, false, null);
+    }
+
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme)
             throws Exception {
@@ -41,17 +49,46 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
                                Integer nSaltBuckets)
             throws Exception {
+        createTable(conn, table_sql, encodingScheme, multitenant, nSaltBuckets, null);
+    }
+
+    protected void createTable(Connection conn, String table_sql,
+                               PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
+                               Integer nSaltBuckets, PTable.IndexType indexType)
+            throws Exception {
+        createTable(conn, table_sql, new HashMap<String, Object>() {{
+            put(TableProperty.COLUMN_ENCODED_BYTES.getPropertyName(), encodingScheme != null ?
+                    new Byte(encodingScheme.getSerializedMetadataValue()) : null);
+            put(TableProperty.MULTI_TENANT.getPropertyName(), multitenant);
+            put(TableProperty.SALT_BUCKETS.getPropertyName(), nSaltBuckets);
+            put(TableProperty.INDEX_TYPE.getPropertyName(), indexType);
+        }});
+    }
+
+    protected void createTable(Connection conn, String table_sql,
+                               Map<String,Object> tableProps) throws Exception {
         List<String> props = new ArrayList<>();
-        if (encodingScheme != null && encodingScheme.getSerializedMetadataValue() !=
+        Byte encodingScheme = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+        if (encodingScheme != null && encodingScheme !=
                 QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES) {
-            props.add("COLUMN_ENCODED_BYTES=" +
-                    String.valueOf(encodingScheme.getSerializedMetadataValue()));
+            props.add(TableProperty.COLUMN_ENCODED_BYTES.getPropertyName() + "=" + encodingScheme);
         }
-        if (multitenant) {
-            props.add("MULTI_TENANT=true");
+        Boolean multitenant = (Boolean) TableProperty.MULTI_TENANT.getValue(tableProps);
+        if (multitenant != null && multitenant) {
+            props.add(TableProperty.MULTI_TENANT.getPropertyName() + "=" + multitenant);
+        }
+        Integer nSaltBuckets = (Integer) TableProperty.SALT_BUCKETS.getValue(tableProps);
+        if (nSaltBuckets != null) {
+            props.add(TableProperty.SALT_BUCKETS.getPropertyName() + "=" + nSaltBuckets);
+        }
+        PTable.IndexType indexType = (PTable.IndexType) TableProperty.INDEX_TYPE.getValue(
+                tableProps);
+        if (indexType != null && indexType == PTable.IndexType.LOCAL) {
+            props.add(TableProperty.INDEX_TYPE.getPropertyName() + "=" +
+                    (indexType == PTable.IndexType.LOCAL ? "l" : "g"));
         }
         if (nSaltBuckets != null) {
-            props.add("SALT_BUCKETS=" + nSaltBuckets);
+            props.add(TableProperty.INDEX_TYPE.getPropertyName() + "=" + indexType);
         }
         table_sql = table_sql + " " + String.join(", ", props);
         conn.createStatement().execute(table_sql);
@@ -59,14 +96,25 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
                                     String cdc_sql) throws Exception {
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, 0);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null, null);
+    }
+
+    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
+                                  String cdc_sql, PTable.IndexType indexType) throws Exception{
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null, indexType);
     }
 
     protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
                                     String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
                                     Integer nSaltBuckets) throws Exception {
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets, null);
+    }
+
+    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
+                                    String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
+                                    Integer nSaltBuckets, PTable.IndexType indexType) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
-        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets);
+        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, indexType);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
         tableName = SchemaUtil.getTableNameFromFullName(tableName);
         IndexToolIT.runIndexTool(false, schemaName, tableName,
@@ -138,12 +186,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected Connection newConnection(String tenantId) throws SQLException {
         Properties props = new Properties();
-        // Uncomment these only while debugging.
-        //props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        //props.put("hbase.client.scanner.timeout.period", "6000000");
-        //props.put("phoenix.query.timeoutMs", "6000000");
-        //props.put("zookeeper.session.timeout", "6000000");
-        //props.put("hbase.rpc.timeout", "6000000");
+        // FIXME: Uncomment these only while debugging.
+        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        props.put("hbase.client.scanner.timeout.period", "6000000");
+        props.put("phoenix.query.timeoutMs", "6000000");
+        props.put("zookeeper.session.timeout", "6000000");
+        props.put("hbase.rpc.timeout", "6000000");
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
