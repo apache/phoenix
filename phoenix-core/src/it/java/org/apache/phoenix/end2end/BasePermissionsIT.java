@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -145,6 +146,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     private static final int NUM_RECORDS = 5;
 
     boolean isNamespaceMapped;
+    boolean isReadAccessEnabledForListDecomRs;
 
     private String schemaName;
     private String tableName;
@@ -159,6 +161,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
         this.tableName = generateUniqueName();
+        isReadAccessEnabledForListDecomRs = isReadAccessEnabledForListDecomRs();
     }
 
     static void initCluster(boolean isNamespaceMapped) throws Exception {
@@ -178,11 +181,47 @@ public abstract class BasePermissionsIT extends BaseTest {
         configureNamespacesOnServer(config, isNamespaceMapped);
         configureStatsConfigurations(config);
         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
-
+        setPhoenixRegionServerEndpoint(config);
         testUtil.startMiniCluster(1);
         superUser1 = User.createUserForTesting(config, SUPER_USER, new String[0]);
         superUser2 = User.createUserForTesting(config, "superUser2", new String[0]);
 
+        /**
+         * CQSI initialization needs to make an Admin API call to fetch a list of live region servers.
+         * Permissions were relaxed for that API call in HBASE-28391.
+         * Disable metadata caching re-design on server if API call needs ADMIN access.
+         */
+        if (!isReadAccessEnabledForListDecomRs()) {
+            config.setLong(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, 0L);
+            config.setBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, false);
+            config.setBoolean(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, false);
+        }
+    }
+
+    // See https://issues.apache.org/jira/browse/HBASE-28391
+    private static boolean isReadAccessEnabledForListDecomRs() {
+        // true for 2.4.18+, 2.5.8+
+        String hbaseVersion = VersionInfo.getVersion();
+        String[] versionArr = hbaseVersion.split("\\.");
+        int majorVersion = Integer.parseInt(versionArr[0]);
+        int minorVersion = Integer.parseInt(versionArr[1]);
+        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
+        if (majorVersion > 2) {
+            return true;
+        }
+        if (majorVersion < 2) {
+            return false;
+        }
+        if (minorVersion > 5) {
+            return true;
+        }
+        if (minorVersion < 4) {
+            return false;
+        }
+        if (minorVersion == 4) {
+            return patchVersion >= 18;
+        }
+        return patchVersion >= 8;
     }
 
     @Before
@@ -340,6 +379,15 @@ public abstract class BasePermissionsIT extends BaseTest {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
+        /**
+         * CQSI initialization needs to make an Admin API call to fetch a list of live region servers.
+         * Permissions were relaxed for that API call in HBASE-28391.
+         * Disable metadata caching re-design on client side if API call needs ADMIN access.
+         */
+        if (!isReadAccessEnabledForListDecomRs) {
+            props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, Long.toString(0L));
+            props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
+        }
         return props;
     }
 

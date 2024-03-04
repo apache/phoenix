@@ -649,7 +649,7 @@ public abstract class BaseTest {
         Set property hbase.coprocessor.regionserver.classes to include PhoenixRegionServerEndpoint
         by default, if some other regionserver coprocs are not already present.
      */
-    private static void setPhoenixRegionServerEndpoint(Configuration conf) {
+    protected static void setPhoenixRegionServerEndpoint(Configuration conf) {
         String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         if (value == null) {
             value = PhoenixRegionServerEndpoint.class.getName();
