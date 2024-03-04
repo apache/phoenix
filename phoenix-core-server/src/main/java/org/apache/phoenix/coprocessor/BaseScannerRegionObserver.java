@@ -18,6 +18,7 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -535,7 +536,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    public static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
+    private static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
         String fullTableName = tableName.getNameAsString();
         Configuration conf = c.getEnvironment().getConfiguration();
@@ -544,13 +545,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 conf).unwrap(PhoenixConnection.class)) {
             table = conn.getTableNoCache(fullTableName);
         }
-        catch (Exception e) {
+        catch (SQLException e) {
             if (e instanceof TableNotFoundException) {
-                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
-                        + fullTableName);
+                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: {}", fullTableName);
                 // non-Phoenix HBase tables won't be found, do nothing
             } else {
-                LOGGER.error("Unable to fetch table level max lookback age for " + fullTableName, e);
+                LOGGER.error("Unable to fetch table level max lookback age for {}", fullTableName, e);
             }
             return MetaDataUtil.getMaxLookbackAge(conf, null);
         }

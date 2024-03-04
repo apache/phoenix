@@ -1485,7 +1485,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         PTable transformingNewTable = null;
         boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
-        boolean isThisAViewIndex = false;
+        boolean isViewIndex = false;
         for (List<Cell> columnCellList : allColumnCellList) {
 
             Cell colKv = columnCellList.get(LINK_TYPE_INDEX);
@@ -1570,7 +1570,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                 }
                 else if (linkType == VIEW_INDEX_PARENT_TABLE) {
-                    isThisAViewIndex = true;
+                    isViewIndex = true;
                     byte[] indexKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                             schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
                     maxLookbackAge = scanMaxLookbackAgeFromParent(indexKey, clientTimeStamp);
@@ -1586,7 +1586,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
-        if (tableType == INDEX && ! isThisAViewIndex) {
+        if (tableType == INDEX && ! isViewIndex) {
             byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
             maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
@@ -1625,42 +1625,43 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private Long scanMaxLookbackAgeFromParent(byte[] key, long clientTimeStamp) throws IOException {
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-        Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
+        try(Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-        ResultScanner scanner = sysCat.getScanner(scan);
-        Result result = scanner.next();
-        boolean startCheckingForLink = false;
-        byte[] parentTableKey = null;
-        do {
-            if (result == null) {
-                return null;
-            }
-            else if (startCheckingForLink) {
-                byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
-                if (linkTypeBytes != null) {
-                    LinkType linkType = LinkType.fromSerializedValue(linkTypeBytes[0]);
-                    int rowKeyColMetadataLength = 5;
-                    byte[][] rowKeyMetaData = new byte[rowKeyColMetadataLength][];
-                    getVarChars(result.getRow(), rowKeyColMetadataLength, rowKeyMetaData);
-                    if (linkType == VIEW_INDEX_PARENT_TABLE) {
-                        parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
-                        return scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
-                    }
-                    else if (linkType == PHYSICAL_TABLE) {
-                        parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+            ResultScanner scanner = sysCat.getScanner(scan)) {
+            Result result = scanner.next();
+            boolean startCheckingForLink = false;
+            byte[] parentTableKey = null;
+            do {
+                if (result == null) {
+                    return null;
+                }
+                else if (startCheckingForLink) {
+                    byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+                    if (linkTypeBytes != null) {
+                        LinkType linkType = LinkType.fromSerializedValue(linkTypeBytes[0]);
+                        int rowKeyColMetadataLength = 5;
+                        byte[][] rowKeyMetaData = new byte[rowKeyColMetadataLength][];
+                        getVarChars(result.getRow(), rowKeyColMetadataLength, rowKeyMetaData);
+                        if (linkType == VIEW_INDEX_PARENT_TABLE) {
+                            parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+                            return scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+                        }
+                        else if (linkType == PHYSICAL_TABLE) {
+                            parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+                        }
                     }
                 }
-            }
-            else {
-                byte[] maxLookbackAgeInBytes = result.getValue(TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
-                if (maxLookbackAgeInBytes != null) {
-                    return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
+                else {
+                    byte[] maxLookbackAgeInBytes = result.getValue(TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
+                    if (maxLookbackAgeInBytes != null) {
+                        return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
+                    }
                 }
-            }
-            result = scanner.next();
-            startCheckingForLink = true;
-        } while (result != null);
-        return parentTableKey == null ? null : scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+                result = scanner.next();
+                startCheckingForLink = true;
+            } while (result != null);
+            return parentTableKey == null ? null : scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+        }
     }
 
     private byte[] getParentTableKeyFromChildRowKeyMetaData(byte[][] rowKeyMetaData) {
