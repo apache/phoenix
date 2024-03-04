@@ -43,6 +43,7 @@ import org.apache.phoenix.coprocessor.ReplicationSinkEndpoint;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableType;
@@ -144,6 +145,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
                 ReplicationSinkEndpoint.class.getName());
         conf1.setBoolean(IndexRegionObserver.PHOENIX_APPEND_METADATA_TO_WAL, true);
         conf1.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/1");
+        //conf1.set("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         setUpConfigForMiniCluster(conf1);
 
         utility1 = new IntegrationTestingUtility(conf1);
@@ -151,13 +153,13 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
 
         conf1 = utility1.getConfiguration();
         zkw1 = new ZKWatcher(conf1, "cluster1", null, true);
-        Admin admin = ConnectionFactory.createConnection(conf1).getAdmin();
 
         // Base conf2 on conf1 so it gets the right zk cluster, and general cluster configs
         conf2 = HBaseConfiguration.create(conf1);
         conf2.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 6);
         conf2.setBoolean("dfs.support.append", true);
         conf2.setBoolean("hbase.tests.use.shortcircuit.reads", false);
+        //conf2.set("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
 
         utility2 = new IntegrationTestingUtility(conf2);
         utility2.startMiniZKCluster();
@@ -166,6 +168,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         utility1.startMiniCluster(2);
         utility2.startMiniCluster(2);
 
+        Admin admin = ConnectionFactory.createConnection(conf1).getAdmin();
         admin.addReplicationPeer("1",
                 ReplicationPeerConfig.newBuilder().setClusterKey(utility2.getClusterKey()).build());
     }
@@ -175,20 +178,20 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         String hbaseVersion = VersionInfo.getVersion();
         String[] versionArr = hbaseVersion.split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
-        int minorVersion = Integer.parseInt(versionArr[1]);
-        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
         if (majorVersion > 2) {
             return true;
         }
         if (majorVersion < 2) {
             return false;
         }
+        int minorVersion = Integer.parseInt(versionArr[1]);
         if (minorVersion > 5) {
             return true;
         }
         if (minorVersion < 4) {
             return false;
         }
+        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
         if (minorVersion == 4) {
             return patchVersion >= 16;
         }
