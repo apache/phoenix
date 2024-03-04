@@ -19,6 +19,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -70,6 +71,8 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
+
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -133,6 +136,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         longRunningProps.put(QueryServices.DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
+        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -168,6 +172,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
     public void testUpdateCacheFrequencyWithAddColumn() throws Exception {
         // Create connections 1 and 2
         Properties longRunningProps = new Properties(); // Must update config before starting server
+        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         Connection conn2 = DriverManager.getConnection(url, longRunningProps);
         conn1.setAutoCommit(true);
@@ -215,6 +220,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -266,6 +272,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
@@ -313,6 +320,7 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
         Properties longRunningProps = new Properties();
         longRunningProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
             QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+        longRunningProps.put("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         Connection conn1 = DriverManager.getConnection(url, longRunningProps);
         String url2 = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + "LongRunningQueries";
         Connection conn2 = DriverManager.getConnection(url2, longRunningProps);
