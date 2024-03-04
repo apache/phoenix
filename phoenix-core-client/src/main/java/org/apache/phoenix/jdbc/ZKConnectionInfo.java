@@ -44,8 +44,8 @@ public class ZKConnectionInfo extends ConnectionInfo {
 
     private ZKConnectionInfo(boolean isConnectionless, String principal, String keytab, User user,
             String haGroup, String zkHosts, Integer zkPort, String zkRootNode,
-                             Boolean isServerConnection) {
-        super(isConnectionless, principal, keytab, user, haGroup, isServerConnection);
+                             ConnectionType connectionType) {
+        super(isConnectionless, principal, keytab, user, haGroup, connectionType);
         this.zkPort = zkPort;
         this.zkRootNode = zkRootNode;
         this.zkHosts = zkHosts;
@@ -154,7 +154,7 @@ public class ZKConnectionInfo extends ConnectionInfo {
     @Override
     public ConnectionInfo withPrincipal(String principal) {
         return new ZKConnectionInfo(isConnectionless, principal, keytab, user,
-            haGroup, zkHosts, zkPort, zkRootNode, isServerConnection);
+            haGroup, zkHosts, zkPort, zkRootNode, connectionType);
     }
 
     /**
@@ -278,7 +278,7 @@ public class ZKConnectionInfo extends ConnectionInfo {
 
         protected ConnectionInfo build() {
             return new ZKConnectionInfo(isConnectionless, principal, keytab, user, haGroup, zkHosts,
-                    zkPort, zkRootNode, isServerConnection);
+                    zkPort, zkRootNode, connectionType);
         }
 
         @Override

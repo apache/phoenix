@@ -88,17 +88,17 @@ public abstract class ConnectionInfo {
     protected final String keytab;
     protected final User user;
     protected final String haGroup;
-    protected final Boolean isServerConnection;
+    protected final ConnectionType connectionType;
 
     protected ConnectionInfo(boolean isConnectionless, String principal, String keytab, User user,
-            String haGroup, Boolean isServerConnection) {
+            String haGroup, ConnectionType connectionType) {
         super();
         this.isConnectionless = isConnectionless;
         this.principal = principal;
         this.keytab = keytab;
         this.user = user;
         this.haGroup = haGroup;
-        this.isServerConnection = isServerConnection;
+        this.connectionType = connectionType;
     }
 
     protected static String unescape(String escaped) {
@@ -333,7 +333,7 @@ public abstract class ConnectionInfo {
         if (haGroup == null) {
             if (other.haGroup != null) return false;
         } else if (!haGroup.equals(other.haGroup)) return false;
-        if (!isServerConnection.equals(other.isServerConnection)) return false;
+        if (!connectionType.equals(other.connectionType)) return false;
         return true;
     }
 
@@ -346,7 +346,7 @@ public abstract class ConnectionInfo {
         result = prime * result + ((haGroup == null) ? 0 : haGroup.hashCode());
         // `user` is guaranteed to be non-null
         result = prime * result + user.hashCode();
-        result = prime * result + isServerConnection.hashCode();
+        result = prime * result + connectionType.hashCode();
         return result;
     }
 
@@ -374,7 +374,7 @@ public abstract class ConnectionInfo {
         protected User user;
         protected String haGroup;
         protected boolean doNotLogin = false;
-        protected Boolean isServerConnection;
+        protected ConnectionType connectionType;
 
         // Only used for building, not part of ConnectionInfo
         protected final String url;
@@ -387,8 +387,10 @@ public abstract class ConnectionInfo {
             this.url = url;
             this.props = props;
             this.info = info;
-            this.isServerConnection = (info != null)
-                    && Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION));
+            this.connectionType = ConnectionType.CLIENT;
+            if (info != null && Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION))) {
+                this.connectionType = ConnectionType.SERVER;
+            }
         }
 
         protected abstract ConnectionInfo create() throws SQLException;
@@ -568,5 +570,10 @@ public abstract class ConnectionInfo {
             }
             return result;
         }
+    }
+
+    public enum ConnectionType {
+        CLIENT,
+        SERVER
     }
 }

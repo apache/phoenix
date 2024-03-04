@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hbase.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -41,8 +40,8 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
             "org.apache.hadoop.hbase.client.RpcConnectionRegistry";
 
     protected RPCConnectionInfo(boolean isConnectionless, String principal, String keytab,
-            User user, String haGroup, String bootstrapServers, Boolean isServerConnection) {
-        super(isConnectionless, principal, keytab, user, haGroup, isServerConnection);
+            User user, String haGroup, String bootstrapServers, ConnectionType connectionType) {
+        super(isConnectionless, principal, keytab, user, haGroup, connectionType);
         this.bootstrapServers = bootstrapServers;
     }
 
@@ -101,7 +100,7 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
     @Override
     public ConnectionInfo withPrincipal(String principal) {
         return new RPCConnectionInfo(isConnectionless, principal, keytab, user,
-            haGroup, bootstrapServers, isServerConnection);
+            haGroup, bootstrapServers, connectionType);
     }
 
     /**
@@ -183,7 +182,7 @@ public class RPCConnectionInfo extends AbstractRPCConnectionInfo {
         @Override
         protected ConnectionInfo build() {
             return new RPCConnectionInfo(isConnectionless, principal, keytab, user, haGroup,
-                    hostsList, isServerConnection);
+                    hostsList, connectionType);
         }
 
         public static boolean isRPC(Configuration config, ReadOnlyProps props, Properties info) {
