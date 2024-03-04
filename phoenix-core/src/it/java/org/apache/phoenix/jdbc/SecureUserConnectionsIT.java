@@ -38,6 +38,7 @@ import org.apache.hadoop.minikdc.MiniKdc;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.util.KerberosName;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -99,6 +100,9 @@ public class SecureUserConnectionsIT {
         conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION, "kerberos");
         conf.set(User.HBASE_SECURITY_CONF_KEY, "kerberos");
         conf.setBoolean(User.HBASE_SECURITY_AUTHORIZATION_CONF_KEY, true);
+        conf.set(User.HBASE_SECURITY_CONF_KEY, "kerberos");
+        conf.setBoolean(User.HBASE_SECURITY_AUTHORIZATION_CONF_KEY, true);
+        conf.set("hbase.client.registry.impl", ZKConnectionInfo.ZK_REGISTRY_NAME);
         UserGroupInformation.setConfiguration(conf);
 
         // Clear the cached singletons so we can inject our own.
