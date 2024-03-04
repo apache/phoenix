@@ -451,6 +451,15 @@ public interface QueryServices extends SQLCloseable {
     boolean DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION = false;
 
     /**
+     * Param to enable updatable view restriction that only mark view as updatable if rows
+     * cannot overlap with other updatable views.
+     */
+    String PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED =
+            "phoenix.updatable.view.restriction.enabled";
+
+    boolean DEFAULT_PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED = false;
+
+    /**
      * Only used by tests: parameter to determine num of regionservers to be created by
      * MiniHBaseCluster.
      */
