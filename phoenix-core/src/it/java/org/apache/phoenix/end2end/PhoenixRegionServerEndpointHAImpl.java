@@ -15,14 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.cache;
+package org.apache.phoenix.end2end;
 
-import java.sql.SQLException;
+import org.apache.phoenix.cache.ServerMetadataCache;
+import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 
 /**
- * Interface for server side metadata cache hosted on each region server.
+ * PhoenixRegionServerEndpoint for HA tests.
+ * Uses {@link ServerMetadataCacheHAImpl} to support keeping multiple cache instances.
  */
-public interface ServerMetadataCache {
-    long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName) throws SQLException;
-    void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName);
+public class PhoenixRegionServerEndpointHAImpl extends PhoenixRegionServerEndpoint {
+    @Override
+    public ServerMetadataCache getServerMetadataCache() {
+        return ServerMetadataCacheHAImpl.getInstance(conf);
+    }
 }
