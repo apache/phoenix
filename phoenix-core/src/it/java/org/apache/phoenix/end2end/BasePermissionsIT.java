@@ -101,7 +101,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     private static final String SUPER_USER = System.getProperty("user.name");
 
-    static HBaseTestingUtility testUtil;
+    static IntegrationTestingUtility testUtil;
     private static final Set<String> PHOENIX_SYSTEM_TABLES =
             new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
                 "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK", "SYSTEM.TRANSFORM"));
@@ -172,7 +172,7 @@ public abstract class BasePermissionsIT extends BaseTest {
             testUtil = null;
         }
 
-        testUtil = new HBaseTestingUtility();
+        testUtil = new IntegrationTestingUtility();
 
         Configuration config = testUtil.getConfiguration();
         enablePhoenixHBaseAuthorization(config, useCustomAccessController);
@@ -250,6 +250,10 @@ public abstract class BasePermissionsIT extends BaseTest {
         conf.set(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         conf.set(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         conf.set(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+    }
+
+    public static IntegrationTestingUtility getUtility(){
+        return testUtil;
     }
 
     // Utility functions to grant permissions with HBase API
@@ -350,7 +354,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     protected static String getUrl() {
-        return "jdbc:phoenix:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
+        return "jdbc:phoenix+zk:localhost:" + testUtil.getZkCluster().getClientPort() + ":/hbase";
     }
 
     private static Set<String> getHBaseTables() throws IOException {
