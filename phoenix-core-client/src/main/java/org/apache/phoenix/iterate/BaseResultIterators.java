@@ -599,9 +599,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             return scans;
     }
 
-    private List<HRegionLocation> getRegionBoundaries(ParallelScanGrouper scanGrouper)
-        throws SQLException{
-        return scanGrouper.getRegionBoundaries(context, physicalTableName);
+    private List<HRegionLocation> getRegionBoundaries(ParallelScanGrouper scanGrouper,
+        byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException {
+        return scanGrouper.getRegionBoundaries(context, physicalTableName, startRegionBoundaryKey,
+            stopRegionBoundaryKey);
     }
 
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
@@ -695,7 +696,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private ScansWithRegionLocations getParallelScans(Scan scan) throws SQLException {
-        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
+        List<HRegionLocation> regionLocations =
+            getRegionBoundaries(scanGrouper, scan.getStartRow(), scan.getStopRow());
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
@@ -963,8 +965,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 SchemaUtil.processSplit(new byte[] { 0 }, table.getPKColumns());
         byte[] splitPostfix =
                 Arrays.copyOfRange(sampleProcessedSaltByte, 1, sampleProcessedSaltByte.length);
-        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
-        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         boolean isSalted = table.getBucketNum() != null;
         GuidePostsInfo gps = getGuidePosts();
         // case when stats wasn't collected
@@ -1005,6 +1005,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         int regionIndex = 0;
         int startRegionIndex = 0;
+        List<HRegionLocation> regionLocations =
+            getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
+        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int stopIndex = regionBoundaries.size();
         if (startRegionBoundaryKey.length > 0) {
             startRegionIndex = regionIndex = getIndexContainingInclusive(regionBoundaries, startRegionBoundaryKey);

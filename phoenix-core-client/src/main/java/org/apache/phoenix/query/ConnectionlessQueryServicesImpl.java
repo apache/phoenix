@@ -230,14 +230,24 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
 
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+        byte[] endRowKey) throws SQLException {
         List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
         if (regions != null) {
             return regions;
         }
         RegionInfo hri =
-                RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
-                        .setStartKey(HConstants.EMPTY_START_ROW)
-                        .setStartKey(HConstants.EMPTY_END_ROW).build();
+            RegionInfoBuilder.newBuilder(TableName.valueOf(tableName))
+                .setStartKey(startRowKey)
+                .setStartKey(endRowKey)
+                .build();
         return Collections.singletonList(new HRegionLocation(hri, SERVER_NAME, -1));
     }
 

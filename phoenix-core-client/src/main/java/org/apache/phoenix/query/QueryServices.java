@@ -479,6 +479,8 @@ public interface QueryServices extends SQLCloseable {
     String PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE =
             "phoenix.paging.start.newscan.startrow.include";
 
+    String PHOENIX_GET_REGIONS_RETRIES = "phoenix.get.table.regions.retries";
+
     /**
      * Get executor service used for parallel scans
      */
