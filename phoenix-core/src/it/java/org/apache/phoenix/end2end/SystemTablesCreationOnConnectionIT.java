@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
+import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -199,6 +200,7 @@ public class SystemTablesCreationOnConnectionIT {
                     refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(testUtil.getAdmin());
                 }
                 testUtil.shutdownMiniCluster();
+                ServerMetadataCacheImpl.resetCache();
                 testUtil = null;
                 assertFalse("refCount leaked", refCountLeaked);
             }
