@@ -277,15 +277,16 @@ public class CreateTableCompiler {
 
         List<Integer> tablePkPositions = new ArrayList<>();
         List<Integer> pkPositions = new ArrayList<>();
-        parentToBe.getPKColumns().forEach(tablePkColumn -> tablePkPositions.add(tablePkColumn.getPosition()));
+        parentToBe.getPKColumns().forEach(tablePkColumn ->
+                tablePkPositions.add(tablePkColumn.getPosition()));
         pkColumnsInWhere.forEach(pkColumn -> pkPositions.add(pkColumn.getPosition()));
         Collections.sort(pkPositions);
         // 2. If not multi tenant, view specification (WHERE clause) should start from the first PK
         // column; otherwise, start from the second PK column
         boolean isMultiTenant = parentToBe.isMultiTenant();
         int firstPkPosition = pkPositions.get(0);
-        if ((!isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(0)))
-                || (isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(1)))) {
+        if (!isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(0))
+                || isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(1))) {
             return ViewType.READ_ONLY;
         }
         // 3. Otherwise, PK column(s) should be in the order they are defined
