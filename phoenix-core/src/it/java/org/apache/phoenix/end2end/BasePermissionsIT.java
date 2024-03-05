@@ -186,7 +186,10 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     @Before
-    public void initUsersAndTables() {
+    public void initUsersAndTables() throws Throwable {
+        TableName aclsTable = TableName.valueOf("hbase:acl");
+        testUtil.waitFor(60000, testUtil.predicateTableAvailable(aclsTable));
+
         Configuration configuration = testUtil.getConfiguration();
 
         regularUser1 = User.createUserForTesting(configuration, "regularUser1_"
@@ -203,6 +206,13 @@ public abstract class BasePermissionsIT extends BaseTest {
 
         unprivilegedUser = User.createUserForTesting(configuration, "unprivilegedUser_"
                 + generateUniqueName(), new String[0]);
+
+        grantPermissions(regularUser1.getName(), Permission.Action.READ);
+        grantPermissions(regularUser2.getName(), Permission.Action.READ);
+        grantPermissions(regularUser3.getName(), Permission.Action.READ);
+        grantPermissions(regularUser4.getName(), Permission.Action.READ);
+        grantPermissions(groupUser.getName(), Permission.Action.READ);
+        grantPermissions(unprivilegedUser.getName(), Permission.Action.READ);
 
         schemaName = generateUniqueName();
         tableName = generateUniqueName();

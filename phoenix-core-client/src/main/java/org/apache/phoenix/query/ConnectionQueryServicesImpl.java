@@ -3552,13 +3552,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             LOGGER.info("An instance of ConnectionQueryServices was created.");
                             connection = openConnection(config);
                             hConnectionEstablished = true;
-                            boolean lastDDLTimestampValidationEnabled
-                                = getProps().getBoolean(
-                                    QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                                    QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
-                            if (lastDDLTimestampValidationEnabled) {
-                                refreshLiveRegionServers();
-                            }
+                            refreshLiveRegionServers();
                             String skipSystemExistenceCheck =
                                 props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
                             if (skipSystemExistenceCheck != null &&
