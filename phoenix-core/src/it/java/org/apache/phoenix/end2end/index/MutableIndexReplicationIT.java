@@ -137,7 +137,6 @@ public class MutableIndexReplicationIT extends BaseTest {
         // than default
         conf1 = utility1.getConfiguration();
         zkw1 = new ZKWatcher(conf1, "cluster1", null, true);
-        admin = ConnectionFactory.createConnection(conf1).getAdmin();
         LOGGER.info("Setup first Zk");
 
         // Base conf2 on conf1 so it gets the right zk cluster, and general cluster configs
@@ -155,6 +154,7 @@ public class MutableIndexReplicationIT extends BaseTest {
         utility1.startMiniCluster(2);
         utility2.startMiniCluster(2);
         //replicate from cluster 1 -> cluster 2, but not back again
+        admin = ConnectionFactory.createConnection(conf1).getAdmin();
         admin.addReplicationPeer("1",
                 ReplicationPeerConfig.newBuilder().setClusterKey(utility2.getClusterKey()).build());
     }

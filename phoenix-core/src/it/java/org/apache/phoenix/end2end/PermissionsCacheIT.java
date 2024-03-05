@@ -84,9 +84,9 @@ public class PermissionsCacheIT extends BasePermissionsIT {
                 }
             });
             verifyAllowed(createTable(phoenixTableName), regularUser1);
-            Configuration conf = utility.getConfiguration();
+            Configuration conf = getUtility().getConfiguration();
             
-            ZKWatcher zkw = utility.getZooKeeperWatcher();
+            ZKWatcher zkw = getUtility().getZooKeeperWatcher();
             String aclZnodeParent = conf.get("zookeeper.znode.acl.parent", "acl");
             String aclZNode = ZNodePaths.joinZNode(zkw.getZNodePaths().baseZNode, aclZnodeParent);
             String tableZNode = ZNodePaths.joinZNode(aclZNode, "@" + schema);
