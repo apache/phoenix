@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -123,6 +124,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
         } catch (Throwable t) {
             logger.error("Exception caught when shutting down mini cluster", t);
         } finally {
+            ServerMetadataCacheTestImpl.resetCache();
             ConnectionFactory.shutdown();
         }
         assertFalse("refCount leaked", refCountLeaked);

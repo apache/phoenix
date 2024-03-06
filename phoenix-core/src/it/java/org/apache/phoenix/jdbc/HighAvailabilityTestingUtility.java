@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.StartMiniClusterOption;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
@@ -472,6 +473,7 @@ public class HighAvailabilityTestingUtility {
             admin1.close();
             admin2.close();
             try {
+                ServerMetadataCacheTestImpl.resetCache();
                 hbaseCluster1.shutdownMiniCluster();
                 hbaseCluster2.shutdownMiniCluster();
             } catch (Exception e) {
