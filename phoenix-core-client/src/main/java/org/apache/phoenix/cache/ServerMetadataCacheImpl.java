@@ -28,7 +28,6 @@ import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.phoenix.thirdparty.com.google.common.cache.RemovalListener;
@@ -44,6 +43,10 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
  * Currently, it only stores LAST_DDL_TIMESTAMP in the cache.
  */
 public class ServerMetadataCacheImpl implements ServerMetadataCache {
+
+    protected Configuration conf;
+    // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
+    protected final Cache<ImmutableBytesPtr, Long> lastDDLTimestampMap;
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCacheImpl.class);
     private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS =
             "phoenix.coprocessor.regionserver.cache.ttl.ms";
@@ -55,10 +58,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
             = "phoenix.coprocessor.regionserver.cache.size";
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
     private static volatile ServerMetadataCacheImpl INSTANCE;
-    private Configuration conf;
-    // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
-    private final Cache<ImmutableBytesPtr, Long> lastDDLTimestampMap;
-    private Connection connectionForTesting;
     private MetricsMetadataCachingSource metricsSource;
 
     /**
@@ -159,36 +158,12 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         lastDDLTimestampMap.invalidate(tableKeyPtr);
     }
 
-    /**
-     * This should be used only in the tests. DO NOT use this in production code.
-     */
-    @VisibleForTesting
-    public Long getLastDDLTimestampForTableFromCacheOnly(byte[] tenantID, byte[] schemaName,
-                                                         byte[] tableName) {
-        byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
-        ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
-        return lastDDLTimestampMap.getIfPresent(tableKeyPtr);
+    protected Connection getConnection(Properties properties) throws SQLException {
+        return QueryUtil.getConnectionOnServer(properties, this.conf);
     }
 
-    // This is used by tests to override specific connection to use.
-    private Connection getConnection(Properties properties) throws SQLException {
-        return connectionForTesting != null ? connectionForTesting
-                : QueryUtil.getConnectionOnServer(properties, this.conf);
-    }
-
-    @VisibleForTesting
-    public void setConnectionForTesting(Connection connection) {
-        this.connectionForTesting = connection;
-    }
-
-    @VisibleForTesting
-    public static  void resetCache() {
+    protected static void resetCache() {
         LOGGER.info("Resetting ServerMetadataCache");
         INSTANCE = null;
-    }
-
-    @VisibleForTesting
-    public static void setInstance(ServerMetadataCacheImpl cache) {
-        INSTANCE = cache;
     }
 }

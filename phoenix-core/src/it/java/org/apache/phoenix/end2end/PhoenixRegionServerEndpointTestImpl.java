@@ -37,6 +37,7 @@ public class PhoenixRegionServerEndpointTestImpl extends PhoenixRegionServerEndp
         super.start(env);
         this.serverName = ((RegionServerCoprocessorEnvironment)env).getServerName();
     }
+
     @Override
     public ServerMetadataCache getServerMetadataCache() {
         return ServerMetadataCacheTestImpl.getInstance(conf, serverName);
