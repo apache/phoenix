@@ -107,6 +107,9 @@ if (( $# > 0 )); then
   error "Arguments can only be provided with option flags, invalid args: $*"
 fi
 export DEBUG
+if [ "$DEBUG" = "1" ]; then
+  set -x
+fi
 
 if [ -z "$WORKDIR" ] || [ ! -d "$WORKDIR" ]; then
   error "Work directory (-d) must be defined and exist. Run with -h for help."
@@ -223,6 +226,7 @@ ASF_PASSWORD=$ASF_PASSWORD
 RELEASE_STEP=$RELEASE_STEP
 API_DIFF_TAG=$API_DIFF_TAG
 HOST_OS=$HOST_OS
+DEBUG=$DEBUG
 EOF
 
 JAVA_MOUNT=()
@@ -313,7 +317,7 @@ if [ "${HOST_OS}" == "DARWIN" ]; then
   fi
   echo "Launching ssh reverse tunnel from the container to gpg agent."
   echo "    we should clean this up for you. If that fails the PID is in gpg-proxy.ssh.pid"
-  ssh -p 62222 -R "/home/${USER}/.gnupg/S.gpg-agent:$(gpgconf --list-dir agent-extra-socket)" \
+  ssh -p 62222 -R "/home/${USER}/.gnupg/S.gpg-agent:$(gpgconf --list-dir agent-socket)" \
       -i "${HOME}/.ssh/id_rsa" -N -n localhost >gpg-proxy.ssh.log 2>&1 &
   echo $! > "${WORKDIR}/gpg-proxy.ssh.pid"
 else
@@ -323,7 +327,7 @@ else
   # agent socket and agent extra socket to your local gpg-agent's extra socket. See the README.txt
   # for an example.
   GPG_PROXY_MOUNT=(--mount \
-      "type=bind,src=$(gpgconf --list-dir agent-extra-socket),dst=/home/${USER}/.gnupg/S.gpg-agent")
+      "type=bind,src=$(gpgconf --list-dir agent-socket),dst=/home/${USER}/.gnupg/S.gpg-agent")
 fi
 
 banner "Building $RELEASE_TAG; output will be at $WORKDIR/output"

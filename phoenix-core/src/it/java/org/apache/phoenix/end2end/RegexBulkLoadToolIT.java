@@ -33,7 +33,6 @@ import java.sql.Statement;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.phoenix.mapreduce.RegexBulkLoadTool;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -305,15 +304,16 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
         RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
         regexBulkLoadTool.setConf(getUtility().getConfiguration());
         try {
-            regexBulkLoadTool.run(new String[] {
+            int exitCode = regexBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input4.csv",
                 "--table", tableName,
                 "--regex", "([^,]*),([^,]*),([^,]*)",
                 "--zookeeper", zkQuorum });
-            fail(String.format("Table %s not created, hence should fail",tableName));
+            assertTrue(String.format("Table %s not created, hence should fail", tableName),
+                exitCode != 0);
         } catch (Exception ex) {
-            assertTrue(ex instanceof IllegalArgumentException); 
-            assertTrue(ex.getMessage().contains(String.format("Table %s not found", tableName)));
+            fail("Tools should return non-zero exit codes on failure"
+                    + " instead of throwing an exception");
         }
     }
     
@@ -336,16 +336,18 @@ public class RegexBulkLoadToolIT extends BaseOwnClusterIT {
             
             RegexBulkLoadTool regexBulkLoadTool = new RegexBulkLoadTool();
             regexBulkLoadTool.setConf(getUtility().getConfiguration());
-            regexBulkLoadTool.run(new String[] {
+            int exitCode = regexBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input9.csv",
                 "--output", outputPath,
                 "--table", tableName,
                 "--regex", "([^,]*),([^,]*),([^,]*)",
                 "--zookeeper", zkQuorum });
-            
-            fail(String.format("Output path %s already exists. hence, should fail",outputPath));
+            assertTrue(
+                String.format("Output path %s already exists. hence, should fail", outputPath),
+                exitCode != 0);
         } catch (Exception ex) {
-            assertTrue(ex instanceof FileAlreadyExistsException); 
+            fail("Tools should return non-zero exit codes on failure"
+                    + " instead of throwing an exception");
         }
     }
     

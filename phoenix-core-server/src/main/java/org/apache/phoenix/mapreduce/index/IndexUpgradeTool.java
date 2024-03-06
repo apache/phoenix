@@ -206,9 +206,14 @@ public class IndexUpgradeTool extends Configured implements Tool {
         } catch (IllegalStateException e) {
             printHelpAndExit(e.getMessage(), getOptions());
         }
-        initializeTool(cmdLine);
-        prepareToolSetup();
-        executeTool();
+        try {
+            initializeTool(cmdLine);
+            prepareToolSetup();
+            executeTool();
+        } catch (Exception e) {
+            e.printStackTrace();
+            hasFailure = true;
+        }
         if (hasFailure) {
             return -1;
         } else {

@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.2.0-SNAPSHOT</version>
+  <version>5.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -43,7 +43,6 @@
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
-    <module>phoenix-hbase-compat-2.4.0</module>
     <module>phoenix-core-client</module>
     <module>phoenix-core-server</module>
     <module>phoenix-core</module>
@@ -75,15 +74,14 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.1.4</hadoop.version>
+    <hadoop.version>3.2.4</hadoop.version>
 
     <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.4.0 2.4 2.5.0 2.5</hbase.profile.list>
+    <hbase.profile.list>2.4 2.5.0 2.5</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
-    <hbase-2.4.0.runtime.version>2.4.0</hbase-2.4.0.runtime.version>
     <hbase-2.4.runtime.version>2.4.17</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.7-hadoop3</hbase-2.5.runtime.version>
@@ -98,6 +96,7 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
     <test.tmp.dir>${project.build.directory}</test.tmp.dir>
+    <shadeSources>true</shadeSources>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
@@ -115,7 +114,7 @@
     <commons-io.version>2.11.0</commons-io.version>
     <commons-lang.version>3.8</commons-lang.version>
     <commons-csv.version>1.0</commons-csv.version>
-    <commons-compress.version>1.21</commons-compress.version>
+    <commons-compress.version>1.26.0</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
@@ -705,11 +704,6 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-embedded-hbase-2.4.0</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -721,11 +715,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.5</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-lite-hbase-2.4.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -745,11 +734,6 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-server-hbase-2.4.0</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -761,11 +745,6 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.5</artifactId>
-        <version>${project.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.4.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -797,11 +776,6 @@
         <groupId>org.apache.phoenix.thirdparty</groupId>
         <artifactId>phoenix-shaded-guava</artifactId>
         <version>${phoenix.thirdparty.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-hbase-compat-2.4.0</artifactId>
-        <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
@@ -1790,33 +1764,19 @@
     <!-- The dependencies should be defined only in phoenix-core
     ,but maven doesn't seem to support that -->
     <profile>
-      <!-- must be identical to phoenix-hbase-compat-2.4.1 profile -->
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.4.1-default</id>
+      <!-- must be identical to phoenix-hbase-compat-2.5.4 profile -->
+      <!-- This WILL work with the public HBase artifacts -->
+      <id>phoenix-hbase-compat-2.5.4-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
-        <hbase.profile>2.4</hbase.profile>
-        <hbase.compat.version>2.4.1</hbase.compat.version>
-        <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.4.0</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>2.4.0</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.profile>2.4.0</hbase.profile>
-        <hbase.compat.version>2.4.0</hbase.compat.version>
-        <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
+        <hbase.profile>2.5</hbase.profile>
+        <hbase.compat.version>2.5.4</hbase.compat.version>
+        <hadoop.version>3.2.4</hadoop.version>
+        <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>
@@ -1831,6 +1791,7 @@
       <properties>
         <hbase.profile>2.4</hbase.profile>
         <hbase.compat.version>2.4.1</hbase.compat.version>
+        <hadoop.version>3.1.4</hadoop.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1846,7 +1807,7 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
-        <hadoop.version>3.2.3</hadoop.version>
+        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1862,7 +1823,7 @@
       <properties>
         <hbase.profile>2.5.0</hbase.profile>
         <hbase.compat.version>2.5.0</hbase.compat.version>
-        <hadoop.version>3.2.3</hadoop.version>
+        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
     </profile>

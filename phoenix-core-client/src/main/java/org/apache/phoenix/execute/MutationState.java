@@ -22,7 +22,9 @@ import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
+import static org.apache.phoenix.query.QueryServices.INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_FAILED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BATCH_SIZE;
@@ -169,6 +171,8 @@ public class MutationState implements SQLCloseable {
     private static boolean allUpsertsMutations = true;
     private static boolean allDeletesMutations = true;
 
+    private final boolean indexRegionObserverEnabledAllTables;
+
     public static void resetAllMutationState(){
         allDeletesMutations = true;
         allUpsertsMutations = true;
@@ -228,6 +232,10 @@ public class MutationState implements SQLCloseable {
             isExternalTxContext = true;
             phoenixTransactionContext = txContext.newTransactionContext(txContext, subTask);
         }
+        this.indexRegionObserverEnabledAllTables = Boolean.parseBoolean(
+                this.connection.getQueryServices().getConfiguration().get(
+                    INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB,
+                    DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES));
     }
 
     public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
@@ -1708,9 +1716,10 @@ public class MutationState implements SQLCloseable {
                 continue;
             }
             PTable logicalTable = tableInfo.getPTable();
-            if (tableInfo.getOrigTableRef().getTable().isImmutableRows()
-                    && IndexUtil.isGlobalIndexCheckerEnabled(connection,
-                    tableInfo.getHTableName())) {
+            if (tableInfo.getOrigTableRef().getTable().isImmutableRows() &&
+                (this.indexRegionObserverEnabledAllTables ||
+                 IndexUtil.isGlobalIndexCheckerEnabled(connection, tableInfo.getHTableName()))
+            ) {
 
                 byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(logicalTable);
                 byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(logicalTable).getFirst();
