@@ -15,7 +15,13 @@ import java.util.Properties;
 
 /**
  * Implementation of {@link ServerMetadataCache} for Integration Tests.
- * Supports keeping more than one instance keyed on the regionserver ServerName.
+ * Supports keeping more than one instanceof the cache keyed on the regionserver ServerName.
+ *
+ * PhoenixRegionServerEndpoint is a region server coproc. There is a 1-1 correspondence between
+ * PhoenixRegionServerEndpoint and ServerMetadataCache. In ITs we can have multiple regionservers
+ * per cluster so we need multiple instances of ServerMetadataCache in the same jvm. Tests using
+ * HighAvailabilityTestingUtility create 2 clusters so we need to have one instance of
+ * ServerMetadataCache for each regionserver in each cluster.
  */
 public class ServerMetadataCacheTestImpl extends ServerMetadataCacheImpl {
     private static volatile Map<ServerName, ServerMetadataCacheTestImpl> INSTANCES = new HashMap<>();
