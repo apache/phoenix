@@ -26,7 +26,9 @@ import java.util.Collections;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
@@ -46,13 +48,16 @@ public class PhoenixRegionServerEndpoint
         implements RegionServerCoprocessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
     private MetricsMetadataCachingSource metricsSource;
+    private ServerName serverName;
     protected Configuration conf;
 
     @Override
     public void start(CoprocessorEnvironment env) throws IOException {
+        RegionServerCoprocessorEnvironment rsEnv = (RegionServerCoprocessorEnvironment) env;
         this.conf = env.getConfiguration();
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
+        this.serverName = rsEnv.getServerName();
     }
 
     @Override
@@ -71,8 +76,8 @@ public class PhoenixRegionServerEndpoint
             try {
                 LOGGER.debug("Verifying last ddl timestamp for tenantID: {}, tableName: {}",
                         tenantIDStr, fullTableName);
-                VerifyLastDDLTimestamp.verifyLastDDLTimestamp(this.conf, tenantID, schemaName,
-                        tableName, clientLastDDLTimestamp);
+                VerifyLastDDLTimestamp.verifyLastDDLTimestamp(this.conf, this.serverName, tenantID,
+                        schemaName, tableName, clientLastDDLTimestamp);
             } catch (Throwable t) {
                 String errorMsg = String.format("Verifying last ddl timestamp FAILED for "
                         + "tenantID: %s,  fullTableName: %s", tenantIDStr, fullTableName);
@@ -99,9 +104,10 @@ public class PhoenixRegionServerEndpoint
             byte[] tableName = invalidateCacheRequest.getTableName().toByteArray();
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             String tenantIDStr = Bytes.toString(tenantID);
-            LOGGER.info("PhoenixRegionServerEndpoint invalidating the cache for tenantID: {},"
-                    + " tableName: {}", tenantIDStr, fullTableName);
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(conf);
+            LOGGER.info("PhoenixRegionServerEndpoint invalidating the cache" +
+                    " for tenantID: {}, tableName: {}",  tenantIDStr, fullTableName);
+            ServerMetadataCache cache =
+                    ServerMetadataCache.getInstance(conf, serverName);
             cache.invalidate(tenantID, schemaName, tableName);
         }
     }

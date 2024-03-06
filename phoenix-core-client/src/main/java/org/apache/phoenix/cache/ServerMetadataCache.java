@@ -19,10 +19,13 @@ package org.apache.phoenix.cache;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
@@ -54,29 +57,37 @@ public class ServerMetadataCache {
     private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE
             = "phoenix.coprocessor.regionserver.cache.size";
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
-    private static volatile ServerMetadataCache INSTANCE;
     private Configuration conf;
     // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
     private final Cache<ImmutableBytesPtr, Long> lastDDLTimestampMap;
     private Connection connectionForTesting;
     private MetricsMetadataCachingSource metricsSource;
+    // We need this map mostly for tests. In HighAvailabilityTestingUtility we create 2 clusters
+    // and ServerMetadataCache needs to be separate for each regionserver in each cluster.
+    private static volatile Map<ServerName, ServerMetadataCache> serverNameToCachemap
+            = new HashMap<>();
+    private static Object lock = new Object();
 
     /**
      * Creates/gets an instance of ServerMetadataCache.
      * @param conf configuration
+     * @param serverName serverName
      * @return cache
      */
-    public static ServerMetadataCache getInstance(Configuration conf) {
-        ServerMetadataCache result = INSTANCE;
-        if (result == null) {
-            synchronized (ServerMetadataCache.class) {
-                result = INSTANCE;
-                if (result == null) {
-                    INSTANCE = result = new ServerMetadataCache(conf);
-                }
-            }
+    public static ServerMetadataCache getInstance(Configuration conf, ServerName serverName) {
+        ServerMetadataCache cache = serverNameToCachemap.get(serverName);
+        if (cache != null) {
+            return cache;
         }
-        return result;
+        synchronized (lock) {
+            cache = serverNameToCachemap.get(serverName);
+            if (cache != null) {
+                return cache;
+            }
+            cache = new ServerMetadataCache(conf);
+            serverNameToCachemap.put(serverName, cache);
+            return cache;
+        }
     }
 
     private ServerMetadataCache(Configuration conf) {
@@ -183,11 +194,11 @@ public class ServerMetadataCache {
     @VisibleForTesting
     public static  void resetCache() {
         LOGGER.info("Resetting ServerMetadataCache");
-        INSTANCE = null;
+        serverNameToCachemap.clear();
     }
 
     @VisibleForTesting
-    public static void setInstance(ServerMetadataCache cache) {
-        INSTANCE = cache;
+    public static void setInstance(ServerName serverName, ServerMetadataCache cache) {
+        serverNameToCachemap.put(serverName, cache);
     }
 }

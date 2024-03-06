@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.hbase.zookeeper.ZKWatcher;
+import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.ReplicationSinkEndpoint;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.execute.MutationState;
@@ -126,8 +127,12 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        utility1.shutdownMiniCluster();
-        utility2.shutdownMiniCluster();
+        try {
+            utility1.shutdownMiniCluster();
+            utility2.shutdownMiniCluster();
+        } finally {
+            ServerMetadataCache.resetCache();
+        }
     }
 
     private static void setupConfigsAndStartCluster() throws Exception {

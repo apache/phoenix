@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -84,6 +85,7 @@ public class PartialResultServerConfigurationIT {
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
+            ServerMetadataCache.resetCache();
             hbaseTestUtil.shutdownMiniCluster();
         }
     }

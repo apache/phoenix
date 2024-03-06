@@ -57,6 +57,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.hadoop.hbase.wal.WALKey;
+import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.hbase.index.IndexTableName;
 import org.apache.phoenix.hbase.index.IndexTestingUtils;
 import org.apache.phoenix.hbase.index.Indexer;
@@ -269,6 +270,7 @@ public class TestWALRecoveryCaching {
     scanner.close();
     index.close();
     primary.close();
+    ServerMetadataCache.resetCache();
     util.shutdownMiniCluster();
   }
 

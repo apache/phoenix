@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -167,6 +168,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     static void initCluster(boolean isNamespaceMapped, boolean useCustomAccessController) throws Exception {
         if (null != testUtil) {
+            ServerMetadataCache.resetCache();
             testUtil.shutdownMiniCluster();
             testUtil = null;
         }

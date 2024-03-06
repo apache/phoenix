@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -98,6 +99,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         try {
             if (testUtil != null) {
                 boolean refCountLeaked = isAnyStoreRefCountLeaked();
+                ServerMetadataCache.resetCache();
                 testUtil.shutdownMiniCluster();
                 testUtil = null;
                 assertFalse("refCount leaked", refCountLeaked);
