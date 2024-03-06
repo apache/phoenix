@@ -17,16 +17,28 @@
  */
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 
+import java.io.IOException;
+
 /**
- * PhoenixRegionServerEndpoint for HA tests.
- * Uses {@link ServerMetadataCacheHAImpl} to support keeping multiple cache instances.
+ * PhoenixRegionServerEndpoint for integration tests.
+ * Uses {@link ServerMetadataCacheTestImpl} to support keeping multiple cache instances.
  */
-public class PhoenixRegionServerEndpointHAImpl extends PhoenixRegionServerEndpoint {
+public class PhoenixRegionServerEndpointTestImpl extends PhoenixRegionServerEndpoint {
+    protected ServerName serverName;
+
+    @Override
+    public void start(CoprocessorEnvironment env) throws IOException {
+        super.start(env);
+        this.serverName = ((RegionServerCoprocessorEnvironment)env).getServerName();
+    }
     @Override
     public ServerMetadataCache getServerMetadataCache() {
-        return ServerMetadataCacheHAImpl.getInstance(conf);
+        return ServerMetadataCacheTestImpl.getInstance(conf, serverName);
     }
 }
