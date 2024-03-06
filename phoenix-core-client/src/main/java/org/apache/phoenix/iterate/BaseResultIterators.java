@@ -1005,8 +1005,42 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         int regionIndex = 0;
         int startRegionIndex = 0;
-        List<HRegionLocation> regionLocations =
-            getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
+
+        List<HRegionLocation> regionLocations;
+        if (isSalted && !isLocalIndex) {
+            // key prefix = salt num + view index id + tenant id
+            // If salting is used with tenant or view index id, scan start and end
+            // rowkeys will not be empty. We need to generate region locations for
+            // all the scan range such that we cover (each salt bucket num) + (prefix starting from
+            // index position 1 to cover view index and/or tenant id and/or remaining prefix).
+            if (scan.getStartRow().length > 0 && scan.getStopRow().length > 0) {
+                regionLocations = new ArrayList<>();
+                for (int i = 0; i < getTable().getBucketNum(); i++) {
+                    byte[] saltStartRegionKey = new byte[scan.getStartRow().length];
+                    saltStartRegionKey[0] = (byte) i;
+                    System.arraycopy(scan.getStartRow(), 1, saltStartRegionKey, 1,
+                        scan.getStartRow().length - 1);
+
+                    byte[] saltStopRegionKey = new byte[scan.getStopRow().length];
+                    saltStopRegionKey[0] = (byte) i;
+                    System.arraycopy(scan.getStopRow(), 1, saltStopRegionKey, 1,
+                        scan.getStopRow().length - 1);
+
+                    regionLocations.addAll(
+                        getRegionBoundaries(scanGrouper, saltStartRegionKey, saltStopRegionKey));
+                }
+            } else {
+                // If scan start and end rowkeys are empty, we end up fetching all region locations.
+                regionLocations =
+                    getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
+            }
+        } else {
+            // For range scans, startRegionBoundaryKey and stopRegionBoundaryKey should refer
+            // to the boundary specified by the scan context.
+            regionLocations =
+                getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
+        }
+
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int stopIndex = regionBoundaries.size();
         if (startRegionBoundaryKey.length > 0) {

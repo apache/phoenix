@@ -17,31 +17,46 @@
  */
 package org.apache.phoenix.end2end;
 
+import java.util.Arrays;
+import java.util.Collection;
+
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
 public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndexIT {
-    private static final Integer SALT_BUCKETS = 3;
-    
+
+    private final Integer saltBuckets;
+
+    public TenantSpecificViewIndexSaltedIT(Integer saltBuckets) {
+        this.saltBuckets = saltBuckets;
+    }
+
+    @Parameterized.Parameters(name = "TenantSpecificViewIndexSaltedIT_SaltBuckets={0}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {{3}, {13}, {39}});
+    }
+
     @Test
     public void testUpdatableSaltedView() throws Exception {
-        testUpdatableView(SALT_BUCKETS);
+        testUpdatableView(saltBuckets);
     }
-    
+
     @Test
     public void testUpdatableViewsWithSameNameDifferentTenants() throws Exception {
-        testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS);
+        testUpdatableViewsWithSameNameDifferentTenants(saltBuckets);
     }
-    
+
     @Test
     public void testUpdatableSaltedViewWithLocalIndex() throws Exception {
-        testUpdatableView(SALT_BUCKETS, true);
+        testUpdatableView(saltBuckets, true);
     }
 
     @Test
     public void testUpdatableViewsWithSameNameDifferentTenantsWithLocalIndex() throws Exception {
-        testUpdatableViewsWithSameNameDifferentTenants(SALT_BUCKETS, true);
+        testUpdatableViewsWithSameNameDifferentTenants(saltBuckets, true);
     }
 }
