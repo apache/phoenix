@@ -21,7 +21,6 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
-import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -53,7 +52,8 @@ public class VerifyLastDDLTimestamp {
      *                              is stale.
      */
     public static void verifyLastDDLTimestamp(ServerMetadataCache cache, byte[] tenantID,
-                                              byte[] schemaName, byte[] tableName, long clientLastDDLTimestamp) throws SQLException {
+                              byte[] schemaName, byte[] tableName, long clientLastDDLTimestamp)
+            throws SQLException {
         long lastDDLTimestamp = cache.getLastDDLTimestampForTable(tenantID, schemaName, tableName);
         // Is it possible to have client last ddl timestamp greater than server side?
         if (clientLastDDLTimestamp < lastDDLTimestamp) {
