@@ -20,6 +20,7 @@ import java.util.Properties;
 public class ServerMetadataCacheTestImpl extends ServerMetadataCacheImpl {
     private static volatile Map<ServerName, ServerMetadataCacheTestImpl> INSTANCES = new HashMap<>();
     private Connection connectionForTesting;
+
     ServerMetadataCacheTestImpl(Configuration conf) {
         super(conf);
     }
@@ -59,8 +60,7 @@ public class ServerMetadataCacheTestImpl extends ServerMetadataCacheImpl {
 
     @Override
     protected Connection getConnection(Properties properties) throws SQLException {
-        System.out.println("USED");
         return connectionForTesting != null ? connectionForTesting
-                : QueryUtil.getConnectionOnServer(properties, this.conf);
+                : super.getConnection(properties);
     }
 }

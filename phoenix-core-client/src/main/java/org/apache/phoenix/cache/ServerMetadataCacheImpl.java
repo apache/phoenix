@@ -161,9 +161,4 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     protected Connection getConnection(Properties properties) throws SQLException {
         return QueryUtil.getConnectionOnServer(properties, this.conf);
     }
-
-    protected static void resetCache() {
-        LOGGER.info("Resetting ServerMetadataCache");
-        INSTANCE = null;
-    }
 }
