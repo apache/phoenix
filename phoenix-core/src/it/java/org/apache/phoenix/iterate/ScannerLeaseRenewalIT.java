@@ -70,7 +70,7 @@ public class ScannerLeaseRenewalIT {
         hbaseTestUtil.startMiniCluster();
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
 
         Properties driverProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         driverProps.put(RENEW_LEASE_THREAD_POOL_SIZE, Long.toString(4));
