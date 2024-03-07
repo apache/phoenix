@@ -57,25 +57,19 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.MetaDataClient;
-import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 
 public class CreateTableCompiler {
-    private static final PDatum VARBINARY_DATUM = new VarbinaryDatum();
     private final PhoenixStatement statement;
     private final Operation operation;
     
@@ -184,24 +178,7 @@ public class CreateTableCompiler {
         final byte[][] viewColumnConstants = viewColumnConstantsToBe;
         final BitSet isViewColumnReferenced = isViewColumnReferencedToBe;
         List<ParseNode> splitNodes = create.getSplitNodes();
-        final byte[][] splits = new byte[splitNodes.size()][];
-        ImmutableBytesWritable ptr = context.getTempPtr();
-        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
-        for (int i = 0; i < splits.length; i++) {
-            ParseNode node = splitNodes.get(i);
-            if (node instanceof BindParseNode) {
-                context.getBindManager().addParamMetaData((BindParseNode) node, VARBINARY_DATUM);
-            }
-            if (node.isStateless()) {
-                Expression expression = node.accept(expressionCompiler);
-                if (expression.evaluate(null, ptr)) {;
-                    splits[i] = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                    continue;
-                }
-            }
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
-                .setMessage("Node: " + node).build().buildException();
-        }
+        final byte[][] splits = SplitKeyUtil.getSplits(splitNodes, context);
         final MetaDataClient client = new MetaDataClient(connection);
         final PTable parent = parentToBe;
 
@@ -417,34 +394,6 @@ public class CreateTableCompiler {
         @Override
         public Boolean visit(SingleCellColumnExpression node) {
             return visit(node.getKeyValueExpression());
-        }
-        
-    }
-    private static class VarbinaryDatum implements PDatum {
-
-        @Override
-        public boolean isNullable() {
-            return false;
-        }
-
-        @Override
-        public PDataType getDataType() {
-            return PVarbinary.INSTANCE;
-        }
-
-        @Override
-        public Integer getMaxLength() {
-            return null;
-        }
-
-        @Override
-        public Integer getScale() {
-            return null;
-        }
-
-        @Override
-        public SortOrder getSortOrder() {
-            return SortOrder.getDefault();
         }
         
     }
