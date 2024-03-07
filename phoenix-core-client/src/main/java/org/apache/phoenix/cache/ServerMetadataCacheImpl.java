@@ -23,6 +23,7 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
@@ -57,7 +58,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE
             = "phoenix.coprocessor.regionserver.cache.size";
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
-    private static volatile ServerMetadataCacheImpl INSTANCE;
+    private static volatile ServerMetadataCacheImpl cacheInstance;
     private MetricsMetadataCachingSource metricsSource;
 
     /**
@@ -67,12 +68,12 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @return cache
      */
     public static ServerMetadataCacheImpl getInstance(Configuration conf) {
-        ServerMetadataCacheImpl result = INSTANCE;
+        ServerMetadataCacheImpl result = cacheInstance;
         if (result == null) {
             synchronized (ServerMetadataCacheImpl.class) {
-                result = INSTANCE;
+                result = cacheInstance;
                 if (result == null) {
-                    INSTANCE = result = new ServerMetadataCacheImpl(conf);
+                    cacheInstance = result = new ServerMetadataCacheImpl(conf);
                 }
             }
         }
@@ -80,7 +81,7 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     }
 
     public ServerMetadataCacheImpl(Configuration conf) {
-        this.conf = conf;
+        this.conf = HBaseConfiguration.create(conf);
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
         long maxTTL = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS,
