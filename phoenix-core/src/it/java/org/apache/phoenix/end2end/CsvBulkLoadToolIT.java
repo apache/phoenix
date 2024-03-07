@@ -37,8 +37,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.mapred.FileAlreadyExistsException;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkLoadTool;
@@ -151,12 +149,10 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                     "--table", "table1",
                     "--schema", "s",
                     "--zookeeper", zkQuorum});
-            fail("Bulk loading error should have happened earlier");
-        } catch (Exception e){
-            assertTrue(e.getMessage().contains("Bulk Loading error: Bulk loading is disabled for " +
-                    "non empty tables with global indexes, because it will corrupt " +
-                    "the global index table in most cases.\n" +
-                    "Use the --corruptindexes option to override this check."));
+            assertTrue("Bulk loading error should have happened earlier", exitCode != 0);
+        } catch (Exception e) {
+            fail("Tools should return non-zero exit codes on failure"
+                    + " instead of throwing an exception");
         }
 
         ResultSet rs = stmt.executeQuery("SELECT id, name, t FROM s.table1 ORDER BY id");
@@ -398,7 +394,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
                 + " (FIRST_NAME ASC)"
                 + " INCLUDE (LAST_NAME)";
         stmt.execute(ddl);
-        
+
         FileSystem fs = FileSystem.get(getUtility().getConfiguration());
         FSDataOutputStream outputStream = fs.create(new Path("/tmp/input3.csv"));
         PrintWriter printWriter = new PrintWriter(outputStream);
@@ -598,17 +594,17 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
         CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
         csvBulkLoadTool.setConf(getUtility().getConfiguration());
         try {
-            csvBulkLoadTool.run(new String[] {
+            int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input4.csv",
                 "--table", tableName,
                 "--zookeeper", zkQuorum });
-            fail(String.format("Table %s not created, hence should fail",tableName));
+            assertTrue(String.format("Table %s not created, hence should fail", tableName),
+                exitCode != 0);
         } catch (Exception ex) {
-            assertTrue(ex instanceof IllegalArgumentException); 
-            assertTrue(ex.getMessage().contains(String.format("Table %s not found", tableName)));
-        }
+            fail("Tools should return non-zero exit codes on failure"
+                    + " instead of throwing an exception");        }
     }
-    
+
     @Test
     public void testAlreadyExistsOutputPath() {
         String tableName = "TABLE9";
@@ -617,7 +613,7 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             Statement stmt = conn.createStatement();
             stmt.execute("CREATE TABLE " + tableName + "(ID INTEGER NOT NULL PRIMARY KEY, "
                     + "FIRST_NAME VARCHAR, LAST_NAME VARCHAR)");
-            
+
             FileSystem fs = FileSystem.get(getUtility().getConfiguration());
             fs.create(new Path(outputPath));
             FSDataOutputStream outputStream = fs.create(new Path("/tmp/input9.csv"));
@@ -625,18 +621,21 @@ public class CsvBulkLoadToolIT extends BaseOwnClusterIT {
             printWriter.println("1,FirstName 1,LastName 1");
             printWriter.println("2,FirstName 2,LastName 2");
             printWriter.close();
-            
+
             CsvBulkLoadTool csvBulkLoadTool = new CsvBulkLoadTool();
             csvBulkLoadTool.setConf(getUtility().getConfiguration());
-            csvBulkLoadTool.run(new String[] {
+            int exitCode = csvBulkLoadTool.run(new String[] {
                 "--input", "/tmp/input9.csv",
                 "--output", outputPath,
                 "--table", tableName,
                 "--zookeeper", zkQuorum });
-            
-            fail(String.format("Output path %s already exists. hence, should fail",outputPath));
+
+            assertTrue(
+                String.format("Output path %s already exists. hence, should fail", outputPath),
+                exitCode != 0);
         } catch (Exception ex) {
-            assertTrue(ex instanceof FileAlreadyExistsException); 
+            fail("Tools should return non-zero exit codes when fail,"
+                + " instead of throwing an exception");
         }
     }
 

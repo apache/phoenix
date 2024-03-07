@@ -105,38 +105,43 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
             return RET_ARGUMENT_ERROR;
         }
 
-        if (commandLine.hasOption(HELP_OPT.getOpt())) {
-            printUsageMessage();
-            return RET_SUCCESS;
-        } else if (commandLine.hasOption(LIST_OPT.getOpt())) { // list
-            String zkUrl = getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
-            try (PhoenixHAAdminHelper admin = new PhoenixHAAdminHelper(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
-                List<ClusterRoleRecord> records = admin.listAllClusterRoleRecordsOnZookeeper();
-                JacksonUtil.getObjectWriterPretty().writeValue(System.out, records);
-            }
-        } else if (commandLine.hasOption(MANIFEST_OPT.getOpt())) { // create or update
-            String fileName = commandLine.getOptionValue(MANIFEST_OPT.getOpt());
-            List<ClusterRoleRecord> records = readRecordsFromFile(fileName);
-            boolean forceful = commandLine.hasOption(FORCEFUL_OPT.getOpt());
-            Map<String, List<String>> failedHaGroups = syncClusterRoleRecords(records, forceful);
-            if (!failedHaGroups.isEmpty()) {
-                System.out.println("Found following HA groups are failing to write the clusters:");
-                failedHaGroups.forEach((k, v) ->
-                        System.out.printf("%s -> [%s]\n", k, String.join(",", v)));
-                return RET_SYNC_ERROR;
-            }
-        } else if (commandLine.hasOption(REPAIR_OPT.getOpt()))  { // verify and repair
-            String zkUrl = getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
-            try (PhoenixHAAdminHelper admin = new PhoenixHAAdminHelper(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
-                List<String> inconsistentRecord = admin.verifyAndRepairWithRemoteZnode();
-                if (!inconsistentRecord.isEmpty()) {
-                    System.out.println("Found following inconsistent cluster role records: ");
-                    System.out.print(String.join(",", inconsistentRecord));
-                    return RET_REPAIR_FOUND_INCONSISTENCIES;
+        try {
+            if (commandLine.hasOption(HELP_OPT.getOpt())) {
+                printUsageMessage();
+                return RET_SUCCESS;
+            } else if (commandLine.hasOption(LIST_OPT.getOpt())) { // list
+                String zkUrl = getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
+                try (PhoenixHAAdminHelper admin = new PhoenixHAAdminHelper(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
+                    List<ClusterRoleRecord> records = admin.listAllClusterRoleRecordsOnZookeeper();
+                    JacksonUtil.getObjectWriterPretty().writeValue(System.out, records);
+                }
+            } else if (commandLine.hasOption(MANIFEST_OPT.getOpt())) { // create or update
+                String fileName = commandLine.getOptionValue(MANIFEST_OPT.getOpt());
+                List<ClusterRoleRecord> records = readRecordsFromFile(fileName);
+                boolean forceful = commandLine.hasOption(FORCEFUL_OPT.getOpt());
+                Map<String, List<String>> failedHaGroups = syncClusterRoleRecords(records, forceful);
+                if (!failedHaGroups.isEmpty()) {
+                    System.out.println("Found following HA groups are failing to write the clusters:");
+                    failedHaGroups.forEach((k, v) ->
+                            System.out.printf("%s -> [%s]\n", k, String.join(",", v)));
+                    return RET_SYNC_ERROR;
+                }
+            } else if (commandLine.hasOption(REPAIR_OPT.getOpt()))  { // verify and repair
+                String zkUrl = getLocalZkUrl(getConf()); // Admin is created against local ZK cluster
+                try (PhoenixHAAdminHelper admin = new PhoenixHAAdminHelper(zkUrl, getConf(), HighAvailibilityCuratorProvider.INSTANCE)) {
+                    List<String> inconsistentRecord = admin.verifyAndRepairWithRemoteZnode();
+                    if (!inconsistentRecord.isEmpty()) {
+                        System.out.println("Found following inconsistent cluster role records: ");
+                        System.out.print(String.join(",", inconsistentRecord));
+                        return RET_REPAIR_FOUND_INCONSISTENCIES;
+                    }
                 }
             }
+            return RET_SUCCESS;
+        } catch(Exception e ) {
+            e.printStackTrace();
+            return -1;
         }
-        return RET_SUCCESS;
     }
 
     /**
