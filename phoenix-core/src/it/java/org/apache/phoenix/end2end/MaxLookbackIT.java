@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
@@ -56,6 +57,8 @@ import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assume.assumeTrue;
+
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class MaxLookbackIT extends BaseTest {
@@ -121,6 +124,7 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=120000L)
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
+        assumeTrue("PHOENIX-7264", VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -188,6 +192,7 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
+        assumeTrue("PHOENIX-7264", VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         ttl = 20;
         optionBuilder.append("TTL=" + ttl);
         tableDDLOptions = optionBuilder.toString();
@@ -260,6 +265,7 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test(timeout=60000)
     public void testRecentMaxVersionsNotCompactedAway() throws Exception {
+        assumeTrue("PHOENIX-7264", VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         int versions = 2;
         optionBuilder.append("VERSIONS=" + versions);
         tableDDLOptions = optionBuilder.toString();
