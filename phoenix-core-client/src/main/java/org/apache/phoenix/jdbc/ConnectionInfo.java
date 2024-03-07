@@ -333,7 +333,9 @@ public abstract class ConnectionInfo {
         if (haGroup == null) {
             if (other.haGroup != null) return false;
         } else if (!haGroup.equals(other.haGroup)) return false;
-        if (!connectionType.equals(other.connectionType)) return false;
+        if (!connectionType.equals(other.connectionType)) {
+            return false;
+        }
         return true;
     }
 
