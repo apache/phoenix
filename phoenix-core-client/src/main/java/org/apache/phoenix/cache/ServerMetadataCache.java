@@ -1,6 +1,6 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
@@ -23,6 +23,7 @@ import java.sql.SQLException;
  * Interface for server side metadata cache hosted on each region server.
  */
 public interface ServerMetadataCache {
-    long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName) throws SQLException;
+    long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
+            throws SQLException;
     void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName);
 }
