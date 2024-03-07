@@ -25,6 +25,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -43,12 +44,14 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.LinkType;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.BeforeClass;
@@ -60,10 +63,12 @@ public class PhoenixDriverIT extends BaseTest {
     
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;
+
+    private static Configuration conf;
     
     @BeforeClass
     public static synchronized void setUp() throws Exception {
-        Configuration conf = HBaseConfiguration.create();
+        conf = HBaseConfiguration.create();
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
@@ -233,5 +238,15 @@ public class PhoenixDriverIT extends BaseTest {
         String physicalTableName = rs.getString(1);
         assertFalse(rs.next());
         return physicalTableName;
+    }
+
+    @Test
+    public void testDifferentQueryServiceForServerConnection() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(QueryUtil.getConnectionUrl(props, conf), props);
+        Connection serverConn = QueryUtil.getConnectionOnServer(props, conf);
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        ConnectionQueryServices serverCqs = serverConn.unwrap(PhoenixConnection.class).getQueryServices();
+        assertNotSame(cqs, serverCqs);
     }
 }
