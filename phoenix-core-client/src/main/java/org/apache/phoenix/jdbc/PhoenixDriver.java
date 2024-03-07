@@ -44,7 +44,6 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -251,8 +250,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
             ConnectionQueryServices connectionQueryServices = null;
             // Also performs the Kerberos login if the URL/properties request this
             final Properties info = PropertiesUtil.deepCopy(infoIn);
-            boolean isServerConnection = Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION));
-            final ConnectionInfo connInfo = ConnectionInfo.create(url, services.getProps(), info, isServerConnection);
+            final ConnectionInfo connInfo = ConnectionInfo.create(url, services.getProps(), info);
             //Set connection parameters to normalized value from URL
             info.putAll(connInfo.asProps().asMap());
             try {

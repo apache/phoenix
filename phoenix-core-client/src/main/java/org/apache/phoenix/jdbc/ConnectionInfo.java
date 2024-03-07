@@ -87,7 +87,6 @@ public abstract class ConnectionInfo {
     protected final String keytab;
     protected final User user;
     protected final String haGroup;
-    protected Boolean isServerConnection = false;
 
     protected ConnectionInfo(boolean isConnectionless, String principal, String keytab, User user,
             String haGroup) {
@@ -113,15 +112,6 @@ public abstract class ConnectionInfo {
             throws SQLException {
         Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
         return create(url, conf, props, info);
-    }
-
-    public static ConnectionInfo create(String url, ReadOnlyProps props,
-            Properties info, boolean isServerConnection)
-            throws SQLException {
-        Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        ConnectionInfo connInfo = create(url, conf, props, info);
-        connInfo.isServerConnection = isServerConnection;
-        return connInfo;
     }
 
     public static ConnectionInfo createNoLogin(String url, Configuration configuration,
@@ -340,7 +330,6 @@ public abstract class ConnectionInfo {
         if (haGroup == null) {
             if (other.haGroup != null) return false;
         } else if (!haGroup.equals(other.haGroup)) return false;
-        if (!isServerConnection.equals(other.isServerConnection)) return false;
         return true;
     }
 
@@ -353,7 +342,6 @@ public abstract class ConnectionInfo {
         result = prime * result + ((haGroup == null) ? 0 : haGroup.hashCode());
         // `user` is guaranteed to be non-null
         result = prime * result + user.hashCode();
-        result = prime * result + isServerConnection.hashCode();
         return result;
     }
 

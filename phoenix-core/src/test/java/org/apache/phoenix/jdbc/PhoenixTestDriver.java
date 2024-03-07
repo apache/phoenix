@@ -33,7 +33,6 @@ import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 
 
@@ -93,8 +92,7 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties infoIn) throws SQLException {
         checkClosed();
         final Properties info = PropertiesUtil.deepCopy(infoIn);
-        boolean isServerConnection = Boolean.valueOf(info.getProperty(QueryUtil.IS_SERVER_CONNECTION));
-        ConnectionInfo connInfo = ConnectionInfo.create(url, null, info, isServerConnection);
+        ConnectionInfo connInfo = ConnectionInfo.create(url, null, info);
         ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(connInfo);
         if (connectionQueryServices != null) {
             return connectionQueryServices;
