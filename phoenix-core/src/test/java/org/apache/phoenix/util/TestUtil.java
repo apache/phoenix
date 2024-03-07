@@ -810,6 +810,11 @@ public class TestUtil {
         conn.createStatement().execute(ddl);
     }
 
+    public static void flush(HBaseTestingUtility utility, TableName table) throws IOException {
+        Admin admin = utility.getAdmin();
+        admin.flush(table);
+    }
+
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
         throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();

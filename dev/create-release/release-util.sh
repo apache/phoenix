@@ -19,7 +19,7 @@
 DRY_RUN=${DRY_RUN:-1} #default to dry run
 DEBUG=${DEBUG:-0}
 GPG=${GPG:-gpg}
-GPG_ARGS=(--no-autostart --batch)
+GPG_ARGS=(--no-autostart --batch --pinentry-mode error)
 if [ -n "${GPG_KEY}" ]; then
   GPG_ARGS=("${GPG_ARGS[@]}" --local-user "${GPG_KEY}")
 fi
@@ -147,7 +147,7 @@ function get_release_info {
   # Find the current version for the branch.
   # FIXME this only works with gitbox
   local version
-  version="$(curl -s "$ASF_REPO_WEBUI;a=blob_plain;f=pom.xml;hb=refs/heads/$GIT_BRANCH" |
+  version="$(curl -L -s "$ASF_REPO_WEBUI;a=blob_plain;f=pom.xml;hb=refs/heads/$GIT_BRANCH" |
     parse_version)"
   echo "Current branch VERSION is $version."
 
