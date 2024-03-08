@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hbase.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.CommitException;
@@ -193,6 +194,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             }
         } catch (Exception e) {
             // ignore
+        } finally {
+            ServerMetadataCacheTestImpl.resetCache();
         }
     }
 

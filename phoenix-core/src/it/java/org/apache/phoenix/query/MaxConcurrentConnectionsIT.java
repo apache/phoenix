@@ -22,6 +22,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
@@ -79,6 +80,7 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
     //Have to shutdown our special delayed region server
     @AfterClass
     public static void tearDown() throws Exception {
+        ServerMetadataCacheTestImpl.resetCache();
         hbaseTestUtil.shutdownMiniCluster();
     }
 

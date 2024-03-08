@@ -18,7 +18,8 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.StartMiniClusterOption;
-import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
+import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
@@ -475,6 +476,7 @@ public class HighAvailabilityTestingUtility {
             admin1.close();
             admin2.close();
             try {
+                ServerMetadataCacheTestImpl.resetCache();
                 hbaseCluster1.shutdownMiniCluster();
                 hbaseCluster2.shutdownMiniCluster();
             } catch (Exception e) {
@@ -541,7 +543,7 @@ public class HighAvailabilityTestingUtility {
             // Phoenix Region Server Endpoint needed for metadata caching
             if (QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
                 conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
-                            PhoenixRegionServerEndpoint.class.getName());
+                            PhoenixRegionServerEndpointTestImpl.class.getName());
             }
         }
     }

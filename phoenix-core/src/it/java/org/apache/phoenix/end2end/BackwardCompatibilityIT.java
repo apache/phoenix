@@ -59,7 +59,6 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.SystemCatalogRegionObserver;
 import org.apache.phoenix.coprocessor.TaskMetaDataEndpoint;
 import org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.MavenCoordinates;
@@ -137,7 +136,7 @@ public class BackwardCompatibilityIT {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
-            ServerMetadataCacheImpl.resetCache();
+            ServerMetadataCacheTestImpl.resetCache();
         }
         System.setProperty("java.io.tmpdir", tmpDir);
         assertFalse("refCount leaked", refCountLeaked);

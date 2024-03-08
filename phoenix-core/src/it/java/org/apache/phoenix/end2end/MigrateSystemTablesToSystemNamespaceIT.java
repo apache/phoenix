@@ -108,6 +108,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         try {
             if (testUtil != null) {
                 boolean refCountLeaked = isAnyStoreRefCountLeaked();
+                ServerMetadataCacheTestImpl.resetCache();
                 testUtil.shutdownMiniCluster();
                 testUtil = null;
                 assertFalse("refCount leaked", refCountLeaked);

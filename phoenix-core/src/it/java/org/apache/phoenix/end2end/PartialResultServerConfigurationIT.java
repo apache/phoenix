@@ -86,6 +86,7 @@ public class PartialResultServerConfigurationIT {
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
+            ServerMetadataCacheTestImpl.resetCache();
             hbaseTestUtil.shutdownMiniCluster();
         }
     }

@@ -170,6 +170,7 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     static void initCluster(boolean isNamespaceMapped, boolean useCustomAccessController) throws Exception {
         if (null != testUtil) {
+            ServerMetadataCacheTestImpl.resetCache();
             testUtil.shutdownMiniCluster();
             testUtil = null;
         }

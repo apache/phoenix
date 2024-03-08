@@ -17,11 +17,15 @@
  */
 package org.apache.phoenix.cache;
 
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -61,6 +65,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.query.ConnectionQueryServicesImpl.INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -75,11 +80,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+// End to end tests for metadata caching re-design.
 @Category(ParallelStatsDisabledIT.class)
-public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
+public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
     private final long NEVER = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
+
+    private static ServerName serverName;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -91,6 +99,8 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
                 Long.toString(Long.MAX_VALUE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+        assertEquals(1, getUtility().getHBaseCluster().getNumLiveRegionServers());
+        serverName = getUtility().getHBaseCluster().getRegionServer(0).getServerName();
     }
 
     @Before
@@ -100,7 +110,23 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
 
     @After
     public void resetMetadataCache() {
-        ServerMetadataCache.resetCache();
+        ServerMetadataCacheTestImpl.resetCache();
+    }
+
+    /**
+     * Get the server metadata cache instance from the endpoint loaded on the region server.
+     */
+    private ServerMetadataCacheTestImpl getServerMetadataCache() {
+        String phoenixRegionServerEndpoint = config.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
+        assertNotNull(phoenixRegionServerEndpoint);
+        RegionServerCoprocessor coproc = getUtility().getHBaseCluster()
+                .getRegionServer(0)
+                .getRegionServerCoprocessorHost()
+                .findCoprocessor(phoenixRegionServerEndpoint);
+        assertNotNull(coproc);
+        ServerMetadataCache cache = ((PhoenixRegionServerEndpointTestImpl)coproc).getServerMetadataCache();
+        assertNotNull(cache);
+        return (ServerMetadataCacheTestImpl)cache;
     }
 
     /**
@@ -121,7 +147,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             createTable(conn, tableNameStr, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn,
                     tableNameStr);// --> First call to CQSI#getTable
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            ServerMetadataCacheTestImpl cache = getServerMetadataCache();
             // Override the connection to use in ServerMetadataCache
             cache.setConnectionForTesting(conn);
             byte[] tableName = Bytes.toBytes(tableNameStr);
@@ -162,7 +188,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             String viewNameStr = generateUniqueName();
             createViewWhereClause(conn, tableNameStr, viewNameStr, whereClause);
             viewTable = PhoenixRuntime.getTableNoCache(conn, viewNameStr);  // --> First call to CQSI#getTable
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
             cache.setConnectionForTesting(conn);
 
@@ -209,7 +235,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             createViewWhereClause(conn, tableNameStr, tenantViewNameStr, whereClause);
             tenantViewTable = PhoenixRuntime.getTableNoCache(conn,
                     tenantViewNameStr);  // --> First call to CQSI#getTable
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
             cache.setConnectionForTesting(conn);
             byte[] tenantIDBytes = Bytes.toBytes(tenantId);
@@ -246,7 +272,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // Create a test table.
             createTable(conn, tableNameStr, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
             cache.setConnectionForTesting(conn);
             byte[] tableName = Bytes.toBytes(tableNameStr);
@@ -276,7 +302,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             // Create a test table.
             createTable(conn, fullTableName, NEVER);
             pTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
             cache.setConnectionForTesting(conn);
             byte[] tableNameBytes = Bytes.toBytes(fullTableName);
@@ -313,7 +339,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), tenantProps)) {
             createViewWhereClause(conn, tableNameStr, tenantViewNameStr, whereClause);
             tenantViewTable = PhoenixRuntime.getTableNoCache(conn, tenantViewNameStr);
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+            ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
             cache.setConnectionForTesting(conn);
             byte[] tenantIDBytes = Bytes.toBytes(tenantId);
@@ -340,7 +366,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String tableNameStr =  generateUniqueName();
         byte[] tableNameBytes = Bytes.toBytes(tableNameStr);
         PTable pTable;
-        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
@@ -377,7 +403,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String tableNameStr =  generateUniqueName();
         byte[] tableNameBytes = Bytes.toBytes(tableNameStr);
         PTable pTable;
-        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
@@ -411,7 +437,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String indexNameStr = "IND_" + generateUniqueName();
         byte[] indexNameBytes = Bytes.toBytes(indexNameStr);
         PTable indexTable;
-        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
         try (Connection conn = DriverManager.getConnection(url, props)) {
             conn.setAutoCommit(false);
             // Create a test table.
@@ -457,7 +483,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         byte[] tableNameBytes = Bytes.toBytes(tableName);
         String indexName = generateUniqueName();
         byte[] indexNameBytes = Bytes.toBytes(indexName);
-        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
             createTable(conn, tableName, NEVER);
@@ -507,7 +533,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String globalViewIndexName = "GV_IDX_" + generateUniqueName();
         byte[] globalViewIndexNameBytes = Bytes.toBytes(globalViewIndexName);
 
-        ServerMetadataCache cache = ServerMetadataCache.getInstance(config);
+        ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
         try(Connection conn = DriverManager.getConnection(getUrl());
             Statement stmt = conn.createStatement()) {
             String whereClause = " WHERE v1 < 1000";
@@ -614,7 +640,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
         ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
-        ServerMetadataCache cache = null;
+        ServerMetadataCacheTestImpl cache = null;
 
         try (Connection conn1 = spyCqs1.connect(url1, props);
              Connection conn2 = spyCqs2.connect(url2, props)) {
@@ -624,11 +650,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             upsert(conn1, tableName, true);
 
             // Instrument ServerMetadataCache to throw a SQLException once
-            cache = ServerMetadataCache.getInstance(config);
-            ServerMetadataCache spyCache = Mockito.spy(cache);
+            cache = getServerMetadataCache();;
+            ServerMetadataCacheTestImpl spyCache = Mockito.spy(cache);
             Mockito.doThrow(new SQLException("FAIL")).doCallRealMethod().when(spyCache)
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
-            ServerMetadataCache.setInstance(spyCache);
+            ServerMetadataCacheTestImpl.setInstance(serverName, spyCache);
 
             // query using client-2 should succeed
             query(conn2, tableName);
@@ -652,7 +678,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
         ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
         int expectedNumCacheUpdates;
-        ServerMetadataCache cache = null;
+        ServerMetadataCacheTestImpl cache = null;
 
         try (Connection conn1 = spyCqs1.connect(url1, props);
              Connection conn2 = spyCqs2.connect(url2, props)) {
@@ -674,11 +700,11 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             Mockito.reset(spyCqs2);
 
             // Instrument ServerMetadataCache to throw a SQLException once
-            cache = ServerMetadataCache.getInstance(config);
-            ServerMetadataCache spyCache = Mockito.spy(cache);
+            cache = getServerMetadataCache();;
+            ServerMetadataCacheTestImpl spyCache = Mockito.spy(cache);
             Mockito.doThrow(new SQLException("FAIL")).doCallRealMethod().when(spyCache)
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
-            ServerMetadataCache.setInstance(spyCache);
+            ServerMetadataCacheTestImpl.setInstance(serverName, spyCache);
 
             // query using client-2 should succeed, one cache update
             query(conn2, tableName);
@@ -702,7 +728,7 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
         ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
-        ServerMetadataCache cache = null;
+        ServerMetadataCacheTestImpl cache = null;
 
         try (Connection conn1 = spyCqs1.connect(url1, props);
              Connection conn2 = spyCqs2.connect(url2, props)) {
@@ -712,12 +738,12 @@ public class ServerMetadataCacheTest extends ParallelStatsDisabledIT {
             upsert(conn1, tableName, true);
 
             // Instrument ServerMetadataCache to throw a SQLException twice
-            cache = ServerMetadataCache.getInstance(config);
-            ServerMetadataCache spyCache = Mockito.spy(cache);
+            cache = getServerMetadataCache();;
+            ServerMetadataCacheTestImpl spyCache = Mockito.spy(cache);
             SQLException e = new SQLException("FAIL");
             Mockito.doThrow(e).when(spyCache)
                     .getLastDDLTimestampForTable(any(), any(), eq(Bytes.toBytes(tableName)));
-            ServerMetadataCache.setInstance(spyCache);
+            ServerMetadataCacheTestImpl.setInstance(serverName, spyCache);
 
             // query using client-2 should fail
             query(conn2, tableName);

@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
+import org.apache.phoenix.cache.ServerMetadataCacheImpl;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
@@ -60,6 +61,7 @@ public class PhoenixRegionServerEndpoint
             RegionServerEndpointProtos.ValidateLastDDLTimestampRequest request,
             RpcCallback<RegionServerEndpointProtos.ValidateLastDDLTimestampResponse> done) {
         metricsSource.incrementValidateTimestampRequestCount();
+        ServerMetadataCache cache = getServerMetadataCache();
         for (RegionServerEndpointProtos.LastDDLTimestampRequest lastDDLTimestampRequest
                 : request.getLastDDLTimestampRequestsList()) {
             byte[] tenantID = lastDDLTimestampRequest.getTenantId().toByteArray();
@@ -71,7 +73,7 @@ public class PhoenixRegionServerEndpoint
             try {
                 LOGGER.debug("Verifying last ddl timestamp for tenantID: {}, tableName: {}",
                         tenantIDStr, fullTableName);
-                VerifyLastDDLTimestamp.verifyLastDDLTimestamp(this.conf, tenantID, schemaName,
+                VerifyLastDDLTimestamp.verifyLastDDLTimestamp(cache, tenantID, schemaName,
                         tableName, clientLastDDLTimestamp);
             } catch (Throwable t) {
                 String errorMsg = String.format("Verifying last ddl timestamp FAILED for "
@@ -101,7 +103,7 @@ public class PhoenixRegionServerEndpoint
             String tenantIDStr = Bytes.toString(tenantID);
             LOGGER.info("PhoenixRegionServerEndpoint invalidating the cache for tenantID: {},"
                     + " tableName: {}", tenantIDStr, fullTableName);
-            ServerMetadataCache cache = ServerMetadataCache.getInstance(conf);
+            ServerMetadataCache cache = getServerMetadataCache();
             cache.invalidate(tenantID, schemaName, tableName);
         }
     }
@@ -109,5 +111,9 @@ public class PhoenixRegionServerEndpoint
     @Override
     public Iterable<Service> getServices() {
         return Collections.singletonList(this);
+    }
+
+    public ServerMetadataCache getServerMetadataCache() {
+        return ServerMetadataCacheImpl.getInstance(conf);
     }
 }
