@@ -1,0 +1,36 @@
+{
+  "datatypes": {
+    "stringtype": "someString",
+    "inttype": 1,
+    "booltype": true,
+    "booltypef": false,
+    "doubletype": 2.5,
+    "longtype": 1490020778457845,
+    "intArray": [
+      1,
+      2,
+      3
+    ],
+    "nullcheck": null,
+    "boolArray": [
+      true,
+      false,
+      false
+    ],
+    "doubleArray": [
+      1.2,
+      2.3,
+      3.4
+    ],
+    "stringArray": [
+      "hello",
+      "world"
+    ],
+    "mixedArray": [
+      2,
+      "string",
+      1.2,
+      false
+    ]
+  }
+}

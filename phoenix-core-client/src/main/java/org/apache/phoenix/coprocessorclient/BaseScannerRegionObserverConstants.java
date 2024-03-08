@@ -90,6 +90,8 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_FILTER = "_IndexFilter";
     public static final String INDEX_LIMIT = "_IndexLimit";
     public static final String INDEX_FILTER_STR = "_IndexFilterStr";
+    public static final String JSON_VALUE_FUNCTION = "_JsonValueFunction";
+    public static final String JSON_QUERY_FUNCTION = "_JsonQueryFunction";
 
     /*
      * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.

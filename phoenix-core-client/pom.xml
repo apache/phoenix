@@ -182,6 +182,7 @@
           <excludes>
             <exclude>src/main/java/org/apache/phoenix/coprocessor/generated/*.java</exclude>
             <exclude>src/main/resources/META-INF/services/java.sql.Driver</exclude>
+            <exclude>src/it/resources/json/*.json</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -285,6 +286,19 @@
     <dependency>
       <groupId>org.apache.zookeeper</groupId>
       <artifactId>zookeeper-jute</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.jayway.jsonpath</groupId>
+      <artifactId>json-path</artifactId>
+      <version>2.6.0</version>
+    </dependency>
+
+    <!-- https://mvnrepository.com/artifact/org.mongodb/bson -->
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>bson</artifactId>
+      <version>4.4.0</version>
     </dependency>
 
     <!-- Transaction dependencies -->

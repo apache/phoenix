@@ -21,7 +21,6 @@ package org.apache.phoenix.pherf.util;
 import com.google.gson.Gson;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.mapreduce.index.automation.PhoenixMRJobSubmitter;
 import org.apache.phoenix.pherf.PherfConstants;
 import org.apache.phoenix.pherf.configuration.Column;
@@ -514,6 +513,13 @@ public class PhoenixUtil {
             case VARCHAR:
                 if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.VARCHAR);
+                } else {
+                    statement.setString(count, dataValue.getValue());
+                }
+                break;
+            case JSON:
+                if (dataValue.getValue().equals("")) {
+                    statement.setNull(count, Types.VARBINARY);
                 } else {
                     statement.setString(count, dataValue.getValue());
                 }

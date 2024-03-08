@@ -1043,13 +1043,13 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(),
                 PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         String ddl = "create table myTable(ID varchar primary key, A integer, B varchar, " +
-                "C date, D double, E integer)";
+                "C date, D double, E integer, F json)";
         pconn.createStatement().execute(ddl);
         ddl = "create table myTableDesc(ID varchar primary key DESC, A integer, B varchar, " +
-                "C date, D double, E integer)";
+                "C date, D double, E integer, F json)";
         pconn.createStatement().execute(ddl);
 
-        final int NUM = 15;
+        final int NUM = 20;
         String[] containingQueries = new String[NUM];
         String[] containedQueries = new String[NUM];
 
@@ -1105,6 +1105,22 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 "CURRENT_DATE() - PHOENIX_ROW_TIMESTAMP() < 10";
         containedQueries[14] = "select * from myTable where " +
                 " CURRENT_DATE() - PHOENIX_ROW_TIMESTAMP() < 5 ";
+
+        containingQueries[15] = "select * from myTable where ID > 'i3' and A > 1 and JSON_VALUE(F, '$.type') > 'i3'";
+        containedQueries[15] = "select * from myTableDesc where (ID > 'i7' or ID = 'i4') and " +
+                "A > 2 * 10 and (JSON_VALUE(F, '$.type') > 'i7' or JSON_VALUE(F, '$.type') = 'i4')";
+
+        containingQueries[16] = "select * from myTable where JSON_VALUE(F, '$.type') is not null";
+        containedQueries[16] = "select * from myTable where JSON_VALUE(F, '$.type') > 'i3'";
+
+        containingQueries[17] = "select * from myTable where JSON_VALUE(F, '$.type') like '%abc'";
+        containedQueries[17] = "select * from myTable where (JSON_VALUE(F, '$.type') like '%abc' and ID > 'i1')";
+
+        containingQueries[18] = "select * from myTable where JSON_EXISTS(F, '$.type')";
+        containedQueries[18] = "select * from myTable where JSON_EXISTS(F, '$.type') and JSON_VALUE(F, '$.type') > 'i3'";
+
+        containingQueries[19] = "select * from myTable where JSON_VALUE(F, '$.type') IN ('i3', 'i7', 'i1') and A < 10";
+        containedQueries[19] = "select * from myTableDesc where JSON_VALUE(F, '$.type') IN ('i1', 'i7') and A < 10 / 2";
 
         for (int i = 0; i < NUM; i++) {
             Assert.assertTrue(WhereCompiler.contains(getDNF(pconn, containingQueries[i]),
