@@ -776,7 +776,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
          * all region locations from the HTable doesn't.
          */
         int retryCount = 0;
-        int maxRetryCount = config.getInt(PHOENIX_GET_REGIONS_RETRIES, 3);
+        int maxRetryCount =
+            config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
         byte[] currentKey = null;
         HRegionLocation prevRegionLocation = null;

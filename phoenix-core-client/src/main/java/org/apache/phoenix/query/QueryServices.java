@@ -479,7 +479,12 @@ public interface QueryServices extends SQLCloseable {
     String PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE =
             "phoenix.paging.start.newscan.startrow.include";
 
+    /**
+     * Num of retries while retrieving the region location details for the given table.
+     */
     String PHOENIX_GET_REGIONS_RETRIES = "phoenix.get.table.regions.retries";
+
+    int DEFAULT_PHOENIX_GET_REGIONS_RETRIES = 3;
 
     /**
      * Get executor service used for parallel scans
