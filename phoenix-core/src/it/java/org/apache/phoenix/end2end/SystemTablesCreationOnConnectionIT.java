@@ -200,7 +200,7 @@ public class SystemTablesCreationOnConnectionIT {
                     refCountLeaked = BaseTest.isAnyStoreRefCountLeaked(testUtil.getAdmin());
                 }
                 testUtil.shutdownMiniCluster();
-                ServerMetadataCacheImpl.resetCache();
+                ServerMetadataCacheTestImpl.resetCache();
                 testUtil = null;
                 assertFalse("refCount leaked", refCountLeaked);
             }
