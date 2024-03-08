@@ -1237,7 +1237,7 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testRVCOffsetWithNotApplicableAndPointLookup() throws Exception {
+    public void testRVCOffsetWithNotApplicableDataPlanAndPointLookup() throws Exception {
         //'ab' is not an integer so this fails
         String failureSql = String.format("SELECT %s FROM %s "
                         + "WHERE t_id = 'b' AND k1 = 2 AND k2 = 3 OFFSET (%s)=('a', 'ab', 2)",

@@ -659,9 +659,15 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
                     + " WHERE id2 = 'a2' AND (id1 = 'a1' OR id1 = 'b1') AND id3 = 3";
             ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
             String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-            String expectedQueryPlan = "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 2 KEYS OVER "
-                    + physicalViewIndexTableName;
-            assertEquals(expectedQueryPlan, actualQueryPlan);
+            assertTrue(actualQueryPlan.contains("1-WAY POINT LOOKUP ON 2 KEYS OVER " + physicalViewIndexTableName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+            assertFalse(rs.next());
+            sql = "SELECT val2, id2, val1, id3, id1 FROM " + fullGrandChildViewName
+                    + " WHERE id2 = 'a2' AND (id1 = 'a1' OR id1 = 'b1') AND id3 = 3";
+            rs = stmt.executeQuery("EXPLAIN " + sql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("1-WAY POINT LOOKUP ON 2 KEYS OVER " + fullDataTableName));
             rs = stmt.executeQuery(sql);
             assertTrue(rs.next());
             assertFalse(rs.next());
