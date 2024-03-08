@@ -136,14 +136,14 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.SystemExitRule;
-import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.compat.hbase.CompatUtil;
-import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
+import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -493,7 +493,7 @@ public abstract class BaseTest {
         } finally {
             try {
                 // Clear ServerMetadataCache.
-                ServerMetadataCache.resetCache();
+                ServerMetadataCacheTestImpl.resetCache();
                 utility.shutdownMiniCluster();
             } catch (Throwable t) {
                 LOGGER.error("Exception caught when shutting down mini cluster", t);
@@ -646,13 +646,14 @@ public abstract class BaseTest {
     }
 
     /*
-        Set property hbase.coprocessor.regionserver.classes to include PhoenixRegionServerEndpoint
-        by default, if some other regionserver coprocs are not already present.
+        Set property hbase.coprocessor.regionserver.classes to include test implementation of
+        PhoenixRegionServerEndpoint by default, if some other regionserver coprocs
+        are not already present.
      */
     private static void setPhoenixRegionServerEndpoint(Configuration conf) {
         String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
         if (value == null) {
-            value = PhoenixRegionServerEndpoint.class.getName();
+            value = PhoenixRegionServerEndpointTestImpl.class.getName();
         }
         conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, value);
     }

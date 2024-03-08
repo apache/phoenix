@@ -137,7 +137,7 @@ public class BackwardCompatibilityIT {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
             hbaseTestUtil.shutdownMiniCluster();
-            ServerMetadataCache.resetCache();
+            ServerMetadataCacheTestImpl.resetCache();
         }
         System.setProperty("java.io.tmpdir", tmpDir);
         assertFalse("refCount leaked", refCountLeaked);

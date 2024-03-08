@@ -17,10 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.io.IOException;
 import java.sql.SQLException;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
@@ -49,13 +47,13 @@ public class VerifyLastDDLTimestamp {
      * @param schemaName             schema name
      * @param tableName              table name
      * @param clientLastDDLTimestamp last ddl timestamp provided by client
-     * @param conf                   configuration
+     * @param cache                  ServerMetadataCache
      * @throws SQLException         StaleMetadataCacheException if client provided timestamp
      *                              is stale.
      */
-    public static void verifyLastDDLTimestamp(Configuration conf, byte[] tenantID,
-            byte[] schemaName, byte[] tableName, long clientLastDDLTimestamp) throws SQLException {
-        ServerMetadataCache cache = ServerMetadataCache.getInstance(conf);
+    public static void verifyLastDDLTimestamp(ServerMetadataCache cache, byte[] tenantID,
+                              byte[] schemaName, byte[] tableName, long clientLastDDLTimestamp)
+            throws SQLException {
         long lastDDLTimestamp = cache.getLastDDLTimestampForTable(tenantID, schemaName, tableName);
         // Is it possible to have client last ddl timestamp greater than server side?
         if (clientLastDDLTimestamp < lastDDLTimestamp) {
