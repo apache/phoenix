@@ -20,6 +20,6 @@
     "2.1": [ {"artifactId":"phoenix-client-hbase-2.1", "version":"5.1.0"} ],
     "2.2": [ {"artifactId":"phoenix-client-hbase-2.2", "version":"5.1.0"} ],
     "2.3": [ {"artifactId":"phoenix-client-hbase-2.3", "version":"5.1.0"} ],
-    "2.4": [ {"artifactId":"phoenix-client-hbase-2.4", "version":"5.1.0"} ],
+    "2.4": [ {"artifactId":"phoenix-client-hbase-2.4", "version":"5.1.2"} ],
     "2.5": [ {"artifactId":"phoenix-client-hbase-2.5", "version":"5.1.3"} ]
 }
