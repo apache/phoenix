@@ -248,10 +248,6 @@ public class QueryOptimizer {
             }
             plans.add(0, hintedPlan);
         }
-        if (dataPlan.getContext().getScanRanges().isPointLookup()
-                && stopAtBestPlan && dataPlan.isApplicable()) {
-            return Collections.<QueryPlan> singletonList(dataPlan);
-        }
         
         for (PTable index : indexes) {
             QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns, parallelIteratorFactory, dataPlan, false);
