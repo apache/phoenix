@@ -54,7 +54,7 @@ public class SystemCatalogViewIndexIdFilter extends FilterBase implements Writab
         this.clientVersion = clientVersion;
     }
 
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell keyValue) {
         return filterCell(keyValue);
     }

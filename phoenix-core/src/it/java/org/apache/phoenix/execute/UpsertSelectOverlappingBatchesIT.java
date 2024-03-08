@@ -209,8 +209,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
             }
 
             // keep trying to split the region
-            final HBaseTestingUtility utility = getUtility();
-            final Admin admin = utility.getAdmin();
+            final Admin admin = getUtility().getAdmin();
             final TableName dataTN = TableName.valueOf(dataTable);
             assertEquals(1, utility.getHBaseCluster().getRegions(dataTN).size());
             utility.waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
@@ -262,16 +261,15 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
                 Thread.sleep(300);
             }
 
-            final HBaseTestingUtility utility = getUtility();
             // try to close the region while UPSERT SELECTs are happening,
-            final HRegionServer dataRs = utility.getHBaseCluster().getRegionServer(0);
-            final Admin admin = utility.getAdmin();
+            final HRegionServer dataRs = getUtility().getHBaseCluster().getRegionServer(0);
+            final Admin admin = getUtility().getAdmin();
             final RegionInfo dataRegion =
                     admin.getRegions(TableName.valueOf(dataTable)).get(0);
             LOGGER.info("Closing data table region");
             admin.unassign(dataRegion.getEncodedNameAsBytes(), true);
             // make sure the region is offline
-            utility.waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
+            getUtility().waitFor(60000L, 1000, new Waiter.Predicate<Exception>() {
                 @Override
                 public boolean evaluate() throws Exception {
                     List<RegionInfo> onlineRegions =

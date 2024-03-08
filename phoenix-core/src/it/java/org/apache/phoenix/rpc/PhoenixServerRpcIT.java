@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
@@ -204,13 +205,12 @@ public class PhoenixServerRpcIT extends BaseTest {
 	 * different region servers. If they are on the same server moves tableName2
 	 * to the other region server.
 	 */
-	private void ensureTablesOnDifferentRegionServers(String tableName1, String tableName2) throws Exception  {
+	private void ensureTablesOnDifferentRegionServers(String tableName1, String tableName2) throws Exception  {    
 		byte[] table1 = Bytes.toBytes(tableName1);
 		byte[] table2 = Bytes.toBytes(tableName2);
 		Admin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
-		HBaseTestingUtility util = getUtility();
-		MiniHBaseCluster cluster = util.getHBaseCluster();
-		HMaster master = cluster.getMaster();
+		IntegrationTestingUtility util = getUtility();
+		HMaster master = util.getHBaseCluster().getMaster();
 		AssignmentManager am = master.getAssignmentManager();
    
 		// verify there is only a single region for data table

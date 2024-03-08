@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -32,6 +33,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -247,11 +249,15 @@ public class TableTTLIT extends BaseTest {
         }
     }
     private void flush(TableName table) throws IOException {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         Admin admin = getUtility().getAdmin();
         admin.flush(table);
     }
 
     private void majorCompact(TableName table) throws Exception {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         TestUtil.majorCompact(getUtility(), table);
     }
 

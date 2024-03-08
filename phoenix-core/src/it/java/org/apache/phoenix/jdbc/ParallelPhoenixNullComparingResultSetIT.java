@@ -36,7 +36,7 @@ import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
@@ -86,12 +86,10 @@ public class ParallelPhoenixNullComparingResultSetIT {
         LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcUrl);
         CLUSTERS.createTableOnClusterPair(tableName, false);
         // Disable replication from cluster 1 to cluster 2
-        ReplicationAdmin admin =
-                new ReplicationAdmin(CLUSTERS.getHBaseCluster1().getConfiguration());
-        admin.removePeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT);
-        ReplicationAdmin admin2 =
-                new ReplicationAdmin(CLUSTERS.getHBaseCluster2().getConfiguration());
-        admin2.removePeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT);
+        CLUSTERS.getHBaseCluster1().getAdmin()
+                .removeReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT);
+        CLUSTERS.getHBaseCluster2().getAdmin()
+                .removeReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT);
     }
 
     @AfterClass

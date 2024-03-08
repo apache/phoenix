@@ -52,6 +52,7 @@ import static junit.framework.TestCase.fail;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 @Category(ParallelStatsEnabledTest.class)
+//TODO why is this a ParallelStatsEnabledIT ?
 public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
 
     @BeforeClass

@@ -65,7 +65,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
      * Evaluate in filterKeyValue instead of filterRowKey, because HBASE-6562 causes filterRowKey
      * to be called with deleted or partial row keys.
      */
-    @Override
+    // No @Override for HBase 3 compatibility
     public ReturnCode filterKeyValue(Cell v) {
         return filterCell(v);
     }

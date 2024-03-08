@@ -57,6 +57,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.Cell;
@@ -65,7 +66,9 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TimedOutTestsListener;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.CompactionState;
@@ -87,6 +90,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.util.Time;
+import org.apache.hbase.thirdparty.com.google.common.base.Supplier;
 import org.apache.phoenix.compile.AggregationManager;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -815,7 +820,8 @@ public class TestUtil {
         admin.flush(table);
     }
 
-    public static void majorCompact(HBaseTestingUtility utility, TableName table)
+
+    public static void majorCompact(IntegrationTestingUtility utility, TableName table)
         throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
         Admin admin = utility.getAdmin();
@@ -1420,4 +1426,29 @@ public class TestUtil {
         return Files.createTempDirectory(Paths.get(System.getProperty("java.io.tmpdir")), null);
     }
 
+    // Copied from org.apache.hadoop.hbase.GenericTestUtils which got removed in HBase
+    /**
+     * Polls "check" every checkEveryMillis until waitForMillis
+     * 
+     * @param check
+     * @param checkEveryMillis
+     * @param waitForMillis
+     * @throws TimeoutException
+     * @throws InterruptedException
+     */
+    public static void waitFor(Supplier<Boolean> check, int checkEveryMillis, int waitForMillis)
+            throws TimeoutException, InterruptedException {
+        long st = Time.now();
+        do {
+            boolean result = check.get();
+            if (result) {
+                return;
+            }
+
+            Thread.sleep(checkEveryMillis);
+        } while (Time.now() - st < waitForMillis);
+
+        throw new TimeoutException("Timed out waiting for condition. " + "Thread diagnostics:\n"
+                + TimedOutTestsListener.buildThreadDiagnosticString());
+    }
 }

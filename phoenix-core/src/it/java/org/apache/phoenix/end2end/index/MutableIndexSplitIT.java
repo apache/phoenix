@@ -32,12 +32,16 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.util.ByteUtil;
@@ -46,6 +50,8 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
+import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 
 @RunWith(Parameterized.class)
 public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
@@ -60,8 +66,13 @@ public abstract class MutableIndexSplitIT extends ParallelStatsDisabledIT {
     
     private static Connection getConnection(Properties props) throws SQLException {
         props.setProperty(QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB, Integer.toString(1));
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        return conn;
+        props.setProperty(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, Integer.toString(1));
+        ConnectionInfo info = ConnectionInfo.create(getUrl(), null, props);
+        // HBase 3 Async implementation pre-caches scanner results in the background, which
+        // would break this test.
+        // The principal makes sure that a new CQSI is created with 
+        // HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, and the scanner cache is just 2 rows. 
+        return DriverManager.getConnection(info.withPrincipal("nocache").toUrl(), props);
     }
     
 	@Parameters(name="MutableIndexSplitIT_localIndex={0},multiTenant={1}") // name is used by failsafe as file name in reports

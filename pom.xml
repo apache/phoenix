@@ -40,6 +40,8 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-3.0.0</module>
+    <module>phoenix-hbase-compat-2.6.0</module>
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
@@ -85,6 +87,13 @@
     <hbase-2.4.runtime.version>2.4.17</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.7-hadoop3</hbase-2.5.runtime.version>
+<!--    <hbase-2.6.runtime.version>2.6.0-hadoop3</hbase-2.6.runtime.version>-->
+    <hbase-2.6.runtime.version>2.6.0-SNAPSHOT</hbase-2.6.runtime.version>
+    <hbase-3.0.runtime.version>3.0.0-beta-2-SNAPSHOT</hbase-3.0.runtime.version>
+
+    <!-- This is a hack to work around Eclipse m2 integration brokennes. It is set to hbase.version
+    when building with Hbase 2.x, and a random existing version for Hbase 3.x -->
+    <hbase2.version>${hbase.version}</hbase2.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -231,6 +240,65 @@
 
     <pluginManagement>
       <plugins>
+          
+<!--     <plugin>-->
+<!--      <groupId>com.google.code.maven-replacer-plugin</groupId>-->
+<!--      <artifactId>replacer</artifactId>-->
+<!--      <version>1.5.3</version>-->
+<!--      <executions>-->
+<!--        <execution>-->
+<!--                    <id>replace-generated-sources</id>-->
+
+<!--          <phase>process-sources</phase>-->
+<!--          <goals>-->
+<!--            <goal>replace</goal>-->
+<!--          </goals>-->
+<!--          <configuration>-->
+<!--        <basedir>${basedir}/target/generated-sources/protobuf</basedir>-->
+<!--          <includes>-->
+<!--            <include>**/*.java</include>-->
+<!--          </includes>-->
+<!--          <ignoreErrors>true</ignoreErrors>-->
+<!--          <replacements>-->
+<!--            <replacement>-->
+<!--              <token>([^\.])com.google.protobuf</token>-->
+<!--              <value>$1org.apache.hbase.thirdparty.com.google.protobuf</value>-->
+<!--            </replacement>-->
+<!--                        <replacement>-->
+<!--              <token>([^\.])org.apache.hadoop.hbase.protobuf.generated</token>-->
+<!--              <value>$1org.apache.hadoop.hbase.shaded.protobuf.generated</value>-->
+<!--            </replacement>-->
+<!--          </replacements>-->
+<!--        </configuration>-->
+<!--        </execution>-->
+<!--        <execution>-->
+<!--          <id>replace-sources</id>-->
+<!--          <phase>process-sources</phase>-->
+<!--          <goals>-->
+<!--            <goal>replace</goal>-->
+<!--          </goals>-->
+<!--          <configuration>-->
+<!--        <basedir>${basedir}/src</basedir>-->
+<!--          <includes>-->
+<!--            <include>**/*.java</include>-->
+<!--          </includes>-->
+<!--          <ignoreErrors>true</ignoreErrors>-->
+<!--          <replacements>-->
+<!--            <replacement>-->
+<!--              <token>([^\.])com.google.protobuf</token>-->
+<!--              <value>$1org.apache.hbase.thirdparty.com.google.protobuf</value>-->
+<!--            </replacement>-->
+<!--                                    <replacement>-->
+<!--              <token>([^\.])org.apache.hadoop.hbase.protobuf.generated</token>-->
+<!--              <value>$1org.apache.hadoop.hbase.shaded.protobuf.generated</value>-->
+<!--            </replacement>-->
+
+<!--          </replacements>-->
+<!--        </configuration>-->
+<!--        </execution>-->
+<!--      </executions>-->
+      
+<!--      </plugin>-->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-project-info-reports-plugin</artifactId>
@@ -321,7 +389,7 @@
           <version>${maven-build-helper-plugin.version}</version>
           <executions>
             <execution>
-              <id>add-test-source</id>
+              <id>add-it-source</id>
               <phase>validate</phase>
               <goals>
                 <goal>add-test-source</goal>
@@ -333,7 +401,7 @@
               </configuration>
             </execution>
             <execution>
-              <id>add-test-resource</id>
+              <id>add-it-resource</id>
               <phase>validate</phase>
               <goals>
                 <goal>add-test-resource</goal>
@@ -719,6 +787,16 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -730,6 +808,16 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-3.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -749,6 +837,16 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -760,6 +858,16 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-3.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -790,6 +898,16 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-3.0.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -1099,12 +1217,56 @@
         <artifactId>hadoop-mapreduce-client-app</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.htrace</groupId>
+            <artifactId>htrace-core4</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.htrace</groupId>
+            <artifactId>htrace-core4</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- HBase dependencies -->
@@ -1116,7 +1278,7 @@
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-protocol</artifactId>
-        <version>${hbase.version}</version>
+        <version>${hbase2.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -1229,7 +1391,7 @@
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-hadoop2-compat</artifactId>
-        <version>${hbase.version}</version>
+        <version>${hbase2.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.hbase</groupId>
@@ -1778,6 +1940,16 @@
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-hadoop2-compat</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-protocol</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
     <profile>
       <!-- PHOENIX-5993 This won't work with the public HBase artifacts -->
@@ -1794,6 +1966,16 @@
         <hadoop.version>3.1.4</hadoop.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
       </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-hadoop2-compat</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-protocol</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
@@ -1810,6 +1992,16 @@
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-hadoop2-compat</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-protocol</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
@@ -1826,6 +2018,66 @@
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-hadoop2-compat</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-protocol</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-2.6.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.6</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.6</hbase.profile>
+        <hbase.compat.version>2.6.0</hbase.compat.version>
+        <hadoop.version>3.3.5</hadoop.version>
+        <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-hadoop2-compat</artifactId>
+        </dependency>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-protocol</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <!-- HBase 3.0 is Hadoop3 only -->
+      <id>phoenix-hbase-compat-3.0.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>3.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>3.0</hbase.profile>
+        <hbase.compat.version>3.0.0</hbase.compat.version>
+        <hadoop.version>3.3.5</hadoop.version>
+        <hbase.version>${hbase-3.0.runtime.version}</hbase.version>
+        <!-- Not relevant, only needed for Eclipse m2 integration -->
+        <hbase2.version>${hbase-2.4.runtime.version}</hbase2.version>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-protocol-shaded</artifactId>
+        </dependency>
+      </dependencies>
     </profile>
     <profile>
       <id>owasp-dependency-check</id>

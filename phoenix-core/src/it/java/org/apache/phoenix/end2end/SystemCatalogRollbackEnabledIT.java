@@ -34,6 +34,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -99,7 +100,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
         return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
-    private void assertNumRegions(HBaseTestingUtility testUtil,
+    private void assertNumRegions(IntegrationTestingUtility testUtil,
             TableName tableName, int expectedNumRegions) throws IOException {
         RegionLocator rl = testUtil.getConnection().getRegionLocator(tableName);
         assertEquals(expectedNumRegions, rl.getAllRegionLocations().size());
@@ -111,7 +112,7 @@ public class SystemCatalogRollbackEnabledIT extends BaseTest {
      */
     @Test
     public void testSystemCatalogDoesNotSplit() throws Exception {
-        HBaseTestingUtility testUtil = getUtility();
+        IntegrationTestingUtility testUtil = getUtility();
         for (int i=0; i<10; i++) {
             createTableAndTenantViews("schema"+i+".table_"+i);
         }

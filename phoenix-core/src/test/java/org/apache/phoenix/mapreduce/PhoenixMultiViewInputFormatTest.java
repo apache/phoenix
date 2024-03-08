@@ -35,6 +35,7 @@ import static org.mockito.Mockito.when;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapred.JobContext;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -51,7 +52,9 @@ public class PhoenixMultiViewInputFormatTest {
 
         Configuration config = new Configuration();
         config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
-        PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
+
+        PhoenixConfigurationUtil
+                .setInputClusterUrl(config, TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL);
         JobContext mockContext = Mockito.mock(JobContext.class);
         when(mockContext.getConfiguration()).thenReturn(config);
 
@@ -67,7 +70,8 @@ public class PhoenixMultiViewInputFormatTest {
         Configuration config = new Configuration();
         config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
         config.set(MAPREDUCE_MULTI_INPUT_STRATEGY_CLAZZ, "dummy.path");
-        PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
+        PhoenixConfigurationUtil.setInputClusterUrl(config,
+            TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL);
         JobContext mockContext = Mockito.mock(JobContext.class);
         when(mockContext.getConfiguration()).thenReturn(config);
 
@@ -86,7 +90,8 @@ public class PhoenixMultiViewInputFormatTest {
         Configuration config = new Configuration();
         config.set(MAPREDUCE_MULTI_INPUT_MAPPER_SPLIT_SIZE, "10");
         config.set(MAPREDUCE_MULTI_INPUT_SPLIT_STRATEGY_CLAZZ, "dummy.path");
-        PhoenixConfigurationUtil.setInputClusterUrl(config, CONNECTIONLESS_URL);
+        PhoenixConfigurationUtil.setInputClusterUrl(config,
+            TestUtil.PHOENIX_CONNECTIONLESS_JDBC_URL);
         JobContext mockContext = Mockito.mock(JobContext.class);
         when(mockContext.getConfiguration()).thenReturn(config);
 

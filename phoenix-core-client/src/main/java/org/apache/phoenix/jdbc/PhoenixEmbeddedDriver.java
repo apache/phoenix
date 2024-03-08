@@ -145,6 +145,11 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
                         HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
                             () -> new SQLException(
                                     "HA group can not be initialized, fallback to single cluster"));
+                // HighAvailabilityGroup always returns the raw quorum + node. 
+                // This is hack to add the explciit protocol variant, so that this works when
+                // ZK is not default registry
+                // TODO: fix this in HighAvailabilityGroup
+                url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + url;
             }
         }
         ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);

@@ -38,10 +38,10 @@ import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -179,9 +179,8 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             ResultSet resultSet = conn.createStatement().executeQuery(query);
             assertFalse(resultSet.next());
 
-            MiniHBaseCluster miniHBaseCluster = getUtility().getMiniHBaseCluster();
-            this.moveIndexTableRegionIfSameRegionSErver(miniHBaseCluster);
-            this.assertRegionServerDifferent(miniHBaseCluster);
+            this.moveIndexTableRegionIfSameRegionSErver(getUtility());
+            this.assertRegionServerDifferent(getUtility());
 
             //load one row into the table
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + DATA_TABLE_NAME + " VALUES(?,?,?)");
@@ -190,7 +189,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             stmt.setString(3, "1");
             stmt.execute();
 
-            this.assertRegionServerDifferent(miniHBaseCluster);
+            this.assertRegionServerDifferent(getUtility());
 
             Scan scan = new Scan();
             org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(getUtility().getConfiguration());
@@ -207,14 +206,14 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             handleFailureCountDownLatch=new CountDownLatch(1);
             failIndexTableWrite=true;
 
-            ServerName dataTableRegionServerName=this.getRegionServerName(miniHBaseCluster, DATA_TABLE_NAME);
+            ServerName dataTableRegionServerName=this.getRegionServerName(getUtility(), DATA_TABLE_NAME);
 
-            miniHBaseCluster.killRegionServer(dataTableRegionServerName);
-            miniHBaseCluster.waitForRegionServerToStop(dataTableRegionServerName, TIMEOUT);
+            getUtility().getHBaseCluster().killRegionServer(dataTableRegionServerName);
+            getUtility().getHBaseCluster().waitForRegionServerToStop(dataTableRegionServerName, TIMEOUT);
 
             //there are only one regionServer now.
-            assertEquals("miniHBaseCluster.getLiveRegionServerThreads()", miniHBaseCluster.getLiveRegionServerThreads().size(),1);
-            HRegionServer liveRegionServer=miniHBaseCluster.getLiveRegionServerThreads().get(0).getRegionServer();
+            assertEquals("miniHBaseCluster.getLiveRegionServerThreads()", getUtility().getHBaseCluster().getLiveRegionServerThreads().size(),1);
+            HRegionServer liveRegionServer=getUtility().getHBaseCluster().getLiveRegionServerThreads().get(0).getRegionServer();
 
             //verify handleFailure is called.
             handleFailureCountDownLatch.await();
@@ -259,7 +258,7 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             scan = new Scan();
             primaryTable.close();
             primaryTable = hbaseConn.getTable(TableName.valueOf(DATA_TABLE_NAME));
-            ((ClusterConnection)hbaseConn).clearRegionLocationCache();
+            hbaseConn.clearRegionLocationCache();
             resultScanner = primaryTable.getScanner(scan);
             count = 0;
             for (Result result : resultScanner) {
@@ -273,31 +272,31 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
         }
     }
 
-    private ServerName getRegionServerName(MiniHBaseCluster miniHBaseCluster,String tableName) throws IOException {
-        List<HRegion> regions = miniHBaseCluster.getRegions(Bytes.toBytes(tableName));
+    private ServerName getRegionServerName(IntegrationTestingUtility utility,String tableName) throws IOException {
+        List<HRegion> regions = utility.getHBaseCluster().getRegions(Bytes.toBytes(tableName));
         assertEquals(1, regions.size());
         HRegion region=regions.get(0);
-        return miniHBaseCluster.getServerHoldingRegion(TableName.valueOf(tableName),region.getRegionInfo().getRegionName());
+        return utility.getHBaseCluster().getServerHoldingRegion(TableName.valueOf(tableName),region.getRegionInfo().getRegionName());
     }
 
-    private void assertRegionServerDifferent(MiniHBaseCluster miniHBaseCluster) throws IOException {
+    private void assertRegionServerDifferent(IntegrationTestingUtility utility) throws IOException {
         ServerName dataTableRegionServerName=
-                this.getRegionServerName(miniHBaseCluster, DATA_TABLE_NAME);
+                this.getRegionServerName(utility, DATA_TABLE_NAME);
         ServerName indexTableRegionServerName=
-                this.getRegionServerName(miniHBaseCluster, INDEX_TABLE_NAME);
+                this.getRegionServerName(utility, INDEX_TABLE_NAME);
         assertTrue(!dataTableRegionServerName.equals(indexTableRegionServerName));
     }
 
-    private void moveIndexTableRegionIfSameRegionSErver(MiniHBaseCluster miniHBaseCluster) throws IOException, InterruptedException {
-        List<HRegion> dataTableRegions = miniHBaseCluster.getRegions(Bytes.toBytes(DATA_TABLE_NAME));
+    private void moveIndexTableRegionIfSameRegionSErver(IntegrationTestingUtility util) throws IOException, InterruptedException {
+        List<HRegion> dataTableRegions = util.getHBaseCluster().getRegions(Bytes.toBytes(DATA_TABLE_NAME));
         assertEquals(1, dataTableRegions.size());
-        List<HRegion> indexTableRegions = miniHBaseCluster.getRegions(Bytes.toBytes(INDEX_TABLE_NAME));
+        List<HRegion> indexTableRegions = util.getHBaseCluster().getRegions(Bytes.toBytes(INDEX_TABLE_NAME));
         assertEquals(1, indexTableRegions.size());
 
         HRegion dataTableRegion=dataTableRegions.get(0);
         HRegion indexTableRegion=indexTableRegions.get(0);
-        int dataTableRegionServerIndex = miniHBaseCluster.getServerWith(dataTableRegion.getRegionInfo().getRegionName());
-        int indexTableRegionServerIndex=miniHBaseCluster.getServerWith(indexTableRegion.getRegionInfo().getRegionName());
+        int dataTableRegionServerIndex = util.getHBaseCluster().getServerWith(dataTableRegion.getRegionInfo().getRegionName());
+        int indexTableRegionServerIndex=util.getHBaseCluster().getServerWith(indexTableRegion.getRegionInfo().getRegionName());
         if(dataTableRegionServerIndex != indexTableRegionServerIndex) {
             return;
         }
@@ -308,13 +307,13 @@ public class WALRecoveryRegionPostOpenIT extends BaseTest {
             newRegionServerIndex++;
         }
 
-        HRegionServer newRegionServer = miniHBaseCluster.getRegionServer(newRegionServerIndex);
-        this.moveRegionAndWait(miniHBaseCluster,indexTableRegion, newRegionServer);
+        HRegionServer newRegionServer = util.getHBaseCluster().getRegionServer(newRegionServerIndex);
+        this.moveRegionAndWait(util,indexTableRegion, newRegionServer);
     }
 
 
-    private void moveRegionAndWait(MiniHBaseCluster miniHBaseCluster,HRegion destRegion, HRegionServer destRegionServer) throws IOException, InterruptedException {
-        HMaster master = miniHBaseCluster.getMaster();
+    private void moveRegionAndWait(IntegrationTestingUtility util, HRegion destRegion, HRegionServer destRegionServer) throws IOException, InterruptedException {
+        HMaster master = util.getHBaseCluster().getMaster();
         getUtility().getAdmin().move(
                 destRegion.getRegionInfo().getEncodedNameAsBytes(),
                 destRegionServer.getServerName());

@@ -26,6 +26,7 @@ import java.util.Properties;
 
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
@@ -219,7 +220,11 @@ public class JDBCUtil {
     public static String formatZookeeperUrl(String jdbcUrl) {
         ConnectionInfo connInfo;
         try {
-            connInfo = ConnectionInfo.create(jdbcUrl, null, null);
+            Properties info = new Properties();
+            // Make sure we use ZK on HBase 3.x
+            info.put(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+                ZKConnectionInfo.ZK_REGISTRY_NAME);
+            connInfo = ConnectionInfo.create(jdbcUrl, null, info);
             // TODO in theory we could support non-ZK registries for HA.
             // However, as HA already relies on ZK, this wouldn't be particularly useful,
             // and would require significant changes.

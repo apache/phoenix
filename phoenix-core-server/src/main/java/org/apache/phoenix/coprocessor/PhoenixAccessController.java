@@ -47,7 +47,6 @@ import org.apache.hadoop.hbase.ipc.RpcCall;
 import org.apache.hadoop.hbase.ipc.RpcServer;
 import org.apache.hadoop.hbase.ipc.RpcUtil;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
-import org.apache.hadoop.hbase.protobuf.ProtobufUtil;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos;
 import org.apache.hadoop.hbase.protobuf.generated.AccessControlProtos.AccessControlService;
 import org.apache.hadoop.hbase.regionserver.RegionCoprocessorHost;
@@ -62,6 +61,7 @@ import org.apache.hadoop.hbase.security.access.AuthResult;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
 import org.apache.hadoop.hbase.security.access.UserPermission;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PhoenixMetaDataControllerEnvironment;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -535,7 +535,7 @@ public class PhoenixAccessController extends BaseMetaDataEndpointObserver {
 
                 AccessControlProtos.GetUserPermissionsRequest.Builder builderTablePerms = AccessControlProtos.GetUserPermissionsRequest
                         .newBuilder();
-                builderTablePerms.setTableName(ProtobufUtil.toProtoTableName(tableName));
+                builderTablePerms.setTableName(CompatUtil.toProtoTableName(tableName));
                 builderTablePerms.setType(AccessControlProtos.Permission.Type.Table);
                 AccessControlProtos.GetUserPermissionsRequest requestTablePerms = builderTablePerms.build();
 

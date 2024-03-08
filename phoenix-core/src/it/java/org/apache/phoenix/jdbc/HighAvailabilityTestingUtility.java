@@ -18,18 +18,21 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.StartMiniClusterOption;
+import org.apache.hadoop.hbase.TimedOutTestsListener;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.GenericTestUtils;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
+import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.Time;
+import org.apache.hbase.thirdparty.com.google.common.base.Supplier;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.PhoenixHAAdminTool.PhoenixHAAdminHelper;
@@ -519,7 +522,6 @@ public class HighAvailabilityTestingUtility {
              */
             conf.setInt(HConstants.REGION_SERVER_HANDLER_COUNT, 5);
             conf.setInt("hbase.regionserver.metahandler.count", 2);
-            conf.setInt(HConstants.MASTER_HANDLER_COUNT, 2);
             conf.setInt("dfs.namenode.handler.count", 2);
             conf.setInt("dfs.namenode.service.handler.count", 2);
             conf.setInt("dfs.datanode.handler.count", 2);

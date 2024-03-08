@@ -102,7 +102,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
     return currentHint.getHint(PhoenixKeyValueUtil.maybeCopyCell(peeked));
   }
 
-  @Override
+  // No @Override for HBase 3 compatibility
   public ReturnCode filterKeyValue(Cell next) {
     return this.filterCell(next);
   }

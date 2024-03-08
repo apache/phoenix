@@ -67,7 +67,6 @@ public class MasterConnectionInfo extends AbstractRPCConnectionInfo {
                 + toString();
     }
 
-
     @Override
     public ConnectionInfo withPrincipal(String principal) {
         return new MasterConnectionInfo(isConnectionless, principal, keytab, user,

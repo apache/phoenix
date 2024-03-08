@@ -74,7 +74,7 @@ public class PartialResultServerConfigurationIT {
 
         hbaseTestUtil.startMiniCluster();
         zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
 
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     }

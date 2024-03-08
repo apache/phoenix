@@ -466,7 +466,7 @@ public final class QueryUtil {
         // If props doesn't have a default for extra args then use the extra args in conf as default
         String extraArgs =
                 props.getProperty(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, defaultExtraArgs);
-        if (extraArgs.length() > 0) {
+        if (extraArgs.length() > 0 && !url.contains(extraArgs)) {
             url +=
                     PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR + extraArgs
                             + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;

@@ -23,7 +23,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
+import org.apache.hadoop.hbase.client.RetriesExhaustedException;
 import org.apache.hbase.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
@@ -174,7 +174,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         hbaseTestUtil.startMiniCluster(1, 1, null, null, DelayedOrFailingRegionServer.class);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + zkQuorum;
+        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkQuorum;
 
         // Add our own driver
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
@@ -873,7 +873,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         } catch (CommitException e) {
             Throwable retriesExhaustedEx = null;
             for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
-                if (t instanceof RetriesExhaustedWithDetailsException) {
+                if (t instanceof RetriesExhaustedException) {
                     retriesExhaustedEx = t;
                     break;
                 }
@@ -923,7 +923,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             } catch (CommitException e) {
                 Throwable retriesExhaustedEx = null;
                 for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
-                    if (t instanceof RetriesExhaustedWithDetailsException) {
+                    if (t instanceof RetriesExhaustedException) {
                         retriesExhaustedEx = t;
                         break;
                     }
@@ -1190,7 +1190,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             } catch (CommitException e) {
                 Throwable retriesExhaustedEx = null;
                 for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
-                    if (t instanceof RetriesExhaustedWithDetailsException) {
+                    if (t instanceof RetriesExhaustedException) {
                         retriesExhaustedEx = t;
                         break;
                     }

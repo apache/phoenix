@@ -88,8 +88,7 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
     final Connection conn = DriverManager.getConnection(getUrl());
 
     final Admin admin = getUtility().getAdmin();
-    final MiniHBaseCluster cluster = getUtility().getHBaseCluster();
-    final HRegionServer regionServer = cluster.getRegionServer(0);
+    final HRegionServer regionServer = getUtility().getHBaseCluster().getRegionServer(0);
     Configuration conf = admin.getConfiguration();
     final int noOfOrgs = 20;
     final AtomicBoolean flag = new AtomicBoolean();

@@ -200,7 +200,7 @@ public abstract class MultiKeyValueComparisonFilter extends BooleanExpressionFil
         expression.accept(visitor);
     }
 
-    @Override
+    // No @Override for Hbase 3 compatibility
     public ReturnCode filterKeyValue(Cell cell) {
         return filterCell(cell);
     }

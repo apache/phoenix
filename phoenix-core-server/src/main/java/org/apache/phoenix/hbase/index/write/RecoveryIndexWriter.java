@@ -141,7 +141,7 @@ public class RecoveryIndexWriter extends IndexWriter {
             }
             try {
                 admin.close();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 LOGGER.error("Closing the admin failed: ", e);
             }
         }

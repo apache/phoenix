@@ -29,6 +29,8 @@
   <description>Core Phoenix Client codebase</description>
 
   <build>
+           <sourceDirectory>does/not/exist</sourceDirectory>
+
     <plugins>
       <!-- Add the ant-generated sources to the source path -->
      <plugin>
@@ -66,6 +68,13 @@
                     || ("${hbase.compat.version}".equals("2.5.4")
                       &amp;&amp; hbaseMinor == 5
                       &amp;&amp; hbasePatch &gt;=4)
+                    || ("${hbase.compat.version}".equals("2.6.0")
+                      &amp;&amp; hbaseMinor == 6
+                      &amp;&amp; hbasePatch &gt;=0)
+                  ) || hbaseMajor == 3 &amp;&amp; (
+                    ("${hbase.compat.version}".equals("3.0.0")
+                      &amp;&amp; hbaseMinor == 0
+                      &amp;&amp; hbasePatch &gt;=0)
                   )
                 </condition>
               </evaluateBeanshell>
@@ -86,7 +95,7 @@
         <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <id>add-source</id>
+            <id>add-antlr-source</id>
             <phase>generate-sources</phase>
             <goals>
               <goal>add-source</goal>
@@ -95,6 +104,18 @@
               <sources>
                 <source>${antlr-output.dir}</source>
                 <source>${antlr-input.dir}</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>add-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${basedir}/src/main/java</source>
               </sources>
             </configuration>
           </execution>
@@ -250,15 +271,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-hadoop2-compat</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-zookeeper</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-protocol</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -424,4 +437,160 @@
       <artifactId>HdrHistogram</artifactId>
     </dependency>
   </dependencies>
+      <profiles>
+        <profile>
+          <id>phoenix-hbase-compat-3.0.0</id>
+          <activation>
+            <property>
+              <name>hbase.profile</name>
+              <value>3.0</value>
+            </property>
+          </activation>
+          <build>
+              <plugins>
+                  <plugin>
+                      <groupId>com.google.code.maven-replacer-plugin</groupId>
+                      <artifactId>replacer</artifactId>
+                            <executions>
+        <execution>
+                    <id>replace-generated-sources</id>
+
+          <phase>process-sources</phase>
+          <goals>
+            <goal>replace</goal>
+          </goals>
+          <configuration>
+        <basedir>${basedir}/target/generated-sources/protobuf</basedir>
+          <includes>
+            <include>**/*.java</include>
+          </includes>
+          <ignoreErrors>true</ignoreErrors>
+          <replacements>
+            <replacement>
+              <token>([^\.])com.google.protobuf</token>
+              <value>$1org.apache.hbase.thirdparty.com.google.protobuf</value>
+            </replacement>
+                        <replacement>
+              <token>([^\.])org.apache.hadoop.hbase.protobuf.generated</token>
+              <value>$1org.apache.hadoop.hbase.shaded.protobuf.generated</value>
+            </replacement>
+          </replacements>
+        </configuration>
+        </execution>
+        <execution>
+          <id>replace-sources</id>
+          <phase>process-sources</phase>
+          <goals>
+            <goal>replace</goal>
+          </goals>
+          <configuration>
+        <basedir>${basedir}/src</basedir>
+        <outputDir>../target/generated-sources/replaced</outputDir>
+          <includes>
+            <include>**/*.java</include>
+          </includes>
+          <!-- Omid uses unshaded protobuf 3 -->
+          <excludes>
+            <exclude>**/OmidTransactionContext*.java</exclude>
+          </excludes>
+          <!-- Ignore errors when missing files, because it means this build
+               was run with -Dprotoc.skip and there is no -Dreplacer.skip -->
+<!--          <ignoreErrors>true</ignoreErrors>-->
+          <replacements>
+            <replacement>
+              <token>([^\.])com.google.protobuf</token>
+              <value>$1org.apache.hbase.thirdparty.com.google.protobuf</value>
+            </replacement>
+                                    <replacement>
+              <token>([^\.])org.apache.hadoop.hbase.protobuf.generated</token>
+              <value>$1org.apache.hadoop.hbase.shaded.protobuf.generated</value>
+            </replacement>
+          </replacements>
+        </configuration>
+        </execution>
+                <execution>
+          <id>copy-sources</id>
+          <phase>process-sources</phase>
+          <goals>
+            <goal>replace</goal>
+          </goals>
+          <configuration>
+        <basedir>${basedir}/src</basedir>
+        <outputDir>../target/generated-sources/replaced</outputDir>
+        <!-- Copy Omid files without change -->
+          <includes>
+            <include>**/OmidTransactionContext*.java</include>
+          </includes>
+          <!-- Ignore errors when missing files, because it means this build
+               was run with -Dprotoc.skip and there is no -Dreplacer.skip -->
+<!--          <ignoreErrors>true</ignoreErrors>-->
+            <replacements>
+                <!-- Just copy -->
+           </replacements>
+        </configuration>
+        </execution>
+      </executions>
+                  </plugin>
+                        <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+
+          <execution>
+            <id>add-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${basedir}/target/generated-sources/replaced/main/java</source>
+              </sources>
+            </configuration>
+          </execution>
+                    <execution>
+            <id>add-antlr-source</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>${antlr-output.dir}</source>
+                <source>${antlr-input.dir}</source>
+              </sources>
+            </configuration>
+          </execution>
+            <execution>
+              <id>add-it-source</id>
+              <phase>generate-sources</phase>
+              <goals>
+                <goal>add-test-source</goal>
+              </goals>
+              <configuration>
+                <sources>
+                  <source>${basedir}/target/generated-sources/replaced/it/java</source>
+                </sources>
+              </configuration>
+            </execution>
+            <execution>
+              <id>add-it-resource</id>
+              <phase>generate-sources</phase>
+              <goals>
+                <goal>add-test-resource</goal>
+              </goals>
+              <configuration>
+                <resources>
+                  <resource>
+                    <directory>${basedir}/target/generated-sources/replaced/it/resources</directory>
+                  </resource>
+                </resources>
+              </configuration>
+            </execution>
+          </executions>
+      </plugin>
+              </plugins>
+          </build>
+        </profile>
+    </profiles>
 </project>

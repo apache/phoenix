@@ -276,14 +276,14 @@ public class PhoenixHAAdminToolTest {
         Configuration conf = HBaseConfiguration.create();
         // default local ZK is 127.0.0.1:2181:/hbase
         final String localZk = String.format("127.0.0.1:%d:%s",
-                HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+                HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         assertEquals(localZk, getLocalZkUrl(conf));
 
         // set host name only; use default port and znode parent
         final String host = "foobar";
         conf.set(HConstants.ZOOKEEPER_QUORUM, "foobar");
         final String expectedLocalZk = String.format("%s:%d:%s", host,
-                HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
+                HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT, HConstants.DEFAULT_ZOOKEEPER_ZNODE_PARENT);
         assertEquals(expectedLocalZk, getLocalZkUrl(conf));
 
         // set host name and port; use default znode parent

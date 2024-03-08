@@ -61,7 +61,7 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
         hbaseTestUtil.startMiniCluster(1,1,null,null,DelayedRegionServer.class);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
-        url = PhoenixRuntime.JDBC_PROTOCOL + JDBC_PROTOCOL_SEPARATOR + zkQuorum +
+        url = PhoenixRuntime.JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkQuorum +
                 JDBC_PROTOCOL_SEPARATOR + "uniqueConn=A";
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     }

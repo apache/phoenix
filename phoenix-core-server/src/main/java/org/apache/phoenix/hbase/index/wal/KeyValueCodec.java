@@ -29,6 +29,7 @@ import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 /**
  * Codec to encode/decode KeyValue s and IndexedKeyValue s within a WALEdit
@@ -74,7 +75,7 @@ public class KeyValueCodec {
       ImmutableBytesPtr indexTableName = new ImmutableBytesPtr(Bytes.readByteArray(in));
       byte[] mutationData = Bytes.readByteArray(in);
       ClientProtos.MutationProto mProto = ClientProtos.MutationProto.parseFrom(mutationData);
-      Mutation mutation = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(mProto);
+      Mutation mutation = CompatUtil.toMutation(mProto);
       IndexedKeyValue kv = null;
       if (mutation != null){
         kv = IndexedKeyValue.newIndexedKeyValue(indexTableName.copyBytesIfNecessary(), mutation);

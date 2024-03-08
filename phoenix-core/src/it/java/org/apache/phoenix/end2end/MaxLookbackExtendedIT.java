@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -36,6 +37,7 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -107,8 +109,11 @@ public class MaxLookbackExtendedIT extends BaseTest {
     public static Collection<Boolean> data() {
         return Arrays.asList(false, true);
     }
-    @Test
+
+    @Test(timeout=60000L)
     public void testKeepDeletedCellsWithMaxLookbackAge() throws Exception {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         int versions = 2;
         optionBuilder.append(", VERSIONS=" + versions);
         optionBuilder.append(", KEEP_DELETED_CELLS=TRUE");
@@ -189,7 +194,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             }
         }
     }
-    @Test
+
+    @Test(timeout=60000L)
     public void testTooLowSCNWithMaxLookbackAge() throws Exception {
         String dataTableName = generateUniqueName();
         createTable(dataTableName);
@@ -216,6 +222,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=120000L)
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -283,6 +291,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         Configuration conf = getUtility().getConfiguration();
         //disable automatic memstore flushes
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
@@ -363,6 +373,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=60000)
     public void testRecentMaxVersionsNotCompactedAway() throws Exception {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         int versions = 2;
         optionBuilder.append(", VERSIONS=" + versions);
         tableDDLOptions = optionBuilder.toString();
@@ -441,6 +453,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=60000)
     public void testOverrideMaxLookbackForCompaction() throws Exception {
+        Assume.assumeTrue("PHOENIX-7264",
+            VersionInfo.getMajorVersion(VersionInfo.getVersion()) < 3);
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableNameOne = generateUniqueName();
             createTable(tableNameOne);

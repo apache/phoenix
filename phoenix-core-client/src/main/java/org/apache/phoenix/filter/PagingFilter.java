@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Writables;
 import org.apache.hadoop.io.Writable;
+import org.apache.phoenix.compat.hbase.CompatPagingFilter;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
@@ -39,7 +40,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  * already a filter then PagingFilter wraps it. This filter for server paging. It makes sure that
  * the scan does not take more than pageSizeInMs.
  */
-public class PagingFilter extends FilterBase implements Writable {
+public class PagingFilter extends CompatPagingFilter implements Writable {
     private enum State {
         INITIAL, STARTED, TIME_TO_STOP, STOPPED
     }
@@ -48,15 +49,15 @@ public class PagingFilter extends FilterBase implements Writable {
     private long startTime;
     // tracks the row we last visited
     private Cell currentCell;
-    private Filter delegate = null;
 
     public PagingFilter() {
+        super(null);
         init();
     }
 
     public PagingFilter(Filter delegate, long pageSizeMs) {
+        super(delegate);
         init();
-        this.delegate = delegate;
         this.pageSizeMs = pageSizeMs;
     }
 
@@ -197,15 +198,6 @@ public class PagingFilter extends FilterBase implements Writable {
             return delegate.isFamilyEssential(name);
         }
         return super.isFamilyEssential(name);
-    }
-
-    @Override
-    public ReturnCode filterKeyValue(Cell v) throws IOException {
-
-        if (delegate != null) {
-            return delegate.filterKeyValue(v);
-        }
-        return super.filterKeyValue(v);
     }
 
     @Override

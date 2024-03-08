@@ -34,7 +34,7 @@ public class NewerTimestampFilter extends FilterBase {
     this.timestamp = timestamp;
   }
 
-  @Override
+  // No @Override for HBase 3 compatibility
   public ReturnCode filterKeyValue(Cell ignored) {
     return this.filterCell(ignored);
   }

@@ -139,7 +139,6 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.CheckAndMutate;
-import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
@@ -163,7 +162,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.snapshot.SnapshotCreationException;
-import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -710,7 +709,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
     @Override
     public void clearTableRegionCache(TableName tableName) throws SQLException {
-        ((ClusterConnection)connection).clearRegionCache(tableName);
+        try {
+            connection.getRegionLocator(tableName).clearRegionLocationCache();
+        } catch (IOException e) {
+            LOGGER.info("Exception while clearing table region cache", e);
+            //TODO allow passing cause to TableNotFoundException
+            throw new TableNotFoundException(tableName.toString());
+        }
     }
 
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey) throws IOException {
@@ -746,8 +751,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 List<HRegionLocation> locations = Lists.newArrayList();
                 byte[] currentKey = HConstants.EMPTY_START_ROW;
                 do {
-                    HRegionLocation regionLocation = ((ClusterConnection)connection).getRegionLocation(
-                            table, currentKey, false);
+                    HRegionLocation regionLocation =
+                            connection.getRegionLocator(table).getRegionLocation(currentKey, false);
                     currentKey = getNextRegionStartKey(regionLocation, currentKey);
                     locations.add(regionLocation);
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
@@ -1989,8 +1994,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             while (true) {
                 if (retried) {
-                    ((ClusterConnection) connection).relocateRegion(
-                        SchemaUtil.getPhysicalName(systemTableName, this.getProps()), tableKey);
+                    connection
+                            .getRegionLocator(
+                                SchemaUtil.getPhysicalName(systemTableName, this.getProps()))
+                            .getRegionLocation(tableKey, true);
                 }
 
                 Table ht = this.getTable(SchemaUtil.getPhysicalName(systemTableName, this.getProps()).getName());

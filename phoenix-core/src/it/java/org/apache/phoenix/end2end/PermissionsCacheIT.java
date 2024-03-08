@@ -27,6 +27,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.AuthUtil;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.Permission.Action;
 import org.apache.hadoop.hbase.security.access.PermissionStorage;
@@ -83,9 +84,9 @@ public class PermissionsCacheIT extends BasePermissionsIT {
                 }
             });
             verifyAllowed(createTable(phoenixTableName), regularUser1);
-            HBaseTestingUtility utility = getUtility();
-            Configuration conf = utility.getConfiguration();
-            ZKWatcher zkw = HBaseTestingUtility.getZooKeeperWatcher(utility);
+            Configuration conf = getUtility().getConfiguration();
+            
+            ZKWatcher zkw = getUtility().getZooKeeperWatcher();
             String aclZnodeParent = conf.get("zookeeper.znode.acl.parent", "acl");
             String aclZNode = ZNodePaths.joinZNode(zkw.getZNodePaths().baseZNode, aclZnodeParent);
             String tableZNode = ZNodePaths.joinZNode(aclZNode, "@" + schema);
