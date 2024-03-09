@@ -27,6 +27,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -51,6 +52,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -824,6 +826,47 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
         }
     }
+
+    @Test
+    public void testPointLookup() throws Exception {
+        if (uncovered || salted) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        populateTable(fullDataTableName);
+        String indexName = generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            stmt.execute("create index " + indexName + " on " + fullDataTableName + " (val2) include (val1)");
+            // Index hint is incorrect as full index name with schema is used
+            String sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + fullIndexName + ")*/ val2, val3 from "
+                    + fullDataTableName + " WHERE id = 'a'";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
+            String actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+            // No explicit index hint and being point lookup no index will be used
+            sql = "SELECT val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
+            rs = stmt.executeQuery("EXPLAIN " + sql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+            // Index hint with point lookup over data table, still index should be used
+            sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + indexName + ")*/ val2, val3 from "
+                    + fullDataTableName + " WHERE id = 'a'";
+            rs = stmt.executeQuery("EXPLAIN " + sql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("FULL SCAN OVER " + fullIndexName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+        }
+    }
+
     public static class ScanFilterRegionObserver extends SimpleRegionObserver {
         public static final AtomicInteger count = new AtomicInteger(0);
         public static void resetCount() {

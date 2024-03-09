@@ -210,8 +210,9 @@ public class QueryOptimizer {
 
     private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan, PhoenixStatement statement, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
         SelectStatement select = (SelectStatement)dataPlan.getStatement();
-        // Exit early if we have a point lookup as we can't get better than that
-        if (dataPlan.getContext().getScanRanges().isPointLookup()
+        String indexHint = select.getHint().getHint(Hint.INDEX);
+        // Exit early if we have a point lookup w/o index hint as we can't get better than that
+        if (indexHint == null && dataPlan.getContext().getScanRanges().isPointLookup()
                 && stopAtBestPlan && dataPlan.isApplicable()) {
             return Collections.<QueryPlan> singletonList(dataPlan);
         }
