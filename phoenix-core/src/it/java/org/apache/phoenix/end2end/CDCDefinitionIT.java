@@ -142,7 +142,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
                 String tableName = generateUniqueName();
                 createTable(conn, "CREATE TABLE  " + tableName +
                                 " ( k INTEGER PRIMARY KEY, v1 INTEGER, v2 DATE)",
-                                null, false, saltingConfig[0]);
+                                null, false, saltingConfig[0], false);
                 assertSaltBuckets(conn, tableName, saltingConfig[0]);
 
                 String cdcName = generateUniqueName();

@@ -47,31 +47,31 @@ import static org.junit.Assert.assertNull;
 public class CDCBaseIT extends ParallelStatsDisabledIT {
     protected void createTable(Connection conn, String table_sql)
             throws Exception {
-        createTable(conn, table_sql, null, false, null);
+        createTable(conn, table_sql, null, false, null, false);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, false, null);
+        createTable(conn, table_sql, encodingScheme, false, null, false);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, multitenant, null);
+        createTable(conn, table_sql, encodingScheme, multitenant, null, false);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                               Integer nSaltBuckets)
+                               Integer nSaltBuckets, boolean immutable)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, multitenant, nSaltBuckets, null);
+        createTable(conn, table_sql, encodingScheme, multitenant, nSaltBuckets, null, immutable);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                               Integer nSaltBuckets, PTable.IndexType indexType)
+                               Integer nSaltBuckets, PTable.IndexType indexType, boolean immutable)
             throws Exception {
         createTable(conn, table_sql, new HashMap<String, Object>() {{
             put(TableProperty.COLUMN_ENCODED_BYTES.getPropertyName(), encodingScheme != null ?
@@ -79,6 +79,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             put(TableProperty.MULTI_TENANT.getPropertyName(), multitenant);
             put(TableProperty.SALT_BUCKETS.getPropertyName(), nSaltBuckets);
             put(TableProperty.INDEX_TYPE.getPropertyName(), indexType);
+            put(TableProperty.IMMUTABLE_ROWS.getPropertyName(), immutable);
         }});
     }
 
@@ -107,7 +108,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         if (nSaltBuckets != null) {
             props.add(TableProperty.INDEX_TYPE.getPropertyName() + "=" + indexType);
         }
-        table_sql = table_sql + " " + String.join(", ", props);
+        Boolean immutableTable = (Boolean) TableProperty.IMMUTABLE_ROWS.getValue(tableProps);
+        if (immutableTable) {
+            props.add(TableProperty.IMMUTABLE_ROWS.getPropertyName() + "=true");
+            props.add(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName() + "=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN.name());
+        }
+        table_sql += " " + String.join(", ", props);
         conn.createStatement().execute(table_sql);
     }
 
@@ -131,7 +137,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                                     String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
                                     Integer nSaltBuckets, PTable.IndexType indexType) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
-        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, indexType);
+        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, indexType, false);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
         tableName = SchemaUtil.getTableNameFromFullName(tableName);
         IndexToolIT.runIndexTool(false, schemaName, tableName,
