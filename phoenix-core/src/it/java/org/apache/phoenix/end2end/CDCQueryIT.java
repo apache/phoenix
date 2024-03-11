@@ -475,7 +475,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
                     "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, CONSTRAINT PK PRIMARY KEY " +
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false);
+                    tableSaltBuckets, false, null);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
@@ -827,11 +827,11 @@ public class CDCQueryIT extends CDCBaseIT {
         String schemaName = withSchemaName ? generateUniqueName() : null;
         String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         try (Connection conn = newConnection()) {
-            createTable(conn, "CREATE TABLE  " + tableName + " (" +
+           createTable(conn, "CREATE TABLE  " + tableName + " (" +
                             (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
                             "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, CONSTRAINT PK PRIMARY KEY " +
                             (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, true);
+                    tableSaltBuckets, true, PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
@@ -863,8 +863,8 @@ public class CDCQueryIT extends CDCBaseIT {
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
-            assertResultSetImmutableTable(conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
-                    null);
+            assertResultSetImmutableTable(conn.createStatement()
+                            .executeQuery("SELECT * FROM " + cdcFullName), null);
             assertResultSetImmutableTable(conn.createStatement().executeQuery("SELECT " +
                             "/*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
                     new HashSet<PTable.CDCChangeScope>(
@@ -884,7 +884,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
                     "k INTEGER NOT NULL, v1 INTEGER, CONSTRAINT PK PRIMARY KEY " +
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false);
+                    tableSaltBuckets, false, null);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
@@ -1034,7 +1034,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     "k INTEGER NOT NULL, v0 INTEGER, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, " +
                     "v3 INTEGER, CONSTRAINT PK PRIMARY KEY " +
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false);
+                    tableSaltBuckets, false, null);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
@@ -1130,7 +1130,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     "k INTEGER NOT NULL, a_binary binary(10), d Date, t TIMESTAMP, " +
                     "CONSTRAINT PK PRIMARY KEY " +
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false);
+                    tableSaltBuckets, false, null);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
@@ -1194,7 +1194,7 @@ public class CDCQueryIT extends CDCBaseIT {
                             "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, " +
                             "CONSTRAINT PK PRIMARY KEY " +
                             (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false);
+                    tableSaltBuckets, false, null);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.index;
 
-import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.io.ByteArrayInputStream;
@@ -511,8 +510,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexDataColumnCount = dataPKColumns.size();
         PTable parentTable = dataTable;
         // We need to get the PK column for the table on which the index is created
-        if (!dataTable.getName().equals(cdcTable != null ?
-                cdcTable.getParentName() : index.getParentName())) {
+        if (!dataTable.getName().equals(cdcTable != null
+                ? cdcTable.getParentName() : index.getParentName())) {
             try {
                 String tenantId = (index.getTenantId() != null) ? 
                         index.getTenantId().getString() : null;

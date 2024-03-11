@@ -749,8 +749,8 @@ public class QueryCompiler {
             // For CDC queries, if a single wildcard projection is used, automatically insert
             // PHOENIX_ROW_TIMESTAMP() as a project at the beginning.
             ParseNode selectNode = selectNodes.size() == 1 ? selectNodes.get(0).getNode() : null;
-            if (selectNode instanceof TerminalParseNode &&
-                    ((TerminalParseNode) selectNode).isWildcardNode()) {
+            if (selectNode instanceof TerminalParseNode
+                    && ((TerminalParseNode) selectNode).isWildcardNode()) {
                 List<AliasedNode> tmpSelectNodes = Lists.newArrayListWithExpectedSize(
                         selectNodes.size() + 1);
                 tmpSelectNodes.add(NODE_FACTORY.aliasedNode(null,

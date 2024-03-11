@@ -50,9 +50,9 @@ public class CDCTableInfo {
     private final byte[] cdcJsonColQualBytes;
 
     public CDCTableInfo(byte[] defaultColumnFamily,
-                        List<CDCColumnInfo> columnInfoList, Set<PTable.CDCChangeScope> includeScopes,
-                        PTable.QualifierEncodingScheme qualifierEncodingScheme,
-                        byte[] cdcJsonColQualBytes) {
+                        List<CDCColumnInfo> columnInfoList, Set<PTable.CDCChangeScope>
+                                includeScopes, PTable.QualifierEncodingScheme
+                                qualifierEncodingScheme, byte[] cdcJsonColQualBytes) {
         Collections.sort(columnInfoList);
         this.columnInfoList = columnInfoList;
         this.defaultColumnFamily = defaultColumnFamily;

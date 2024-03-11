@@ -116,7 +116,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilityLevel;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -601,7 +600,7 @@ public class MutationState implements SQLCloseable {
         return ptr;
     }
 
-    private List<Mutation> getCDCDeleteMutations (PTable table, PTable index,
+    private List<Mutation> getCDCDeleteMutations(PTable table, PTable index,
                                                  Long mutationTimestamp,
                                                  List<Mutation> mutationList) throws
             SQLException {
@@ -609,6 +608,7 @@ public class MutationState implements SQLCloseable {
         IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
         List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(mutationList.size());
         for (final Mutation mutation : mutationList) {
+            // Only generate extra row mutations for DELETE
             if (mutation instanceof Delete) {
                 ptr.set(mutation.getRow());
                 ValueGetter getter = new AbstractValueGetter() {
@@ -631,8 +631,11 @@ public class MutationState implements SQLCloseable {
                             return null;
                         }
                         for (Cell kv : kvs) {
-                            if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), family, 0, family.length) == 0 &&
-                                    Bytes.compareTo(kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength(), qualifier, 0, qualifier.length) == 0) {
+                            if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(),
+                                    kv.getFamilyLength(), family, 0, family.length) == 0
+                                    && Bytes.compareTo(kv.getQualifierArray(),
+                                    kv.getQualifierOffset(), kv.getQualifierLength(),
+                                    qualifier, 0, qualifier.length) == 0) {
                                 ImmutableBytesPtr ptr = new ImmutableBytesPtr();
                                 connection.getKeyValueBuilder().getValueAsPtr(kv, ptr);
                                 return ptr;
@@ -641,8 +644,10 @@ public class MutationState implements SQLCloseable {
                         return null;
                     }
                 };
-                ImmutableBytesPtr key = new ImmutableBytesPtr(maintainer.buildRowKey(getter, ptr, null, null, mutationTimestamp));
-                PRow row = table.newRow(connection.getKeyValueBuilder(), mutationTimestamp, key, false);
+                ImmutableBytesPtr key = new ImmutableBytesPtr(maintainer.buildRowKey(
+                        getter, ptr, null, null, mutationTimestamp));
+                PRow row = table.newRow(
+                        connection.getKeyValueBuilder(), mutationTimestamp, key, false);
                 row.delete();
                 indexMutations.addAll(row.toRowMutations());
             }
@@ -729,7 +734,8 @@ public class MutationState implements SQLCloseable {
                     }
 
                     if (CDCUtil.isCDCIndex(index)) {
-                        List<Mutation> cdcMutations = getCDCDeleteMutations(table, index, mutationTimestamp, mutationList);
+                        List<Mutation> cdcMutations = getCDCDeleteMutations(
+                                table, index, mutationTimestamp, mutationList);
                         if (cdcMutations.size() > 0) {
                             if (indexMutations == null) {
                                 indexMutations = cdcMutations;

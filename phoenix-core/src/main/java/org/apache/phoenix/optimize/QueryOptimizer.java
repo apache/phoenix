@@ -19,7 +19,6 @@
 package org.apache.phoenix.optimize;
 
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -28,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
@@ -40,8 +38,6 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
-import org.apache.phoenix.execute.ScanPlan;
-import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -55,10 +51,7 @@ import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.IndexExpressionParseNodeRewriter;
 import org.apache.phoenix.parse.JoinTableNode;
-import org.apache.phoenix.parse.LimitNode;
 import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.OffsetNode;
-import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.ParseNodeRewriter;
@@ -66,8 +59,6 @@ import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TableNodeVisitor;
-import org.apache.phoenix.parse.TerminalParseNode;
-import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -80,7 +71,6 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.CDCUtil;
@@ -283,14 +273,16 @@ public class QueryOptimizer {
             targetColumns = targetDatums;
         }
         
-        List<QueryPlan> plans = Lists.newArrayListWithExpectedSize((forCDC ? 0 : 1) +
-                indexes.size());
-        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(select, FromCompiler.getResolver(dataPlan.getTableRef()));
+        List<QueryPlan> plans = Lists.newArrayListWithExpectedSize((forCDC ? 0 : 1)
+                + indexes.size());
+        SelectStatement translatedIndexSelect = IndexStatementRewriter.translate(
+                select, FromCompiler.getResolver(dataPlan.getTableRef()));
         QueryPlan hintedPlan = null;
         // We can't have hints work with CDC queries so skip looking for hinted plans.
         if (! forCDC) {
             plans.add(dataPlan);
-            hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns, parallelIteratorFactory, plans);
+            hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes,
+                    targetColumns, parallelIteratorFactory, plans);
             if (hintedPlan != null) {
                 PTable index = hintedPlan.getTableRef().getTable();
                 if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
@@ -395,15 +387,17 @@ public class QueryOptimizer {
                               boolean isHinted, ColumnResolver indexResolver)
                               throws SQLException {
         String tableAlias = dataPlan.getTableRef().getTableAlias();
-        String alias = tableAlias == null ? null : '"' + tableAlias + '"'; // double quote in case it's case sensitive
+        String alias = tableAlias == null ? null
+                : '"' + tableAlias + '"'; // double quote in case it's case sensitive
         String schemaName = index.getParentSchemaName().getString();
         schemaName = schemaName.length() == 0 ? null : '"' + schemaName + '"';
 
         String tableName = '"' + index.getTableName().getString() + '"';
-        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName), select.getTableSamplingRate());
+        TableNode table = FACTORY.namedTable(alias, FACTORY.table(schemaName, tableName),
+                select.getTableSamplingRate());
         SelectStatement indexSelect = FACTORY.select(select, table);
-        ColumnResolver resolver = indexResolver != null ? indexResolver :
-                FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
+        ColumnResolver resolver = indexResolver != null ? indexResolver
+                : FromCompiler.getResolverForQuery(indexSelect, statement.getConnection());
         return addPlan(statement, select, index, targetColumns, parallelIteratorFactory, dataPlan,
                 isHinted, indexSelect, resolver);
     }
@@ -437,7 +431,8 @@ public class QueryOptimizer {
                             : index.getTableName().getString();
                     throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
                 }
-                // translate nodes that match expressions that are indexed to the associated column parse node
+                // translate nodes that match expressions that are indexed to the
+                // associated column parse node
                 SelectStatement rewrittenIndexSelect = ParseNodeRewriter.rewrite(indexSelect, new  IndexExpressionParseNodeRewriter(index, null, statement.getConnection(), indexSelect.getUdfParseNodes()));
                 QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver, targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans);
 
@@ -466,7 +461,8 @@ public class QueryOptimizer {
                                 indexTable.getParentTableName().getString());
                     } else {
                         newIndexTable = indexTable;
-                        dataTableName = SchemaUtil.getTableName(indexTable.getParentSchemaName().getString(),
+                        dataTableName = SchemaUtil.getTableName(
+                                indexTable.getParentSchemaName().getString(),
                                 indexTable.getParentTableName().getString());
                     }
                     PTable dataTableFromDataPlan = dataPlan.getTableRef().getTable();
@@ -476,11 +472,12 @@ public class QueryOptimizer {
                         dataTableName = SchemaUtil.getTableName(
                                 indexTable.getParentSchemaName().getString(),
                                 dataTableFromDataPlan.getParentTableName().getString());
-                     }
+                    }
                     PTable dataTable = PhoenixRuntime.getTable(connection, dataTableName);
                     maintainer = newIndexTable.getIndexMaintainer(dataTable, cdcTable, connection);
                     Set<org.apache.hadoop.hbase.util.Pair<String, String>> indexedColumns =
-                            maintainer.getIndexedColumnInfo(); // TODO: Why is PHOENIX_ROW_TIMESTAMP() not showing up?
+                            maintainer.getIndexedColumnInfo();
+                    // TODO: Why is PHOENIX_ROW_TIMESTAMP() not showing up?
                     for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
                         // The first member of the pair is the column family. For the data table PK columns, the column
                         // family is set to null. The data PK columns should not be added to the set of data columns

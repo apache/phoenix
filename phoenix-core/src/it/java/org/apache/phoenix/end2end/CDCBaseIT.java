@@ -47,31 +47,32 @@ import static org.junit.Assert.assertNull;
 public class CDCBaseIT extends ParallelStatsDisabledIT {
     protected void createTable(Connection conn, String table_sql)
             throws Exception {
-        createTable(conn, table_sql, null, false, null, false);
+        createTable(conn, table_sql, null, false, null, false, null);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, false, null, false);
+        createTable(conn, table_sql, encodingScheme, false, null, false, null);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, multitenant, null, false);
+        createTable(conn, table_sql, encodingScheme, multitenant, null, false, null);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                               Integer nSaltBuckets, boolean immutable)
+                               Integer nSaltBuckets, boolean immutable, PTable.ImmutableStorageScheme immutableStorageScheme)
             throws Exception {
-        createTable(conn, table_sql, encodingScheme, multitenant, nSaltBuckets, null, immutable);
+        createTable(conn, table_sql, encodingScheme, multitenant, nSaltBuckets, null, immutable, immutableStorageScheme);
     }
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                               Integer nSaltBuckets, PTable.IndexType indexType, boolean immutable)
+                               Integer nSaltBuckets, PTable.IndexType indexType, boolean immutable,
+                               PTable.ImmutableStorageScheme immutableStorageScheme)
             throws Exception {
         createTable(conn, table_sql, new HashMap<String, Object>() {{
             put(TableProperty.COLUMN_ENCODED_BYTES.getPropertyName(), encodingScheme != null ?
@@ -80,6 +81,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             put(TableProperty.SALT_BUCKETS.getPropertyName(), nSaltBuckets);
             put(TableProperty.INDEX_TYPE.getPropertyName(), indexType);
             put(TableProperty.IMMUTABLE_ROWS.getPropertyName(), immutable);
+            put(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName(), immutableStorageScheme != null ?
+                    immutableStorageScheme.name() : null);
         }});
     }
 
@@ -111,7 +114,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         Boolean immutableTable = (Boolean) TableProperty.IMMUTABLE_ROWS.getValue(tableProps);
         if (immutableTable) {
             props.add(TableProperty.IMMUTABLE_ROWS.getPropertyName() + "=true");
-            props.add(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName() + "=" + PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN.name());
+        }
+        PTable.ImmutableStorageScheme immutableStorageScheme =
+                (PTable.ImmutableStorageScheme) TableProperty
+                        .IMMUTABLE_STORAGE_SCHEME.getValue(tableProps);
+        if (immutableStorageScheme != null) {
+            props.add(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName() + "="
+                    + immutableStorageScheme.name());
         }
         table_sql += " " + String.join(", ", props);
         conn.createStatement().execute(table_sql);
@@ -137,7 +146,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                                     String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
                                     Integer nSaltBuckets, PTable.IndexType indexType) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
-        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, indexType, false);
+        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, indexType, false, null);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
         tableName = SchemaUtil.getTableNameFromFullName(tableName);
         IndexToolIT.runIndexTool(false, schemaName, tableName,

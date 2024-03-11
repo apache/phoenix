@@ -45,7 +45,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Base64;
@@ -53,7 +52,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
@@ -119,7 +117,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             // FIXME: The below boolean flags should probably be translated to util methods on
             //  the Enum class itself.
             boolean isChangeImageInScope = this.cdcDataTableInfo.getIncludeScopes().size() == 0
-                    || (this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.CHANGE));
+                    || (this.cdcDataTableInfo.getIncludeScopes()
+                    .contains(PTable.CDCChangeScope.CHANGE));
             boolean isPreImageInScope =
                     this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.PRE);
             boolean isPostImageInScope =
@@ -170,7 +169,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                         // must be for dropped columns and so can be ignored.
                                         break cellLoop;
                                     }
-                                    // Continue looking for the right column definition for this cell.
+                                    // Continue looking for the right column definition
+                                    // for this cell.
                                     continue;
                                 } else if (columnComparisonResult < 0) {
                                     // We didn't find a column definition for this cell, ignore the
@@ -182,7 +182,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 if (cell.getTimestamp() < indexCellTS
                                         && cell.getTimestamp() > lowerBoundTsForPreImage) {
                                     if (isPreImageInScope || isPostImageInScope) {
-                                        String cdcColumnName = getColumnDisplayName(currentColumnInfo);
+                                        String cdcColumnName = getColumnDisplayName(
+                                                currentColumnInfo);
                                         if (preImageObj.containsKey(cdcColumnName)) {
                                             // Ignore current cell, continue with the rest.
                                             continue cellLoop;
@@ -253,18 +254,17 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         if (Arrays.equals(currentColumnInfo.getColumnFamily(),
                 cdcDataTableInfo.getDefaultColumnFamily())) {
             cdcColumnName = currentColumnInfo.getColumnName();
-        }
-        else {
-            cdcColumnName = currentColumnInfo.getColumnFamilyName() +
-                    NAME_SEPARATOR + currentColumnInfo.getColumnName();
+        } else {
+            cdcColumnName = currentColumnInfo.getColumnFamilyName()
+                    + NAME_SEPARATOR + currentColumnInfo.getColumnName();
         }
         return cdcColumnName;
     }
 
     private Result getCDCImage(byte[] indexRowKey, Map<String, Object> preImageObj,
-                               Map<String, Object> changeImageObj, boolean isIndexCellDeleteRow, Long indexCellTS,
-                               Cell firstCell, boolean isChangeImageInScope, boolean isPreImageInScope,
-                               boolean isPostImageInScope) {
+                               Map<String, Object> changeImageObj, boolean isIndexCellDeleteRow,
+                               Long indexCellTS, Cell firstCell, boolean isChangeImageInScope,
+                               boolean isPreImageInScope, boolean isPostImageInScope) {
         Map<String, Object> rowValueMap = new HashMap<>();
 
         if (isPreImageInScope) {
