@@ -65,6 +65,7 @@ import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 @RunWith(Parameterized.class)
 public class MaxLookbackExtendedIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;
+    private static final int TABLE_LEVEL_MAX_LOOKBACK_AGE = 10;
     private static final int ROWS_POPULATED = 2;
     public static final int WAIT_AFTER_TABLE_CREATION_MILLIS = 1;
     private String tableDDLOptions;
@@ -72,9 +73,11 @@ public class MaxLookbackExtendedIT extends BaseTest {
     ManualEnvironmentEdge injectEdge;
     private int ttl;
     private boolean multiCF;
+    private boolean hasTableLevelMaxLookback;
 
-    public MaxLookbackExtendedIT(boolean multiCF) {
+    public MaxLookbackExtendedIT(boolean multiCF, boolean hasTableLevelMaxLookback) {
         this.multiCF = multiCF;
+        this.hasTableLevelMaxLookback = hasTableLevelMaxLookback;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -103,21 +106,30 @@ public class MaxLookbackExtendedIT extends BaseTest {
         Assert.assertFalse("refCount leaked", refCountLeaked);
     }
 
-    @Parameterized.Parameters(name = "MaxLookbackExtendedIT_multiCF={0}")
-    public static Collection<Boolean> data() {
-        return Arrays.asList(false, true);
+    @Parameterized.Parameters(name = "MaxLookbackExtendedIT_multiCF={0},hasTableLevelMaxLookback={1}")
+    public static Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+                {false, true},
+                {false, false},
+                {true, false},
+                {true, true}
+        });
     }
     @Test
     public void testKeepDeletedCellsWithMaxLookbackAge() throws Exception {
         int versions = 2;
         optionBuilder.append(", VERSIONS=" + versions);
         optionBuilder.append(", KEEP_DELETED_CELLS=TRUE");
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+        }
         tableDDLOptions = optionBuilder.toString();
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             createTable(dataTableName);
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
+            long firstUpsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             conn.createStatement().execute("upsert into " + dataTableName
                     + " values ('a', 'ab1', 'abc1', 'abcd1')");
             conn.commit();
@@ -136,7 +148,12 @@ public class MaxLookbackExtendedIT extends BaseTest {
             String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
             Assert.assertEquals(1, conn.createStatement().executeUpdate(dml));
             conn.commit();
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            long timeToAdvance = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK_AGE : MAX_LOOKBACK_AGE;
+            injectEdge.incrementValue(timeToAdvance * 1000);
+            if (hasTableLevelMaxLookback) {
+                Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() < firstUpsertSCN +
+                        MAX_LOOKBACK_AGE * 1000);
+            }
             dml = "DELETE from " + dataTableName + " WHERE id  = 'b'";
             Assert.assertEquals(1, conn.createStatement().executeUpdate(dml));
             conn.commit();
@@ -191,6 +208,10 @@ public class MaxLookbackExtendedIT extends BaseTest {
     }
     @Test
     public void testTooLowSCNWithMaxLookbackAge() throws Exception {
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            tableDDLOptions = optionBuilder.toString();
+        }
         String dataTableName = generateUniqueName();
         createTable(dataTableName);
         injectEdge.setValue(System.currentTimeMillis());
@@ -199,7 +220,12 @@ public class MaxLookbackExtendedIT extends BaseTest {
         injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
         populateTable(dataTableName);
         long populateTime = EnvironmentEdgeManager.currentTimeMillis();
-        injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 + 1000);
+        long timeToAdvance = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK_AGE : MAX_LOOKBACK_AGE;
+        injectEdge.incrementValue(timeToAdvance * 1000 + 1000);
+        if (hasTableLevelMaxLookback) {
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                    (populateTime + MAX_LOOKBACK_AGE * 1000));
+        }
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
             Long.toString(populateTime));
@@ -216,6 +242,10 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=120000L)
     public void testRecentlyDeletedRowsNotCompactedAway() throws Exception {
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            tableDDLOptions = optionBuilder.toString();
+        }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
@@ -229,7 +259,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             TableName indexTable = TableName.valueOf(indexName);
             injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
             long beforeDeleteSCN = EnvironmentEdgeManager.currentTimeMillis();
-            injectEdge.incrementValue(10); //make sure we delete at a different ts
+            injectEdge.incrementValue(5); //make sure we delete at a different ts
             Statement stmt = conn.createStatement();
             stmt.execute("DELETE FROM " + dataTableName + " WHERE " + " id = 'a'");
             Assert.assertEquals(1, stmt.getUpdateCount());
@@ -252,7 +282,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
             assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             //wait for the lookback time. After this compactions should purge the deleted row
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            long timeToAdvance = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK_AGE : MAX_LOOKBACK_AGE;
+            injectEdge.incrementValue(timeToAdvance * 1000);
             long beforeSecondCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
             String notDeletedRowSql =
                 String.format("SELECT * FROM %s WHERE id = 'b'", dataTableName);
@@ -266,6 +297,10 @@ public class MaxLookbackExtendedIT extends BaseTest {
                 " values ('c', 'cd', 'cde', 'cdef')");
             conn.commit();
             injectEdge.incrementValue(1L);
+            if (hasTableLevelMaxLookback) {
+                Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                        beforeDeleteSCN + MAX_LOOKBACK_AGE * 1000);
+            }
             majorCompact(dataTable);
             majorCompact(indexTable);
             // Deleted row versions should be removed.
@@ -283,6 +318,9 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
+        if(hasTableLevelMaxLookback) {
+            return;
+        }
         Configuration conf = getUtility().getConfiguration();
         //disable automatic memstore flushes
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
@@ -365,6 +403,9 @@ public class MaxLookbackExtendedIT extends BaseTest {
     public void testRecentMaxVersionsNotCompactedAway() throws Exception {
         int versions = 2;
         optionBuilder.append(", VERSIONS=" + versions);
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+        }
         tableDDLOptions = optionBuilder.toString();
         String firstValue = "abc";
         String secondValue = "def";
@@ -420,18 +461,24 @@ public class MaxLookbackExtendedIT extends BaseTest {
             // at the appropriate times
             assertMultiVersionLookbacks(dataTableSelectSql, allValues, allSCNs);
             assertMultiVersionLookbacks(indexTableSelectSql, allValues, allSCNs);
-            // Make the first row versions outside the max lookback window
-            injectEdge.setValue(afterInsertSCN + MAX_LOOKBACK_AGE * 1000);
+            long timeToAdvance = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK_AGE : MAX_LOOKBACK_AGE;
+            // Make the first two row versions of row a outside the max lookback window. Only the first version should
+            // be collected while the other more recent one should be retained.
+            injectEdge.setValue(afterFirstUpdateSCN + timeToAdvance * 1000);
+            if (hasTableLevelMaxLookback) {
+                Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                        afterFirstUpdateSCN + MAX_LOOKBACK_AGE * 1000);
+            }
             majorCompact(dataTable);
             majorCompact(indexTable);
             // At this moment, the data table has three row versions for row a within the max
             // lookback window.
             // These versions have the following cells {empty, ab, abc, abcd}, {empty, def} and
             // {empty, ghi}.
-            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 8);
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 6);
             // The index table will have three full row versions for "a" and each will have 3 cells,
             // one for each of columns empty, val2, and val3.
-            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), 9);
+            assertRawCellCount(conn, indexTable, Bytes.toBytes("ab\u0000a"), 6);
             //empty column + 1 version each of val1,2 and 3 = 4
             assertRawCellCount(conn, dataTable, Bytes.toBytes("b"), 4);
             //1 version of empty column, 1 version of val2, 1 version of val3 = 3
@@ -441,6 +488,10 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test(timeout=60000)
     public void testOverrideMaxLookbackForCompaction() throws Exception {
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            tableDDLOptions = optionBuilder.toString();
+        }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableNameOne = generateUniqueName();
             createTable(tableNameOne);

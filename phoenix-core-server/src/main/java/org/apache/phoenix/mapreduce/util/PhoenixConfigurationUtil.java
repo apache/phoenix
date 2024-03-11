@@ -36,6 +36,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.FormatToBytesWritableMapper;
 import org.apache.phoenix.mapreduce.ImportPreUpsertKeyValueProcessor;
@@ -919,5 +920,18 @@ public final class PhoenixConfigurationUtil {
         Preconditions.checkNotNull(configuration);
         return configuration.getBoolean(MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER,
             DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER);
+    }
+
+    public static void setMaxLookbackAge(Configuration configuration, Long maxLookbackAge) {
+        Preconditions.checkNotNull(configuration);
+        if (maxLookbackAge != null) {
+            configuration.setLong(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE, maxLookbackAge);
+        }
+    }
+
+    public static Long getMaxLookbackAge(Configuration configuration) {
+        Preconditions.checkNotNull(configuration);
+        String maxLookbackAgeStr = configuration.get(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
+        return maxLookbackAgeStr != null ? Long.valueOf(maxLookbackAgeStr) : null;
     }
 }

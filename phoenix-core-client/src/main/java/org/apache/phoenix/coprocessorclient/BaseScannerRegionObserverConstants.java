@@ -136,6 +136,7 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
 
+    public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
     /**
      * The scan attribute to provide the scan start rowkey for analyze table queries.
      */
@@ -164,7 +165,6 @@ public class BaseScannerRegionObserverConstants {
      * data integrity issues related to region moves (PHOENIX-7106).
      */
     public static final String SCAN_SERVER_RETURN_VALID_ROW_KEY = "_ScanServerValidRowKey";
-
 
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);

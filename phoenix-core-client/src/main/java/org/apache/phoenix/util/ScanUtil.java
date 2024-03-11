@@ -108,6 +108,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * 
@@ -1628,6 +1629,20 @@ public class ScanUtil {
             }
         }
         return null;
+    }
+
+    public static void setScanAttributeForMaxLookbackAge(Scan scan, Long maxLookbackAge) {
+        Preconditions.checkNotNull(scan);
+        if (maxLookbackAge != null) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
+                    Bytes.toBytes(maxLookbackAge));
+        }
+    }
+
+    public static Long getMaxLookbackAgeFromScanAttribute(Scan scan) {
+        Preconditions.checkNotNull(scan);
+        byte[] maxLookbackAge = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
+        return maxLookbackAge != null ? Bytes.toLong(maxLookbackAge) : null;
     }
 
     /**

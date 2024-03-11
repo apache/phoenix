@@ -68,14 +68,16 @@ public class TableTTLIT extends BaseTest {
     private final boolean multiCF;
     private final boolean columnEncoded;
     private final KeepDeletedCells keepDeletedCells;
+    private final Integer tableLevelMaxLooback;
 
     public TableTTLIT(boolean multiCF, boolean columnEncoded,
-            KeepDeletedCells keepDeletedCells, int versions, int ttl) {
+            KeepDeletedCells keepDeletedCells, int versions, int ttl, Integer tableLevelMaxLooback) {
         this.multiCF = multiCF;
         this.columnEncoded = columnEncoded;
         this.keepDeletedCells = keepDeletedCells;
         this.versions = versions;
         this.ttl = ttl;
+        this.tableLevelMaxLooback = tableLevelMaxLooback;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -103,6 +105,9 @@ public class TableTTLIT extends BaseTest {
         } else {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=0");
         }
+        if (tableLevelMaxLooback != null) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=").append(tableLevelMaxLooback * 1000);
+        }
         this.tableDDLOptions = optionBuilder.toString();
         injectEdge = new ManualEnvironmentEdge();
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
@@ -117,15 +122,18 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Parameterized.Parameters(name = "TableTTLIT_multiCF={0}, columnEncoded={1}, "
-            + "keepDeletedCells={2}, versions={3}, ttl={4}")
+            + "keepDeletedCells={2}, versions={3}, ttl={4}, tableLevelMaxLookback={5}")
     public static synchronized Collection<Object[]> data() {
             return Arrays.asList(new Object[][] {
-                    { false, false, KeepDeletedCells.FALSE, 1, 100},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50},
-                    { false, false, KeepDeletedCells.TTL, 1, 25},
-                    { true, false, KeepDeletedCells.FALSE, 5, 50},
-                    { true, false, KeepDeletedCells.TRUE, 1, 25},
-                    { true, false, KeepDeletedCells.TTL, 5, 100} });
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, null},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, null},
+                    { false, false, KeepDeletedCells.TTL, 1, 25, null},
+                    { true, false, KeepDeletedCells.FALSE, 5, 50, null},
+                    { true, false, KeepDeletedCells.TRUE, 1, 25, null},
+                    { true, false, KeepDeletedCells.TTL, 5, 100, null},
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, 15},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, 15},
+                    { false, false, KeepDeletedCells.TTL, 1, 25, 15}});
     }
 
     /**
@@ -146,7 +154,8 @@ public class TableTTLIT extends BaseTest {
 
     @Test
     public void testMaskingAndCompaction() throws Exception {
-        final int maxDeleteCounter = MAX_LOOKBACK_AGE;
+        final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
+        final int maxDeleteCounter = maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
         final int maxMaskingCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
@@ -174,7 +183,7 @@ public class TableTTLIT extends BaseTest {
                 }
                 if (maskingCounter-- == 0) {
                     updateRow(conn, tableName, noCompactTableName, "a");
-                    injectEdge.incrementValue((ttl + MAX_LOOKBACK_AGE + 1) * 1000);
+                    injectEdge.incrementValue((ttl + maxLookbackAge + 1) * 1000);
                     LOG.debug("Masking " + i + " current time: " + injectEdge.currentTime());
                     ResultSet rs = conn.createStatement().executeQuery(
                             "SELECT count(*) FROM " + tableName);
@@ -205,7 +214,7 @@ public class TableTTLIT extends BaseTest {
                 }
                 afterCompaction = false;
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
-                long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
+                long scn = injectEdge.currentTime() - maxLookbackAge * 1000;
                 long scnEnd = injectEdge.currentTime();
                 long scnStart = Math.max(scn, startTime);
                 for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
@@ -224,6 +233,9 @@ public class TableTTLIT extends BaseTest {
 
     @Test
     public void testRowSpansMultipleTTLWindows() throws Exception {
+        if (tableLevelMaxLooback != null) {
+            return;
+        }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);

@@ -30,6 +30,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
@@ -218,6 +219,7 @@ public class PTableImpl implements PTable {
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
+    private Long maxLookbackAge;
 
     public static class Builder {
         private PTableKey key;
@@ -284,6 +286,7 @@ public class PTableImpl implements PTable {
         private String externalSchemaId;
         private String streamingTopicName;
         private String indexWhere;
+        private Long maxLookbackAge;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -711,6 +714,14 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setMaxLookbackAge(Long maxLookbackAge) {
+            if (maxLookbackAge != null) {
+                propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge));
+            }
+            this.maxLookbackAge = maxLookbackAge;
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -1002,6 +1013,7 @@ public class PTableImpl implements PTable {
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
         this.indexWhere = builder.indexWhere;
+        this.maxLookbackAge = builder.maxLookbackAge;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1082,7 +1094,8 @@ public class PTableImpl implements PTable {
                 .setSchemaVersion(table.getSchemaVersion())
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
-                .setIndexWhere(table.getIndexWhere());
+                .setIndexWhere(table.getIndexWhere())
+                .setMaxLookbackAge(table.getMaxLookbackAge());
     }
 
     @Override
@@ -2028,6 +2041,10 @@ public class PTableImpl implements PTable {
             indexWhere =
                     (String) PVarchar.INSTANCE.toObject(table.getIndexWhere().toByteArray());
         }
+        Long maxLookbackAge = null;
+        if (table.hasMaxLookbackAge()) {
+            maxLookbackAge = table.getMaxLookbackAge();
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2086,6 +2103,7 @@ public class PTableImpl implements PTable {
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
                     .setIndexWhere(indexWhere)
+                    .setMaxLookbackAge(maxLookbackAge)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2228,6 +2246,9 @@ public class PTableImpl implements PTable {
         if (table.getIndexWhere() != null) {
             builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
                     table.getIndexWhere())));
+        }
+        if (table.getMaxLookbackAge() != null) {
+            builder.setMaxLookbackAge(table.getMaxLookbackAge());
         }
         return builder.build();
     }
@@ -2374,6 +2395,11 @@ public class PTableImpl implements PTable {
     @Override
     public String getIndexWhere() {
         return indexWhere;
+    }
+
+    @Override
+    public Long getMaxLookbackAge() {
+        return maxLookbackAge;
     }
 
     private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {

@@ -359,6 +359,7 @@ public enum SQLExceptionCode {
             + "only if none of the child views extends primary key"),
     VIEW_CANNOT_EXTEND_PK_WITH_PARENT_INDEXES(10956, "44A38", "View can extend parent primary key"
             + " only if none of the parents have indexes in the parent hierarchy"),
+    MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY(10957, "44A39", "Max lookback age can only be set for tables"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
