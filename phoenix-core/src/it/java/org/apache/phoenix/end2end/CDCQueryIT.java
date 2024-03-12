@@ -134,10 +134,13 @@ public class CDCQueryIT extends CDCBaseIT {
         for (String tid: tenantids) {
             try (Connection conn = newConnection(tid)) {
                 conn.createStatement().execute("UPSERT INTO " + tableName +
-                        " (k, v1, v2) VALUES (1, 100, 1000)");
+                        " (k, v1, v2, B.vb) VALUES (1, 100, 1000, 10000)");
                 injectEdge.incrementValue(100);
                 conn.createStatement().execute("UPSERT INTO " + tableName +
                         " (k, v1, v2) VALUES (2, 200, 2000)");
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2, B.vb) VALUES (3, 300, NULL, NULL)");
                 commit(conn, withCommitFailure);
                 injectEdge.incrementValue(100);
                 conn.createStatement().execute("UPSERT INTO " + tableName +
@@ -167,7 +170,7 @@ public class CDCQueryIT extends CDCBaseIT {
                 commit(conn, withCommitFailure);
                 injectEdge.incrementValue(100);
                 conn.createStatement().execute("UPSERT INTO " + tableName +
-                        " (k, v1, v2) VALUES (2, 201, NULL)");
+                        " (k, v1, v2, B.vb) VALUES (2, 201, NULL, 20001)");
                 commit(conn, withCommitFailure);
                 injectEdge.incrementValue(100);
                 conn.createStatement().execute("UPSERT INTO " + tableName +
@@ -212,12 +215,14 @@ public class CDCQueryIT extends CDCBaseIT {
             Map<String, Double> postImage = new HashMap<>();
             postImage.put("V1", 100d);
             postImage.put("V2", 1000d);
+            postImage.put("B.VB", 10000d);
             row1.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 100d);
             changeImage.put("V2", 1000d);
+            changeImage.put("B.VB", 10000d);
             row1.put(CDC_CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
@@ -238,7 +243,7 @@ public class CDCQueryIT extends CDCBaseIT {
             postImage.put("V2", 2000d);
             row2.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 200d);
             changeImage.put("V2", 2000d);
@@ -250,26 +255,28 @@ public class CDCQueryIT extends CDCBaseIT {
         }
         assertEquals(row2, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
+
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(1 + COL_OFFSET));
+        assertEquals(3, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row3 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
             Map<String, Double> postImage = new HashMap<>();
-            postImage.put("V1", 101d);
-            postImage.put("V2", 1000d);
+            postImage.put("V1", 300d);
+            postImage.put("V2", null);
+            postImage.put("B.VB", null);
             row3.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
-            changeImage.put("V1", 101d);
+            changeImage.put("V1", 300d);
+            changeImage.put("V2", null);
+            changeImage.put("B.VB", null);
             row3.put(CDC_CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
-            preImage.put("V1", 100d);
-            preImage.put("V2", 1000d);
             row3.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row3, gson.fromJson(rs.getString(2 + COL_OFFSET),
@@ -278,20 +285,25 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row4 = new HashMap<String, Object>(){{
-            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row4.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
-            }});
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 101d);
+            postImage.put("V2", 1000d);
+            postImage.put("B.VB", 10000d);
+            row4.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row4.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
-            }});
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 101d);
+            row4.put(CDC_CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
-            preImage.put("V1", 101d);
+            preImage.put("V1", 100d);
             preImage.put("V2", 1000d);
+            preImage.put("B.VB", 10000d);
             row4.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row4, gson.fromJson(rs.getString(2 + COL_OFFSET),
@@ -300,23 +312,22 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row5 = new HashMap<String, Object>(){{
-            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Double> postImage = new HashMap<>();
-            postImage.put("V1", 102d);
-            postImage.put("V2", 1002d);
-            row5.put(CDC_POST_IMAGE, postImage);
+            row5.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
+            }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Double> changeImage = new HashMap<>();
-            changeImage.put("V1", 102d);
-            changeImage.put("V2", 1002d);
-            row5.put(CDC_CHANGE_IMAGE, changeImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row5.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
+            }});
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            row5.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
-            }});
+            Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 101d);
+            preImage.put("V2", 1000d);
+            preImage.put("B.VB", 10000d);
+            row5.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row5, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
@@ -324,70 +335,72 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row6 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 102d);
+            postImage.put("V2", 1002d);
+            row6.put(CDC_POST_IMAGE, postImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 102d);
+            changeImage.put("V2", 1002d);
+            row6.put(CDC_CHANGE_IMAGE, changeImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            row6.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
+            }});
+        }
+        assertEquals(row6, gson.fromJson(rs.getString(2 + COL_OFFSET),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
+        Map<String, Object> row7 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row6.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
+            row7.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row6.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row7.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
             preImage.put("V1", 102d);
             preImage.put("V2", 1002d);
-            row6.put(CDC_PRE_IMAGE, preImage);
-        }
-        assertEquals(row6, gson.fromJson(rs.getString(2 + COL_OFFSET),
-                HashMap.class));
-
-        assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(1 + COL_OFFSET));
-        Map<String, Object> row7 = new HashMap<String, Object>(){{
-            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
-        }};
-        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Double> postImage = new HashMap<>();
-            postImage.put("V1", 201d);
-            postImage.put("V2", null);
-            row7.put(CDC_POST_IMAGE, postImage);
-        }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Double> changeImage = new HashMap<>();
-            changeImage.put("V1", 201d);
-            changeImage.put("V2", null);
-            row7.put(CDC_CHANGE_IMAGE, changeImage);
-        }
-        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
-            Map<String, Double> preImage = new HashMap<>();
-            preImage.put("V1", 200d);
-            preImage.put("V2", 2000d);
             row7.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row7, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(1 + COL_OFFSET));
+        assertEquals(2, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row8 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
             Map<String, Double> postImage = new HashMap<>();
-            postImage.put("V1", 103d);
-            postImage.put("V2", 1003d);
+            postImage.put("V1", 201d);
+            postImage.put("V2", null);
+            postImage.put("B.VB", 20001d);
             row8.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
-            changeImage.put("V1", 103d);
-            changeImage.put("V2", 1003d);
+            changeImage.put("V1", 201d);
+            changeImage.put("V2", null);
+            changeImage.put("B.VB", 20001d);
             row8.put(CDC_CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 200d);
+            preImage.put("V2", 2000d);
             row8.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row8, gson.fromJson(rs.getString(2 + COL_OFFSET),
@@ -396,20 +409,22 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row9 = new HashMap<String, Object>(){{
-            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row9.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
-            }});
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 103d);
+            postImage.put("V2", 1003d);
+            row9.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row9.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
-            }});
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 103d);
+            changeImage.put("V2", 1003d);
+            row9.put(CDC_CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
-            preImage.put("V1", 103d);
-            preImage.put("V2", 1003d);
             row9.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row9, gson.fromJson(rs.getString(2 + COL_OFFSET),
@@ -418,22 +433,20 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row10 = new HashMap<String, Object>(){{
-            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+            put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            Map<String, Double> postImage = new HashMap<>();
-            postImage.put("V1", 104d);
-            postImage.put("V2", 1004d);
-            row10.put(CDC_POST_IMAGE, postImage);
+            row10.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
+            }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            Map<String, Double> changeImage = new HashMap<>();
-            changeImage.put("V1", 104d);
-            changeImage.put("V2", 1004d);
-            row10.put(CDC_CHANGE_IMAGE, changeImage);
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row10.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
+            }});
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
+            preImage.put("V1", 103d);
+            preImage.put("V2", 1003d);
             row10.put(CDC_PRE_IMAGE, preImage);
         }
         assertEquals(row10, gson.fromJson(rs.getString(2 + COL_OFFSET),
@@ -442,23 +455,47 @@ public class CDCQueryIT extends CDCBaseIT {
         assertEquals(true, rs.next());
         assertEquals(1, rs.getInt(1 + COL_OFFSET));
         Map<String, Object> row11 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 104d);
+            postImage.put("V2", 1004d);
+            row11.put(CDC_POST_IMAGE, postImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 104d);
+            changeImage.put("V2", 1004d);
+            row11.put(CDC_CHANGE_IMAGE, changeImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            Map<String, Double> preImage = new HashMap<>();
+            row11.put(CDC_PRE_IMAGE, preImage);
+        }
+        assertEquals(row11, gson.fromJson(rs.getString(2 + COL_OFFSET),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(1, rs.getInt(1 + COL_OFFSET));
+        Map<String, Object> row12 = new HashMap<String, Object>(){{
             put(CDC_EVENT_TYPE, CDC_DELETE_EVENT_TYPE);
         }};
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
-            row11.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
+            row12.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
-            row11.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            row12.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
             Map<String, Double> preImage = new HashMap<>();
             preImage.put("V1", 104d);
             preImage.put("V2", 1004d);
-            row11.put(CDC_PRE_IMAGE, preImage);
+            row12.put(CDC_PRE_IMAGE, preImage);
         }
-        assertEquals(row11, gson.fromJson(rs.getString(2 + COL_OFFSET),
+        assertEquals(row12, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(false, rs.next());
@@ -471,11 +508,11 @@ public class CDCQueryIT extends CDCBaseIT {
         String schemaName = withSchemaName ? generateUniqueName() : null;
         String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         try (Connection conn = newConnection()) {
-            createTable(conn, "CREATE TABLE  " + tableName + " (" +
-                    (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
-                    "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, CONSTRAINT PK PRIMARY KEY " +
-                    (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false, null);
+            createTable(conn, "CREATE TABLE  " + tableName + " ("
+                    + (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "")
+                    + "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, B.vb INTEGER, "
+                    + "CONSTRAINT PK PRIMARY KEY " + (multitenant ? "(TENANT_ID, k) " : "(k)")
+                    + ")", encodingScheme, multitenant, tableSaltBuckets, false, null);
             if (forView) {
                 String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
                 createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
@@ -516,30 +553,36 @@ public class CDCQueryIT extends CDCBaseIT {
                     CDCUtil.getCDCIndexName(cdcName) + ") */ k, v1 FROM " + tableName;
             try (ResultSet rs = conn.createStatement().executeQuery(uncovered_sql)) {
                 assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertEquals(300, rs.getInt(2));
+                assertTrue(rs.next());
                 assertEquals(2, rs.getInt(1));
                 assertEquals(201, rs.getInt(2));
                 assertFalse(rs.next());
             }
 
-            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
-            null);
-            assertResultSet(conn.createStatement().executeQuery("SELECT " +
-                    "/*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
+            assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)));
+            assertResultSet(conn.createStatement().executeQuery("SELECT "
+                            + "/*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
                     new HashSet<PTable.CDCChangeScope>(
                             Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
-            assertResultSet(conn.createStatement().executeQuery("SELECT " +
-                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName), null);
+            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
+                    null);
+            assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */"
+                    + "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
+                    new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)));
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
                 put("SELECT 'dummy', k FROM " + cdcFullName,
-                        new int[]{1, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1});
+                        new int[]{1, 2, 3, 1, 1, 1, 1, 2, 1, 1, 1, 1});
                 put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcFullName +
-                        " ORDER BY k ASC", new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2});
+                        " ORDER BY k ASC", new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3});
                 put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcFullName +
-                        " ORDER BY k DESC", new int[]{2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
+                        " ORDER BY k DESC", new int[]{3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
                 put("SELECT PHOENIX_ROW_TIMESTAMP(), k FROM " + cdcFullName +
                         " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC",
-                        new int[]{1, 1, 1, 1, 2, 1, 1, 1, 1, 2, 1});
+                        new int[]{1, 1, 1, 1, 2, 1, 1, 1, 1, 3, 2, 1});
             }};
             for (Map.Entry<String, int[]> testQuery : testQueries.entrySet()) {
                 try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
@@ -568,7 +611,10 @@ public class CDCQueryIT extends CDCBaseIT {
                         " (k, v1, v2) VALUES (1, 100, 1000)");
                 injectEdge.incrementValue(100);
                 conn.createStatement().execute("UPSERT INTO " + tableName +
-                        " (k, v1, v2) VALUES (2, 200, 2000)");
+                        " (k, v1) VALUES (2, 200)");
+                injectEdge.incrementValue(100);
+                conn.createStatement().execute("UPSERT INTO " + tableName +
+                        " (k, v1, v2) VALUES (3, 300, NULL)");
                 commit(conn, withCommitFailure);
                 injectEdge.incrementValue(100);
                 conn.createStatement().execute("DELETE FROM " + tableName +
@@ -620,7 +666,7 @@ public class CDCQueryIT extends CDCBaseIT {
             postImage.put("V2", 1000d);
             row1.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 100d);
             changeImage.put("V2", 1000d);
@@ -641,13 +687,11 @@ public class CDCQueryIT extends CDCBaseIT {
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
             Map<String, Double> postImage = new HashMap<>();
             postImage.put("V1", 200d);
-            postImage.put("V2", 2000d);
             row2.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 200d);
-            changeImage.put("V2", 2000d);
             row2.put(CDC_CHANGE_IMAGE, changeImage);
         }
         if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
@@ -655,6 +699,28 @@ public class CDCQueryIT extends CDCBaseIT {
             }});
         }
         assertEquals(row2, gson.fromJson(rs.getString(2 + COL_OFFSET),
+                HashMap.class));
+
+        assertEquals(true, rs.next());
+        assertEquals(3, rs.getInt(1 + COL_OFFSET));
+        Map<String, Object> row3 = new HashMap<String, Object>(){{
+            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
+        }};
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.POST)) {
+            Map<String, Double> postImage = new HashMap<>();
+            postImage.put("V1", 300d);
+            row3.put(CDC_POST_IMAGE, postImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+            Map<String, Double> changeImage = new HashMap<>();
+            changeImage.put("V1", 300d);
+            row3.put(CDC_CHANGE_IMAGE, changeImage);
+        }
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.PRE)) {
+            row3.put(CDC_PRE_IMAGE, new HashMap<String, Double>() {{
+            }});
+        }
+        assertEquals(row3, gson.fromJson(rs.getString(2 + COL_OFFSET),
                 HashMap.class));
 
         assertEquals(true, rs.next());
@@ -666,7 +732,7 @@ public class CDCQueryIT extends CDCBaseIT {
             row4.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             row4.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
@@ -690,7 +756,7 @@ public class CDCQueryIT extends CDCBaseIT {
             postImage.put("V2", 1002d);
             row5.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 102d);
             changeImage.put("V2", 1002d);
@@ -712,7 +778,7 @@ public class CDCQueryIT extends CDCBaseIT {
             row6.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             row6.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
@@ -736,7 +802,7 @@ public class CDCQueryIT extends CDCBaseIT {
             postImage.put("V2", 1003d);
             row8.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 103d);
             changeImage.put("V2", 1003d);
@@ -758,7 +824,7 @@ public class CDCQueryIT extends CDCBaseIT {
             row9.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             row9.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
@@ -782,7 +848,7 @@ public class CDCQueryIT extends CDCBaseIT {
             postImage.put("V2", 1004d);
             row10.put(CDC_POST_IMAGE, postImage);
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             Map<String, Double> changeImage = new HashMap<>();
             changeImage.put("V1", 104d);
             changeImage.put("V2", 1004d);
@@ -804,7 +870,7 @@ public class CDCQueryIT extends CDCBaseIT {
             row11.put(CDC_POST_IMAGE, new HashMap<String, Double>() {{
             }});
         }
-        if (cdcChangeScopeSet == null || cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
+        if (cdcChangeScopeSet != null && cdcChangeScopeSet.contains(PTable.CDCChangeScope.CHANGE)) {
             row11.put(CDC_CHANGE_IMAGE, new HashMap<String, Double>() {{
             }});
         }
@@ -864,13 +930,15 @@ public class CDCQueryIT extends CDCBaseIT {
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
             assertResultSetImmutableTable(conn.createStatement()
-                            .executeQuery("SELECT * FROM " + cdcFullName), null);
+                            .executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)));
             assertResultSetImmutableTable(conn.createStatement().executeQuery("SELECT " +
                             "/*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
                     new HashSet<PTable.CDCChangeScope>(
                             Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)));
-            assertResultSetImmutableTable(conn.createStatement().executeQuery("SELECT " +
-                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName), null);
+            assertResultSetImmutableTable(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
+                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
+                    new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)));
         }
     }
 
@@ -1031,7 +1099,7 @@ public class CDCQueryIT extends CDCBaseIT {
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
                     (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
-                    "k INTEGER NOT NULL, v0 INTEGER, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, " +
+                    "k INTEGER NOT NULL, v0 INTEGER, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, B.vb INTEGER, " +
                     "v3 INTEGER, CONSTRAINT PK PRIMARY KEY " +
                     (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets, false, null);
@@ -1067,9 +1135,9 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         try (Connection conn = newConnection(tenantId)) {
-            assertResultSet(conn.createStatement().executeQuery("SELECT * FROM " +
+            assertResultSet(conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " +
                             SchemaUtil.getTableName(schemaName, cdcName)),
-            null);
+                    new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)));
         }
     }
 
@@ -1191,7 +1259,7 @@ public class CDCQueryIT extends CDCBaseIT {
         try (Connection conn = newConnection()) {
             createTable(conn, "CREATE TABLE  " + tableName + " (" +
                             (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
-                            "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, " +
+                            "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, B.vb INTEGER, " +
                             "CONSTRAINT PK PRIMARY KEY " +
                             (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
                     tableSaltBuckets, false, null);

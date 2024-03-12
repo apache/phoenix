@@ -100,11 +100,7 @@ public class CDCUtil {
         scan.setCacheBlocks(false);
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (! familyMap.isEmpty()) {
-            familyMap.keySet().stream().forEach(fQual -> {
-                if (familyMap.get(fQual) != null) {
-                    familyMap.get(fQual).clear();
-                }
-            });
+            familyMap.clear();
         }
         return scan;
     }

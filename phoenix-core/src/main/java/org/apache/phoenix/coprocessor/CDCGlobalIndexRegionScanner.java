@@ -116,9 +116,8 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             Map<String, Object> changeImageObj = null;
             // FIXME: The below boolean flags should probably be translated to util methods on
             //  the Enum class itself.
-            boolean isChangeImageInScope = this.cdcDataTableInfo.getIncludeScopes().size() == 0
-                    || (this.cdcDataTableInfo.getIncludeScopes()
-                    .contains(PTable.CDCChangeScope.CHANGE));
+            boolean isChangeImageInScope =
+                    this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.CHANGE);
             boolean isPreImageInScope =
                     this.cdcDataTableInfo.getIncludeScopes().contains(PTable.CDCChangeScope.PRE);
             boolean isPostImageInScope =
