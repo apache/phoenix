@@ -439,13 +439,23 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
+                                    String sName = e.getSchemaName();
+                                    String tName = e.getTableName();
+                                    PTable queryPlanTable
+                                            = getLastQueryPlan().getTableRef().getTable();
+                                    // when the query plan uses the local index PTable,
+                                    // the TNFE can still be for the base table
+                                    if (queryPlanTable.getIndexType() == IndexType.LOCAL) {
+                                        sName = queryPlanTable.getSchemaName().getString();
+                                        tName = queryPlanTable.getTableName().getString();
+                                    }
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
-                                                e.getTableName());
+                                                tName);
                                     }
                                     if (new MetaDataClient(connection)
                                             .updateCache(connection.getTenantId(),
-                                                    e.getSchemaName(), e.getTableName(), true)
+                                                    sName, tName, true)
                                             .wasUpdated()) {
                                         updateMetrics = false;
                                         //TODO we can log retry count and error for debugging in LOG table
