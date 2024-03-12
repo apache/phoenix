@@ -1221,7 +1221,7 @@ public class ViewUtil {
         String
                 viewsWithTTLSQL =
                 "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " +
-                        "TABLE_TYPE, TTL, ROW_KEY_PREFIX " +
+                        "TABLE_TYPE, TTL, ROW_KEY_MATCHER " +
                         "FROM SYSTEM.CATALOG " +
                         "WHERE TABLE_TYPE = 'v' AND " +
                         "(TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
