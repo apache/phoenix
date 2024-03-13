@@ -360,6 +360,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             String tableName = null;
                             clearResultSet();
                             PhoenixResultSet rs = null;
+                            QueryPlan plan = null;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 conn.checkOpen();
@@ -369,9 +370,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
                                 }
-                                QueryPlan
-                                        plan =
-                                        stmt.compilePlan(PhoenixStatement.this,
+                                plan = stmt.compilePlan(PhoenixStatement.this,
                                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 // Send mutations to hbase, so they are visible to subsequent reads.
                                 // Use original plan for data table so that data and immutable indexes will be sent
@@ -441,13 +440,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
                                     String sName = e.getSchemaName();
                                     String tName = e.getTableName();
-                                    PTable queryPlanTable
-                                            = getLastQueryPlan().getTableRef().getTable();
                                     // when the query plan uses the local index PTable,
                                     // the TNFE can still be for the base table
-                                    if (queryPlanTable.getIndexType() == IndexType.LOCAL) {
-                                        sName = queryPlanTable.getSchemaName().getString();
-                                        tName = queryPlanTable.getTableName().getString();
+                                    if (plan != null && plan.getTableRef() != null) {
+                                        PTable queryPlanTable = plan.getTableRef().getTable();
+                                        if (queryPlanTable != null &&
+                                                queryPlanTable.getIndexType() == IndexType.LOCAL) {
+                                            sName = queryPlanTable.getSchemaName().getString();
+                                            tName = queryPlanTable.getTableName().getString();
+                                        }
                                     }
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
