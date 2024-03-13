@@ -1741,8 +1741,72 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that client always refreshes its cache for DDL operations.
+     * create view -> refresh base table
+     * create child view -> refresh parent view and base table
+     * add/drop column on table -> refresh table
+     * add/drop column on view -> refresh view and base table
+     */
+    @Test
+    public void testCacheUpdatedBeforeDDLOperations() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String childViewName = generateUniqueName();
+        int numTableRPCs = 0, numViewRPCs = 0;
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        try (Connection conn1 = spyCqs1.connect(url1, props)) {
+            // create table
+            createTable(conn1, tableName);
+
+            // create index, getTable RPCs for base table
+            createIndex(conn1, tableName, indexName, "v2");
+            numTableRPCs += 3; // one rpc each for getting current time, create index, alter index state after building
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+
+
+            // create a view, getTable RPC for base table
+            createView(conn1, tableName, viewName);
+            numTableRPCs++;
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+
+            // create a child view, getTable RPC for parent view and base table
+            createView(conn1, viewName, childViewName);
+            numTableRPCs++;
+            numViewRPCs++;
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+            assertNumGetTableRPC(spyCqs1, viewName, numViewRPCs);
+
+
+            // add and drop column, 2 getTable RPCs for base table
+            alterTableAddColumn(conn1, tableName, "newcol1");
+            numTableRPCs++;
+            alterTableDropColumn(conn1, tableName, "newcol1");
+            numTableRPCs++;
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+
+            // add and drop column, 2 getTable RPCs for view
+            alterViewAddColumn(conn1, viewName, "newcol2");
+            numViewRPCs++;
+            numTableRPCs++;
+            alterViewDropColumn(conn1, viewName, "newcol2");
+            numViewRPCs++;
+            numTableRPCs++;
+            assertNumGetTableRPC(spyCqs1, viewName, numViewRPCs);
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+        }
+    }
+
 
     //Helper methods
+    public static void assertNumGetTableRPC(ConnectionQueryServices spyCqs, String tableName, int numExpectedRPCs) throws SQLException {
+        Mockito.verify(spyCqs, Mockito.times(numExpectedRPCs)).getTable(eq(null),
+                any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                anyLong(), anyLong());
+    }
     public static void assertPlan(PhoenixResultSet rs, String schemaName, String tableName) {
         PTable table = rs.getContext().getCurrentTable().getTable();
         assertTrue(table.getSchemaName().getString().equals(schemaName) &&
@@ -1807,6 +1871,10 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER VIEW " + viewName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
+    }
+
+    private void alterViewDropColumn(Connection conn, String viewName, String columnName) throws SQLException {
+        conn.createStatement().execute("ALTER VIEW " + viewName + " DROP COLUMN  " + columnName);
     }
 
     private void alterIndexChangeState(Connection conn, String tableName, String indexName, String state) throws SQLException, InterruptedException {

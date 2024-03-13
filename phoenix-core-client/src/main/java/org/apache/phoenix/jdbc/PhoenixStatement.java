@@ -598,8 +598,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             clearResultSet();
                             try {
                                 PhoenixConnection conn = getConnection();
-                                // for DDL statements when UCF=never
-                                pruneClientCacheIfRequired(stmt);
                                 if (conn.getQueryServices().isUpgradeRequired() && !conn.isRunningUpgrade()
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
@@ -2643,30 +2641,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             } else {
                 LOGGER.warn(
                     "There are Uncommitted mutations, which will be dropped on the execution of this DDL statement.");
-            }
-        }
-    }
-
-    /**
-     * If UPDATE_CACHE_FREQUENCY is set to NEVER, client can possibly have stale metadata
-     * for parent entities. See https://issues.apache.org/jira/browse/PHOENIX-7270
-     * We can remove all non-system tables from a client's cache before executing any DDL
-     * statement so that client can retrieve latest metadata for any of the required entities.
-     */
-    private void pruneClientCacheIfRequired(final CompilableStatement stmt) {
-        if (stmt instanceof MutableStatement && !(stmt instanceof DMLStatement)) {
-            long ucf = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
-                    connection.getQueryServices().getProps().get(
-                            QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
-            if (ucf == Long.MAX_VALUE) {
-                this.connection.getMetaDataCache().pruneTables(new PMetaData.Pruner() {
-                    @Override public boolean prune(PTable table) {
-                        return table.getType() != PTableType.SYSTEM;
-                    }
-                    @Override public boolean prune(PFunction function) {
-                        return false;
-                    }
-                });
             }
         }
     }

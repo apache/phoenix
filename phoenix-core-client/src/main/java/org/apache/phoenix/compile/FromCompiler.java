@@ -180,7 +180,7 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true, true);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
@@ -280,7 +280,7 @@ public class FromCompiler {
 
     public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection)
             throws SQLException {
-        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true, true);
         return visitor;
     }
 
