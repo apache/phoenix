@@ -355,7 +355,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             assertEquals(53, rs.getInt(1));
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             String queryPlan = QueryUtil.getExplainPlan(rs);
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 [*] - ['b']\n"
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [*] - ['b']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    SERVER AGGREGATE INTO SINGLE ROW",
                 queryPlan);
@@ -373,7 +373,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             assertEquals(128, rs.getInt(1));
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             queryPlan = QueryUtil.getExplainPlan(rs);
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 [*] - ['cd']\n"
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [*] - ['cd']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    SERVER AGGREGATE INTO SINGLE ROW",
                 queryPlan);
@@ -391,7 +391,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             assertEquals(25, rs.getInt(1));
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             queryPlan = QueryUtil.getExplainPlan(rs);
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 ['ef'] - ['eg']\n"
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['ef'] - ['eg']\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    SERVER AGGREGATE INTO SINGLE ROW",
                 queryPlan);
@@ -409,7 +409,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             assertEquals(75, rs.getInt(1));
             rs = conn.createStatement().executeQuery("EXPLAIN " + query);
             queryPlan = QueryUtil.getExplainPlan(rs);
-            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 ['de'] - [*]\n"
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['de'] - [*]\n"
                     + "    SERVER FILTER BY FIRST KEY ONLY\n"
                     + "    SERVER AGGREGATE INTO SINGLE ROW",
                 queryPlan);
