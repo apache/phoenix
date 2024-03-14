@@ -20,22 +20,30 @@ package org.apache.phoenix.index;
 
 import org.apache.hadoop.hbase.util.ByteStringer;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.coprocessor.generated.CDCInfoProtos;
+import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.CDCUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
+import static org.apache.phoenix.query.QueryConstants.NAME_SEPARATOR;
 
 
 /**
@@ -46,19 +54,21 @@ public class CDCTableInfo {
     private byte[] defaultColumnFamily;
     private Set<PTable.CDCChangeScope> includeScopes;
     private PTable.QualifierEncodingScheme qualifierEncodingScheme;
-
     private final byte[] cdcJsonColQualBytes;
+    private final TupleProjector dataTableProjector;
 
     public CDCTableInfo(byte[] defaultColumnFamily,
-                        List<CDCColumnInfo> columnInfoList, Set<PTable.CDCChangeScope>
-                                includeScopes, PTable.QualifierEncodingScheme
-                                qualifierEncodingScheme, byte[] cdcJsonColQualBytes) {
+                        List<CDCColumnInfo> columnInfoList,
+                        Set<PTable.CDCChangeScope> includeScopes,
+                        PTable.QualifierEncodingScheme qualifierEncodingScheme,
+                        byte[] cdcJsonColQualBytes, TupleProjector dataTableProjector) {
         Collections.sort(columnInfoList);
         this.columnInfoList = columnInfoList;
         this.defaultColumnFamily = defaultColumnFamily;
         this.qualifierEncodingScheme = qualifierEncodingScheme;
         this.cdcJsonColQualBytes = cdcJsonColQualBytes;
         this.includeScopes = includeScopes;
+        this.dataTableProjector = dataTableProjector;
     }
 
     public List<CDCColumnInfo> getColumnInfoList() {
@@ -79,6 +89,10 @@ public class CDCTableInfo {
 
     public byte[] getCdcJsonColQualBytes() {
         return cdcJsonColQualBytes;
+    }
+
+    public TupleProjector getDataTableProjector() {
+        return dataTableProjector;
     }
 
     public static CDCTableInfo createFromProto(CDCInfoProtos.CDCTableDef table) {
@@ -105,8 +119,14 @@ public class CDCTableInfo {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+        TupleProjector dataTableProjector = null;
+        if (table.hasDataTableProjectorBytes()) {
+            dataTableProjector = TupleProjector.deserializeProjectorFromBytes(
+                    table.getDataTableProjectorBytes().toByteArray());
+        }
         return new CDCTableInfo(defaultColumnFamily, columns, changeScopeSet,
-                qualifierEncodingScheme, table.getCdcJsonColQualBytes().toByteArray());
+                qualifierEncodingScheme, table.getCdcJsonColQualBytes().toByteArray(),
+                dataTableProjector);
     }
 
     public static CDCInfoProtos.CDCTableDef toProto(StatementContext context)
@@ -134,6 +154,27 @@ public class CDCTableInfo {
         }
         PColumn cdcJsonCol = cdcTable.getColumnForColumnName(CDC_JSON_COL_NAME);
         builder.setCdcJsonColQualBytes(ByteStringer.wrap(cdcJsonCol.getColumnQualifierBytes()));
+
+        TableRef cdcDataTableRef = context.getCDCDataTableRef();
+        if (cdcDataTableRef.getTable().isImmutableRows() &&
+                cdcDataTableRef.getTable().getImmutableStorageScheme() ==
+                        PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+
+            List<ColumnRef> dataColumns = new ArrayList<ColumnRef>();
+            PTable table = cdcDataTableRef.getTable();
+            for (PColumn column : table.getColumns()) {
+                if (!SchemaUtil.isPKColumn(column)) {
+                    dataColumns.add(new ColumnRef(cdcDataTableRef, column.getPosition()));
+                }
+            }
+
+            PTable projectedDataTable = TupleProjectionCompiler.createProjectedTable(
+                    cdcDataTableRef, dataColumns, false);;
+            TupleProjector dataTableProjector = new TupleProjector(projectedDataTable);
+            builder.setDataTableProjectorBytes(ByteStringer.wrap(
+                    TupleProjector.serializeProjectorIntoBytes(dataTableProjector)));
+        }
+
         return builder.build();
     }
 
@@ -147,6 +188,7 @@ public class CDCTableInfo {
         private String columnName;
         private PDataType columnType;
         private String columnFamilyName;
+        private String columnDisplayName;
 
         public CDCColumnInfo(byte[] columnFamily, byte[] columnQualifier,
                              String columnName, PDataType columnType,
@@ -211,6 +253,19 @@ public class CDCTableInfo {
                         ByteStringer.wrap(column.getColumnQualifierBytes()));
             }
             return builder.build();
+        }
+
+        public String getColumnDisplayName(CDCTableInfo tableInfo) {
+            if (columnDisplayName == null) {
+                // Don't include Column Family if it is a default column Family
+                if (Arrays.equals(getColumnFamily(), tableInfo.getDefaultColumnFamily())) {
+                    columnDisplayName = getColumnName();
+                } else {
+                    columnDisplayName = getColumnFamilyName()
+                            + NAME_SEPARATOR + getColumnName();
+                }
+            }
+            return columnDisplayName;
         }
     }
 }

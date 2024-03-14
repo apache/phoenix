@@ -25,6 +25,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
+import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.RUN_UPDATE_STATS_ASYNC_ATTRIB;
@@ -1783,6 +1784,11 @@ public class MetaDataClient {
                 PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,
                 null, false, SortOrder.getDefault(), "", null, false));
         tableProps = new HashMap<>();
+        if (dataTable.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+            // CDC table doesn't need SINGLE_CELL_ARRAY_WITH_OFFSETS encoding, so override it.
+            tableProps.put(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName(),
+                    ONE_CELL_PER_COLUMN.name());
+        }
         if (dataTable.isMultiTenant()) {
             tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
         }
@@ -2697,7 +2703,9 @@ public class MetaDataClient {
                         }
                     }
 
-                    if (parent.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS && immutableStorageScheme == ONE_CELL_PER_COLUMN) {
+                    if (tableType != CDC &&
+                            parent.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS &&
+                            immutableStorageScheme == ONE_CELL_PER_COLUMN) {
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE)
                                 .setSchemaName(schemaName).setTableName(tableName).build()

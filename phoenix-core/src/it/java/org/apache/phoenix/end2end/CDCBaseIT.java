@@ -218,12 +218,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected Connection newConnection(String tenantId) throws SQLException {
         Properties props = new Properties();
-        // FIXME: Uncomment these only while debugging.
-        props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        props.put("hbase.client.scanner.timeout.period", "6000000");
-        props.put("phoenix.query.timeoutMs", "6000000");
-        props.put("zookeeper.session.timeout", "6000000");
-        props.put("hbase.rpc.timeout", "6000000");
+        // Uncomment these only while debugging.
+        //props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+        //props.put("hbase.client.scanner.timeout.period", "6000000");
+        //props.put("phoenix.query.timeoutMs", "6000000");
+        //props.put("zookeeper.session.timeout", "6000000");
+        //props.put("hbase.rpc.timeout", "6000000");
         if (tenantId != null) {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }

@@ -307,7 +307,6 @@ public interface QueryConstants {
     byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
 
     String CDC_JSON_COL_NAME = "CDC JSON";
-
     String CDC_EVENT_TYPE = "event_type";
     String CDC_PRE_IMAGE = "pre_image";
     String CDC_POST_IMAGE = "post_image";
