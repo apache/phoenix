@@ -28,10 +28,13 @@ import java.sql.ResultSet;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -288,6 +291,136 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testRangeScanWithMetadataLookup() throws Exception {
+        final String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(
+                "CREATE TABLE " + tableName + "(PK1 VARCHAR NOT NULL, "
+                    + "PK2 VARCHAR, COL1 VARCHAR"
+                    + " CONSTRAINT pk PRIMARY KEY (PK1, PK2)) SPLIT ON ('b', 'c', 'd')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('0123A', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('#0123A', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('_0123A', 'pk20', 'col10')");
+            for (int i = 0; i < 25; i++) {
+                String pk1Val = "a" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2a', 'col10a')");
+                pk1Val = "ab" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2ab', 'col10ab')");
+            }
+            for (int i = 0; i < 25; i++) {
+                String pk1Val = "b" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2b', 'col10b')");
+                pk1Val = "bc" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2bc', 'col10bc')");
+            }
+            for (int i = 0; i < 25; i++) {
+                String pk1Val = "c" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2c', 'col10c')");
+                pk1Val = "cd" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2cd', 'col10cd')");
+            }
+            for (int i = 0; i < 25; i++) {
+                String pk1Val = "d" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2d', 'col10d')");
+                pk1Val = "de" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2de', 'col10de')");
+            }
+            for (int i = 0; i < 25; i++) {
+                String pk1Val = "e" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2e', 'col10e')");
+                pk1Val = "ef" + i;
+                conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + " VALUES ('" + pk1Val + "', 'pk2ef', 'col10ef')");
+            }
+            conn.commit();
+
+            String query = "select count(*) from " + tableName
+                + " where PK1 <= 'b'";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(53, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            String queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 [*] - ['b']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    SERVER AGGREGATE INTO SINGLE ROW",
+                queryPlan);
+            ExplainPlan plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery()
+                .getExplainPlan();
+            ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals(2, planAttributes.getNumRegionLocationLookups());
+
+            query = "select count(*) from " + tableName
+                + " where PK1 <= 'cd'";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(128, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 [*] - ['cd']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    SERVER AGGREGATE INTO SINGLE ROW",
+                queryPlan);
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery()
+                .getExplainPlan();
+            planAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals(3, planAttributes.getNumRegionLocationLookups());
+
+            query = "select count(*) from " + tableName
+                + " where PK1 LIKE 'ef%'";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(25, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 ['ef'] - ['eg']\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    SERVER AGGREGATE INTO SINGLE ROW",
+                queryPlan);
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery()
+                .getExplainPlan();
+            planAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals(1, planAttributes.getNumRegionLocationLookups());
+
+            query = "select count(*) from " + tableName
+                + " where PK1 > 'de'";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(75, rs.getInt(1));
+            rs = conn.createStatement().executeQuery("EXPLAIN " + query);
+            queryPlan = QueryUtil.getExplainPlan(rs);
+            assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER N000001 ['de'] - [*]\n"
+                    + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                    + "    SERVER AGGREGATE INTO SINGLE ROW",
+                queryPlan);
+            plan = conn.prepareStatement(query)
+                .unwrap(PhoenixPreparedStatement.class)
+                .optimizeQuery()
+                .getExplainPlan();
+            planAttributes = plan.getPlanStepsAsAttributes();
+            assertEquals(1, planAttributes.getNumRegionLocationLookups());
+        }
+    }
 
     public static void assertEstimatesAreNull(String sql, List<Object> binds, Connection conn)
             throws Exception {

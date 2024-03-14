@@ -165,6 +165,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     protected Map<ImmutableBytesPtr,ServerCache> caches;
     private final QueryPlan dataPlan;
     private static boolean forTestingSetTimeoutToMaxToLetQueryPassHere = false;
+    private int numRegionLocationLookups = 0;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -698,6 +699,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     private ScansWithRegionLocations getParallelScans(Scan scan) throws SQLException {
         List<HRegionLocation> regionLocations =
             getRegionBoundaries(scanGrouper, scan.getStartRow(), scan.getStopRow());
+        numRegionLocationLookups = regionLocations.size();
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
@@ -1041,6 +1043,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
         }
 
+        numRegionLocationLookups = regionLocations.size();
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int stopIndex = regionBoundaries.size();
         if (startRegionBoundaryKey.length > 0) {
@@ -1704,6 +1707,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return this.scans.size();
     }
 
+    public int getNumRegionLocationLookups() {
+        return this.numRegionLocationLookups;
+    }
+
     @Override
     public void explain(List<String> planSteps) {
         explainUtil(planSteps, null);
@@ -1748,6 +1755,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (explainPlanAttributesBuilder != null) {
             explainPlanAttributesBuilder.setIteratorTypeAndScanSize(
                 iteratorTypeAndScanSize);
+            explainPlanAttributesBuilder.setNumRegionLocationLookups(getNumRegionLocationLookups());
         }
 
         if (this.plan.getStatement().getTableSamplingRate() != null) {
