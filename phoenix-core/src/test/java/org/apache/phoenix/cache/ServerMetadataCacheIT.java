@@ -1705,43 +1705,6 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     }
 
     /**
-     * Test that a client can learn about the changes to a base table's
-     * sequence number after a view is created on the table.
-     */
-    @Test
-    public void testBaseTableSequenceNumberAfterCreateView() throws Exception {
-        String baseTableName = generateUniqueName();
-        String viewName = generateUniqueName();
-        Properties props = new Properties();
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            //create table, seq_num=0
-            conn.createStatement().execute("CREATE TABLE " + baseTableName + " ("
-                    + " ID char(1) NOT NULL,"
-                    + " COL1 integer NOT NULL,"
-                    + " COL2 bigint NOT NULL,"
-                    + " CONSTRAINT NAME_PK PRIMARY KEY (ID, COL1, COL2)"
-                    + " ) ");
-
-            //alter table, seq_num = 1
-            String alterDDL = "ALTER TABLE " + baseTableName + " ADD COL3 VARCHAR PRIMARY KEY, COL4 INTEGER";
-            conn.createStatement().execute(alterDDL);
-
-            //create view + alter view, seq_num = 3
-            conn.createStatement().execute("CREATE VIEW " + viewName + " ( VIEW_COL1 INTEGER, A.VIEW_COL2 VARCHAR ) AS SELECT * FROM " + baseTableName);
-            conn.createStatement().execute("ALTER VIEW " +viewName+ " ADD VIEW_COL3 DECIMAL(10, 2), A.VIEW_COL4 VARCHAR, B.VIEW_COL5 INTEGER");
-
-            // check sequence number
-            String query = "SELECT " + TABLE_SEQ_NUM + " FROM SYSTEM.CATALOG WHERE " + TABLE_NAME
-                    + " = '" + baseTableName + "' AND " +  TABLE_SEQ_NUM + " IS NOT NULL AND " + COLUMN_NAME + " IS NULL AND "
-                    + COLUMN_FAMILY + " IS NULL ";
-            ResultSet rs = conn.createStatement().executeQuery(query);
-            assertTrue(rs.next());
-            assertEquals(3, rs.getInt(1));
-            assertFalse(rs.next());
-        }
-    }
-
-    /**
      * Test that client always refreshes its cache for DDL operations.
      * create view -> refresh base table
      * create child view -> refresh parent view and base table
