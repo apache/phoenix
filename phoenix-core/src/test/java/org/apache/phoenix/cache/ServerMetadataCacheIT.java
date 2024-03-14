@@ -95,7 +95,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, Long.toString(Long.MAX_VALUE));
+        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER"););
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
         props.put(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
