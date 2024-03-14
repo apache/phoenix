@@ -37,6 +37,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 
@@ -420,6 +421,165 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
             planAttributes = plan.getPlanStepsAsAttributes();
             assertEquals(1, planAttributes.getNumRegionLocationLookups());
         }
+    }
+
+    @Test
+    public void testMultiTenantWithMetadataLookup() throws Exception {
+        final String tableName = generateUniqueName();
+        final String view01 = generateUniqueName();
+        final String view02 = generateUniqueName();
+        final String view03 = generateUniqueName();
+        final String view04 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(new Properties());
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute(
+                "CREATE TABLE " + tableName + "(TENANT_ID VARCHAR NOT NULL, "
+                    + "PK2 VARCHAR, COL1 VARCHAR"
+                    + " CONSTRAINT pk PRIMARY KEY (TENANT_ID, PK2)) MULTI_TENANT = true"
+                    + " SPLIT ON ('b', 'c', 'd')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('0123A', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('#0123A', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('_0123A', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('bcde', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('cdef', 'pk20', 'col10')");
+            conn.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES ('defg', 'pk20', 'col10')");
+            conn.commit();
+
+            try (Connection tenantConn = getTenantConnection("ab12")) {
+                tenantConn.createStatement().execute("CREATE VIEW " + view01
+                    + " (COL2 VARCHAR) AS SELECT * FROM " + tableName);
+                for (int i = 0; i < 25; i++) {
+                    String pk2Val = "012" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view01 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col101', 'col201')");
+                    pk2Val = "ab" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view01 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col1010', 'col2010')");
+                }
+                tenantConn.commit();
+            }
+
+            try (Connection tenantConn = getTenantConnection("bc12")) {
+                tenantConn.createStatement().execute("CREATE VIEW " + view02
+                    + " (COL2 VARCHAR) AS SELECT * FROM " + tableName);
+                for (int i = 0; i < 25; i++) {
+                    String pk2Val = "012" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view02 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col101', 'col201')");
+                    pk2Val = "ab" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view02 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col1010', 'col2010')");
+                }
+                tenantConn.commit();
+            }
+
+            try (Connection tenantConn = getTenantConnection("cd12")) {
+                tenantConn.createStatement().execute("CREATE VIEW " + view03
+                    + " (COL2 VARCHAR) AS SELECT * FROM " + tableName);
+                for (int i = 0; i < 25; i++) {
+                    String pk2Val = "012" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view03 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col101', 'col201')");
+                    pk2Val = "ab" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view03 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col1010', 'col2010')");
+                }
+                tenantConn.commit();
+            }
+
+            try (Connection tenantConn = getTenantConnection("de12")) {
+                tenantConn.createStatement().execute("CREATE VIEW " + view04
+                    + " (COL2 VARCHAR) AS SELECT * FROM " + tableName);
+                for (int i = 0; i < 25; i++) {
+                    String pk2Val = "012" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view04 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col101', 'col201')");
+                    pk2Val = "ab" + i;
+                    tenantConn.createStatement().execute(
+                        "UPSERT INTO " + view04 + "(PK2, COL1, COL2) VALUES ('" + pk2Val
+                            + "', 'col1010', 'col2010')");
+                }
+                tenantConn.commit();
+            }
+
+            try (Connection tenantConn = getTenantConnection("ab12")) {
+                String query = "select count(*) from " + view01;
+                ResultSet rs = tenantConn.createStatement().executeQuery(query);
+                assertTrue(rs.next());
+                assertEquals(50, rs.getInt(1));
+
+                rs = tenantConn.createStatement().executeQuery("EXPLAIN " + query);
+                String queryPlan = QueryUtil.getExplainPlan(rs);
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['ab12']\n"
+                        + "    SERVER FILTER BY FIRST KEY ONLY\n"
+                        + "    SERVER AGGREGATE INTO SINGLE ROW",
+                    queryPlan);
+                ExplainPlan plan = tenantConn.prepareStatement(query)
+                    .unwrap(PhoenixPreparedStatement.class)
+                    .optimizeQuery()
+                    .getExplainPlan();
+                ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+                assertEquals(1, planAttributes.getNumRegionLocationLookups());
+            }
+
+            try (Connection tenantConn = getTenantConnection("cd12")) {
+                String query = "select * from " + view03 + " order by col2";
+
+                ResultSet rs = tenantConn.createStatement().executeQuery("EXPLAIN " + query);
+                String queryPlan = QueryUtil.getExplainPlan(rs);
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['cd12']\n"
+                        + "    SERVER SORTED BY [COL2]\n"
+                        + "CLIENT MERGE SORT",
+                    queryPlan);
+                ExplainPlan plan = tenantConn.prepareStatement(query)
+                    .unwrap(PhoenixPreparedStatement.class)
+                    .optimizeQuery()
+                    .getExplainPlan();
+                ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+                assertEquals(1, planAttributes.getNumRegionLocationLookups());
+            }
+
+            try (Connection tenantConn = getTenantConnection("de12")) {
+                String query = "select * from " + view04 + " where col1='col101'";
+                ResultSet rs = tenantConn.createStatement().executeQuery(query);
+                int c = 0;
+                while (rs.next()) {
+                    c++;
+                }
+                assertEquals(25, c);
+
+                rs = tenantConn.createStatement().executeQuery("EXPLAIN " + query);
+                String queryPlan = QueryUtil.getExplainPlan(rs);
+                assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['de12']\n"
+                        + "    SERVER FILTER BY COL1 = 'col101'",
+                    queryPlan);
+                ExplainPlan plan = tenantConn.prepareStatement(query)
+                    .unwrap(PhoenixPreparedStatement.class)
+                    .optimizeQuery()
+                    .getExplainPlan();
+                ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+                assertEquals(1, planAttributes.getNumRegionLocationLookups());
+            }
+        }
+    }
+
+    private Connection getTenantConnection(final String tenantId) throws Exception {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
     public static void assertEstimatesAreNull(String sql, List<Object> binds, Connection conn)
