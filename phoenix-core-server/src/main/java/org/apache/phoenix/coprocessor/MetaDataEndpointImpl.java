@@ -1491,7 +1491,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (indexType != IndexType.LOCAL) {
                         parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
                                 SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
-                        if (parentTable == null) {
+                        if (parentTable == null || isTableDeleted(parentTable)) {
                             // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
                             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                                 parentTable = connection.getTableNoCache(famName.getString());
