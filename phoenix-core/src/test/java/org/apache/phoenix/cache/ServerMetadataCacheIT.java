@@ -35,7 +35,6 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -85,13 +84,13 @@ import static org.mockito.Mockito.verify;
 public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
-    private final long NEVER = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
 
     private static ServerName serverName;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "NEVER");
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
         props.put(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
@@ -144,7 +143,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try(Connection conn = spyCQS.connect(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
             pTable = PhoenixRuntime.getTableNoCache(conn,
                     tableNameStr);// --> First call to CQSI#getTable
             ServerMetadataCacheTestImpl cache = getServerMetadataCache();
@@ -182,7 +181,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = spyCQS.connect(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
             // Create view on table.
             String whereClause = " WHERE v1 = 1000";
             String viewNameStr = generateUniqueName();
@@ -220,7 +219,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
         }
         String tenantId = "T_" + generateUniqueName();
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -270,7 +269,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
             ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
@@ -300,7 +299,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, fullTableName, NEVER);
+            createTable(conn, fullTableName);
             pTable = PhoenixRuntime.getTableNoCache(conn, fullTableName);
             ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
             // Override the connection to use in ServerMetadataCache
@@ -327,7 +326,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
         }
         String tenantId = "T_" + generateUniqueName();
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -370,7 +369,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
             long lastDDLTimestamp = pTable.getLastDDLTimestamp();
             assertEquals(lastDDLTimestamp,
@@ -407,7 +406,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
             pTable = PhoenixRuntime.getTableNoCache(conn, tableNameStr);
             long lastDDLTimestamp = pTable.getLastDDLTimestamp();
             assertEquals(lastDDLTimestamp,
@@ -441,7 +440,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(url, props)) {
             conn.setAutoCommit(false);
             // Create a test table.
-            createTable(conn, tableNameStr, NEVER);
+            createTable(conn, tableNameStr);
             String indexDDLStmt = "CREATE INDEX " + indexNameStr + " ON " + tableNameStr + "(v1)";
             conn.createStatement().execute(indexDDLStmt);
             TestUtil.waitForIndexState(conn, indexNameStr, PIndexState.ACTIVE);
@@ -486,7 +485,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         ServerMetadataCacheTestImpl cache = getServerMetadataCache();;
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             conn.setAutoCommit(true);
-            createTable(conn, tableName, NEVER);
+            createTable(conn, tableName);
             long tableLastDDLTimestampBeforeIndexCreation = getLastDDLTimestamp(tableName);
             // Populate the cache
             assertNotNull(cache.getLastDDLTimestampForTable(null, null, tableNameBytes));
@@ -537,7 +536,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try(Connection conn = DriverManager.getConnection(getUrl());
             Statement stmt = conn.createStatement()) {
             String whereClause = " WHERE v1 < 1000";
-            createTable(conn, tableName, NEVER);
+            createTable(conn, tableName);
             createViewWhereClause(conn, tableName, globalViewName, whereClause);
             // Populate the cache
             assertNotNull(cache.getLastDDLTimestampForTable(null, null, globalViewNameBytes));
@@ -591,7 +590,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table with UCF=never and upsert data using client-1
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, true);
 
             // select query from client-2 works to populate client side metadata cache
@@ -646,7 +645,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, true);
 
             // Instrument ServerMetadataCache to throw a SQLException once
@@ -684,7 +683,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, true);
 
             // query using client-2 to populate cache
@@ -734,7 +733,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table and upsert using client-1
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, true);
 
             // Instrument ServerMetadataCache to throw a SQLException twice
@@ -774,7 +773,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // create table using client-1
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, true);
 
             // create 2 level of views using client-1
@@ -896,7 +895,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             //client-1 creates a table and an index on it
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             createIndex(conn1, tableName, indexName, "v1");
             TestUtil.waitForIndexState(conn1, indexName, PIndexState.ACTIVE);
 
@@ -955,7 +954,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             //client-1 creates table
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
 
             //client-2 populates its cache
             query(conn2, tableName);
@@ -991,7 +990,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             //client-1 creates table and index on it
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             createIndex(conn1, tableName, indexName, "v1");
 
             //client-2 populates its cache
@@ -1025,8 +1024,8 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             //client-1 creates 2 tables
-            createTable(conn1, tableName1, NEVER);
-            createTable(conn1, tableName2, NEVER);
+            createTable(conn1, tableName1);
+            createTable(conn1, tableName2);
 
             //client-2 populates its cache, 1 getTable call for each table
             query(conn2, tableName1);
@@ -1065,7 +1064,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             //client-1 creates a table and views
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             createView(conn1, tableName, viewName1);
             createView(conn1, viewName1, viewName2);
 
@@ -1135,7 +1134,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // client-1 creates tables and executes upserts
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
@@ -1170,7 +1169,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // client-1 creates tables and executes upserts
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
@@ -1205,7 +1204,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // client-1 creates tables and executes upserts
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
@@ -1237,7 +1236,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // client-1 creates tables and executes upserts
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
@@ -1283,7 +1282,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // client-1 creates tables, index and executes upserts
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             createIndex(conn1, tableName, indexName, "v1");
             upsert(conn1, tableName, false);
             upsert(conn1, tableName, false);
@@ -1317,7 +1316,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             // client-1 creates tables and executes upserts
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             createIndex(conn1, tableName, indexName, "v1");
             alterIndexChangeState(conn1, tableName, indexName, " DISABLE");
             upsert(conn1, tableName, false);
@@ -1388,7 +1387,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = spyCqs2.connect(url2, props)) {
 
             //client-1 creates tables and views
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             createView(conn1, tableName, viewName1);
             createView(conn1, viewName1, viewName2);
 
@@ -1442,7 +1441,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
              Connection conn2 = cqs2.connect(url2, props)) {
 
             // no metric changes
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
 
             // client validates table, regionserver does not find table in its cache
             query(conn2, tableName);
@@ -1565,7 +1564,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
         try (Connection conn = cqs1.connect(url1, props);
              Connection conn2 = useSameClient ? conn : cqs2.connect(url2, props)) {
-            createTable(conn, tableName, NEVER);
+            createTable(conn, tableName);
             createView(conn, tableName, viewName1);
             createView(conn, viewName1, viewName2);
             query(conn2, viewName2);
@@ -1603,11 +1602,11 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         try (Connection conn = cqs1.connect(url1, props);
              Connection conn2 = cqs2.connect(url2, props)) {
             //client-1 creates tables, views, indexes and view indexes
-            createTable(conn, baseTable, NEVER);
+            createTable(conn, baseTable);
             createView(conn, baseTable, view);
             createIndex(conn, baseTable, index, "v2");
             createIndex(conn, view, viewIndex, "v1");
-            createTable(conn, baseTable2, NEVER);
+            createTable(conn, baseTable2);
             createView(conn, baseTable2, view2);
             createIndex(conn, baseTable2, index2, "v2");
             createIndex(conn, view2, viewIndex2, "v1");
@@ -1748,9 +1747,72 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that client always refreshes its cache for DDL operations.
+     * create view -> refresh base table
+     * create child view -> refresh parent view and base table
+     * add/drop column on table -> refresh table
+     * add/drop column on view -> refresh view and base table
+     */
+    @Test
+    public void testCacheUpdatedBeforeDDLOperations() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String childViewName = generateUniqueName();
+        int numTableRPCs = 0, numViewRPCs = 0;
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        try (Connection conn1 = spyCqs1.connect(url1, props)) {
+            // create table
+            createTable(conn1, tableName);
+
+            // create index, getTable RPCs for base table
+            createIndex(conn1, tableName, indexName, "v2");
+            numTableRPCs += 3; // one rpc each for getting current time, create index, alter index state after building
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+
+
+            // create a view, getTable RPC for base table
+            createView(conn1, tableName, viewName);
+            numTableRPCs++;
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+
+            // create a child view, getTable RPC for parent view and base table
+            createView(conn1, viewName, childViewName);
+            numTableRPCs++;
+            numViewRPCs++;
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+            assertNumGetTableRPC(spyCqs1, viewName, numViewRPCs);
+
+
+            // add and drop column, 2 getTable RPCs for base table
+            alterTableAddColumn(conn1, tableName, "newcol1");
+            numTableRPCs++;
+            alterTableDropColumn(conn1, tableName, "newcol1");
+            numTableRPCs++;
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+
+            // add and drop column, 2 getTable RPCs for view
+            alterViewAddColumn(conn1, viewName, "newcol2");
+            numViewRPCs++;
+            numTableRPCs++;
+            alterViewDropColumn(conn1, viewName, "newcol2");
+            numViewRPCs++;
+            numTableRPCs++;
+            assertNumGetTableRPC(spyCqs1, viewName, numViewRPCs);
+            assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
+        }
+    }
 
 
     //Helper methods
+    public static void assertNumGetTableRPC(ConnectionQueryServices spyCqs, String tableName, int numExpectedRPCs) throws SQLException {
+        Mockito.verify(spyCqs, Mockito.times(numExpectedRPCs)).getTable(eq(null),
+                any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
+                anyLong(), anyLong());
+    }
     public static void assertPlan(PhoenixResultSet rs, String schemaName, String tableName) {
         PTable table = rs.getContext().getCurrentTable().getTable();
         assertTrue(table.getSchemaName().getString().equals(schemaName) &&
@@ -1767,10 +1829,9 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         }
     }
 
-    private void createTable(Connection conn, String tableName, long updateCacheFrequency) throws SQLException {
+    private void createTable(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("CREATE TABLE " + tableName
-                + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER)"
-                + (updateCacheFrequency == 0 ? "" : "UPDATE_CACHE_FREQUENCY="+updateCacheFrequency));
+                + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER)");
     }
 
     private void createView(Connection conn, String parentName, String viewName) throws SQLException {
@@ -1816,6 +1877,10 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     private void alterViewAddColumn(Connection conn, String viewName, String columnName) throws SQLException {
         conn.createStatement().execute("ALTER VIEW " + viewName + " ADD IF NOT EXISTS "
                 + columnName + " INTEGER");
+    }
+
+    private void alterViewDropColumn(Connection conn, String viewName, String columnName) throws SQLException {
+        conn.createStatement().execute("ALTER VIEW " + viewName + " DROP COLUMN  " + columnName);
     }
 
     private void alterIndexChangeState(Connection conn, String tableName, String indexName, String state) throws SQLException, InterruptedException {
