@@ -165,6 +165,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
     protected Map<ImmutableBytesPtr,ServerCache> caches;
     private final QueryPlan dataPlan;
     private static boolean forTestingSetTimeoutToMaxToLetQueryPassHere = false;
+    private int numRegionLocationLookups = 0;
     
     static final Function<HRegionLocation, KeyRange> TO_KEY_RANGE = new Function<HRegionLocation, KeyRange>() {
         @Override
@@ -599,9 +600,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             return scans;
     }
 
-    private List<HRegionLocation> getRegionBoundaries(ParallelScanGrouper scanGrouper)
-        throws SQLException{
-        return scanGrouper.getRegionBoundaries(context, physicalTableName);
+    private List<HRegionLocation> getRegionBoundaries(ParallelScanGrouper scanGrouper,
+        byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException {
+        return scanGrouper.getRegionBoundaries(context, physicalTableName, startRegionBoundaryKey,
+            stopRegionBoundaryKey);
     }
 
     private static List<byte[]> toBoundaries(List<HRegionLocation> regionLocations) {
@@ -695,7 +697,9 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
      * @throws SQLException
      */
     private ScansWithRegionLocations getParallelScans(Scan scan) throws SQLException {
-        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
+        List<HRegionLocation> regionLocations =
+            getRegionBoundaries(scanGrouper, scan.getStartRow(), scan.getStopRow());
+        numRegionLocationLookups = regionLocations.size();
         List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int regionIndex = 0;
         int stopIndex = regionBoundaries.size();
@@ -963,8 +967,6 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 SchemaUtil.processSplit(new byte[] { 0 }, table.getPKColumns());
         byte[] splitPostfix =
                 Arrays.copyOfRange(sampleProcessedSaltByte, 1, sampleProcessedSaltByte.length);
-        List<HRegionLocation> regionLocations = getRegionBoundaries(scanGrouper);
-        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         boolean isSalted = table.getBucketNum() != null;
         GuidePostsInfo gps = getGuidePosts();
         // case when stats wasn't collected
@@ -1005,6 +1007,44 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         
         int regionIndex = 0;
         int startRegionIndex = 0;
+
+        List<HRegionLocation> regionLocations;
+        if (isSalted && !isLocalIndex) {
+            // key prefix = salt num + view index id + tenant id
+            // If salting is used with tenant or view index id, scan start and end
+            // rowkeys will not be empty. We need to generate region locations for
+            // all the scan range such that we cover (each salt bucket num) + (prefix starting from
+            // index position 1 to cover view index and/or tenant id and/or remaining prefix).
+            if (scan.getStartRow().length > 0 && scan.getStopRow().length > 0) {
+                regionLocations = new ArrayList<>();
+                for (int i = 0; i < getTable().getBucketNum(); i++) {
+                    byte[] saltStartRegionKey = new byte[scan.getStartRow().length];
+                    saltStartRegionKey[0] = (byte) i;
+                    System.arraycopy(scan.getStartRow(), 1, saltStartRegionKey, 1,
+                        scan.getStartRow().length - 1);
+
+                    byte[] saltStopRegionKey = new byte[scan.getStopRow().length];
+                    saltStopRegionKey[0] = (byte) i;
+                    System.arraycopy(scan.getStopRow(), 1, saltStopRegionKey, 1,
+                        scan.getStopRow().length - 1);
+
+                    regionLocations.addAll(
+                        getRegionBoundaries(scanGrouper, saltStartRegionKey, saltStopRegionKey));
+                }
+            } else {
+                // If scan start and end rowkeys are empty, we end up fetching all region locations.
+                regionLocations =
+                    getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
+            }
+        } else {
+            // For range scans, startRegionBoundaryKey and stopRegionBoundaryKey should refer
+            // to the boundary specified by the scan context.
+            regionLocations =
+                getRegionBoundaries(scanGrouper, startRegionBoundaryKey, stopRegionBoundaryKey);
+        }
+
+        numRegionLocationLookups = regionLocations.size();
+        List<byte[]> regionBoundaries = toBoundaries(regionLocations);
         int stopIndex = regionBoundaries.size();
         if (startRegionBoundaryKey.length > 0) {
             startRegionIndex = regionIndex = getIndexContainingInclusive(regionBoundaries, startRegionBoundaryKey);
@@ -1667,6 +1707,10 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         return this.scans.size();
     }
 
+    public int getNumRegionLocationLookups() {
+        return this.numRegionLocationLookups;
+    }
+
     @Override
     public void explain(List<String> planSteps) {
         explainUtil(planSteps, null);
@@ -1711,6 +1755,7 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         if (explainPlanAttributesBuilder != null) {
             explainPlanAttributesBuilder.setIteratorTypeAndScanSize(
                 iteratorTypeAndScanSize);
+            explainPlanAttributesBuilder.setNumRegionLocationLookups(getNumRegionLocationLookups());
         }
 
         if (this.plan.getStatement().getTableSamplingRate() != null) {

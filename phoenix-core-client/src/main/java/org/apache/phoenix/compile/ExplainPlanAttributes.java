@@ -76,6 +76,7 @@ public class ExplainPlanAttributes {
     private final ExplainPlanAttributes rhsJoinQueryExplainPlan;
     private final Set<PColumn> serverMergeColumns;
     private final List<HRegionLocation> regionLocations;
+    private final int numRegionLocationLookups;
 
     private static final ExplainPlanAttributes EXPLAIN_PLAN_INSTANCE =
         new ExplainPlanAttributes();
@@ -116,6 +117,7 @@ public class ExplainPlanAttributes {
         this.rhsJoinQueryExplainPlan = null;
         this.serverMergeColumns = null;
         this.regionLocations = null;
+        this.numRegionLocationLookups = 0;
     }
 
     public ExplainPlanAttributes(String abstractExplainPlan,
@@ -135,8 +137,8 @@ public class ExplainPlanAttributes {
             Integer clientOffset, Integer clientRowLimit,
             Integer clientSequenceCount, String clientCursorName,
             String clientSortAlgo,
-            ExplainPlanAttributes rhsJoinQueryExplainPlan,
-            Set<PColumn> serverMergeColumns, List<HRegionLocation> regionLocations) {
+            ExplainPlanAttributes rhsJoinQueryExplainPlan, Set<PColumn> serverMergeColumns,
+            List<HRegionLocation> regionLocations, int numRegionLocationLookups) {
         this.abstractExplainPlan = abstractExplainPlan;
         this.splitsChunk = splitsChunk;
         this.estimatedRows = estimatedRows;
@@ -172,6 +174,7 @@ public class ExplainPlanAttributes {
         this.rhsJoinQueryExplainPlan = rhsJoinQueryExplainPlan;
         this.serverMergeColumns = serverMergeColumns;
         this.regionLocations = regionLocations;
+        this.numRegionLocationLookups = numRegionLocationLookups;
     }
 
     public String getAbstractExplainPlan() {
@@ -314,6 +317,10 @@ public class ExplainPlanAttributes {
         return regionLocations;
     }
 
+    public int getNumRegionLocationLookups() {
+        return numRegionLocationLookups;
+    }
+
     public static ExplainPlanAttributes getDefaultExplainPlan() {
         return EXPLAIN_PLAN_INSTANCE;
     }
@@ -354,6 +361,7 @@ public class ExplainPlanAttributes {
         private ExplainPlanAttributes rhsJoinQueryExplainPlan;
         private Set<PColumn> serverMergeColumns;
         private List<HRegionLocation> regionLocations;
+        private int numRegionLocationLookups;
 
         public ExplainPlanAttributesBuilder() {
             // default
@@ -407,6 +415,7 @@ public class ExplainPlanAttributes {
                 explainPlanAttributes.getRhsJoinQueryExplainPlan();
             this.serverMergeColumns = explainPlanAttributes.getServerMergeColumns();
             this.regionLocations = explainPlanAttributes.getRegionLocations();
+            this.numRegionLocationLookups = explainPlanAttributes.getNumRegionLocationLookups();
         }
 
         public ExplainPlanAttributesBuilder setAbstractExplainPlan(
@@ -616,6 +625,12 @@ public class ExplainPlanAttributes {
             return this;
         }
 
+        public ExplainPlanAttributesBuilder setNumRegionLocationLookups(
+                int numRegionLocationLookups) {
+            this.numRegionLocationLookups = numRegionLocationLookups;
+            return this;
+        }
+
         public ExplainPlanAttributes build() {
             return new ExplainPlanAttributes(abstractExplainPlan, splitsChunk,
                 estimatedRows, estimatedSizeInBytes, iteratorTypeAndScanSize,
@@ -629,7 +644,7 @@ public class ExplainPlanAttributes {
                 clientAfterAggregate, clientDistinctFilter, clientOffset,
                 clientRowLimit, clientSequenceCount, clientCursorName,
                 clientSortAlgo, rhsJoinQueryExplainPlan, serverMergeColumns,
-                regionLocations);
+                regionLocations, numRegionLocationLookups);
         }
     }
 }
