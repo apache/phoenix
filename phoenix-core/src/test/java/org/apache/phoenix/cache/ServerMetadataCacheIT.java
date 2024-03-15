@@ -864,7 +864,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         String viewName = generateUniqueName();
         try (Connection conn = cqs.connect(url, props)) {
-            createTable(conn, tableName, NEVER);
+            createTable(conn, tableName);
             createView(conn, tableName, viewName);
             query(conn, viewName);
             // this removes the parent table from the client cache
@@ -1360,7 +1360,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
         try (Connection conn1 = spyCqs1.connect(url1, props);
              Connection conn2 = spyCqs2.connect(url2, props)) {
-            createTable(conn1, tableName, NEVER);
+            createTable(conn1, tableName);
             alterTableDropColumn(conn2, tableName, "v2");
             createIndex(conn1, tableName, indexName, "v2");
             fail("Client should not be able to create index on dropped column.");
