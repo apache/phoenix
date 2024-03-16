@@ -43,4 +43,20 @@ public interface ParallelScanGrouper {
 
 	List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) throws SQLException;
 
+	/**
+	 * Retrieve table region locations that cover the startRegionBoundaryKey and
+	 * stopRegionBoundaryKey. The start key of the first region of the returned list must be less
+	 * than or equal to startRegionBoundaryKey. The end key of the last region of the returned list
+	 * must be greater than or equal to stopRegionBoundaryKey.
+	 *
+	 * @param context Statement Context.
+	 * @param tableName Table name.
+	 * @param startRegionBoundaryKey Start region boundary key.
+	 * @param stopRegionBoundaryKey Stop region boundary key.
+	 * @return The list of region locations that cover the startRegionBoundaryKey and
+	 * stopRegionBoundaryKey key boundary.
+	 * @throws SQLException If fails to retrieve region locations.
+	 */
+	List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName,
+			byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException;
 }

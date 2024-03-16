@@ -154,7 +154,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
             if (saltBuckets == null) {
                 iteratorTypeAndScanSize = "PARALLEL 1-WAY";
             } else {
-                iteratorTypeAndScanSize = "PARALLEL 3-WAY";
+                iteratorTypeAndScanSize = "PARALLEL " + saltBuckets + "-WAY";
             }
             clientSortAlgo = "CLIENT MERGE SORT";
             expectedTableName =
@@ -169,7 +169,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
                 keyRanges = " [" + (Short.MIN_VALUE + expectedIndexIdOffset)
                     + ",'" + tenantId + "','" + valuePrefix + "v2-1']";
             } else {
-                iteratorTypeAndScanSize = "PARALLEL 3-WAY";
+                iteratorTypeAndScanSize = "PARALLEL " + saltBuckets + "-WAY";
                 clientSortAlgo = "CLIENT MERGE SORT";
                 keyRanges = " [0," + (Short.MIN_VALUE + expectedIndexIdOffset)
                     + ",'" + tenantId + "','" + valuePrefix + "v2-1'] - ["

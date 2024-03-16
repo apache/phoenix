@@ -49,8 +49,8 @@ import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
@@ -161,9 +161,12 @@ public class ConnectionQueryServicesImplTest {
 
     @Test
     public void testGetNextRegionStartKey() {
-        HRegionInfo mockHRegionInfo = org.mockito.Mockito.mock(HRegionInfo.class);
+        RegionInfo mockHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
+        RegionInfo mockPrevHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
         HRegionLocation mockRegionLocation = org.mockito.Mockito.mock(HRegionLocation.class);
-        ConnectionQueryServicesImpl mockCqsi = org.mockito.Mockito.mock(ConnectionQueryServicesImpl.class,
+        HRegionLocation mockPrevRegionLocation = org.mockito.Mockito.mock(HRegionLocation.class);
+        ConnectionQueryServicesImpl mockCqsi =
+            org.mockito.Mockito.mock(ConnectionQueryServicesImpl.class,
                 org.mockito.Mockito.CALLS_REAL_METHODS);
         byte[] corruptedStartAndEndKey = "0x3000".getBytes();
         byte[] corruptedDecreasingKey = "0x2999".getBytes();
@@ -172,20 +175,26 @@ public class ConnectionQueryServicesImplTest {
         byte[] notCorruptedEndKey = "0x3000".getBytes();
         byte[] notCorruptedNewKey = "0x3001".getBytes();
         byte[] mockTableName = "dummyTable".getBytes();
-        when(mockRegionLocation.getRegionInfo()).thenReturn(mockHRegionInfo);
+        when(mockRegionLocation.getRegion()).thenReturn(mockHRegionInfo);
         when(mockHRegionInfo.getRegionName()).thenReturn(mockTableName);
+        when(mockPrevRegionLocation.getRegion()).thenReturn(mockPrevHRegionInfo);
+        when(mockPrevHRegionInfo.getRegionName()).thenReturn(mockTableName);
 
         // comparing the current regionInfo endKey is equal to the previous endKey
         // [0x3000, Ox3000) vs 0x3000
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo endKey is less than previous endKey
         // [0x3000,0x2999) vs 0x3000
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedDecreasingKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo endKey is greater than the previous endKey
         // [0x3000,0x3000) vs 0x3001
@@ -193,41 +202,51 @@ public class ConnectionQueryServicesImplTest {
         // [0x2999,0x3001) vs 0x3000
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo startKey is greater than the previous endKey leading to a hole
         // [0x3000,0x3001) vs 0x2999
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedDecreasingKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedDecreasingKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedDecreasingKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo startKey is less than the previous endKey leading to an overlap
-        // [0x2999,0x3001) vs 0x3000
+        // [0x2999,0x3001) vs 0x3000.
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo startKey is equal to the previous endKey
         // [0x3000,0x3001) vs 0x3000
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(notCorruptedEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false,
+            mockPrevRegionLocation);
 
         // test EMPTY_START_ROW
         when(mockHRegionInfo.getStartKey()).thenReturn(HConstants.EMPTY_START_ROW);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, HConstants.EMPTY_START_ROW, false);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, HConstants.EMPTY_START_ROW, false,
+            null);
 
         //test EMPTY_END_ROW
         when(mockHRegionInfo.getStartKey()).thenReturn(notCorruptedStartKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(HConstants.EMPTY_END_ROW);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedStartKey, false);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedStartKey, false, null);
     }
 
     private void testGetNextRegionStartKey(ConnectionQueryServicesImpl mockCqsi,
-                                           HRegionLocation mockRegionLocation, byte[] key, boolean isCorrupted) {
+        HRegionLocation mockRegionLocation, byte[] key, boolean isCorrupted,
+        HRegionLocation mockPrevRegionLocation) {
         try {
-            mockCqsi.getNextRegionStartKey(mockRegionLocation, key);
+            mockCqsi.getNextRegionStartKey(mockRegionLocation, key, mockPrevRegionLocation);
             if (isCorrupted) {
                 fail();
             }

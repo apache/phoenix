@@ -65,21 +65,41 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 	public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName) throws SQLException {
 		String snapshotName;
 		Configuration conf = context.getConnection().getQueryServices().getConfiguration();
-		if((snapshotName = getSnapshotName(conf)) != null) {
-			try {
-				Path rootDir = new Path(conf.get(HConstants.HBASE_DIR));
-				FileSystem fs = rootDir.getFileSystem(conf);
-				Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
-				SnapshotDescription snapshotDescription = SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
-				SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshotDescription);
-				return getRegionLocationsFromManifest(manifest);
-			}
-			catch (Exception e) {
-				throw new RuntimeException(e);
-			}
-		}
-		else {
+		if ((snapshotName = getSnapshotName(conf)) != null) {
+			return getRegionLocationsFromSnapshot(conf, snapshotName);
+		} else {
 			return context.getConnection().getQueryServices().getAllTableRegions(tableName);
+		}
+	}
+
+	/**
+	 * {@inheritDoc}.
+	 */
+	@Override
+	public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName,
+			byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException {
+		String snapshotName;
+		Configuration conf = context.getConnection().getQueryServices().getConfiguration();
+		if ((snapshotName = getSnapshotName(conf)) != null) {
+			return getRegionLocationsFromSnapshot(conf, snapshotName);
+		} else {
+			return context.getConnection().getQueryServices()
+					.getTableRegions(tableName, startRegionBoundaryKey, stopRegionBoundaryKey);
+		}
+	}
+
+	private List<HRegionLocation> getRegionLocationsFromSnapshot(Configuration conf,
+			String snapshotName) {
+		try {
+			Path rootDir = new Path(conf.get(HConstants.HBASE_DIR));
+			FileSystem fs = rootDir.getFileSystem(conf);
+			Path snapshotDir = SnapshotDescriptionUtils.getCompletedSnapshotDir(snapshotName, rootDir);
+			SnapshotDescription snapshotDescription =
+					SnapshotDescriptionUtils.readSnapshotInfo(fs, snapshotDir);
+			SnapshotManifest manifest = SnapshotManifest.open(conf, fs, snapshotDir, snapshotDescription);
+			return getRegionLocationsFromManifest(manifest);
+		} catch (Exception e) {
+			throw new RuntimeException(e);
 		}
 	}
 

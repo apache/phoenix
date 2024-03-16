@@ -63,9 +63,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.*;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
@@ -654,54 +652,112 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         ((ClusterConnection)connection).clearRegionCache(tableName);
     }
 
-    public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey) throws IOException {
+    public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey,
+        HRegionLocation prevRegionLocation) throws IOException {
         // in order to check the overlap/inconsistencies bad region info, we have to make sure
         // the current endKey always increasing(compare the previous endKey)
-        // note :- currentKey is the previous regions endKey
-        if ((Bytes.compareTo(regionLocation.getRegionInfo().getStartKey(), currentKey) != 0
-            || Bytes.compareTo(regionLocation.getRegionInfo().getEndKey(), currentKey) <= 0)
+
+        // conditionOne = true if the currentKey does not belong to the region boundaries specified
+        // by regionLocation i.e. if the currentKey is less than the region startKey or if the
+        // currentKey is greater than or equal to the region endKey.
+
+        // conditionTwo = true if the previous region endKey is either not same as current region
+        // startKey or if the previous region endKey is greater than or equal to current region
+        // endKey.
+        boolean conditionOne =
+            (Bytes.compareTo(regionLocation.getRegion().getStartKey(), currentKey) > 0
+            || Bytes.compareTo(regionLocation.getRegion().getEndKey(), currentKey) <= 0)
                 && !Bytes.equals(currentKey, HConstants.EMPTY_START_ROW)
-                && !Bytes.equals(regionLocation.getRegionInfo().getEndKey(), HConstants.EMPTY_END_ROW)) {
+                && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW);
+        boolean conditionTwo = prevRegionLocation != null && (
+            Bytes.compareTo(regionLocation.getRegion().getStartKey(),
+                prevRegionLocation.getRegion().getEndKey()) != 0 ||
+                Bytes.compareTo(regionLocation.getRegion().getEndKey(),
+                    prevRegionLocation.getRegion().getEndKey()) <= 0)
+            && !Bytes.equals(prevRegionLocation.getRegion().getEndKey(), HConstants.EMPTY_START_ROW)
+            && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW);
+        if (conditionOne || conditionTwo) {
             String regionNameString =
-                    new String(regionLocation.getRegionInfo().getRegionName(), StandardCharsets.UTF_8);
-            throw new IOException(String.format(
-                    "HBase region information overlap/inconsistencies on region %s", regionNameString));
+                new String(regionLocation.getRegion().getRegionName(), StandardCharsets.UTF_8);
+            LOGGER.error(
+                "HBase region overlap/inconsistencies on {} , current key: {} , region startKey:"
+                    + " {} , region endKey: {} , prev region startKey: {} , prev region endKey: {}",
+                regionLocation,
+                Bytes.toStringBinary(currentKey),
+                Bytes.toStringBinary(regionLocation.getRegion().getStartKey()),
+                Bytes.toStringBinary(regionLocation.getRegion().getEndKey()),
+                prevRegionLocation == null ?
+                    "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getStartKey()),
+                prevRegionLocation == null ?
+                    "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getEndKey()));
+            throw new IOException(
+                String.format("HBase region information overlap/inconsistencies on region %s",
+                    regionNameString));
         }
-        return regionLocation.getRegionInfo().getEndKey();
+        return regionLocation.getRegion().getEndKey();
     }
 
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
+            HConstants.EMPTY_END_ROW);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+        byte[] endRowKey) throws SQLException {
         /*
          * Use HConnection.getRegionLocation as it uses the cache in HConnection, while getting
          * all region locations from the HTable doesn't.
          */
-        int retryCount = 0, maxRetryCount = 1;
+        int retryCount = 0;
+        int maxRetryCount =
+            config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
+        byte[] currentKey = null;
+        HRegionLocation prevRegionLocation = null;
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
                 // to get the sizing info we need, but this would require a new class in the same package and a cast
                 // to this implementation class, so it's probably not worth it.
                 List<HRegionLocation> locations = Lists.newArrayList();
-                byte[] currentKey = HConstants.EMPTY_START_ROW;
+                currentKey = startRowKey;
                 do {
-                    HRegionLocation regionLocation = ((ClusterConnection)connection).getRegionLocation(
-                            table, currentKey, false);
-                    currentKey = getNextRegionStartKey(regionLocation, currentKey);
+                    HRegionLocation regionLocation =
+                        ((ClusterConnection) connection).getRegionLocation(table,
+                            currentKey, false);
+                    currentKey =
+                        getNextRegionStartKey(regionLocation, currentKey, prevRegionLocation);
                     locations.add(regionLocation);
+                    prevRegionLocation = regionLocation;
+                    if (!Bytes.equals(endRowKey, HConstants.EMPTY_END_ROW)
+                        && Bytes.compareTo(currentKey, endRowKey) >= 0) {
+                        break;
+                    }
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
                 throw new TableNotFoundException(table.getNameAsString());
             } catch (IOException e) {
                 LOGGER.error("Exception encountered in getAllTableRegions for "
-                        + "table: {}, retryCount: {}", table.getNameAsString(), retryCount, e);
-                if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
+                        + "table: {}, retryCount: {} , currentKey: {} , startRowKey: {} ,"
+                        + " endRowKey: {}",
+                    table.getNameAsString(),
+                    retryCount,
+                    Bytes.toStringBinary(currentKey),
+                    Bytes.toStringBinary(startRowKey),
+                    Bytes.toStringBinary(endRowKey),
+                    e);
+                if (retryCount++ < maxRetryCount) {
                     continue;
                 }
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
-                .setRootCause(e).build().buildException();
+                throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.GET_TABLE_REGIONS_FAIL).setRootCause(e).build()
+                    .buildException();
             }
         }
     }
