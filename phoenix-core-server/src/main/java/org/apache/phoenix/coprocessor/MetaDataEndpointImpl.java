@@ -1501,7 +1501,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         }
                     }
 
-                    if (parentTable == null) {
+                    if (parentTable == null || isTableDeleted(parentTable)) {
                         if (indexType == IndexType.LOCAL) {
                             PName tablePhysicalName = getPhysicalTableName(
                                 env.getRegion(),null,
