@@ -183,8 +183,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 }
 
                                 // else, found the column definition.
-                                Object cellValue = getColumnValue(cell, cdcColumnInfoList
-                                        .get(curColumnNum).getColumnType());
+                                Object cellValue = cell.getType() == Cell.Type.DeleteColumn ? null
+                                        : getColumnValue(cell, cdcColumnInfoList.get(curColumnNum)
+                                                .getColumnType());
                                 changeBuilder.registerChange(cell, curColumnNum, cellValue);
                                 // Done processing the current cell, check the next cell.
                                 break;

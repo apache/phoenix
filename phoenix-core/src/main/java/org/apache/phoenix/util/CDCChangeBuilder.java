@@ -41,14 +41,12 @@ public class CDCChangeBuilder {
     private String changeType;
     private long lastDeletedTimestamp;
     private long changeTimestamp;
-    private Map<String, Object> preImageObj = null;
-    private Map<String, Object> changeImageObj = null;
+    private Map<String, Object> preImage = null;
+    private Map<String, Object> changeImage = null;
 
     public CDCChangeBuilder(CDCTableInfo cdcDataTableInfo) {
         this.cdcDataTableInfo = cdcDataTableInfo;
         Set<PTable.CDCChangeScope> changeScopes = cdcDataTableInfo.getIncludeScopes();
-        // FIXME: The below boolean flags should probably be translated to util methods on
-        //  the Enum class itself.
         isChangeImageInScope = changeScopes.contains(PTable.CDCChangeScope.CHANGE);
         isPreImageInScope = changeScopes.contains(PTable.CDCChangeScope.PRE);
         isPostImageInScope = changeScopes.contains(PTable.CDCChangeScope.POST);
@@ -59,23 +57,15 @@ public class CDCChangeBuilder {
         changeType = null;
         lastDeletedTimestamp = 0L;
         if (isPreImageInScope || isPostImageInScope) {
-            preImageObj = new HashMap<>();
+            preImage = new HashMap<>();
         }
         if (isChangeImageInScope || isPostImageInScope) {
-            changeImageObj = new HashMap<>();
+            changeImage = new HashMap<>();
         }
     }
 
     public long getChangeTimestamp() {
         return changeTimestamp;
-    }
-
-    public Map<String, Object> getChangeImageObj() {
-        return changeImageObj;
-    }
-
-    public Map<String, Object> getPreImageObj() {
-        return preImageObj;
     }
 
     public boolean isDeletionEvent() {
@@ -119,38 +109,39 @@ public class CDCChangeBuilder {
         String cdcColumnName = columnInfo.getColumnDisplayName(cdcDataTableInfo);
         if (isOlderThanChange(cell)) {
             if ((isPreImageInScope || isPostImageInScope) &&
-                    !preImageObj.containsKey(cdcColumnName)) {
-                preImageObj.put(cdcColumnName, value);
+                    !preImage.containsKey(cdcColumnName)) {
+                preImage.put(cdcColumnName, value);
             }
         } else if (cell.getTimestamp() == changeTimestamp) {
             assert !isDeletionEvent() : "Not expected to find a change for delete event";
             changeType = CDC_UPSERT_EVENT_TYPE;
             if (isChangeImageInScope || isPostImageInScope) {
-                changeImageObj.put(cdcColumnName, value);
+                changeImage.put(cdcColumnName, value);
             }
         }
     }
 
     public Map buildCDCEvent() {
-        Map<String, Object> rowValueMap = new HashMap<>();
+        assert (changeType != null) : "Not expected when no event was detected";
+        Map<String, Object> cdcChange = new HashMap<>();
         if (isPreImageInScope) {
-            rowValueMap.put(CDC_PRE_IMAGE, preImageObj);
+            cdcChange.put(CDC_PRE_IMAGE, preImage);
         }
-        if (isChangeImageInScope) {
-            rowValueMap.put(CDC_CHANGE_IMAGE, changeImageObj);
-        }
-        if (isPostImageInScope) {
-            Map<String, Object> postImageObj = new HashMap<>();
-            if (!isDeletionEvent()) {
-                postImageObj.putAll(preImageObj);
-                postImageObj.putAll(changeImageObj);
+        if (changeType == CDC_UPSERT_EVENT_TYPE) {
+            if (isChangeImageInScope) {
+                cdcChange.put(CDC_CHANGE_IMAGE, changeImage);
             }
-            rowValueMap.put(CDC_POST_IMAGE, postImageObj);
+            if (isPostImageInScope) {
+                Map<String, Object> postImage = new HashMap<>();
+                if (!isDeletionEvent()) {
+                    postImage.putAll(preImage);
+                    postImage.putAll(changeImage);
+                }
+                cdcChange.put(CDC_POST_IMAGE, postImage);
+            }
         }
-        if (changeType != null) {
-            rowValueMap.put(CDC_EVENT_TYPE, changeType);
-        }
-        return rowValueMap;
+        cdcChange.put(CDC_EVENT_TYPE, changeType);
+        return cdcChange;
     }
 
     public boolean isOlderThanChange(Cell cell) {

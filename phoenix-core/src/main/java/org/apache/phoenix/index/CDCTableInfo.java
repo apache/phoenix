@@ -52,23 +52,28 @@ import static org.apache.phoenix.query.QueryConstants.NAME_SEPARATOR;
 public class CDCTableInfo {
     private List<CDCColumnInfo> columnInfoList;
     private byte[] defaultColumnFamily;
-    private Set<PTable.CDCChangeScope> includeScopes;
+    private final Set<PTable.CDCChangeScope> includeScopes;
     private PTable.QualifierEncodingScheme qualifierEncodingScheme;
     private final byte[] cdcJsonColQualBytes;
     private final TupleProjector dataTableProjector;
 
-    public CDCTableInfo(byte[] defaultColumnFamily,
-                        List<CDCColumnInfo> columnInfoList,
+    private CDCTableInfo(List<CDCColumnInfo> columnInfoList,
+                         Set<PTable.CDCChangeScope> includeScopes, byte[] cdcJsonColQualBytes,
+                         TupleProjector dataTableProjector) {
+        Collections.sort(columnInfoList);
+        this.columnInfoList = columnInfoList;
+        this.includeScopes = includeScopes;
+        this.cdcJsonColQualBytes = cdcJsonColQualBytes;
+        this.dataTableProjector = dataTableProjector;
+    }
+
+    public CDCTableInfo(byte[] defaultColumnFamily, List<CDCColumnInfo> columnInfoList,
                         Set<PTable.CDCChangeScope> includeScopes,
                         PTable.QualifierEncodingScheme qualifierEncodingScheme,
                         byte[] cdcJsonColQualBytes, TupleProjector dataTableProjector) {
-        Collections.sort(columnInfoList);
-        this.columnInfoList = columnInfoList;
+        this(columnInfoList, includeScopes, cdcJsonColQualBytes, dataTableProjector);
         this.defaultColumnFamily = defaultColumnFamily;
         this.qualifierEncodingScheme = qualifierEncodingScheme;
-        this.cdcJsonColQualBytes = cdcJsonColQualBytes;
-        this.includeScopes = includeScopes;
-        this.dataTableProjector = dataTableProjector;
     }
 
     public List<CDCColumnInfo> getColumnInfoList() {
@@ -183,11 +188,11 @@ public class CDCTableInfo {
      */
     public static class CDCColumnInfo implements Comparable<CDCColumnInfo> {
 
-        private byte[] columnFamily;
-        private byte[] columnQualifier;
-        private String columnName;
-        private PDataType columnType;
-        private String columnFamilyName;
+        private final byte[] columnFamily;
+        private final byte[] columnQualifier;
+        private final String columnName;
+        private final PDataType columnType;
+        private final String columnFamilyName;
         private String columnDisplayName;
 
         public CDCColumnInfo(byte[] columnFamily, byte[] columnQualifier,
