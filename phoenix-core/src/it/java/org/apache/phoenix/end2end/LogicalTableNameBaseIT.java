@@ -532,6 +532,7 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
 
     public static void renameAndDropPhysicalTable(Connection conn, String tenantId, String schema, String tableName, String physicalName, boolean isNamespaceEnabled) throws Exception {
         // if client is validating last_ddl_timestamp, this change in physical table name should be visible to the client
+        // UPDATE LAST_DDL_TIMESTAMP of the table and clear the server metadata cache on region servers
         long lastDDLTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         String
                 changeName = String.format(

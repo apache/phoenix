@@ -373,7 +373,14 @@ public class QueryServicesOptions {
 
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
 
-    //metadata caching configs
+    /**
+     * Metadata caching configs, see https://issues.apache.org/jira/browse/PHOENIX-6883.
+     * Disable the boolean flags and set UCF=always to disable the caching re-design.
+     *
+     * Disable caching re-design if you use Online Data Format Change since the cutover logic
+     * is currently incompatible and clients may not learn about the physical table change.
+     * See https://issues.apache.org/jira/browse/PHOENIX-7284.
+     */
     public static final long DEFAULT_UPDATE_CACHE_FREQUENCY
                 = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
     public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = true;
