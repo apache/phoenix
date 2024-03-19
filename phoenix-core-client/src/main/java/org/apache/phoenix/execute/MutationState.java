@@ -94,6 +94,7 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
@@ -1238,7 +1239,21 @@ public class MutationState implements SQLCloseable {
                 for (TableRef tableRef : tableRefs) {
                     String schemaName = tableRef.getTable().getSchemaName().toString();
                     String tableName = tableRef.getTable().getTableName().toString();
+                    // remove cached PTable to ensure latest PTable is always retrieved
+                    connection.removeTable(connection.getTenantId(),
+                            SchemaUtil.getTableName(schemaName, tableName),
+                            null, HConstants.LATEST_TIMESTAMP);
                     mc.updateCache(tenantId, schemaName, tableName, true);
+                }
+            } catch (MetaDataEntityNotFoundException e) {
+                if (e.getTableName() != null) {
+                    MetaDataClient mc = new MetaDataClient(connection);
+                    PName tenantId = connection.getTenantId();
+                    mc.updateCache(tenantId, e.getSchemaName(), e.getTableName(), true);
+                    send(tableRefIterator);
+                }
+                else {
+                    throw e;
                 }
             }
         }

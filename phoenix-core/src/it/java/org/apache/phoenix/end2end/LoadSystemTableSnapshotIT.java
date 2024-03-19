@@ -167,6 +167,8 @@ public class LoadSystemTableSnapshotIT extends BaseTest {
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
+        clientProps.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, Long.toString(0L));
+        clientProps.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
 
         //Now we can start Phoenix
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()

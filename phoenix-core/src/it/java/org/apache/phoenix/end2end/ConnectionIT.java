@@ -23,6 +23,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assume.assumeTrue;
 
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.util.InstanceResolver;
@@ -58,6 +60,7 @@ public class ConnectionIT {
         conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/hbase-test");
         hbaseTestUtil.startMiniCluster();
         Class.forName(PhoenixDriver.class.getName());
+        DriverManager.registerDriver(new PhoenixTestDriver());
         InstanceResolver.clearSingletons();
         // Make sure the ConnectionInfo doesn't try to pull a default Configuration
         InstanceResolver.getSingleton(ConfigurationFactory.class, new ConfigurationFactory() {
