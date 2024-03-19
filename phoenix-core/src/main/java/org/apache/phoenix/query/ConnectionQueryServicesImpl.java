@@ -776,7 +776,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                throw new TableNotFoundException(table.getNameAsString());
+                TableNotFoundException ex = new TableNotFoundException(table.getNameAsString());
+                e.initCause(ex);
+                throw ex;
             } catch (IOException e) {
                 LOGGER.error("Exception encountered in getAllTableRegions for "
                         + "table: {}, retryCount: {}", table.getNameAsString(), retryCount, e);

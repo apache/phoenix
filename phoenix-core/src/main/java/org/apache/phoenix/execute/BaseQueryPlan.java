@@ -22,7 +22,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -48,10 +47,8 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
-import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -77,10 +74,8 @@ import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.trace.TracingIterator;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
@@ -316,7 +311,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
         ScanUtil.setCustomAnnotations(scan,
                 customAnnotations == null ? null : customAnnotations.getBytes());
         // Set index related scan attributes.
-        if (table.getType() == PTableType.INDEX || table.getType() == PTableType.CDC) {
+        if (table.getType() == PTableType.INDEX) {
             if (table.getIndexType() == IndexType.LOCAL) {
                 ScanUtil.setLocalIndex(scan);
             } else if (context.isUncoveredIndex()) {
@@ -334,8 +329,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 // Set data columns to be join back from data table.
                 PTable parentTable = context.getCurrentTable().getTable();
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
-                if (parentTable.getType() == PTableType.CDC) {
-                    dataTable = parentTable;
+                if (context.getCDCTableRef() != null) {
+                    dataTable = context.getCDCTableRef().getTable();
                 }
                 else {
                     String parentTableName = parentTable.getParentTableName().getString();
@@ -386,7 +381,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         PName name = context.getCurrentTable().getTable().getName();
         List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
         for (PTable index : dataTable.getIndexes()) {
-            if (index.getName().equals(name) && index.getIndexType() == IndexType.LOCAL) {
+            if (index.getName().equals(name) && (
+                    index.getIndexType() == IndexType.LOCAL
+                            || dataTable.getType() == PTableType.CDC)) {
                 indexes.add(index);
                 break;
             }

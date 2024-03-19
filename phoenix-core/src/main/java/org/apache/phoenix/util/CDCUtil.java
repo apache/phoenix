@@ -25,12 +25,15 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.util.StringUtils;
-
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
+
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "__CDC__";
@@ -80,12 +83,7 @@ public class CDCUtil {
     }
 
     public static String getCDCIndexName(String cdcName) {
-        return CDC_INDEX_PREFIX + cdcName;
-    }
-
-    public static String getCDCNameFromIndexName(String indexName) {
-        assert(indexName.startsWith(CDC_INDEX_PREFIX));
-        return indexName.substring(CDC_INDEX_PREFIX.length());
+        return CDC_INDEX_PREFIX + SchemaUtil.getTableNameFromFullName(cdcName.toUpperCase());
     }
 
     public static boolean isCDCIndex(String indexName) {
@@ -102,12 +100,21 @@ public class CDCUtil {
         scan.setCacheBlocks(false);
         Map<byte[], NavigableSet<byte[]>> familyMap = scan.getFamilyMap();
         if (! familyMap.isEmpty()) {
-            familyMap.keySet().stream().forEach(fQual -> {
-                if (familyMap.get(fQual) != null) {
-                    familyMap.get(fQual).clear();
-                }
-            });
+            familyMap.clear();
         }
         return scan;
+    }
+
+    public static int compareCellFamilyAndQualifier(byte[] columnFamily1,
+                                                     byte[] columnQual1,
+                                                     byte[] columnFamily2,
+                                                     byte[] columnQual2) {
+        int familyNameComparison = DescVarLengthFastByteComparisons.compareTo(columnFamily1,
+                0, columnFamily1.length, columnFamily2, 0, columnFamily2.length);
+        if (familyNameComparison != 0) {
+            return familyNameComparison;
+        }
+        return DescVarLengthFastByteComparisons.compareTo(columnQual1,
+                0, columnQual1.length, columnQual2, 0, columnQual2.length);
     }
 }

@@ -299,7 +299,7 @@ public class IndexUtil {
     }
     
 
-    private static boolean isEmptyKeyValue(PTable table, ColumnReference ref) {
+    public static boolean isEmptyKeyValue(PTable table, ColumnReference ref) {
         byte[] emptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(table);
         byte[] emptyKeyValueQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
         return (Bytes.compareTo(emptyKeyValueCF, 0, emptyKeyValueCF.length, ref.getFamilyWritable()
@@ -586,7 +586,7 @@ public class IndexUtil {
                         tupleProjector.getValueBitSet(), ptr);
         Cell firstCell = result.get(0);
         Cell keyValue =
-                PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(),
+                PhoenixKeyValueUtil.newKeyValue(firstCell.getRowArray(), // FIXME: This does DEEP_COPY of cell, do we need that?
                         firstCell.getRowOffset(),firstCell.getRowLength(), VALUE_COLUMN_FAMILY,
                         VALUE_COLUMN_QUALIFIER, firstCell.getTimestamp(), value, 0, value.length);
         result.add(keyValue);

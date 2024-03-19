@@ -150,11 +150,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
-    public static final String CDC_DATA_TABLE_NAME = "_CdcDataTableName";
-    public static final String CDC_JSON_COL_QUALIFIER = "_CdcJsonColumn_Qualifier";
-    public static final String CDC_INCLUDE_SCOPES = "_CdcIncludeScopes";
-    public static final String DATA_COL_QUALIFIER_TO_NAME_MAP = "_DataColQualToNameMap";
-    public static final String DATA_COL_QUALIFIER_TO_TYPE_MAP = "_DataColQualToTypeMap";
+    public static final String CDC_DATA_TABLE_DEF = "_CdcDataTableDef";
 
     public final static byte[] REPLAY_TABLE_AND_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(1);
     public final static byte[] REPLAY_ONLY_INDEX_WRITES = PUnsignedTinyint.INSTANCE.toBytes(2);
@@ -237,7 +233,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             Exception cause = new StaleRegionBoundaryCacheException(region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
-        if(isLocalIndex) {
+        if (isLocalIndex) {
             ScanUtil.setupLocalIndexScan(scan);
         }
     }
@@ -414,7 +410,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             // If the exception is NotServingRegionException then throw it as
             // StaleRegionBoundaryCacheException to handle it by phoenix client other wise hbase
             // client may recreate scans with wrong region boundaries.
-            if(t instanceof NotServingRegionException) {
+            if (t instanceof NotServingRegionException) {
                 Exception cause = new StaleRegionBoundaryCacheException(c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString());
                 throw new DoNotRetryIOException(cause.getMessage(), cause);
             }

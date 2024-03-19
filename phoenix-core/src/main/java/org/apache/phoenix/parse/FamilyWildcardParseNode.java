@@ -20,6 +20,7 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
+import org.apache.hadoop.hbase.backup.example.HFileArchiveTableMonitor;
 import org.apache.phoenix.compile.ColumnResolver;
 
 /**
@@ -79,5 +80,14 @@ public class FamilyWildcardParseNode extends NamedParseNode {
         toSQL(buf);
         buf.append(".*");
     }
-}
 
+	@Override
+	public boolean isWildcardNode() {
+		return true;
+	}
+
+	@Override
+	public FamilyWildcardParseNode getRewritten() {
+		return new FamilyWildcardParseNode(getName(), true);
+	}
+}

@@ -18,7 +18,7 @@
 
 package org.apache.phoenix.iterate;
 
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.coprocessor.ScanRegionObserver.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -191,7 +191,7 @@ public abstract class RegionScannerFactory {
                               dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
                               pageSizeMs, offset, actualStartKey, extraLimit);
                   } else {
-                      if (scan.getAttribute(CDC_DATA_TABLE_NAME) != null) {
+                      if (scan.getAttribute(CDC_DATA_TABLE_DEF) != null) {
                           s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                                   dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
                                   pageSizeMs, extraLimit);

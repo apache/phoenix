@@ -19,32 +19,21 @@ package org.apache.phoenix.util;
 
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.FWD_ROW_KEY_ORDER_BY;
 import static org.apache.phoenix.compile.OrderByCompiler.OrderBy.REV_ROW_KEY_ORDER_BY;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_NAME;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_INCLUDE_SCOPES;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_JSON_COL_QUALIFIER;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.CUSTOM_ANNOTATIONS;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_NAME_MAP;
-import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.DATA_COL_QUALIFIER_TO_TYPE_MAP;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.SCAN_STOP_ROW_SUFFIX;
-import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -68,11 +57,11 @@ import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableComparator;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
+import org.apache.phoenix.coprocessor.GlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.MetaDataProtocol;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -89,6 +78,7 @@ import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -323,14 +313,16 @@ public class ScanUtil {
         Filter filter = scan.getFilter();
         if (filter == null) {
             scan.setFilter(andWithFilter); 
-        } else if (filter instanceof FilterList && ((FilterList)filter).getOperator() == FilterList.Operator.MUST_PASS_ALL) {
+        } else if (filter instanceof FilterList && ((FilterList)filter).getOperator()
+                == FilterList.Operator.MUST_PASS_ALL) {
             FilterList filterList = (FilterList)filter;
             List<Filter> allFilters = new ArrayList<Filter>(filterList.getFilters().size() + 1);
             allFilters.addAll(filterList.getFilters());
             allFilters.add(andWithFilter);
             scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,allFilters));
         } else {
-            scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,Arrays.asList(filter, andWithFilter)));
+            scan.setFilter(new FilterList(FilterList.Operator.MUST_PASS_ALL,
+                    Arrays.asList(filter, andWithFilter)));
         }
     }
     
@@ -1136,7 +1128,7 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
-            PhoenixConnection phoenixConnection) throws SQLException {
+                                                           PhoenixConnection phoenixConnection, StatementContext context) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
@@ -1180,25 +1172,22 @@ public class ScanUtil {
             scan.setAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
             scan.setAttribute(BaseScannerRegionObserver.READ_REPAIR_TRANSFORMING_TABLE, TRUE_BYTES);
         } else {
-            if (table.getType() != PTableType.CDC && (table.getType() != PTableType.INDEX ||
-                    !IndexUtil.isGlobalIndex(indexTable))) {
+            if (table.getType() != PTableType.INDEX || !IndexUtil.isGlobalIndex(indexTable)) {
                 return;
             }
             if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                 return;
             }
-            PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
+            PTable dataTable = context.getCDCDataTableRef() != null ?
+                    context.getCDCDataTableRef().getTable() :
+                    ScanUtil.getDataTable(indexTable, phoenixConnection);
             if (dataTable == null) {
                 // This index table must be being deleted. No need to set the scan attributes
                 return;
             }
             // MetaDataClient modifies the index table name for view indexes if the parent view of an index has a child
             // view. This, we need to recreate a PTable object with the correct table name for the rest of this code to work
-            if (table.getType() == PTableType.CDC) {
-                indexTable = PhoenixRuntime.getTable(phoenixConnection,
-                        CDCUtil.getCDCIndexName(table.getName().getString()));
-            }
-            else if (indexTable.getViewIndexId() != null &&
+            if (indexTable.getViewIndexId() != null &&
                     indexTable.getName().getString().contains(
                             QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)) {
                 int lastIndexOf = indexTable.getName().getString().lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
@@ -1302,7 +1291,7 @@ public class ScanUtil {
     public static void setScanAttributesForClient(Scan scan, PTable table,
                                                   StatementContext context) throws SQLException {
         PhoenixConnection phoenixConnection = context.getConnection();
-        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
+        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection, context);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_FAMILY_NAME);
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserver.EMPTY_COLUMN_QUALIFIER_NAME);
@@ -1320,112 +1309,10 @@ public class ScanUtil {
 
         setScanAttributeForPaging(scan, phoenixConnection);
 
-        if (table.getType() == PTableType.CDC) {
-            PTable dataTable = PhoenixRuntime.getTable(phoenixConnection,
-                    SchemaUtil.getTableName(table.getSchemaName().getString(),
-                            table.getParentTableName().getString()));
-            scan.setAttribute(CDC_DATA_TABLE_NAME,
-                    table.getParentName().getBytes());
-
-            PColumn cdcJsonCol = table.getColumnForColumnName(CDC_JSON_COL_NAME);
-            scan.setAttribute(CDC_JSON_COL_QUALIFIER, cdcJsonCol.getColumnQualifierBytes());
-            scan.setAttribute(CDC_INCLUDE_SCOPES,
-                    context.getEncodedCdcIncludeScopes().getBytes(StandardCharsets.UTF_8));
+        if (context.getCDCTableRef() != null) {
+            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(context).toByteArray());
             CDCUtil.initForRawScan(scan);
-            List<PColumn> columns = dataTable.getColumns();
-            Map<byte[], String> dataColQualNameMap = new HashMap<>(columns.size());
-            Map<byte[], PDataType> dataColTypeMap = new HashMap<>();
-            for (PColumn col: columns) {
-                if (col.getColumnQualifierBytes() != null) {
-                    dataColQualNameMap.put(col.getColumnQualifierBytes(), col.getName().getString());
-                    dataColTypeMap.put(col.getColumnQualifierBytes(), col.getDataType());
-                }
-            }
-            scan.setAttribute(DATA_COL_QUALIFIER_TO_NAME_MAP,
-                    serializeColumnQualifierToNameMap(dataColQualNameMap));
-            scan.setAttribute(DATA_COL_QUALIFIER_TO_TYPE_MAP,
-                    serializeColumnQualifierToTypeMap(dataColTypeMap));
-        }
-    }
-
-    public static byte[] serializeColumnQualifierToNameMap(Map<byte[], String> colQualNameMap) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        DataOutputStream output = new DataOutputStream(stream);
-        try {
-            output.writeInt(colQualNameMap.size());
-            for (Map.Entry<byte[], String> entry: colQualNameMap.entrySet()) {
-                output.writeInt(entry.getKey().length);
-                output.write(entry.getKey());
-                WritableUtils.writeString(output, entry.getValue());
-            }
-            return stream.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static Map<ImmutableBytesPtr, String> deserializeColumnQualifierToNameMap(
-            byte[] mapBytes) {
-        ByteArrayInputStream stream = new ByteArrayInputStream(mapBytes);
-        DataInputStream input = new DataInputStream(stream);
-        try {
-            Map<ImmutableBytesPtr, String> colQualNameMap = new HashMap<>();
-            int size = input.readInt();
-            for (int i = 0; i < size; ++i) {
-                int qualLength = input.readInt();
-                byte[] qualBytes = new byte[qualLength];
-                int bytesRead = input.read(qualBytes);
-                if (bytesRead != qualLength) {
-                    throw new IOException("Expected number of bytes: " + qualLength + " but got " +
-                            "only: " + bytesRead);
-                }
-                String colName = WritableUtils.readString(input);
-                colQualNameMap.put(new ImmutableBytesPtr(qualBytes), colName);
-            }
-            return colQualNameMap;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static byte[] serializeColumnQualifierToTypeMap(
-            Map<byte[], PDataType> pkColNamesAndTypes) {
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        DataOutputStream output = new DataOutputStream(stream);
-        try {
-            output.writeInt(pkColNamesAndTypes.size());
-            for (Map.Entry<byte[], PDataType> entry: pkColNamesAndTypes.entrySet()) {
-                output.writeInt(entry.getKey().length);
-                output.write(entry.getKey());
-                WritableUtils.writeString(output, entry.getValue().getSqlTypeName());
-            }
-            return stream.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static Map<ImmutableBytesPtr, PDataType> deserializeColumnQualifierToTypeMap(
-            byte[] pkColInfoBytes) {
-        ByteArrayInputStream stream = new ByteArrayInputStream(pkColInfoBytes);
-        DataInputStream input = new DataInputStream(stream);
-        try {
-            Map<ImmutableBytesPtr, PDataType> colQualTypeMap = new HashMap<>();
-            int colCnt = input.readInt();
-            for (int i = 0; i < colCnt; ++i) {
-                int qualLength = input.readInt();
-                byte[] qualBytes = new byte[qualLength];
-                int bytesRead = input.read(qualBytes);
-                if (bytesRead != qualLength) {
-                    throw new IOException("Expected number of bytes: " + qualLength + " but got " +
-                            "only: " + bytesRead);
-                }
-                colQualTypeMap.put(new ImmutableBytesPtr(qualBytes),
-                        PDataType.fromSqlTypeName(WritableUtils.readString(input)));
-            }
-            return colQualTypeMap;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            GlobalIndexRegionScanner.adjustScanFilter(scan);
         }
     }
 

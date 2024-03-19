@@ -1763,9 +1763,16 @@ public class PTableImpl implements PTable {
 
     @Override
     public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable,
+                                                           PhoenixConnection connection)
+            throws SQLException {
+        return getIndexMaintainer(dataTable, null, connection);
+    }
+
+    @Override
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PTable cdcTable,
             PhoenixConnection connection) throws SQLException {
         if (indexMaintainer == null) {
-            indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
+            indexMaintainer = IndexMaintainer.create(dataTable, cdcTable, this, connection);
         }
         return indexMaintainer;
     }
@@ -1795,9 +1802,7 @@ public class PTableImpl implements PTable {
                 return SchemaUtil.getPhysicalHBaseTableName(schemaName,
                         physicalTableNameColumnInSyscat, isNamespaceMapped);
             }
-            return SchemaUtil.getPhysicalHBaseTableName(schemaName, getType() == PTableType.CDC ?
-                    PNameFactory.newName(CDCUtil.getCDCIndexName(tableName.getString())) :
-                    tableName, isNamespaceMapped);
+            return SchemaUtil.getPhysicalHBaseTableName(schemaName, tableName, isNamespaceMapped);
         } else {
             return PNameFactory.newName(physicalNames.get(0).getBytes());
         }

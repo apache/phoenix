@@ -16,8 +16,6 @@
  * limitations under the License.
  */
 package org.apache.phoenix.compile;
-import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
-import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.VALUE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 
@@ -57,7 +55,6 @@ import org.apache.phoenix.schema.SaltingUtil;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -92,8 +89,10 @@ public class TupleProjectionCompiler {
             if (node instanceof WildcardParseNode) {
                 if (((WildcardParseNode) node).isRewrite()) {
                     TableRef parentTableRef = FromCompiler.getResolver(
-                            NODE_FACTORY.namedTable(null, TableName.create(table.getSchemaName().getString(),
-                                    table.getParentTableName().getString())), context.getConnection()).resolveTable(
+                            NODE_FACTORY.namedTable(null,
+                                    TableName.create(table.getSchemaName().getString(),
+                                    table.getParentTableName().getString())),
+                                    context.getConnection()).resolveTable(
                             table.getSchemaName().getString(),
                             table.getParentTableName().getString());
                     for (PColumn column : parentTableRef.getTable().getColumns()) {

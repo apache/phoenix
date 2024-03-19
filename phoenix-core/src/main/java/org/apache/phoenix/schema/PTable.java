@@ -870,11 +870,12 @@ public interface PTable extends PMetaDataEntity {
     PName getPhysicalName(boolean returnColValueFromSyscat);
 
     boolean isImmutableRows();
-
     boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection)
             throws SQLException;
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection)
             throws SQLException;
+    IndexMaintainer getIndexMaintainer(PTable dataTable, PTable cdcTable,
+                                       PhoenixConnection connection) throws SQLException;
     TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
