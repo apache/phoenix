@@ -17,12 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.ToNumberPolicy;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
-import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -38,8 +34,6 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -48,16 +42,10 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
-import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
@@ -87,54 +75,6 @@ public class CDCQueryIT extends CDCBaseIT {
     private final Integer indexSaltBuckets;
     private final Integer tableSaltBuckets;
     private final boolean withSchemaName;
-    private ManualEnvironmentEdge injectEdge;
-    private Gson gson = new GsonBuilder()
-            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-            .create();
-    private Calendar cal = Calendar.getInstance();
-
-    private class ChangeRow {
-        private final String tenantid;
-        private final long changeTS;
-        private final Map<String, Object> pks;
-
-        public String getTenantID() {
-            return tenantid;
-        }
-
-        public Map<String, Object> getPreImage() {
-            return (Map<String, Object>) change.get(CDC_PRE_IMAGE);
-        }
-
-        public Map<String, Object> getChangeImage() {
-            return (Map<String, Object>) change.get(CDC_CHANGE_IMAGE);
-        }
-
-        public Map<String, Object> getPostImage() {
-            return (Map<String, Object>) change.get(CDC_POST_IMAGE);
-        }
-
-        private final Map<String, Object> change;
-
-        ChangeRow(String tenantid, long changeTS, Map<String, Object> pks, Map<String, Object> change) {
-            this.tenantid = tenantid;
-            this.changeTS = changeTS;
-            this.pks = pks;
-            this.change = change;
-        }
-
-        public String toString() {
-            return gson.toJson(this);
-        }
-
-        public Map<String, Object> getPrimaryKeys() {
-            return pks;
-        }
-
-        public long getChangeTimestamp() {
-            return changeTS;
-        }
-    }
 
     public CDCQueryIT(Boolean forView, Boolean dataBeforeCDC,
                       PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
@@ -175,220 +115,6 @@ public class CDCQueryIT extends CDCBaseIT {
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
     }
 
-    private Map<String, Object> addChange(Connection conn, Map preImage,
-                                          Set<PTable.CDCChangeScope> changeScopes,
-                                          long changeTS, String changeType, String tableName,
-                                          Map<String, Object> pks, Map<String, Object> values)
-                                          throws SQLException {
-        if (conn != null) {
-            String sql;
-            if (changeType == CDC_DELETE_EVENT_TYPE) {
-                String predicates = pks.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).
-                        collect(Collectors.joining(", "));
-                sql = "DELETE FROM " + tableName + " WHERE " + predicates;
-            }
-            else {
-                String columnList = Stream.concat(pks.keySet().stream(),
-                        values.keySet().stream()).collect(Collectors.joining(", "));
-                String valueList =
-                        Stream.concat(pks.values().stream(), values.values().stream())
-                                .map(v -> String.valueOf(v)).collect(Collectors.joining(", "));
-                sql = "UPSERT INTO " + tableName + " (" + columnList + ") VALUES (" + valueList + ")";
-            }
-            cal.setTimeInMillis(changeTS);
-            injectEdge.setValue(changeTS);
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute(sql);
-            }
-        }
-        Map<String, Object> cdcChange = new HashMap<>();
-        cdcChange.put(CDC_EVENT_TYPE, changeType);
-        if (changeScopes.contains(PTable.CDCChangeScope.PRE)) {
-            cdcChange.put(CDC_PRE_IMAGE, preImage);
-        }
-        if (changeType == CDC_UPSERT_EVENT_TYPE) {
-            Map<String, Object> changeImage = new HashMap<>();
-            changeImage.putAll(values);
-            if (changeScopes.contains(PTable.CDCChangeScope.CHANGE)) {
-                cdcChange.put(CDC_CHANGE_IMAGE, changeImage);
-            }
-            if (changeScopes.contains(PTable.CDCChangeScope.POST)) {
-                Map<String, Object> postImage = new HashMap<>();
-                postImage.putAll(preImage);
-                postImage.putAll(changeImage);
-                cdcChange.put(CDC_POST_IMAGE, postImage);
-            }
-        }
-        return cdcChange;
-    }
-
-    // FIXME: Add the following with consecutive upserts on the sake PK (no delete in between):
-    //  - with different values
-    //  - with a null
-    //  - missing columns
-    private List<ChangeRow> generateChanges(long startTS, String[] tenantids, String tableName,
-                                            String datatableNameForDDL,
-                                            Set<PTable.CDCChangeScope> changeScopes,
-                                            CommitAdapter committer)
-                            throws Exception {
-        List<ChangeRow> changes = new ArrayList<>();
-        EnvironmentEdgeManager.injectEdge(injectEdge);
-        injectEdge.setValue(startTS);
-        boolean dropV3Done = false;
-        committer.init();
-        Map<String, Object> pk1 = new HashMap() {{ put("K", 1); }};
-        Map<String, Object> pk2 = new HashMap() {{ put("K", 2); }};
-        Map<String, Object> pk3 = new HashMap() {{ put("K", 3); }};
-        Map<String, Object> c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12;
-        for (String tid: tenantids) {
-            try (Connection conn = committer.getConnection(tid)) {
-                c1 = addChange(conn, new HashMap(), changeScopes, startTS,
-                        CDC_UPSERT_EVENT_TYPE, tableName, pk1, new TreeMap<String, Object>() {{
-                            put("V1", 100L);
-                            put("V2", 1000L);
-                            put("B.VB", 10000L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk1, c1));
-                c2 = addChange(conn, new HashMap(), changeScopes, startTS,
-                        CDC_UPSERT_EVENT_TYPE, tableName, pk2, new TreeMap<String, Object>() {{
-                            put("V1", 200L);
-                            put("V2", 2000L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk2, c2));
-                committer.commit(conn);
-
-                c3 = addChange(conn, new HashMap(), changeScopes, startTS +=100,
-                        CDC_UPSERT_EVENT_TYPE,
-                        tableName, pk3, new TreeMap<String, Object>() {{
-                            put("V1", 300L);
-                            put("V2", null);
-                            put("B.VB", null);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk3, c3));
-                committer.commit(conn);
-
-                c4 = addChange(conn, (Map) c1.get(CDC_POST_IMAGE),
-                        changeScopes, startTS +=100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 101L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk1, c4));
-                committer.commit(conn);
-            }
-            if (datatableNameForDDL != null && !dropV3Done) {
-                try (Connection conn = newConnection()) {
-                    conn.createStatement().execute("ALTER TABLE " + datatableNameForDDL +
-                            " DROP COLUMN v3");
-                }
-                injectEdge.incrementValue(100);
-                dropV3Done = true;
-            }
-            try (Connection conn = newConnection(tid)) {
-                c5 = addChange(conn, (Map) c4.get(CDC_POST_IMAGE), changeScopes, startTS +=100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                changes.add(new ChangeRow(tid, startTS, pk1, c5));
-                committer.commit(conn);
-
-                c6 = addChange(conn, new HashMap(),
-                        changeScopes, startTS +=100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 102L);
-                            put("V2", 1002L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk1, c6));
-                committer.commit(conn);
-
-                c7 = addChange(conn, (Map) c6.get(CDC_POST_IMAGE), changeScopes, startTS +=100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                changes.add(new ChangeRow(tid, startTS, pk1, c7));
-                committer.commit(conn);
-
-                c8 = addChange(conn, (Map) c2.get(CDC_POST_IMAGE),
-                        changeScopes, startTS +=100, CDC_UPSERT_EVENT_TYPE, tableName, pk2,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 201L);
-                            put("V2", null);
-                            put("B.VB", 20001L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk2, c8));
-                committer.commit(conn);
-
-                c9 = addChange(conn, new HashMap(),
-                        changeScopes, startTS +=100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 103L);
-                            put("V2", 1003L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk1, c9));
-                committer.commit(conn);
-
-                c10 = addChange(conn, (Map) c9.get(CDC_POST_IMAGE), changeScopes, startTS +=100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                changes.add(new ChangeRow(tid, startTS, pk1, c10));
-                committer.commit(conn);
-
-                c11 = addChange(conn, new HashMap(),
-                        changeScopes, startTS +=100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 104L);
-                            put("V2", 1004L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, pk1, c11));
-                committer.commit(conn);
-
-                c12 = addChange(conn, (Map) c11.get(CDC_POST_IMAGE), changeScopes, startTS +=100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                changes.add(new ChangeRow(tid, startTS, pk1, c12));
-                committer.commit(conn);
-            }
-        }
-        committer.reset();
-        return changes;
-    }
-
-    private void verifyChanges(String tenantId, ResultSet rs, List<ChangeRow> changes,
-                               boolean mutableTable) throws Exception {
-        for (int i = 0, changenr = 0; i < changes.size(); ++i) {
-            ChangeRow change = changes.get(i);
-            if (change.getTenantID() != tenantId) {
-                continue;
-            }
-            String changeDesc = "Chang " + (changenr+1) + ": " + change;
-            assertTrue(changeDesc, rs.next());
-            Map cdcObj = gson.fromJson(rs.getString(3), HashMap.class);
-            // This is needed because for immutable tables, CDC can't distinguish a null value from
-            //  that of a a missing cell.
-            if (!mutableTable && changeDesc != null) {
-                _purgeNulls(change.getPreImage());
-                _purgeNulls(change.getChangeImage());
-                _purgeNulls(change.getPostImage());
-            }
-            assertEquals(changeDesc, change.getChangeTimestamp(),
-                    rs.getDate(1).getTime());
-            for (Map.Entry<String, Object> pk: change.getPrimaryKeys().entrySet()) {
-                assertEquals(changeDesc, pk.getValue(), rs.getObject(pk.getKey()));
-            }
-            assertEquals(changeDesc, change.change, cdcObj);
-            ++changenr;
-        }
-        assertFalse(rs.next());
-    }
-
-    private Object _ifIntConvertToLong(Object val) {
-        return (val instanceof Integer) ? new Long(((Integer) val).intValue()) : val;
-    }
-
-    private void _purgeNulls(Map image) {
-        if (image == null) {
-            return;
-        }
-        for (Iterator<Map.Entry> it = image.entrySet().iterator(); it.hasNext(); ) {
-            if (it.next().getValue() == null) {
-                it.remove();
-            }
-        }
-    }
-
     @Test
     public void testSelectCDC() throws Exception {
         String cdcName, cdc_sql;
@@ -423,7 +149,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, null,
-                new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)), COMMIT_SUCCESS);
+                COMMIT_SUCCESS);
 
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
@@ -456,21 +182,17 @@ public class CDCQueryIT extends CDCBaseIT {
             }
 
             verifyChanges(tenantId, conn.createStatement().executeQuery(
-                    "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName), changes, true);
+                    "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName), changes,
+                    CHANGE_IMG, true);
             verifyChanges(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ PHOENIX_ROW_TIMESTAMP(), K," +
-                                    "\"CDC JSON\" FROM " + cdcFullName), changes, true);
-            changes = generateChanges(startTS, tenantids, tableName, null,
-                    new HashSet<PTable.CDCChangeScope>(
-                            Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)),
-                    COMMIT_NOOP);
+                                    "\"CDC JSON\" FROM " + cdcFullName), changes,
+                    CHANGE_IMG, true);
             verifyChanges(tenantId, conn.createStatement().executeQuery(
                     "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                    changes, true);
-            changes = generateChanges(startTS, tenantids, tableName, null,
-                    new HashSet<>(), COMMIT_NOOP);
+                    changes, PRE_POST_IMG, true);
             verifyChanges(tenantId, conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
-                    changes, true);
+                    changes, new HashSet<>(), true);
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
                 put("SELECT 'dummy', k, \"CDC JSON\" FROM " + cdcFullName,
@@ -503,88 +225,6 @@ public class CDCQueryIT extends CDCBaseIT {
                 }
             }
         }
-    }
-
-    private List<ChangeRow> generateChangesImmutableTable(long startTS, String[] tenantids,
-                                                          String tableName,
-                                                          Set<PTable.CDCChangeScope> changeScopes,
-                                                          CommitAdapter committer)
-            throws Exception {
-        List<ChangeRow> changes = new ArrayList<>();
-        EnvironmentEdgeManager.injectEdge(injectEdge);
-        injectEdge.setValue(startTS);
-        committer.init();
-        Map<String, Object> pk1 = new HashMap() {{ put("K", 1); }};
-        Map<String, Object> pk2 = new HashMap() {{ put("K", 2); }};
-        Map<String, Object> pk3 = new HashMap() {{ put("K", 3); }};
-        Map<String, Object> c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12;
-        for (String tid: tenantids) {
-            try (Connection conn = newConnection(tid)) {
-                c1 = addChange(conn, new HashMap(), changeScopes, startTS,
-                        CDC_UPSERT_EVENT_TYPE, tableName, pk1, new TreeMap<String, Object>() {{
-                            put("V1", 100L);
-                            put("V2", 1000L);
-                        }});
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c1));
-                c2 = addChange(conn, new HashMap(), changeScopes, startTS += 100,
-                        CDC_UPSERT_EVENT_TYPE, tableName, pk2, new TreeMap<String, Object>() {{
-                            put("V1", 200L);
-                        }});
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk2, c2));
-                c3 = addChange(conn, new HashMap(), changeScopes, startTS += 100,
-                        CDC_UPSERT_EVENT_TYPE,
-                        tableName, pk3, new TreeMap<String, Object>() {{
-                            put("V1", 300L);
-                            put("V2", null);
-                        }});
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk3, c3));
-                c4 = addChange(conn, (Map) c1.get(CDC_POST_IMAGE), changeScopes, startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c4));
-                c5 = addChange(conn, new HashMap(),
-                        changeScopes, startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 102L);
-                            put("V2", 1002L);
-                        }});
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c5));
-                c6 = addChange(conn, (Map) c5.get(CDC_POST_IMAGE), changeScopes, startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c6));
-                c7 = addChange(conn, new HashMap(),
-                        changeScopes, startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 103L);
-                            put("V2", 1003L);
-                        }});
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c7));
-                c8 = addChange(conn, (Map) c7.get(CDC_POST_IMAGE), changeScopes, startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c8));
-                c9 = addChange(conn, new HashMap(),
-                        changeScopes, startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, pk1,
-                        new TreeMap<String, Object>() {{
-                            put("V1", 104L);
-                            put("V2", 1004L);
-                        }});
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c9));
-                c10 = addChange(conn, (Map) c9.get(CDC_POST_IMAGE), changeScopes, startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, pk1, null);
-                committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, pk1, c10));
-            }
-        }
-        committer.reset();
-        return changes;
     }
 
     private void _testSelectCDCImmutable(PTable.ImmutableStorageScheme immutableStorageScheme)
@@ -621,8 +261,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChangesImmutableTable(startTS, tenantids, tableName,
-                new HashSet<PTable.CDCChangeScope>(
-                        Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)),
                 COMMIT_SUCCESS);
 
         if (dataBeforeCDC) {
@@ -651,15 +289,13 @@ public class CDCQueryIT extends CDCBaseIT {
             //}
             verifyChanges(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                            changes, false);
-            changes = generateChangesImmutableTable(startTS, tenantids, tableName,
-                    new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)), COMMIT_NOOP);
+                            changes, PRE_POST_IMG, false);
             verifyChanges(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName), changes,
-                    false);
+                    CHANGE_IMG, false);
             verifyChanges(tenantId, conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
                     "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
-                    changes, false);
+                    changes, CHANGE_IMG, false);
         }
     }
 
@@ -859,7 +495,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, datatableName,
-                new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE)), COMMIT_SUCCESS);
+                COMMIT_SUCCESS);
 
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
@@ -876,7 +512,7 @@ public class CDCQueryIT extends CDCBaseIT {
             verifyChanges(tenantId, conn.createStatement().executeQuery(
                     "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + SchemaUtil.getTableName(
                             schemaName, cdcName)),
-                    changes, true);
+                    changes, CHANGE_IMG, true);
         }
     }
 
@@ -1019,7 +655,7 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         long startTS = System.currentTimeMillis();
-        generateChanges(startTS, tenantids, tableName, null, new HashSet<>(),
+        generateChanges(startTS, tenantids, tableName, null,
                 COMMIT_FAILURE_EXPECTED);
 
         try (Connection conn = newConnection(tenantId)) {
@@ -1028,69 +664,4 @@ public class CDCQueryIT extends CDCBaseIT {
             assertEquals(false, rs.next());
         }
     }
-
-    private abstract class CommitAdapter {
-        abstract void commit(Connection conn) throws SQLException;
-
-        void init() {
-            EnvironmentEdgeManager.injectEdge(injectEdge);
-        }
-
-        public void reset() {
-            EnvironmentEdgeManager.reset();
-        }
-
-        public Connection getConnection(String tid) throws SQLException {
-            return newConnection(tid);
-        }
-    }
-
-    private final CommitAdapter COMMIT_SUCCESS = new CommitAdapter() {
-        @Override
-        public void commit(Connection conn) throws SQLException {
-            conn.commit();
-        }
-    };
-
-    private final CommitAdapter COMMIT_NOOP = new CommitAdapter() {
-        void init() {
-            // Do nothing.
-        }
-
-        public void reset() {
-            // Do nothing.
-        }
-
-        @Override
-        public void commit(Connection conn) throws SQLException {
-            // Do nothing.
-        }
-
-        public Connection getConnection(String tid) throws SQLException {
-            return null;
-        }
-    };
-
-    private final CommitAdapter COMMIT_FAILURE_EXPECTED = new CommitAdapter() {
-        @Override
-        public void commit(Connection conn) throws SQLException {
-            try {
-                conn.commit();
-                // It is config issue commit didn't fail.
-                fail("Commit expected to fail");
-            } catch (SQLException e) {
-                // this is expected
-            }
-        }
-
-        @Override
-        void init() {
-            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
-        }
-
-        @Override
-        public void reset() {
-            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
-        }
-    };
 }
