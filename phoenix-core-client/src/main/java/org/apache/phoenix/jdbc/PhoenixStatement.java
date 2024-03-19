@@ -70,6 +70,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -223,6 +224,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -358,6 +360,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             String tableName = null;
                             clearResultSet();
                             PhoenixResultSet rs = null;
+                            QueryPlan plan = null;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 conn.checkOpen();
@@ -367,9 +370,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
                                 }
-                                QueryPlan
-                                        plan =
-                                        stmt.compilePlan(PhoenixStatement.this,
+                                plan = stmt.compilePlan(PhoenixStatement.this,
                                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 // Send mutations to hbase, so they are visible to subsequent reads.
                                 // Use original plan for data table so that data and immutable indexes will be sent
@@ -437,13 +438,25 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
+                                    String sName = e.getSchemaName();
+                                    String tName = e.getTableName();
+                                    // when the query plan uses the local index PTable,
+                                    // the TNFE can still be for the base table
+                                    if (plan != null && plan.getTableRef() != null) {
+                                        PTable queryPlanTable = plan.getTableRef().getTable();
+                                        if (queryPlanTable != null &&
+                                                queryPlanTable.getIndexType() == IndexType.LOCAL) {
+                                            sName = queryPlanTable.getSchemaName().getString();
+                                            tName = queryPlanTable.getTableName().getString();
+                                        }
+                                    }
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
-                                                e.getTableName());
+                                                tName);
                                     }
                                     if (new MetaDataClient(connection)
                                             .updateCache(connection.getTenantId(),
-                                                    e.getSchemaName(), e.getTableName(), true)
+                                                    sName, tName, true)
                                             .wasUpdated()) {
                                         updateMetrics = false;
                                         //TODO we can log retry count and error for debugging in LOG table
@@ -474,6 +487,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view
+                                // remove cached PTable to ensure latest PTable is always retrieved
+                                connection.removeTable(connection.getTenantId(),
+                                        SchemaUtil.getTableName(schemaN, tableN),
+                                        null, HConstants.LATEST_TIMESTAMP);
                                 new MetaDataClient(connection)
                                         .updateCache(tenantId, schemaN, tableN, true);
                                 // skip last ddl timestamp validation in the retry

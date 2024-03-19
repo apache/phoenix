@@ -768,7 +768,19 @@ public class MetaDataClient {
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
             // i.e. explicitly set to 0. We should ideally be checking for something like
             // hasUpdateCacheFrequency().
-            if (table.getUpdateCacheFrequency() != 0L) {
+
+            //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
+            //QueryOptimizer needs that to decide whether the index can be used
+            if (PIndexState.PENDING_DISABLE.equals(table.getIndexState())) {
+                effectiveUpdateCacheFreq =
+                        (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                            connection.getQueryServices().getProps().get(
+                                QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
+                                QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
+                ucfInfoForLogging = "pending-disable-index-level";
+            }
+            else if (table.getUpdateCacheFrequency()
+                    != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
                 ucfInfoForLogging = "table-level";
             } else {
@@ -4743,12 +4755,15 @@ public class MetaDataClient {
                                 .setColumnName(columnToDrop.getName().getString()).build().buildException();
                     }
                     columnsToDrop.add(new ColumnRef(columnRef.getTableRef(), columnToDrop.getPosition()));
-                    boolean acquiredMutex = writeCell(null, physicalSchemaName,
-                            physicalTableName, columnToDrop.toString());
-                    if (!acquiredMutex) {
-                        throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                    // check if client is already holding a mutex from previous retry
+                    if (!acquiredColumnMutexSet.contains(columnToDrop.toString())) {
+                        boolean acquiredMutex = writeCell(null, physicalSchemaName,
+                                physicalTableName, columnToDrop.toString());
+                        if (!acquiredMutex) {
+                            throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                        }
+                        acquiredColumnMutexSet.add(columnToDrop.toString());
                     }
-                    acquiredColumnMutexSet.add(columnToDrop.toString());
                 }
 
                 dropColumnMutations(table, tableColumnsToDrop);
@@ -4974,7 +4989,14 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    table = connection.getTable(fullTableName);
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(LogUtil.addCustomAnnotations(
+                        "Caught ConcurrentTableMutationException for table "
+                                + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
+                                + ". Will update cache and try again...", connection));
+                    }
+                    updateCache(connection.getTenantId(),
+                                    e.getSchemaName(), e.getTableName(), true);
                     retried = true;
                 } catch (Throwable e) {
                     TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);

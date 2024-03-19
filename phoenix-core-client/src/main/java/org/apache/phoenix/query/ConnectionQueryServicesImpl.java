@@ -75,6 +75,7 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCC
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
@@ -6267,7 +6268,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
         boolean invalidateCacheEnabled =
-                config.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, false);
+                config.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
+                        DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED);
         if (!invalidateCacheEnabled) {
             LOGGER.info("Skip invalidating server metadata cache since conf property"
                     + " phoenix.metadata.invalidate.cache.enabled is set to false");

@@ -88,7 +88,7 @@ public class LoggingSingleConnectionLimiterIT extends LoggingConnectionLimiterIT
         String zkQuorum = "localhost:" + hBaseTestingUtility.getZkCluster().getClientPort();
         url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-
+        DriverManager.registerDriver(new PhoenixTestDriver());
         String profileName = "setup";
         final String urlWithPrinc = url + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + profileName
                 + PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;

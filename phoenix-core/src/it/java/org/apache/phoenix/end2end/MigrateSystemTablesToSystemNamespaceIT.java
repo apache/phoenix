@@ -16,6 +16,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -41,10 +42,12 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
@@ -54,6 +57,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -85,9 +89,15 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     final UserGroupInformation user4 =
             UserGroupInformation.createUserForTesting("user4", new String[0]);
 
+    @BeforeClass
+    public static synchronized void registerTestDriver() throws SQLException {
+        DriverManager.registerDriver(new PhoenixTestDriver());
+    }
+
     public final void doSetup(boolean systemMappingEnabled) throws Exception {
         testUtil = new HBaseTestingUtility();
         Configuration conf = testUtil.getConfiguration();
+        conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, PhoenixRegionServerEndpoint.class.getName());
         enableNamespacesOnServer(conf, systemMappingEnabled);
         configureRandomHMasterPort(conf);
         testUtil.startMiniCluster(1);
