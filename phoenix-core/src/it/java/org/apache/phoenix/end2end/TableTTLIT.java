@@ -82,6 +82,7 @@ public class TableTTLIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -119,13 +120,13 @@ public class TableTTLIT extends BaseTest {
     @Parameterized.Parameters(name = "TableTTLIT_multiCF={0}, columnEncoded={1}, "
             + "keepDeletedCells={2}, versions={3}, ttl={4}")
     public static synchronized Collection<Object[]> data() {
-            return Arrays.asList(new Object[][] {
-                    { false, false, KeepDeletedCells.FALSE, 1, 100},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50},
-                    { false, false, KeepDeletedCells.TTL, 1, 25},
-                    { true, false, KeepDeletedCells.FALSE, 5, 50},
-                    { true, false, KeepDeletedCells.TRUE, 1, 25},
-                    { true, false, KeepDeletedCells.TTL, 5, 100} });
+        return Arrays.asList(new Object[][] {
+            { false, false, KeepDeletedCells.FALSE, 1, 100},
+            { false, false, KeepDeletedCells.TRUE, 5, 50},
+            { false, false, KeepDeletedCells.TTL, 1, 25},
+            { true, false, KeepDeletedCells.FALSE, 5, 50},
+            { true, false, KeepDeletedCells.TRUE, 1, 25},
+            { true, false, KeepDeletedCells.TTL, 5, 100} });
     }
 
     /**
