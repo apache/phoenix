@@ -25,7 +25,6 @@ import java.util.LinkedList;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
@@ -45,10 +44,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.filter.RowKeyComparisonFilter.RowKeyTuple;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.matcher.RowKeyMatcher;
 import org.apache.phoenix.util.matcher.TableTTLInfoCache;
 import org.apache.phoenix.util.matcher.TableTTLInfo;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -86,11 +86,8 @@ public class CompactionScanner implements InternalScanner {
     private final InternalScanner storeScanner;
     private final Region region;
     private final Store store;
-    private final Configuration config;
     private final RegionCoprocessorEnvironment env;
     private long maxLookbackWindowStart;
-    //private long ttlWindowStart;
-    //private long ttl;
     private final long maxLookbackInMillis;
     private int minVersion;
     private int maxVersion;
@@ -116,9 +113,7 @@ public class CompactionScanner implements InternalScanner {
         this.store = store;
         this.env = env;
         this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        this.emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                QueryConstants.EMPTY_COLUMN_BYTES : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-        this.config = env.getConfiguration();
+        this.emptyCQ = SchemaUtil.getEncodingScheme(table);
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         String columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
@@ -140,7 +135,10 @@ public class CompactionScanner implements InternalScanner {
         familyCount = region.getTableDescriptor().getColumnFamilies().length;
         localIndex = columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
         emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF)) || localIndex;
-        // TODO: check if is it appropriate to throw an IOException here
+        // Initialize the tracker that computes the TTL for the compacting table.
+        // The TTL tracker can be
+        // simple (one single TTL for the table) when the compacting table is not Partitioned
+        // complex when the TTL can vary per row when the compacting table is Partitioned.
         TTLTracker ttlTracker = createTTLTrackerFor(env, store, table);
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor(ttlTracker);
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor(ttlTracker);
@@ -169,14 +167,23 @@ public class CompactionScanner implements InternalScanner {
     private TTLTracker createTTLTrackerFor(RegionCoprocessorEnvironment env,
             Store store,  PTable baseTable) throws IOException {
 
+        boolean isViewTTLEnabled =
+                env.getConfiguration().getBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
+        // If VIEW TTL is not enabled then return TTL tracker for base HBase tables.
+        // since TTL can be set only at the table level.
+        if (!isViewTTLEnabled) {
+            return new NonPartitionedTableTTLTracker(baseTable, store);
+        }
+
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
         String compactionTableName = env.getRegion().getRegionInfo().getTable().getNameAsString();
         String schemaName = SchemaUtil.getSchemaNameFromFullName(baseTable.getName().toString());
         String tableName = SchemaUtil.getTableNameFromFullName(baseTable.getName().toString());
 
-        boolean isPartitionedIndexTable = false;
+        boolean isPartitionedViewIndexTable = false;
         if (compactionTableName.startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
-            isPartitionedIndexTable = true;
+            isPartitionedViewIndexTable = true;
         }
 
         // NonPartitioned: Salt bucket property can be separately set for base tables and indexes.
@@ -197,8 +204,8 @@ public class CompactionScanner implements InternalScanner {
                     currentTime);
 
             return isPartitioned ?
-                    new PartitionedTableTTLTracker(baseTable, env, isSalted, isPartitionedIndexTable) :
-                    new NonPartitionedTableTTLTracker(baseTable, env, store);
+                    new PartitionedTableTTLTracker(baseTable, isSalted, isPartitionedViewIndexTable) :
+                    new NonPartitionedTableTTLTracker(baseTable, store);
 
         } catch (SQLException e) {
             throw new IOException(e);
@@ -244,16 +251,24 @@ public class CompactionScanner implements InternalScanner {
         VIEW_INDEXES, GLOBAL_VIEWS, TENANT_VIEWS
     }
 
+    /**
+     * The implementation classes will track TTL for various Phoenix Objects.
+     * Tables - Partitioned (HBase Tables with Views and View-Indexes)
+     *          and Non-Partitioned (Simple HBase Tables And Indexes)
+     */
     private interface TTLTracker {
         void setTTL(Cell firstCell);
         RowContext getRowContext();
+        void setRowContext(RowContext rowContext);
     }
     private class NonPartitionedTableTTLTracker implements TTLTracker {
 
         private long ttl;
         private RowContext rowContext;
 
-        public NonPartitionedTableTTLTracker(PTable pTable, RegionCoprocessorEnvironment env, Store store) {
+        public NonPartitionedTableTTLTracker(
+                PTable pTable,
+                Store store) {
             boolean isSystemTable = pTable.getType() == PTableType.SYSTEM;
             if (isSystemTable) {
                 ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
@@ -261,7 +276,9 @@ public class CompactionScanner implements InternalScanner {
             } else {
                 ttl = pTable.getTTL() != TTL_NOT_DEFINED ? pTable.getTTL() : DEFAULT_TTL;
             }
-            LOGGER.info(String.format("NonPartitionedTableTTLTracker params:- (physical-name=%s, ttl=%d, isSystemTable=%s)",
+            LOGGER.info(String.format(
+                    "NonPartitionedTableTTLTracker params:- " +
+                            "(physical-name=%s, ttl=%d, isSystemTable=%s)",
                     pTable.getName().toString(), ttl*1000, isSystemTable));
         }
 
@@ -280,6 +297,12 @@ public class CompactionScanner implements InternalScanner {
             }
             return rowContext;
         }
+
+        @Override
+        public void setRowContext(RowContext rowContext) {
+            this.rowContext = rowContext;
+            this.rowContext.setTTL(ttl);
+        }
     }
 
     private class PartitionedTableTTLTracker implements TTLTracker {
@@ -295,61 +318,64 @@ public class CompactionScanner implements InternalScanner {
         private long ttl;
         private RowContext rowContext;
 
-        private boolean isIndexTable = false;
+        private boolean isViewIndexTable = false;
         private boolean isMultiTenant = false;
         private boolean isSalted = false;
         private int startingPKPosition;
         private RowKeyParser rowKeyParser;
 
-        public PartitionedTableTTLTracker(PTable table, RegionCoprocessorEnvironment env,
-                boolean isSalted, boolean isIndexTable) {
+        public PartitionedTableTTLTracker(
+                PTable table,
+                boolean isSalted,
+                boolean isViewIndexTable) {
 
             try {
                 this.baseTable = table;
                 this.ttlCache = new TableTTLInfoCache();
                 this.rowKeyParser = new RowKeyParser(baseTable);
                 this.ttl = table.getTTL() != TTL_NOT_DEFINED ? table.getTTL() : DEFAULT_TTL;
-                this.isIndexTable = isIndexTable || localIndex ;
+                this.isViewIndexTable = isViewIndexTable || localIndex ;
                 this.isSalted = isSalted;
                 this.isMultiTenant = table.isMultiTenant();
 
                 int startingPKPosition = 0;
-                if (this.isMultiTenant && this.isSalted && this.isIndexTable) {
-                    // case multi-tenant + salted + index-table =>
+                if (this.isMultiTenant && this.isSalted && this.isViewIndexTable) {
+                    // case multi-tenanted, salted, is a view-index-table =>
                     // startingPKPosition = 1 skip the salt-byte and starting at the viewIndexId
                     startingPKPosition = 1;
-                } else if (this.isMultiTenant && this.isSalted) {
-                    // case multi-tenant + salted =>
+                } else if (this.isMultiTenant && this.isSalted && !this.isViewIndexTable) {
+                    // case multi-tenanted, salted, not a view-index-table  =>
                     // startingPKPosition = 2 skip salt byte + tenant-id to search the global space
                     // if above search returned no results
                     // then search using the following start position
                     // startingPKPosition = 1 skip salt-byte to search the tenant space
                     startingPKPosition = 2;
-                } else if (this.isMultiTenant && this.isIndexTable) {
-                    // case multi-tenant + index-table =>
+                } else if (this.isMultiTenant && !this.isSalted && this.isViewIndexTable) {
+                    // case multi-tenanted, not-salted, is a view-index-table  =>
                     // startingPKPosition = 0, the first key will the viewIndexId
                     startingPKPosition = 0;
-                } else if (this.isSalted && this.isIndexTable) {
-                    // case salted + index-table =>
-                    // startingPKPosition = 1 skip salt-byte search using the viewIndexId
-                    startingPKPosition = 1;
-                } else if (this.isSalted) {
-                    // case salted =>
-                    // startingPKPosition = 1 skip salt-byte
-                    startingPKPosition = 1;
-                } else if (this.isIndexTable) {
-                    // case index-table =>
-                    // startingPKPosition = 0 the first key will the viewIndexId
-                    startingPKPosition = 0;
-                } else if (this.isMultiTenant) {
-                    // case multi-tenant =>
+                } else if (this.isMultiTenant && !this.isSalted && !this.isViewIndexTable) {
+                    // case multi-tenanted, not-salted, not a view-index-table  =>
                     // startingPKPosition = 1 skip tenant-id to search the global space
                     // if above search returned no results
                     // then search using the following start position
                     // startingPKPosition = 0 to search the tenant space
                     startingPKPosition = 1;
+                } else if (!this.isMultiTenant && this.isSalted && this.isViewIndexTable) {
+                    // case non-multi-tenanted, salted, index-table =>
+                    // startingPKPosition = 1 skip salt-byte search using the viewIndexId
+                    startingPKPosition = 1;
+                } else if (!this.isMultiTenant && this.isSalted && !this.isViewIndexTable) {
+                    // case non-multi-tenanted, salted, not a view-index-table =>
+                    // start at the view-index-id position after skipping the salt byte
+                    // startingPKPosition = 1 skip salt-byte
+                    startingPKPosition = 1;
+                } else if (!this.isMultiTenant && !this.isSalted && this.isViewIndexTable) {
+                    // case non-multi-tenanted, not-salted, is a view-index-table =>
+                    // startingPKPosition = 0 the first key will the viewIndexId
+                    startingPKPosition = 0;
                 } else {
-                    // case not multi-tenant + not salted + not index-table  =>
+                    // case non-multi-tenanted, not-salted, not a view-index-table  =>
                     // startingPKPosition = 0
                     startingPKPosition = 0;
                 }
@@ -364,7 +390,7 @@ public class CompactionScanner implements InternalScanner {
                         region.getRegionInfo().getEncodedName(),
                         region.getRegionInfo().getTable().getNameAsString(),
                         this.isMultiTenant,
-                        this.isIndexTable,
+                        this.isViewIndexTable,
                         this.isSalted,
                         this.ttl,
                         this.startingPKPosition));
@@ -389,7 +415,7 @@ public class CompactionScanner implements InternalScanner {
         // Initialize the various matchers
         private void initializeMatchers() throws SQLException {
 
-            if (this.isIndexTable) {
+            if (this.isViewIndexTable) {
                 this.viewIndexMatcher = initializeMatcher(MatcherType.VIEW_INDEXES);
             } else if (this.isMultiTenant) {
                 this.globalViewMatcher = initializeMatcher(MatcherType.GLOBAL_VIEWS);
@@ -446,7 +472,7 @@ public class CompactionScanner implements InternalScanner {
         // Match row key using the appropriate matcher
         private Integer match(byte[] rowkey, int offset, MatcherType matcherType) {
             RowKeyMatcher matcher = null;
-            if (this.isIndexTable && matcherType.compareTo(MatcherType.VIEW_INDEXES) == 0) {
+            if (this.isViewIndexTable && matcherType.compareTo(MatcherType.VIEW_INDEXES) == 0) {
                 matcher = this.viewIndexMatcher;
             } else if (this.isMultiTenant && matcherType.compareTo(MatcherType.GLOBAL_VIEWS) == 0) {
                 matcher = this.globalViewMatcher;
@@ -479,25 +505,25 @@ public class CompactionScanner implements InternalScanner {
                 }
                 // pkPositions holds the byte offsets for the PKs of the base table
                 // for the current row
-                pkPositions = isIndexTable ?
+                pkPositions = isViewIndexTable ?
                         (isSalted ?
                                 Arrays.asList(0, 1) :
                                 Arrays.asList(0)) :
                         rowKeyParser.parsePKPositions(firstCell);
                 // The startingPKPosition was initialized(constructor) in the following manner
-                // case multi-tenant + salted + index-table  => startingPKPosition = 1
-                // case multi-tenant + salted => startingPKPosition = 2, 1
-                // case multi-tenant + index-table => startingPKPosition = 0
-                // case salted + index-table => startingPKPosition = 1
-                // case salted => startingPKPosition = 1
-                // case index-table => startingPKPosition = 0
-                // case multi-tenant => startingPKPosition = 1, 0
-                // case non-multi-tenant => startingPKPosition = 0
+                // case multi-tenant, salted, is-view-index-table  => startingPKPosition = 1
+                // case multi-tenant, salted, not-view-index-table => startingPKPosition = 2
+                // case multi-tenant, not-salted, is-view-index-table => startingPKPosition = 0
+                // case multi-tenant, not-salted, not-view-index-table => startingPKPosition = 1
+                // case non-multi-tenant, salted, is-view-index-table => startingPKPosition = 1
+                // case non-multi-tenant, salted, not-view-index-table => startingPKPosition = 1
+                // case non-multi-tenant, not-salted, is-view-index-table => startingPKPosition = 0
+                // case non-multi-tenant, not-salted, not-view-index-table => startingPKPosition = 0
                 int offset = pkPositions.get(pkPosition);
                 byte[] rowKey = CellUtil.cloneRow(firstCell);
                 Integer tableId = null;
                 // Search using the starting offset (startingPKPosition offset)
-                if (isIndexTable) {
+                if (isViewIndexTable) {
                     // case index table
                     tableId = match(rowKey, offset, MatcherType.VIEW_INDEXES);
                 } else if (isMultiTenant) {
@@ -553,6 +579,12 @@ public class CompactionScanner implements InternalScanner {
                 this.rowContext.setTTL(ttl);
             }
             return rowContext;
+        }
+
+        @Override
+        public void setRowContext(RowContext rowContext) {
+            this.rowContext = rowContext;
+            this.rowContext.setTTL(ttl);
         }
     }
 
@@ -610,8 +642,11 @@ public class CompactionScanner implements InternalScanner {
 
         public void setTTL(long ttlInSecs) {
             this.ttl = ttlInSecs*1000;
-            this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl;
+            this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl ;
             this.maxLookbackWindowStartForRow = Math.max(ttlWindowStart, maxLookbackWindowStart);
+            LOGGER.info(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
+                    ttlWindowStart, maxLookbackWindowStart));
+
         }
         public long getTTL() {
             return ttl;
@@ -905,7 +940,8 @@ public class CompactionScanner implements InternalScanner {
 
         private void formCompactionRowVersions(LinkedList<LinkedList<Cell>> columns,
                 List<Cell> result) {
-            RowContext rowContext = rowTracker.getRowContext();
+            RowContext rowContext = new RowContext();
+            rowTracker.setRowContext(rowContext);
             while (!columns.isEmpty()) {
                 formNextCompactionRowVersion(columns, rowContext, result);
                 // Remove the columns that are empty
@@ -997,7 +1033,7 @@ public class CompactionScanner implements InternalScanner {
             Cell currentColumnCell = null;
             LinkedList<Cell> currentColumn = null;
             for (Cell cell : result) {
-                if (cell.getTimestamp() > maxLookbackWindowStart) {
+                if (cell.getTimestamp() > rowTracker.getRowContext().getMaxLookbackWindowStart()) {
                     retainedCells.add(cell);
                     continue;
                 }
@@ -1057,7 +1093,9 @@ public class CompactionScanner implements InternalScanner {
             if (columns.isEmpty()) {
                 return;
             }
-            RowContext rowContext = rowTracker.getRowContext();
+
+            RowContext rowContext = new RowContext();
+            rowTracker.setRowContext(rowContext);
             long ttl = rowContext.getTTL();
             rowContext.getNextRowVersionTimestamps(columns, storeColumnFamily);
             List<Cell> retainedPutCells = new ArrayList<>();
@@ -1073,13 +1111,13 @@ public class CompactionScanner implements InternalScanner {
                     if (cell.getTimestamp() >= rowContext.maxTimestamp) {
                         // This means that the row version outside the max lookback window is
                         // deleted and thus should not be visible to the scn queries
-                        if (cell.getTimestamp() == maxLookbackWindowStart) {
+                        if (cell.getTimestamp() == rowTracker.getRowContext().getMaxLookbackWindowStart()) {
                             // Include delete markers at maxLookbackWindowStart
                             retainedCells.add(cell);
                         }
                         return;
                     }
-                } else if (cell.getTimestamp() == maxLookbackWindowStart) {
+                } else if (cell.getTimestamp() == rowTracker.getRowContext().getMaxLookbackWindowStart()) {
                     // Include delete markers at maxLookbackWindowStart
                     retainedCells.add(cell);
                 }
@@ -1339,6 +1377,7 @@ public class CompactionScanner implements InternalScanner {
             scan.withStartRow(rowKey, true);
             scan.withStopRow(rowKey, true);
             RegionScanner scanner = region.getScanner(scan);
+
             List<Cell> regionResult = new ArrayList<>(result.size());
             scanner.next(regionResult);
             scanner.close();
