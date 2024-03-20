@@ -61,6 +61,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
@@ -194,7 +195,11 @@ public class CompactionScanner implements InternalScanner {
         try (PhoenixConnection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
 
-            Table childLinkHTable = serverConnection.getQueryServices().getTable(SYSTEM_CHILD_LINK_NAME_BYTES);
+            byte[] childLinkTableNameBytes = SchemaUtil.isNamespaceMappingEnabled(
+                    PTableType.SYSTEM, env.getConfiguration()) ?
+                    SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
+                    SYSTEM_CHILD_LINK_NAME_BYTES;
+            Table childLinkHTable = serverConnection.getQueryServices().getTable(childLinkTableNameBytes);
             // If there is atleast one child view for this table then it is a partitioned table.
             boolean isPartitioned = ViewUtil.hasChildViews(
                     childLinkHTable,
