@@ -61,6 +61,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.ReadOnlyTableException;
@@ -659,6 +660,14 @@ public class ViewIT extends SplitSystemCatalogIT {
                         + " values (7, 'host7', TRUE, 1)");
                 fail();
             } catch (Exception ignore) {
+            }
+
+            PTable view = PhoenixRuntime.getTable(conn, fullViewName);
+            PTable childView = PhoenixRuntime.getTable(conn, fullChildViewName);
+            // if PTable for views in the client cache are not immediately updated
+            if (QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
+                view = PhoenixRuntime.getTableNoCache(conn, fullViewName);
+                childView = PhoenixRuntime.getTableNoCache(conn, fullChildViewName);
             }
             // Check view inherits index, but child view doesn't
             PTable table = conn.unwrap(PhoenixConnection.class).getTable(fullViewName);

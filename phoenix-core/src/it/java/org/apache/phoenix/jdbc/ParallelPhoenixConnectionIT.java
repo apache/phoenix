@@ -97,6 +97,7 @@ public class ParallelPhoenixConnectionIT {
     public static void setUpBeforeClass() throws Exception {
         CLUSTERS.start();
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
+        DriverManager.registerDriver(new PhoenixTestDriver());
         GLOBAL_PROPERTIES.setProperty(AUTO_COMMIT_ATTRIB, "true");
         GLOBAL_PROPERTIES.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
         GLOBAL_PROPERTIES.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name()); //Need logging for query metrics

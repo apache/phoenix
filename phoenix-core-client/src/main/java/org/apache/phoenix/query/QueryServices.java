@@ -326,6 +326,10 @@ public interface QueryServices extends SQLCloseable {
     //Update Cache Frequency default config attribute
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";
 
+    //Update Cache Frequency for indexes in PENDING_DISABLE state
+    public static final String UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
+            = "phoenix.update.cache.frequency.pending.disable.index";
+
     // whether to validate last ddl timestamps during client operations
     public static final String LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = "phoenix.ddl.timestamp.validation.enabled";
 

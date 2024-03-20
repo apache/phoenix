@@ -31,6 +31,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -530,13 +531,16 @@ public abstract class LogicalTableNameBaseIT extends BaseTest {
     }
 
     public static void renameAndDropPhysicalTable(Connection conn, String tenantId, String schema, String tableName, String physicalName, boolean isNamespaceEnabled) throws Exception {
+        // if client is validating last_ddl_timestamp, this change in physical table name should be visible to the client
+        // UPDATE LAST_DDL_TIMESTAMP of the table and clear the server metadata cache on region servers
+        long lastDDLTimestamp = EnvironmentEdgeManager.currentTimeMillis();
         String
                 changeName = String.format(
-                "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, PHYSICAL_TABLE_NAME) VALUES (%s, %s, '%s', NULL, NULL, '%s')",
-                tenantId, schema==null ? null : ("'" + schema + "'"), tableName, physicalName);
+                "UPSERT INTO SYSTEM.CATALOG (TENANT_ID, TABLE_SCHEM, TABLE_NAME, COLUMN_NAME, COLUMN_FAMILY, PHYSICAL_TABLE_NAME, LAST_DDL_TIMESTAMP) VALUES (%s, %s, '%s', NULL, NULL, '%s', %d)",
+                tenantId, schema==null ? null : ("'" + schema + "'"), tableName, physicalName, lastDDLTimestamp);
         conn.createStatement().execute(changeName);
         conn.commit();
-
+        ServerMetadataCacheTestImpl.resetCache();
         String fullTableName = SchemaUtil.getTableName(schema, tableName);
         if (isNamespaceEnabled && !(Strings.isNullOrEmpty(schema) || NULL_STRING.equals(schema))) {
             fullTableName = schema + NAMESPACE_SEPARATOR + tableName;
