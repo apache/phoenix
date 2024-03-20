@@ -74,11 +74,12 @@ public class ViewTTLIT extends BaseViewTTLIT {
 
     @BeforeClass
     public static void doSetup() throws Exception {
-        // Turn on the TTL feature
+        // Turn on the View TTL feature
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
             put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
             put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
             put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0)); // An hour
+            put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
         }};
 
         setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
@@ -1707,28 +1708,8 @@ public class ViewTTLIT extends BaseViewTTLIT {
 
 
     @Test
-    public void testSaltedTablesAndViews() throws Exception {
-
-        // View TTL is set in seconds (for e.g 10 secs)
-        int viewTTL = VIEW_TTL_10_SECS;
-        TableOptions tableOptions = TableOptions.withDefaults();
-        tableOptions.getTableColumns().clear();
-        tableOptions.getTableColumnTypes().clear();
-        tableOptions.setSaltBuckets(11);
-
-        TenantViewOptions tenantViewOptions = TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps(String.format("TTL=%d, SALT_BUCKETS=%d", viewTTL, 3));
-
-        // Define the test schema.
-        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
-        schemaBuilder
-                .withTableOptions(tableOptions)
-                .withTenantViewOptions(tenantViewOptions)
-                .withTenantViewIndexDefaults()
-                .build();
-
-        String viewName = schemaBuilder.getEntityTenantViewName();
-
+    public void testTablesIndexesAndViewIndexes() throws Exception {
+        super.testMajorCompactWithSimpleIndexedBaseTables();
     }
     @Test
     public void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
