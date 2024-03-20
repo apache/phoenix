@@ -528,6 +528,12 @@ public class SchemaUtil {
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
     }
 
+    public static byte[] getEncodingScheme(PTable table) {
+        return table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                QueryConstants.EMPTY_COLUMN_BYTES :
+                table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+    }
+
     public static String getEmptyColumnFamilyAsString(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY : QueryConstants.DEFAULT_COLUMN_FAMILY) : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
