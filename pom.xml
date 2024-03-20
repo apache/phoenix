@@ -1666,7 +1666,7 @@
         <hbase.compat.version>2.5.4</hbase.compat.version>
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <zookeeper.version>3.8.3</zookeeper.version>
+        <zookeeper.version>3.8.4</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1739,7 +1739,7 @@
         <hbase.compat.version>2.4.0</hbase.compat.version>
         <hadoop.version>3.1.4</hadoop.version>
         <hbase.version>${hbase-2.4.0.runtime.version}</hbase.version>
-        <zookeeper.version>3.8.3</zookeeper.version>
+        <zookeeper.version>3.8.4</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1757,7 +1757,7 @@
         <hbase.compat.version>2.4.1</hbase.compat.version>
         <hadoop.version>3.1.4</hadoop.version>
         <hbase.version>${hbase-2.4.runtime.version}</hbase.version>
-        <zookeeper.version>3.8.3</zookeeper.version>
+        <zookeeper.version>3.8.4</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1775,7 +1775,7 @@
         <hbase.compat.version>2.5.0</hbase.compat.version>
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <zookeeper.version>3.8.3</zookeeper.version>
+        <zookeeper.version>3.8.4</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
@@ -1793,7 +1793,7 @@
         <hbase.compat.version>2.5.4</hbase.compat.version>
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
-        <zookeeper.version>3.8.3</zookeeper.version>
+        <zookeeper.version>3.8.4</zookeeper.version>
         <tephra.hbase.compat.version>2.4</tephra.hbase.compat.version>
       </properties>
     </profile>
