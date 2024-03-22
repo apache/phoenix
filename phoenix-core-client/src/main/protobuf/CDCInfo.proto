@@ -15,29 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.parse;
 
-import java.util.Collections;
-import java.util.List;
+option java_package = "org.apache.phoenix.coprocessor.generated";
+option java_outer_classname = "CDCInfoProtos";
+option java_generic_services = true;
+option java_generate_equals_and_hash = true;
+option optimize_for = SPEED;
 
-/**
- * 
- * Abstract node for expressions that have no children
- *
- * 
- * @since 0.1
- */
-public abstract class TerminalParseNode extends ParseNode {
-    @Override
-    public final List<ParseNode> getChildren() {
-        return Collections.emptyList();
-    }
+message CDCColumnDef {
+  required string columnName = 1;
+  required bytes familyNameBytes = 2;
+  required bytes columnQualifierBytes = 3;
+  required string dataType = 4;
+}
 
-    public boolean isWildcardNode() {
-        return false;
-    }
-
-    public TerminalParseNode getRewritten() {
-        return null;
-    }
+message CDCTableDef {
+  optional bytes defaultFamilyName = 1;
+  optional string cdcIncludeScopes = 2;
+  required bytes qualifierEncodingScheme = 3;
+  repeated CDCColumnDef columns = 4;
+  required bytes cdcJsonColQualBytes = 5;
+  optional bytes dataTableProjectorBytes = 6;
 }

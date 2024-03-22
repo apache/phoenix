@@ -139,7 +139,7 @@ public class TupleProjector {
      * @param projector projector to serialize
      * @return byte array
      */
-    private static byte[] serializeProjectorIntoBytes(TupleProjector projector) {
+    public static byte[] serializeProjectorIntoBytes(TupleProjector projector) {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         try {
             DataOutputStream output = new DataOutputStream(stream);
@@ -172,7 +172,7 @@ public class TupleProjector {
      * @param proj byte array to deserialize
      * @return projector
      */
-    private static TupleProjector deserializeProjectorFromBytes(byte[] proj) {
+    public static TupleProjector deserializeProjectorFromBytes(byte[] proj) {
         if (proj == null) {
             return null;
         }

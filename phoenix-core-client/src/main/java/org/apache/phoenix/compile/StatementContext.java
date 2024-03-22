@@ -24,7 +24,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -46,6 +45,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -84,7 +84,10 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
-    
+    private String cdcIncludeScopes;
+    private TableRef cdcTableRef;
+    private TableRef cdcDataTableRef;
+
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }
@@ -377,5 +380,28 @@ public class StatementContext {
         } else {
             return retrying;
         }
+    }
+    public String getEncodedCdcIncludeScopes() {
+        return cdcIncludeScopes;
+    }
+
+    public void setCDCIncludeScopes(Set<PTable.CDCChangeScope> cdcIncludeScopes) {
+        this.cdcIncludeScopes = CDCUtil.makeChangeScopeStringFromEnums(cdcIncludeScopes);
+    }
+
+    public TableRef getCDCDataTableRef() {
+        return cdcDataTableRef;
+    }
+
+    public void setCDCDataTableRef(TableRef cdcDataTableRef) {
+        this.cdcDataTableRef = cdcDataTableRef;
+    }
+
+    public TableRef getCDCTableRef() {
+        return cdcTableRef;
+    }
+
+    public void setCDCTableRef(TableRef cdcTableRef) {
+        this.cdcTableRef = cdcTableRef;
     }
 }

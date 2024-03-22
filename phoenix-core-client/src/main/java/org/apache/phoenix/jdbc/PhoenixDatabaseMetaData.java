@@ -436,6 +436,13 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String MAX_LOOKBACK_AGE = BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE;
     public static final byte[] MAX_LOOKBACK_AGE_BYTES = Bytes.toBytes(MAX_LOOKBACK_AGE);
 
+    public static final String CDC_INCLUDE_NAME = "INCLUDE";
+    public static final String CDC_INCLUDE_TABLE = "CDC_INCLUDE";
+    public static final byte[] CDC_INCLUDE_BYTES = Bytes.toBytes(CDC_INCLUDE_TABLE);
+
+    // This is just a virtual property on CDC that translates to the type of index created.
+    public static final String CDC_INDEX_TYPE_NAME = "INDEX_TYPE";
+
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";
     public static final String SYSTEM_LOG_NAME =
