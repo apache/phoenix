@@ -21,14 +21,25 @@
 # may affect many developers of the project and make sure to discuss the
 # changes with dev@ before committing.
 
-notifications:
-  commits: commits@phoenix.apache.org
-  issues: issues@phoenix.apache.org
-  pullrequests: issues@phoenix.apache.org
-  jira_options: link label comment
-
 github:
+  description: "Apache Phoenix"
+  homepage: https://hbase.apache.org/
+  labels:
+    - database
+    - sql
+    - java
+    - phoenix
+    - hbase
+  features:
+    wiki: false
+    issues: false
+    projects: false
   enabled_merge_buttons:
     squash: true
     merge: false
     rebase: false
+notifications:
+  commits: commits@phoenix.apache.org
+  issues: issues@phoenix.apache.org
+  pullrequests: issues@phoenix.apache.org
+  jira_options: link label
