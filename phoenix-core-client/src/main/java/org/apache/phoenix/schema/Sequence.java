@@ -345,7 +345,7 @@ public class Sequence {
             // }
             throw new SQLExceptionInfo.Builder(code)
                 .setSchemaName(key.getSchemaName())
-                .setTableName(key.getSequenceName())
+                .setSequenceName(key.getSequenceName())
                 .build().buildException();
         }
         // If we found the sequence, we update our cache with the new value
@@ -553,7 +553,7 @@ public class Sequence {
         // }
         throw new SQLExceptionInfo.Builder(code)
             .setSchemaName(key.getSchemaName())
-            .setTableName(key.getSequenceName())
+            .setSequenceName(key.getSequenceName())
             .build().buildException();
     }
 
@@ -626,7 +626,7 @@ public class Sequence {
         // }
         throw new SQLExceptionInfo.Builder(code)
             .setSchemaName(key.getSchemaName())
-            .setTableName(key.getSequenceName())
+            .setSequenceName(key.getSequenceName())
             .build().buildException();
     }
 

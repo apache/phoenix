@@ -61,6 +61,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.schema.SequenceNotFoundException;
 
 
 @Category(ParallelStatsDisabledTest.class)
