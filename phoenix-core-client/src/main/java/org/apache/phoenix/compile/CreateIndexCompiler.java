@@ -26,7 +26,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -71,6 +70,7 @@ import java.util.Iterator;
 import java.util.List;
 
 public class CreateIndexCompiler {
+
     private final PhoenixStatement statement;
     private final Operation operation;
 
@@ -228,7 +228,6 @@ public class CreateIndexCompiler {
         Scan scan = new Scan();
         final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         verifyIndexWhere(create.getWhere(), context, create.getTable().getName());
-        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         List<ParseNode> splitNodes = create.getSplitNodes();
         if (create.getIndexType() == IndexType.LOCAL) {
             if (!splitNodes.isEmpty()) {
@@ -245,18 +244,9 @@ public class CreateIndexCompiler {
                 }
             }
         }
-        final byte[][] splits = new byte[splitNodes.size()][];
-        for (int i = 0; i < splits.length; i++) {
-            ParseNode node = splitNodes.get(i);
-            if (!node.isStateless()) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_POINT_NOT_CONSTANT)
-                    .setMessage("Node: " + node).build().buildException();
-            }
-            LiteralExpression expression = (LiteralExpression)node.accept(expressionCompiler);
-            splits[i] = expression.getBytes();
-        }
+        final byte[][] splits = SplitKeyUtil.getSplits(splitNodes, context);
         final MetaDataClient client = new MetaDataClient(connection);
-        
+
         return new BaseMutationPlan(context, operation) {
             @Override
             public MutationState execute() throws SQLException {

@@ -135,6 +135,51 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testCreateIndexWithRowValueConstructorSplitKeys() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = "TBL_" + generateUniqueName();
+        String indexName = "IND_" + generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, tableName);
+        String fullIndexName = SchemaUtil.getTableName(TestUtil.DEFAULT_SCHEMA_NAME, indexName);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(false);
+            String splitKeys = "('foo', 'a', 1, 100, 1.0, TO_DATE('2024-01-01')), " +
+                    "('john', 'b', 2, 101, 2.0, TO_DATE('2024-01-01')), " +
+                    "('tom', 'c', 3, 102, 3.0, TO_DATE('2024-01-01'))";
+            String ddl ="CREATE TABLE " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + tableDDLOptions + " SPLIT ON (" +
+                    splitKeys + ")";
+            Statement stmt = conn.createStatement();
+            stmt.execute(ddl);
+            BaseTest.populateTestTable(fullTableName);
+            String indexSplitKeys = "('a',111, 'foo', 'a', 1, 100, 1.0, TO_DATE('2024-01-01')), " +
+                    "('e','222','john', 'b', 2, 101, 2.0, TO_DATE('2024-01-01')), " +
+                    "('i', '333', 'tom', 'c', 3, 102, 3.0, TO_DATE('2024-01-01'))";
+            ddl = "CREATE " + (localIndex ? "LOCAL" : "") + (uncovered ? "UNCOVERED" : "")
+                    + " INDEX " + indexName + " ON " + fullTableName
+                    + " (char_col1 ASC, int_col1 ASC)"
+                    + (uncovered ? "" : " INCLUDE (long_col1, long_col2)") + (localIndex ? "" :
+                    " SPLIT ON (" + indexSplitKeys + ")");
+            stmt.execute(ddl);
+
+            String query = "SELECT d.char_col1, int_col1 from " + fullTableName + " as d";
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals("chara", rs.getString("char_col1"));
+            assertEquals(2, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(3, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals("chara", rs.getString(1));
+            assertEquals(4, rs.getInt(2));
+            assertFalse(rs.next());
+            conn.createStatement().execute("DROP INDEX " + indexName + " ON " + fullTableName);
+        }
+    }
+
+    @Test
     public void testIndexWithNullableFixedWithCols() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = "TBL_" + generateUniqueName();
