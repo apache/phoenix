@@ -86,12 +86,17 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class CreateTableIT extends ParallelStatsDisabledIT {
-
+    private static String tmpPath;
+    @Before
+    public void setup () throws Exception {
+        tmpPath = System.getProperty("java.io.tmpdir");
+    }
     @Test
     public void testStartKeyStopKey() throws SQLException {
         Properties props = new Properties();
@@ -1560,7 +1565,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             // Now roll back to the old indexing
             IndexUpgradeTool iut =
                     new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
-                            "/tmp/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                            tmpPath + "/index_upgrade_" + UUID.randomUUID().toString(), false, null,
                             false);
             iut.setConf(getUtility().getConfiguration());
             iut.prepareToolSetup();
@@ -1607,7 +1612,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             // Now roll back to the old indexing
             IndexUpgradeTool iut =
                     new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
-                            "/tmp/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                            tmpPath + "/index_upgrade_" + UUID.randomUUID().toString(), false, null,
                             false);
             iut.setConf(getUtility().getConfiguration());
             iut.prepareToolSetup();
