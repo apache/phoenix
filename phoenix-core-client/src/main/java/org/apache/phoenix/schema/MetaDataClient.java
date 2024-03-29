@@ -774,11 +774,10 @@ public class MetaDataClient {
                 effectiveUpdateCacheFreq =
                         (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
                             connection.getQueryServices().getProps().get(
-                                QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
-                                QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
+                  QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
+                  QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
                 ucfInfoForLogging = "pending-disable-index-level";
-            }
-            else if (table.getUpdateCacheFrequency()
+            } else if (table.getUpdateCacheFrequency()
                     != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
                 ucfInfoForLogging = "table-level";
