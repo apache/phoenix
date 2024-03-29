@@ -23,7 +23,6 @@ import java.util.Objects;
 
 import org.apache.phoenix.compile.TupleProjectionCompiler;
 import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -91,9 +90,7 @@ public class TableRef {
         this.alias = alias;
         this.table = table;
         // if UPDATE_CACHE_FREQUENCY is set, always let the server set timestamps
-        this.upperBoundTimeStamp =
-                table.getUpdateCacheFrequency()!=QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY
-                        ? QueryConstants.UNSET_TIMESTAMP : upperBoundTimeStamp;
+        this.upperBoundTimeStamp = table.getUpdateCacheFrequency()!=0 ? QueryConstants.UNSET_TIMESTAMP : upperBoundTimeStamp;
         this.currentTime = this.upperBoundTimeStamp;
         this.lowerBoundTimeStamp = lowerBoundTimeStamp;
         this.hasDynamicCols = hasDynamicCols;
