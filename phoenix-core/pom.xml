@@ -233,12 +233,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-          <groupId>com.google.code.gson</groupId>
-          <artifactId>gson</artifactId>
-        </dependency>
-
-
         <!-- HBase Adjacent Dependencies -->
         <dependency>
             <groupId>org.apache.zookeeper</groupId>
@@ -456,6 +450,11 @@
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+          <groupId>com.google.code.gson</groupId>
+          <artifactId>gson</artifactId>
         </dependency>
 
         <!-- logging -->
