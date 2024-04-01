@@ -579,7 +579,7 @@
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
       <!-- random version, for exclusion only -->
-      <version>2.1.1</version>
+      <version>2.10.1</version>
       <scope>provided</scope>
     </dependency>
 
