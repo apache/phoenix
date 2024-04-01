@@ -4743,12 +4743,16 @@ public class MetaDataClient {
                                 .setColumnName(columnToDrop.getName().getString()).build().buildException();
                     }
                     columnsToDrop.add(new ColumnRef(columnRef.getTableRef(), columnToDrop.getPosition()));
-                    boolean acquiredMutex = writeCell(null, physicalSchemaName,
-                            physicalTableName, columnToDrop.toString());
-                    if (!acquiredMutex) {
-                        throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                    // check if client is already holding a mutex from previous retry
+                    if (!acquiredColumnMutexSet.contains(columnToDrop.toString())) {
+                        boolean acquiredMutex = writeCell(null, physicalSchemaName,
+                                physicalTableName, columnToDrop.toString());
+                        if (!acquiredMutex) {
+                            throw new ConcurrentTableMutationException(physicalSchemaName,
+                                                                        physicalTableName);
+                        }
+                        acquiredColumnMutexSet.add(columnToDrop.toString());
                     }
-                    acquiredColumnMutexSet.add(columnToDrop.toString());
                 }
 
                 dropColumnMutations(table, tableColumnsToDrop);
@@ -4974,7 +4978,14 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    table = connection.getTable(fullTableName);
+                    if (LOGGER.isDebugEnabled()) {
+                        LOGGER.debug(LogUtil.addCustomAnnotations(
+                            "Caught ConcurrentTableMutationException for table "
+                                    + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
+                                    + ". Will update cache and try again...", connection));
+                    }
+                    updateCache(connection.getTenantId(),
+                                    e.getSchemaName(), e.getTableName(), true);
                     retried = true;
                 } catch (Throwable e) {
                     TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
