@@ -3370,6 +3370,12 @@ public class MetaDataClient {
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result, false);
+                // If we created an index, parent's last_ddl_timestamp changed so remove it
+                // from client's cache. It will be refreshed when table is accessed next time.
+                if (tableType == PTableType.INDEX) {
+                    connection.removeTable(tenantId, parent.getName().getString(),
+                                null, parent.getTimeStamp());
+                }
                 return table;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNameNode.toString(),

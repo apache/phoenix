@@ -487,10 +487,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view
-                                // remove cached PTable to ensure latest PTable is always retrieved
-                                connection.removeTable(connection.getTenantId(),
-                                        SchemaUtil.getTableName(schemaN, tableN),
-                                        null, HConstants.LATEST_TIMESTAMP);
                                 new MetaDataClient(connection)
                                         .updateCache(tenantId, schemaN, tableN, true);
                                 // skip last ddl timestamp validation in the retry

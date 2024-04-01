@@ -234,14 +234,7 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         }
 
         // The indexes should have got the UPDATE_CACHE_FREQUENCY value of their base table
-        int numRPCUpsert = 0;
-        int numRPCSelect = 0;
-        if (isLastDDLTimestampValidationEnabled) {
-            // we created indexes on the table which will bump the last_ddl_timestamp of the table
-            // hence we will do 1 getTable RPC for the upsert
-            numRPCUpsert = 1;
-        }
-        helpTestUpdateCache(fullTableName, new int[] {numRPCUpsert, numRPCSelect}, false);
+        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + localIndex,
                 new int[] {0}, true);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + globalIndex,
