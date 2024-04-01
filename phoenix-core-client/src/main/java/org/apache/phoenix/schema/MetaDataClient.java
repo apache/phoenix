@@ -4980,9 +4980,9 @@ public class MetaDataClient {
                     }
                     if (LOGGER.isDebugEnabled()) {
                         LOGGER.debug(LogUtil.addCustomAnnotations(
-                        "Caught ConcurrentTableMutationException for table "
-                                + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
-                                + ". Will update cache and try again...", connection));
+                            "Caught ConcurrentTableMutationException for table "
+                                    + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
+                                    + ". Will update cache and try again...", connection));
                     }
                     updateCache(connection.getTenantId(),
                                     e.getSchemaName(), e.getTableName(), true);
