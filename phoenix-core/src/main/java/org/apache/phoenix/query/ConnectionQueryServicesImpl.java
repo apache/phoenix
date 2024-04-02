@@ -718,13 +718,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
         byte[] currentKey = null;
-        HRegionLocation prevRegionLocation = null;
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
                 // to get the sizing info we need, but this would require a new class in the same package and a cast
                 // to this implementation class, so it's probably not worth it.
                 List<HRegionLocation> locations = Lists.newArrayList();
+                HRegionLocation prevRegionLocation = null;
                 currentKey = startRowKey;
                 do {
                     HRegionLocation regionLocation =
