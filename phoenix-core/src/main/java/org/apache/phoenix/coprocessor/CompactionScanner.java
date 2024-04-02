@@ -114,7 +114,7 @@ public class CompactionScanner implements InternalScanner {
         this.store = store;
         this.env = env;
         this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-        this.emptyCQ = SchemaUtil.getEncodingScheme(table);
+        this.emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         String columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();

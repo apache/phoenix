@@ -120,6 +120,36 @@ public class RowKeyMatcherTest {
                 Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x04"),
                 300));
 
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000006".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x8F"),
+                300));
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000007".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\x9F"),
+                300));
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000008".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\xAF"),
+                300));
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000009".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\xBF"),
+                300));
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_0000010".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\xCF"),
+                300));
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000011".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\xDF"),
+                300));
+        sampleTableList.add(new TableTTLInfo("TEST_ENTITY.T_000001".getBytes(),
+                ByteUtil.EMPTY_BYTE_ARRAY, "TEST_ENTITY.GV_000012".getBytes(),
+                Bytes.toBytesBinary("\\x7F\\xFF\\xFF\\xFF\\xFF\\xFF\\x80\\xEF"),
+                300));
+
+
         for (int i = 0; i < sampleTableList.size(); i++) {
             Integer tableId = cache.addTable(sampleTableList.get(i));
             rowKeyMatcher.put(sampleTableList.get(i).getMatchPattern(), tableId);
@@ -180,13 +210,15 @@ public class RowKeyMatcherTest {
     }
 
     private void assertResults(TableTTLInfoCache cache, List<TableTTLInfo> sampleTableList) {
-        //Assert results
+//        //Assert results
         Set<TableTTLInfo> dedupedTables = new HashSet<TableTTLInfo>();
         dedupedTables.addAll(sampleTableList);
 
-        int tableCountExpected = dedupedTables.size();
+        int tableCountExpected = sampleTableList.size();
+        int dedupeTableCountExpected = dedupedTables.size();
         int tableCountActual = cache.getNumTablesInCache();
         String message = String.format("expected = %d, actual = %d", tableCountExpected, tableCountActual);
+        assertTrue(message, dedupeTableCountExpected == tableCountActual);
         assertTrue(message, tableCountExpected == tableCountActual);
     }
 

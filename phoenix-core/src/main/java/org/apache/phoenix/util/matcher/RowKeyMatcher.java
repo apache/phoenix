@@ -90,15 +90,9 @@ public class RowKeyMatcher {
 			return node;
 		}
 
-		int index = (int) key[depth] % (int) R;
-		int originalIndex = index;
-		int convertedIndex = index;
-		if (index < 0) {
-			convertedIndex = 128 + (128 + index);
-			index = convertedIndex;
-		}
+		int index = key[depth] & 0xFF;
 		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace(String.format("%d, %d, %d", depth, originalIndex, convertedIndex));
+			LOGGER.trace(String.format("depth = %d, index = %d", depth, index));
 		}
 
 		return get(node.tryOptimisticGet(index), key, depth + 1);
@@ -121,15 +115,9 @@ public class RowKeyMatcher {
 			return node;
 		}
 
-		int index = (int) key[depth] % (int) R;
-		int originalIndex = index;
-		int convertedIndex = index;
-		if (index < 0) {
-			convertedIndex = 128 + (128 + index);
-			index = convertedIndex;
-		}
+		int index = key[depth] & 0xFF;
 		if (LOGGER.isTraceEnabled()) {
-			LOGGER.trace(String.format("%d, %d, %d", depth, originalIndex, convertedIndex));
+			LOGGER.trace(String.format("depth = %d, index = %d", depth, index));
 		}
 
 		if (!isLocked && node.next[index] == null) {
