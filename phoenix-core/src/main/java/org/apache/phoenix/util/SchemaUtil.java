@@ -36,7 +36,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -68,7 +67,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -528,7 +526,7 @@ public class SchemaUtil {
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
     }
 
-    public static byte[] getEncodingScheme(PTable table) {
+    public static byte[] getEmptyColumnQualifier(PTable table) {
         return table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
                 QueryConstants.EMPTY_COLUMN_BYTES :
                 table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
