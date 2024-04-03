@@ -18,7 +18,8 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -47,6 +48,8 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -65,7 +68,6 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
                     .setNameFormat("query-timeout-tests-%d").build());
 
     private String tableName;
-    private String tableNameWithDeletedRows;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -79,14 +81,9 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
     }
 
     @Before
-    public void createTableAndInsertRowsForBothTables() throws Exception {
+    public void createTableAndInsertRows() throws Exception {
         tableName = generateUniqueName();
-        tableNameWithDeletedRows = generateUniqueName();
-        createTableAndInsertRows(tableName, 1000, false);
-        createTableAndInsertRows(tableNameWithDeletedRows, 5000, true);
-    }
-
-    private void createTableAndInsertRows(String tableName, int numRows, boolean deleteRows) throws Exception {
+        int numRows = 1000;
         String ddl =
             "CREATE TABLE " + tableName + " (K INTEGER NOT NULL PRIMARY KEY, V VARCHAR)";
         try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -99,12 +96,6 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
                 stmt.executeUpdate();
             }
             conn.commit();
-
-            if (deleteRows) {
-                dml = "DELETE FROM " + tableNameWithDeletedRows + " WHERE K > 10 AND K < 4996";
-                conn.prepareStatement(dml).execute();
-                conn.commit();
-            }
         }
     }
 
@@ -187,7 +178,7 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
     @Test
     public void testScanningResultIteratorQueryTimeoutForPagingWithVeryLowTimeout() throws Exception {
         //Arrange
-        PreparedStatement ps = loadDataAndPreparePagedQuery(1,1, tableName, 0);
+        PreparedStatement ps = loadDataAndPreparePagedQuery(1,1);
 
         //Act + Assert
         try {
@@ -215,30 +206,59 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testScanningResultIteratorShouldNotQueryTimeoutForPagingAfterReceivingAValidRow() throws Exception {
-        //For tableNameWithDeletedRows we created table with 5000 rows and then deleted rows between 10 and 4996, and
-        // we have page timeout of 7ms which should give us valid result of 2,4,6,8 and then it should page out and
-        // we have a queryTimeout in millis as 10 ms which should have timeout in between 10 and 4996 of query but
-        // it will not as we already got one valid result so we let the scanner continue
         //Arrange
-        PreparedStatement ps = loadDataAndPreparePagedQuery(10,1, tableNameWithDeletedRows, 7);
+        PreparedStatement ps = loadDataAndPreparePagedQuery(10,1);
+
+        ManualEnvironmentEdge injectEdge;
+        injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+        EnvironmentEdgeManager.injectEdge(injectEdge);
 
         //Act + Assert
         try {
             //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
             ResultSet rs = ps.executeQuery();
-            while(rs.next()) {}
+            while(rs.next()) {
+                injectEdge.incrementValue(10);
+            }
         } catch (SQLException e) {
             fail("Query should have run smoothly");
         } finally {
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
         }
+
+        PreparedStatement failingPs = loadDataAndPreparePagedQuery(0,0);
+
+        try {
+            //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
+            ResultSet rs = failingPs.executeQuery();
+            EnvironmentEdgeManager.reset();
+            while(rs.next()) {}
+            fail("Expected query to timeout with a 0 ms timeout");
+        } catch (SQLException e) {
+            //OPERATION_TIMED_OUT Exception expected
+            Throwable t = e;
+            // SQLTimeoutException can be wrapped inside outer exceptions like PhoenixIOException
+            while (t != null && !(t instanceof SQLTimeoutException)) {
+                t = t.getCause();
+            }
+            if (t == null) {
+                fail("Expected query to fail with SQLTimeoutException");
+            }
+            assertEquals(OPERATION_TIMED_OUT.getErrorCode(),
+                    ((SQLTimeoutException)t).getErrorCode());
+        } finally {
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+        }
+
     }
 
     @Test
     public void testScanningResultIteratorQueryTimeoutForPagingWithNormalLowTimeout() throws Exception {
         //Arrange
-        PreparedStatement ps = loadDataAndPreparePagedQuery(30000,30, tableName, 0);
+        PreparedStatement ps = loadDataAndPreparePagedQuery(30000,30);
 
         //Act + Assert
         try {
@@ -313,17 +333,17 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         });
     }
 
-    private PreparedStatement loadDataAndPreparePagedQuery(int timeoutMs, int timeoutSecs, String tableName, int pageSize) throws Exception {
+    private PreparedStatement loadDataAndPreparePagedQuery(int timeoutMs, int timeoutSecs) throws Exception {
         Properties props = new Properties();
         //Setting Paging Size to 0 and Query Timeout to 1ms so that query get paged quickly and times out immediately
         props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, String.valueOf(timeoutMs));
-        props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(pageSize));
+        props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(0));
         PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class);
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + tableName + " WHERE K % 2 = 0");
         PhoenixStatement phoenixStmt = ps.unwrap(PhoenixStatement.class);
         assertEquals(timeoutMs, phoenixStmt.getQueryTimeoutInMillis());
         assertEquals(timeoutSecs, phoenixStmt.getQueryTimeout());
-        assertEquals(pageSize, conn.getQueryServices().getProps().getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1));
+        assertEquals(0, conn.getQueryServices().getProps().getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1));
         return ps;
     }
 }
