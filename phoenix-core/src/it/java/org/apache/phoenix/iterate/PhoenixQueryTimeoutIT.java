@@ -213,6 +213,8 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         injectEdge = new ManualEnvironmentEdge();
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
         EnvironmentEdgeManager.injectEdge(injectEdge);
+        // First query we are executing with timeout of 10ms, so it should not timeout as first row will be retrieved
+        // before 10 ms.
 
         //Act + Assert
         try {
@@ -229,7 +231,7 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
         }
 
         PreparedStatement failingPs = loadDataAndPreparePagedQuery(0,0);
-
+        //Second query should timeout as queryTimeout is set to 0ms
         try {
             //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
