@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -84,6 +85,8 @@ public class ScanningResultIterator implements ResultIterator {
     private final long maxQueryEndTime;
 
     private long dummyRowCounter = 0;
+
+    private AtomicBoolean hasFirstValidResult = new AtomicBoolean(false);
 
     private final ScanningResultPostDummyResultCaller scanningResultPostDummyResultCaller;
     private final ScanningResultPostValidResultCaller scanningResultPostValidResultCaller;
@@ -205,7 +208,7 @@ public class ScanningResultIterator implements ResultIterator {
             while (result != null && (result.isEmpty() || isDummy(result))) {
                 dummyRowCounter += 1;
                 long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
-                if (timeOutForScan < 0) {
+                if (!hasFirstValidResult.get() && timeOutForScan < 0) {
                     throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
                             ". Query couldn't be completed in the allotted time : "
                                     + context.getStatement().getQueryTimeoutInMillis() + " ms").build().buildException();
@@ -225,6 +228,7 @@ public class ScanningResultIterator implements ResultIterator {
                 close(); // Free up resources early
                 return null;
             }
+            hasFirstValidResult.set(true);
             // TODO: use ResultTuple.setResult(result)?
             // Need to create a new one if holding on to it (i.e. OrderedResultIterator)
             processAfterRetrievingValidResult();
