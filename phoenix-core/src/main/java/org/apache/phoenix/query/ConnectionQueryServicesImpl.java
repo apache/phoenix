@@ -312,8 +312,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private static final int DEFAULT_OUT_OF_ORDER_MUTATIONS_WAIT_TIME_MS = 1000;
     private static final String ALTER_TABLE_SET_PROPS =
         "ALTER TABLE %s SET %s=%s";
-    private final GuidePostsCacheProvider
-            GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     protected final Configuration config;
     protected final ConnectionInfo connectionInfo;
     // Copy of config.getProps(), but read-only to prevent synchronization that we
@@ -322,7 +320,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final String userName;
     private final User user;
     private final ConcurrentHashMap<ImmutableBytesWritable,ConnectionQueryServices> childServices;
-    private final GuidePostsCacheWrapper tableStatsCache;
+    private GuidePostsCacheWrapper tableStatsCache;
 
     // Cache the latest meta data here for future connections
     // writes guarded by "latestMetaDataLock"
@@ -452,10 +450,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             list.add(queue);
         }
         connectionQueues = ImmutableList.copyOf(list);
-
-        // A little bit of a smell to leak `this` here, but should not be a problem
-        this.tableStatsCache = GUIDE_POSTS_CACHE_PROVIDER.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
-                QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), this, config);
 
         this.isAutoUpgradeEnabled = config.getBoolean(AUTO_UPGRADE_ENABLED, QueryServicesOptions.DEFAULT_AUTO_UPGRADE_ENABLED);
         this.maxConnectionsAllowed = config.getInt(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS,
@@ -3342,6 +3336,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             LOGGER.info("An instance of ConnectionQueryServices was created.");
                             openConnection();
                             hConnectionEstablished = true;
+                            tableStatsCache =
+                                    (new GuidePostsCacheProvider()).getGuidePostsCache(
+                                        props.getProperty(GUIDE_POSTS_CACHE_FACTORY_CLASS,
+                                            QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS),
+                                        ConnectionQueryServicesImpl.this, config);
                             String skipSystemExistenceCheck =
                                 props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
                             if (skipSystemExistenceCheck != null &&
