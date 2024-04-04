@@ -1520,7 +1520,7 @@ public class MetaDataClient {
             tableRef = resolver.getTables().get(0);
             Date asyncCreatedDate = null;
             if (statement.isAsync()) {
-                asyncCreatedDate = new Date(tableRef.getTimeStamp());
+                asyncCreatedDate = new Date(tableRef.getCurrentTime());
             }
             dataTable = tableRef.getTable();
             boolean isTenantConnection = connection.getTenantId() != null;
