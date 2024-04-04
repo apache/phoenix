@@ -1770,11 +1770,10 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
             // create index, getTable RPCs for base table
             createIndex(conn1, tableName, indexName, "v2");
-            // refreshing table after creating index
             // getting current time,
             // create index(compile+execute),
             // alter index state after building(compile+execute)
-            numTableRPCs += 6;
+            numTableRPCs += 5;
             assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
 
 

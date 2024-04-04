@@ -1514,6 +1514,7 @@ public class MetaDataClient {
         Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
         String physicalSchemaName = null;
         String physicalTableName = null;
+        PTable dataTable = null;
         try {
             ColumnResolver resolver = FromCompiler.getResolver(statement, connection, statement.getUdfParseNodes());
             tableRef = resolver.getTables().get(0);
@@ -1521,7 +1522,7 @@ public class MetaDataClient {
             if (statement.isAsync()) {
                 asyncCreatedDate = new Date(tableRef.getTimeStamp());
             }
-            PTable dataTable = tableRef.getTable();
+            dataTable = tableRef.getTable();
             boolean isTenantConnection = connection.getTenantId() != null;
             if (isTenantConnection) {
                 if (dataTable.getType() != PTableType.VIEW) {
@@ -1774,7 +1775,18 @@ public class MetaDataClient {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
 
-        return buildIndex(table, tableRef);
+        MutationState state = buildIndex(table, tableRef);
+        // If client is validating LAST_DDL_TIMESTAMPS, parent's last_ddl_timestamp changed
+        // so remove it from client's cache. It will be refreshed when table is accessed next time.
+        boolean lastDDLTimestampValidationEnabled =
+                connection.getQueryServices().getProps().getBoolean(
+                        QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+        if (lastDDLTimestampValidationEnabled) {
+            connection.removeTable(connection.getTenantId(),dataTable.getName().getString(),
+                    null, dataTable.getTimeStamp());
+        }
+        return state;
     }
 
     /**
@@ -3369,12 +3381,6 @@ public class MetaDataClient {
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result, false);
-                // If we created an index, parent's last_ddl_timestamp changed so remove it
-                // from client's cache. It will be refreshed when table is accessed next time.
-                if (tableType == PTableType.INDEX) {
-                    connection.removeTable(tenantId, parent.getName().getString(),
-                                null, parent.getTimeStamp());
-                }
                 return table;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNameNode.toString(),
