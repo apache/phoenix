@@ -775,11 +775,10 @@ public class MetaDataClient {
                 effectiveUpdateCacheFreq =
                         (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
                             connection.getQueryServices().getProps().get(
-                                QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
-                                QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
+                  QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
+                  QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
                 ucfInfoForLogging = "pending-disable-index-level";
-            }
-            else if (table.getUpdateCacheFrequency()
+            } else if (table.getUpdateCacheFrequency()
                     != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
                 ucfInfoForLogging = "table-level";
@@ -4766,7 +4765,8 @@ public class MetaDataClient {
                         boolean acquiredMutex = writeCell(null, physicalSchemaName,
                                 physicalTableName, columnToDrop.toString());
                         if (!acquiredMutex) {
-                            throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
+                            throw new ConcurrentTableMutationException(physicalSchemaName,
+                                                                        physicalTableName);
                         }
                         acquiredColumnMutexSet.add(columnToDrop.toString());
                     }
@@ -4997,9 +4997,9 @@ public class MetaDataClient {
                     }
                     if (LOGGER.isDebugEnabled()) {
                         LOGGER.debug(LogUtil.addCustomAnnotations(
-                        "Caught ConcurrentTableMutationException for table "
-                                + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
-                                + ". Will update cache and try again...", connection));
+                            "Caught ConcurrentTableMutationException for table "
+                                    + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
+                                    + ". Will update cache and try again...", connection));
                     }
                     updateCache(connection.getTenantId(),
                                     e.getSchemaName(), e.getTableName(), true);

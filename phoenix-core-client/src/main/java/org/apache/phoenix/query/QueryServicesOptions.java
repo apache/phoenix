@@ -385,7 +385,8 @@ public class QueryServicesOptions {
                 = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
     public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = true;
     public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = true;
-    public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX = Long.toString(0L);
+    public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
+                                                                            = Long.toString(0L);
 
     // default system task handling interval in milliseconds
     public static final long DEFAULT_TASK_HANDLING_INTERVAL_MS = 60*1000; // 1 min
