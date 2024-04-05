@@ -1615,14 +1615,21 @@ public class ScanUtil {
     public static PageFilter removePageFilter(Scan scan) {
         Filter filter = scan.getFilter();
         if (filter != null) {
+            PagingFilter pagingFilter = null;
             if (filter instanceof PagingFilter) {
-                filter = ((PagingFilter) filter).getDelegateFilter();
+                pagingFilter = (PagingFilter) filter;
+                filter = pagingFilter.getDelegateFilter();
                 if (filter == null) {
                     return null;
                 }
             }
             if (filter instanceof PageFilter) {
-                scan.setFilter(null);
+                if (pagingFilter != null) {
+                    pagingFilter.setDelegateFilter(null);
+                    scan.setFilter(pagingFilter);
+                } else {
+                    scan.setFilter(null);
+                }
                 return (PageFilter) filter;
             } else if (filter instanceof FilterList) {
                 return removePageFilterFromFilterList((FilterList) filter);
