@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.2.0 - Unreleased (as of 2024-02-28)
+## Release 5.2.0 - Unreleased (as of 2024-04-05)
 
 
 
@@ -40,6 +40,9 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7253](https://issues.apache.org/jira/browse/PHOENIX-7253) | Metadata lookup performance improvement for range scan queries |  Critical | . |
+| [PHOENIX-7275](https://issues.apache.org/jira/browse/PHOENIX-7275) | Update HBase 2.5 default version to 2.5.8 |  Minor | core |
+| [PHOENIX-7258](https://issues.apache.org/jira/browse/PHOENIX-7258) | Query Optimizer should pick Index hint even for point lookup queries |  Major | . |
 | [PHOENIX-7229](https://issues.apache.org/jira/browse/PHOENIX-7229) | Leverage bloom filters for single key point lookups |  Major | . |
 | [PHOENIX-7230](https://issues.apache.org/jira/browse/PHOENIX-7230) | Optimize rpc call to master if all indexes are migrated to new coprocs |  Major | . |
 | [PHOENIX-7216](https://issues.apache.org/jira/browse/PHOENIX-7216) | Bump Hadoop version to 3.2.4 for 2.5.x profile |  Major | core |
@@ -132,6 +135,10 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7299](https://issues.apache.org/jira/browse/PHOENIX-7299) | ScanningResultIterator should not time out a query after receiving a valid result |  Major | . |
+| [PHOENIX-7295](https://issues.apache.org/jira/browse/PHOENIX-7295) | Fix getTableRegions failing due to overlap/inconsistencies on region |  Major | . |
+| [PHOENIX-7291](https://issues.apache.org/jira/browse/PHOENIX-7291) | Bump up omid to 1.1.2 |  Major | . |
+| [PHOENIX-7285](https://issues.apache.org/jira/browse/PHOENIX-7285) | Upgade Zookeeper to 3.8.4 |  Major | core |
 | [PHOENIX-7234](https://issues.apache.org/jira/browse/PHOENIX-7234) | Bump org.apache.commons:commons-compress from 1.21 to 1.26.0 |  Major | core |
 | [PHOENIX-7223](https://issues.apache.org/jira/browse/PHOENIX-7223) | Make Sure Tools Always Close HBase Connections on Exit |  Minor | core |
 | [PHOENIX-7160](https://issues.apache.org/jira/browse/PHOENIX-7160) | Change the TSO default port to be compatible with Omid 1.1.1 |  Major | omid |

@@ -23,6 +23,13 @@ These release notes cover new developer and user-facing incompatibilities, impor
 
 ---
 
+* [PHOENIX-7285](https://issues.apache.org/jira/browse/PHOENIX-7285) | *Major* | **Upgade Zookeeper to 3.8.4**
+
+Phoenix now includes Zookeeper 3.8.4 when build for HBase 2.4 and later.
+
+
+---
+
 * [PHOENIX-7230](https://issues.apache.org/jira/browse/PHOENIX-7230) | *Major* | **Optimize rpc call to master if all indexes are migrated to new coprocs**
 
 Use "phoenix.index.region.observer.enabled.all.tables" as "false" only if new index coprocs (GlobalIndexChecker, IndexRegionObserver etc) are not in use by all tables. Default value "true" indicates that we will not perform extra RPC call to retrieve TableDescriptor for all Mutations.
