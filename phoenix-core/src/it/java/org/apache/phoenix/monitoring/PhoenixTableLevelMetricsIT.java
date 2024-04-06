@@ -38,6 +38,7 @@ import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -1280,14 +1281,24 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 assertTrue(metricExists);
                 metricExists = false;
                 //assert BaseTable is not being queried
-                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
-                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
-                        metricExists = true;
-                        assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
-                        break;
+                //if client is validating last_ddl_timestamps with ucf=never,
+                //there will be no metrics for base table (like getTable RPC times/counts).
+                boolean lastDDLTimestampValidationEnabled =
+                        conn.unwrap(PhoenixConnection.class).getQueryServices().getProps().getBoolean(
+                                QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                                QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+                if (lastDDLTimestampValidationEnabled) {
+                    assertFalse(getPhoenixTableClientMetrics().containsKey(dataTable));
+                } else {
+                    for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
+                        if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                            metricExists = true;
+                            assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
+                            break;
+                        }
                     }
+                    assertTrue(metricExists);
                 }
-                assertTrue(metricExists);
             }
         }
     }
