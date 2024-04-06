@@ -70,7 +70,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -224,7 +223,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -444,8 +442,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     // the TNFE can still be for the base table
                                     if (plan != null && plan.getTableRef() != null) {
                                         PTable queryPlanTable = plan.getTableRef().getTable();
-                                        if (queryPlanTable != null &&
-                                                queryPlanTable.getIndexType() == IndexType.LOCAL) {
+                                        if (queryPlanTable != null
+                                                && queryPlanTable.getIndexType()
+                                                    == IndexType.LOCAL) {
                                             sName = queryPlanTable.getSchemaName().getString();
                                             tName = queryPlanTable.getTableName().getString();
                                         }

@@ -1652,14 +1652,14 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             map = viewPTable2.getAncestorLastDDLTimestampMap();
             assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
             assertEquals(2, viewPTable2.getIndexes().size());
-            for (PTable indexT : viewPTable2.getIndexes()) {
+            for (PTable indexOfView : viewPTable2.getIndexes()) {
                 // inherited index
-                if (indexT.getTableName().getString().equals(index2)) {
-                    map = indexT.getAncestorLastDDLTimestampMap();
+                if (indexOfView.getTableName().getString().equals(index2)) {
+                    map = indexOfView.getAncestorLastDDLTimestampMap();
                     assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
                 } else {
                     // view index
-                    map = indexT.getAncestorLastDDLTimestampMap();
+                    map = indexOfView.getAncestorLastDDLTimestampMap();
                     assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
                     assertEquals(viewPTable2.getLastDDLTimestamp(), map.get(viewPTable2.getKey()));
                 }

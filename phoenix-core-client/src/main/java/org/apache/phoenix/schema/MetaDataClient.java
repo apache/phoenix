@@ -1783,7 +1783,7 @@ public class MetaDataClient {
                         QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
                         QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
         if (lastDDLTimestampValidationEnabled) {
-            connection.removeTable(connection.getTenantId(),dataTable.getName().getString(),
+            connection.removeTable(connection.getTenantId(), dataTable.getName().getString(),
                     null, dataTable.getTimeStamp());
         }
         return state;

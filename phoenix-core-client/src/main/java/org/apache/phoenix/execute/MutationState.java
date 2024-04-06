@@ -1247,8 +1247,7 @@ public class MutationState implements SQLCloseable {
                     PName tenantId = connection.getTenantId();
                     mc.updateCache(tenantId, e.getSchemaName(), e.getTableName(), true);
                     send(tableRefIterator);
-                }
-                else {
+                } else {
                     throw e;
                 }
             }
