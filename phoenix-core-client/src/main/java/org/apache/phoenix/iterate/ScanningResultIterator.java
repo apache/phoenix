@@ -85,6 +85,8 @@ public class ScanningResultIterator implements ResultIterator {
 
     private long dummyRowCounter = 0;
 
+    private boolean hasFirstValidResult = false;
+
     private final ScanningResultPostDummyResultCaller scanningResultPostDummyResultCaller;
     private final ScanningResultPostValidResultCaller scanningResultPostValidResultCaller;
 
@@ -205,7 +207,7 @@ public class ScanningResultIterator implements ResultIterator {
             while (result != null && (result.isEmpty() || isDummy(result))) {
                 dummyRowCounter += 1;
                 long timeOutForScan = maxQueryEndTime - EnvironmentEdgeManager.currentTimeMillis();
-                if (timeOutForScan < 0) {
+                if (!hasFirstValidResult && timeOutForScan < 0) {
                     throw new SQLExceptionInfo.Builder(OPERATION_TIMED_OUT).setMessage(
                             ". Query couldn't be completed in the allotted time : "
                                     + context.getStatement().getQueryTimeoutInMillis() + " ms").build().buildException();
@@ -225,6 +227,7 @@ public class ScanningResultIterator implements ResultIterator {
                 close(); // Free up resources early
                 return null;
             }
+            hasFirstValidResult = true;
             // TODO: use ResultTuple.setResult(result)?
             // Need to create a new one if holding on to it (i.e. OrderedResultIterator)
             processAfterRetrievingValidResult();

@@ -66,11 +66,16 @@ public class IndexScrutinyToolBaseIT extends BaseTest {
 
     protected List<Job> runScrutiny(Class<? extends IndexScrutinyMapper> mapperClass,
                                     String[] cmdArgs) throws Exception {
+        return runScrutiny(mapperClass, cmdArgs, 0);
+    }
+
+    protected List<Job> runScrutiny(Class<? extends IndexScrutinyMapper> mapperClass,
+                                    String[] cmdArgs, int expectedStatus) throws Exception {
         IndexScrutinyTool scrutiny = new IndexScrutinyTool(mapperClass);
         Configuration conf = new Configuration(getUtility().getConfiguration());
         scrutiny.setConf(conf);
         int status = scrutiny.run(cmdArgs);
-        assertEquals(0, status);
+        assertEquals(expectedStatus, status);
         for (Job job : scrutiny.getJobs()) {
             assertTrue(job.waitForCompletion(true));
         }

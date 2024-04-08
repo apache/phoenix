@@ -44,6 +44,16 @@ public class TestingMapReduceParallelScanGrouper extends MapReduceParallelScanGr
         return regionLocations;
     }
 
+    @Override
+    public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName,
+        byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException {
+        List<HRegionLocation> regionLocations =
+            super.getRegionBoundaries(context, tableName, startRegionBoundaryKey,
+                stopRegionBoundaryKey);
+        numCallsToGetRegionBoundaries.incrementAndGet();
+        return regionLocations;
+    }
+
     public static int getNumCallsToGetRegionBoundaries() {
         return numCallsToGetRegionBoundaries.get();
     }

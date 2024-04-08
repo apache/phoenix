@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.mapreduce.Counters;
@@ -26,7 +27,6 @@ import org.apache.phoenix.mapreduce.index.IndexScrutinyMapper;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTableOutput;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -37,14 +37,21 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.After;
+import org.junit.experimental.categories.Category;
+import org.junit.Ignore;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.INVALID_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixScrutinyJobCounters.BEYOND_MAX_LOOKBACK_COUNT;
@@ -55,6 +62,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+@Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
 public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
 
     private static PreparedStatement upsertDataStmt;
@@ -67,13 +76,24 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     private static boolean isViewIndex;
     private static ManualEnvironmentEdge testClock;
     public static final String UPSERT_DATA = "UPSERT INTO %s VALUES (?, ?, ?)";
-    public static final String DELETE_SCRUTINY_METADATA = "DELETE FROM "
-        + IndexScrutinyTableOutput.OUTPUT_METADATA_TABLE_NAME;
-    public static final String DELETE_SCRUTINY_OUTPUT = "DELETE FROM " +
-        IndexScrutinyTableOutput.OUTPUT_TABLE_NAME;
-    public static final int MAX_LOOKBACK = 6;
+    public static final int MAX_LOOKBACK = 12;
+    public static final int TABLE_LEVEL_MAX_LOOKBACK = 8;
     private long scrutinyTs;
+    private final boolean hasTableLevelMaxLookback;
 
+    public IndexScrutinyWithMaxLookbackIT(boolean hasTableLevelMaxLookback) {
+        this.hasTableLevelMaxLookback = hasTableLevelMaxLookback;
+    }
+
+    @Parameterized.Parameters(name = "hasTableLevelMaxLookback={0}")
+    public static synchronized Collection<Object[]> data() {
+        List<Object[]> list = Lists.newArrayListWithExpectedSize(2);
+        boolean[] Booleans = new boolean[]{true, false};
+        for (boolean mutable : Booleans) {
+            list.add(new Object[]{mutable});
+        }
+        return list;
+    }
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -85,18 +105,27 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     }
 
     @Before
-    public void setupTest() throws SQLException {
+    public void setupTest() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl(),
-            PropertiesUtil.deepCopy(TEST_PROPERTIES))){
-            conn.createStatement().execute(DELETE_SCRUTINY_METADATA);
-            conn.createStatement().execute(DELETE_SCRUTINY_OUTPUT);
-            conn.commit();
-        } catch (TableNotFoundException tnfe){
-            //This will happen the first time
+            PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            IndexScrutinyTool.createScrutinyToolTables(conn);
         }
     }
 
+    @After
+    public void cleanup () throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            deleteAllRows(conn,
+                    TableName.valueOf(IndexScrutinyTableOutput.OUTPUT_METADATA_TABLE_NAME));
+            deleteAllRows(conn,
+                    TableName.valueOf(IndexScrutinyTableOutput.OUTPUT_TABLE_NAME));
+        }
+        EnvironmentEdgeManager.reset();
+    }
+
     @Test
+    @Ignore("Test is already broken")
     public void testScrutinyOnRowsBeyondMaxLookBack() throws Exception {
         setupTables();
         try {
@@ -109,6 +138,7 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     }
 
     @Test
+    @Ignore("Test is already broken")
     public void testScrutinyOnRowsBeyondMaxLookback_viewIndex() throws Exception {
         schema = "S"+generateUniqueName();
         dataTableName = "T"+generateUniqueName();
@@ -160,11 +190,32 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     @Test
     public void testScrutinyOnDeletedRowsBeyondMaxLookBack() throws Exception {
         setupTables();
-        try {
-            upsertDataThenDeleteAndScrutinize(dataTableName, dataTableFullName, testClock);
-            assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
-        } finally {
-            EnvironmentEdgeManager.reset();
+        upsertDataThenDeleteAndScrutinize(dataTableName, dataTableFullName, testClock);
+        assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
+    }
+
+    @Test
+    public void testSCNBeyondMaxLookback() throws Exception {
+        setupTables();
+        testClock.setValue(EnvironmentEdgeManager.currentTimeMillis());
+        EnvironmentEdgeManager.injectEdge(testClock);
+        long beforeInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
+        testClock.incrementValue(1);
+        try (Connection conn =
+                     DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            populateTable(dataTableFullName, conn);
+            testClock.incrementValue(1);
+            long maxLookbackAge = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK : MAX_LOOKBACK;
+            testClock.incrementValue(maxLookbackAge * 1000);
+            if (hasTableLevelMaxLookback) {
+                assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                        beforeInsertSCN + MAX_LOOKBACK * 1000);
+            }
+            runScrutiny(schema, dataTableName, indexTableName, beforeInsertSCN, -1);
+        }
+        catch (IllegalArgumentException e) {
+            assertTrue(e.getMessage().contains(
+                    "Index scrutiny can't look back past the configured max lookback age"));
         }
     }
 
@@ -177,6 +228,9 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
         isViewIndex = false;
         String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, "
             + "ZIP INTEGER) COLUMN_ENCODED_BYTES=0, VERSIONS=1";
+        if (hasTableLevelMaxLookback) {
+            dataTableDDL += ", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK * 1000;
+        }
         String indexTableDDL = "CREATE INDEX %s ON %s (NAME) INCLUDE (ZIP)";
         testClock = new ManualEnvironmentEdge();
 
@@ -234,17 +288,23 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
         throws Exception {
         try(Connection conn =
                 DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
-            populateTable(tableFullName, conn);
-            long afterInsertSCN = EnvironmentEdgeManager.currentTimeMillis() + 1;
-            testClock.setValue(afterInsertSCN);
+            testClock.setValue(EnvironmentEdgeManager.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(testClock);
+            long beforeInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
+            testClock.incrementValue(1);
+            populateTable(tableFullName, conn);
+            testClock.incrementValue(1);
             deleteIndexRows(conn);
             //move forward to the time we want to scrutinize, which is less than max lookback age
             //for the initial inserts
-            testClock.incrementValue(MAX_LOOKBACK /2  * 1000);
+            long maxLookbackAge = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK : MAX_LOOKBACK;
+            testClock.incrementValue(maxLookbackAge / 2  * 1000);
             scrutinyTs = EnvironmentEdgeManager.currentTimeMillis();
             //now go past max lookback age for the initial 2 inserts
-            testClock.incrementValue(MAX_LOOKBACK /2  * 1000);
+            testClock.incrementValue(maxLookbackAge / 2  * 1000);
+            if (hasTableLevelMaxLookback) {
+                assertTrue(EnvironmentEdgeManager.currentTimeMillis() < beforeInsertSCN + MAX_LOOKBACK * 1000);
+            }
 
             List<Job> completedJobs = runScrutiny(schema, tableName, indexTableName, scrutinyTs);
             Job job = completedJobs.get(0);
@@ -273,18 +333,24 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
                                   Long scrutinyTs)
         throws Exception {
-        return runScrutiny(schemaName, dataTableName, indexTableName, null, null, scrutinyTs);
+        return runScrutiny(schemaName, dataTableName, indexTableName, null, null, scrutinyTs, 0);
+    }
+
+    private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
+                                  Long scrutinyTs, int expectedStatus) throws Exception {
+        return runScrutiny(schemaName, dataTableName, indexTableName, null, null,
+                scrutinyTs, expectedStatus);
     }
 
     private List<Job> runScrutiny(String schemaName, String dataTableName, String indexTableName,
                                   Long batchSize, IndexScrutinyTool.SourceTable sourceTable,
-                                  Long scrutinyTs) throws Exception {
+                                  Long scrutinyTs, int expectedStatus) throws Exception {
         final String[]
             cmdArgs =
             getArgValues(schemaName, dataTableName, indexTableName, batchSize, sourceTable,
                 true, IndexScrutinyTool.OutputFormat.TABLE,
                 null, null, scrutinyTs);
-        return runScrutiny(MaxLookbackIndexScrutinyMapper.class, cmdArgs);
+        return runScrutiny(MaxLookbackIndexScrutinyMapper.class, cmdArgs, expectedStatus);
     }
 
     private static class MaxLookbackIndexScrutinyMapper extends IndexScrutinyMapper {

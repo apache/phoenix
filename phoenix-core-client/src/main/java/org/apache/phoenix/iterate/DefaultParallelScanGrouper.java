@@ -73,4 +73,15 @@ public class DefaultParallelScanGrouper implements ParallelScanGrouper {
             throws SQLException {
         return context.getConnection().getQueryServices().getAllTableRegions(tableName);
     }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getRegionBoundaries(StatementContext context,
+        byte[] tableName, byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey)
+        throws SQLException {
+        return context.getConnection().getQueryServices()
+            .getTableRegions(tableName, startRegionBoundaryKey, stopRegionBoundaryKey);
+    }
 }

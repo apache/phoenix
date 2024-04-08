@@ -37,6 +37,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.schema.types.PLong;
 
 public enum TableProperty {
 
@@ -335,6 +336,29 @@ public enum TableProperty {
 
         @Override public Object getPTableValue(PTable table) {
             return table.getStreamingTopicName();
+        }
+    },
+
+    MAX_LOOKBACK_AGE(PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE, true, false, false) {
+        @Override
+        public Object getValue(Object value) {
+            if (value == null) {
+                return null;
+            }
+            else if (value instanceof Integer) {
+                return Long.valueOf((Integer) value);
+            }
+            else if (value instanceof Long) {
+                return value;
+            }
+            else {
+                throw new IllegalArgumentException("Table level MAX_LOOKBACK_AGE should be a " + PLong.INSTANCE.getSqlTypeName() + " value in milli-seconds");
+            }
+        }
+
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getMaxLookbackAge();
         }
     };
 
