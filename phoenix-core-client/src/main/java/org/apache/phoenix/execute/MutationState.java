@@ -1241,15 +1241,6 @@ public class MutationState implements SQLCloseable {
                     String tableName = tableRef.getTable().getTableName().toString();
                     mc.updateCache(tenantId, schemaName, tableName, true);
                 }
-            } catch (MetaDataEntityNotFoundException e) {
-                if (e.getTableName() != null) {
-                    MetaDataClient mc = new MetaDataClient(connection);
-                    PName tenantId = connection.getTenantId();
-                    mc.updateCache(tenantId, e.getSchemaName(), e.getTableName(), true);
-                    send(tableRefIterator);
-                } else {
-                    throw e;
-                }
             }
         }
 
