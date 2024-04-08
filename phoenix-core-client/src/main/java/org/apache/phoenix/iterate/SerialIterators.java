@@ -44,10 +44,13 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.LogUtil;
 import org.apache.phoenix.util.QueryUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.ScanUtil;
 
 
 /**
@@ -188,7 +191,15 @@ public class SerialIterators extends BaseResultIterators {
                                 renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
                 PeekingResultIterator peekingItr = iteratorFactory.newIterator(context, itr, currentScan, tableName, plan);
                 Tuple tuple;
-                if ((tuple = peekingItr.peek()) == null) {
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                tuple = peekingItr.peek();
+                if (LOGGER.isDebugEnabled()) {
+                    LOGGER.debug(LogUtil.addCustomAnnotations("Id: " + scanId + ", Time: " +
+                                    (EnvironmentEdgeManager.currentTimeMillis() - startTime) +
+                                    "ms, Table: " + tableName + ", Scan: " + currentScan,
+                            ScanUtil.getCustomAnnotations(currentScan)));
+                }
+                if (tuple == null) {
                     peekingItr.close();
                     continue;
                 } else if ((remainingOffset = QueryUtil.getRemainingOffset(tuple)) != null) {
