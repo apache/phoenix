@@ -46,7 +46,6 @@ import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -146,7 +145,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     private static final int NUM_RECORDS = 5;
 
     boolean isNamespaceMapped;
-    boolean isReadAccessEnabledForListDecomRs;
+    boolean areHBaseApiPermsRelaxed;
 
     private String schemaName;
     private String tableName;
@@ -161,7 +160,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
         this.tableName = generateUniqueName();
-        isReadAccessEnabledForListDecomRs = isReadAccessEnabledForListDecomRs();
+        areHBaseApiPermsRelaxed = areHBaseAPIPermsRelaxed();
     }
 
     static void initCluster(boolean isNamespaceMapped) throws Exception {
@@ -188,20 +187,25 @@ public abstract class BasePermissionsIT extends BaseTest {
         superUser2 = User.createUserForTesting(config, "superUser2", new String[0]);
 
         /**
-         * CQSI initialization needs to make an Admin API call to fetch a list of live region servers.
-         * Permissions were relaxed for that API call in HBASE-28391.
-         * Disable metadata caching re-design on server if API call needs ADMIN access.
+         * Disable metadata caching re-design on server if required HBase API perms are not relaxed.
          */
-        if (!isReadAccessEnabledForListDecomRs()) {
+        if (!areHBaseAPIPermsRelaxed()) {
             config.setLong(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, 0L);
             config.setBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, false);
             config.setBoolean(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, false);
         }
     }
 
-    // See https://issues.apache.org/jira/browse/HBASE-28391
-    private static boolean isReadAccessEnabledForListDecomRs() {
-        // true for 2.4.18+, 2.5.8+
+    /**
+     * With PHOENIX-6883,
+     * CQSI initialization needs to make an Admin API call to fetch a list of live region servers.
+     *      Permissions were relaxed for that API call in HBASE-28391.
+     * Client needs to make an RPC call to a RegionServer CoProc to validate timestamps which also needs ADMIN perms
+     *      Permissions to be relaxed in HBASE-28508.
+     * See https://issues.apache.org/jira/browse/HBASE-28391 and https://issues.apache.org/jira/browse/HBASE-28508
+     */
+    private static boolean areHBaseAPIPermsRelaxed() {
+        // true for 2.4.18+, 2.5.9+
         String hbaseVersion = VersionInfo.getVersion();
         String[] versionArr = hbaseVersion.split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
@@ -222,7 +226,7 @@ public abstract class BasePermissionsIT extends BaseTest {
         if (minorVersion == 4) {
             return patchVersion >= 18;
         }
-        return patchVersion >= 8;
+        return patchVersion >= 9;
     }
 
     @Before
@@ -258,7 +262,7 @@ public abstract class BasePermissionsIT extends BaseTest {
          * Permissions were relaxed from ADMIN to READ for list decom regionservers API in HBASE-28391.
          * If that is the case, provide READ permission to all users in the tests.
          */
-        if (isReadAccessEnabledForListDecomRs()) {
+        if (areHBaseAPIPermsRelaxed()) {
             TableName aclsTable = TableName.valueOf("hbase:acl");
             testUtil.waitFor(30000, testUtil.predicateTableAvailable(aclsTable));
             grantPermissions(regularUser1.getName(), Permission.Action.READ);
@@ -396,11 +400,9 @@ public abstract class BasePermissionsIT extends BaseTest {
         }
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
         /**
-         * CQSI initialization needs to make an Admin API call to fetch a list of live region servers.
-         * Permissions were relaxed for that API call in HBASE-28391.
-         * Disable metadata caching re-design on client side if API call needs ADMIN access.
+         * Disable metadata caching re-design on client if required HBase API perms are not relaxed.
          */
-        if (!isReadAccessEnabledForListDecomRs) {
+        if (!areHBaseApiPermsRelaxed) {
             props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, Long.toString(0L));
             props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
         }
