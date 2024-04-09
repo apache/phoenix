@@ -226,7 +226,7 @@ public abstract class BasePermissionsIT extends BaseTest {
     }
 
     @Before
-    public void initUsersAndTables() {
+    public void initUsersAndTables() throws Throwable {
         Configuration configuration = testUtil.getConfiguration();
 
         regularUser1 = User.createUserForTesting(configuration, "regularUser1_"
@@ -253,6 +253,21 @@ public abstract class BasePermissionsIT extends BaseTest {
         localIdx1TableName = tableName + "_LIDX1";
         view1TableName = tableName + "_V1";
         view2TableName = tableName + "_V2";
+
+        /**
+         * Permissions were relaxed from ADMIN to READ for list decom regionservers API in HBASE-28391.
+         * If that is the case, provide READ permission to all users in the tests.
+         */
+        if (isReadAccessEnabledForListDecomRs()) {
+            TableName aclsTable = TableName.valueOf("hbase:acl");
+            testUtil.waitFor(30000, testUtil.predicateTableAvailable(aclsTable));
+            grantPermissions(regularUser1.getName(), Permission.Action.READ);
+            grantPermissions(regularUser2.getName(), Permission.Action.READ);
+            grantPermissions(regularUser3.getName(), Permission.Action.READ);
+            grantPermissions(regularUser4.getName(), Permission.Action.READ);
+            grantPermissions(groupUser.getName(), Permission.Action.READ);
+            grantPermissions(unprivilegedUser.getName(), Permission.Action.READ);
+        }
     }
 
     private static void enablePhoenixHBaseAuthorization(Configuration config,
