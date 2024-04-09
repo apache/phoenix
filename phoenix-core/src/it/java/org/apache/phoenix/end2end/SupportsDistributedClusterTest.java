@@ -18,18 +18,15 @@
 package org.apache.phoenix.end2end;
 
 /**
- * 
  * Marker class to denote that the test needs to run its own
  * mini cluster that is separate from the clusters used by
  * tests annotated as {@link ParallelStatsDisabledTest} or
  * {@link ParallelStatsEnabledTest}.
- * 
  * As much as possible, tests should be able to run in one of the
  * mini clusters used by {@link ParallelStatsDisabledTest} or
  * {@link ParallelStatsEnabledTest}. In the *rare* case it can't
  * you would need to annotate the test as {@link NeedsOwnMiniClusterTest}
  * otherwise the test won't be executed when you run mvn verify or mvn install.
- * 
  * @since 4.1
  */
 public class SupportsDistributedClusterTest {
