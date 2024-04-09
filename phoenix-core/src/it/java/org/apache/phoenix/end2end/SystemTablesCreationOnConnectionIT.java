@@ -75,7 +75,7 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class SystemTablesCreationOnConnectionIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(

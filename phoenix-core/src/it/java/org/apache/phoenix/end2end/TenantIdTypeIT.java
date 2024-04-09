@@ -42,7 +42,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class TenantIdTypeIT extends ParallelStatsDisabledIT {
 

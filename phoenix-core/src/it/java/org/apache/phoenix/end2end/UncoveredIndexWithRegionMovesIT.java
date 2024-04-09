@@ -63,7 +63,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Uncovered index tests that include some region moves while performing rs#next.
  */
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class UncoveredIndexWithRegionMovesIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER =

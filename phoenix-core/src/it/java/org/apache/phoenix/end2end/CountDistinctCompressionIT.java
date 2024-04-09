@@ -40,7 +40,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class CountDistinctCompressionIT extends BaseTest {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {

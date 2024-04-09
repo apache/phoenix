@@ -48,7 +48,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
 public class VariableLengthPKIT extends ParallelStatsDisabledIT {
     private static final String DS1 = "1970-01-01 00:58:00";
     private static final Date D1 = toDate(DS1);

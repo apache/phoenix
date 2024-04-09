@@ -33,7 +33,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link PowerFunction}
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class PowerFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

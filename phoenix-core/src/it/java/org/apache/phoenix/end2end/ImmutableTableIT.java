@@ -27,7 +27,7 @@ import java.sql.Statement;
 
 import static org.junit.Assert.assertEquals;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class ImmutableTableIT extends ParallelStatsDisabledIT {
 
     @Test

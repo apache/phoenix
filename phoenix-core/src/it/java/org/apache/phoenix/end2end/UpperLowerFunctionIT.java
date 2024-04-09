@@ -31,7 +31,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class UpperLowerFunctionIT extends ParallelStatsDisabledIT {
     private static String tableName = generateUniqueName();
     private static String firstName = "Joe";

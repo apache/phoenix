@@ -38,7 +38,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category(ParallelStatsEnabledTest.class)
+@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
 public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
 	
 	@Test

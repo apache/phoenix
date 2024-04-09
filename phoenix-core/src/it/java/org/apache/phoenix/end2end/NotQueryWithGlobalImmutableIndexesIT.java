@@ -25,7 +25,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class NotQueryWithGlobalImmutableIndexesIT extends NotQueryIT {
 
     public NotQueryWithGlobalImmutableIndexesIT(String indexDDL, boolean columnEncoded, boolean keepDeleted) throws Exception {

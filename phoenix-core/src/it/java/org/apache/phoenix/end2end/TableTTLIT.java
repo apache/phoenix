@@ -52,7 +52,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class TableTTLIT extends BaseTest {
     private static final Logger LOG =

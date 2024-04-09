@@ -38,7 +38,7 @@ import org.junit.experimental.categories.Category;
  */
 
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class StatementHintsIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateUniqueName();

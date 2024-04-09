@@ -31,7 +31,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
 public class AuditLoggingIT extends ParallelStatsDisabledIT {
 
     @Test

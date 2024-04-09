@@ -61,7 +61,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class StatsEnabledSplitSystemCatalogIT extends BaseTest {
 	

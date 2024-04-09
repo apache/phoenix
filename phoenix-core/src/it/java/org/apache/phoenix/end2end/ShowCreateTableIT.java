@@ -31,7 +31,7 @@ import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.junit.Assert.assertTrue;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class ShowCreateTableIT extends ParallelStatsDisabledIT {
     @Test
     public void testShowCreateTableBasic() throws Exception {

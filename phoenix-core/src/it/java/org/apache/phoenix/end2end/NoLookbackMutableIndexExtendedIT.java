@@ -52,7 +52,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class NoLookbackMutableIndexExtendedIT extends BaseTest {
     protected final boolean localIndex;
     protected final String tableDDLOptions;

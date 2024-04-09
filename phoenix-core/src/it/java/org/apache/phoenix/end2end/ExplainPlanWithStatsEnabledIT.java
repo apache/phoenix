@@ -57,7 +57,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are enabled.
  */
-@Category(ParallelStatsEnabledTest.class)
+@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
 public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
     private static String tableA;

@@ -52,7 +52,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class AggregateQueryWithRegionMovesIT extends BaseQueryWithRegionMovesIT {
 
     @Parameters(name = "AggregateQueryWithRegionMovesIT_{index}")

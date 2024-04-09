@@ -55,7 +55,7 @@ import static org.junit.Assert.assertTrue;
  * only be able to cover the region state that was present before the scanner was opened. HBase
  * provides this guarantee by using region level MVCC.
  */
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER =

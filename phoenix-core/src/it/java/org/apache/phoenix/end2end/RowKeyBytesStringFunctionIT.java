@@ -35,7 +35,7 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class RowKeyBytesStringFunctionIT extends ParallelStatsDisabledIT {
 
     @Test

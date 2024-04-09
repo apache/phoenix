@@ -46,7 +46,7 @@ import org.junit.experimental.categories.Category;
  * @since 0.1
  */
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class ToNumberFunctionIT extends ParallelStatsDisabledIT {
 
     // This test changes to locale to en_US, and saves the previous locale here

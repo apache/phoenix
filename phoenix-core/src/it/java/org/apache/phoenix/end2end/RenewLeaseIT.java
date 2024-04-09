@@ -44,7 +44,7 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class RenewLeaseIT extends BaseTest {
     private static final long SCANNER_LEASE_TIMEOUT = 12000;
     private static volatile boolean SLEEP_NOW = false;

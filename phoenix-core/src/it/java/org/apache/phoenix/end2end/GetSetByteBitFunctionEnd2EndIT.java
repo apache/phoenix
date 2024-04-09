@@ -39,7 +39,7 @@ import org.junit.experimental.categories.Category;
  * End to end tests for {@link GetByteFunction} {@link SetByteFunction} {@link GetBitFunction}
  * {@link SetBitFunction}
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class GetSetByteBitFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

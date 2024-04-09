@@ -41,7 +41,7 @@ import org.junit.experimental.categories.Category;
  * Basic tests for Alter Session Statements
  *
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class AlterSessionIT extends ParallelStatsDisabledIT {
 
     private String tableName;

@@ -19,7 +19,7 @@ package org.apache.phoenix.end2end;
 
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class OrderByIT extends BaseOrderByIT {
 
 }

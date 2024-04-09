@@ -37,7 +37,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class SortOrderWithRegionMoves2IT extends SortOrderIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SortOrderWithRegionMoves2IT.class);

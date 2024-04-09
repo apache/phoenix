@@ -32,7 +32,7 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class ArrayConcatFunctionIT extends ParallelStatsDisabledIT {
 
     private String initTables(Connection conn) throws Exception {

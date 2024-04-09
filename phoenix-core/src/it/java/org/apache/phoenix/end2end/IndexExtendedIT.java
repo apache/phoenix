@@ -65,7 +65,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * Tests for the {@link IndexTool}
  */
 @RunWith(Parameterized.class)
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class IndexExtendedIT extends BaseTest {
     private final boolean localIndex;
     private final boolean useViewIndex;

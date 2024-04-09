@@ -63,7 +63,7 @@ import org.junit.experimental.categories.Category;
 import org.mockito.AdditionalMatchers;
 import org.mockito.Mockito;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
 
     

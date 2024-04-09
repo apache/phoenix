@@ -77,7 +77,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexScrutinyToolIT.class);

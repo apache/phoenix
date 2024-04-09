@@ -88,7 +88,7 @@ import org.slf4j.LoggerFactory;
  */
 
 @RunWith(Parameterized.class)
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class BackwardCompatibilityIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(

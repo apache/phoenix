@@ -55,7 +55,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 

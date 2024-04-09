@@ -34,7 +34,9 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+//@Category(ParallelStatsDisabledTest.class)
+
 public class ClientHashAggregateIT extends ParallelStatsDisabledIT {
     
     @Test

@@ -80,7 +80,7 @@ import org.junit.runners.Parameterized.Parameters;
  * Tests for views dealing with other ongoing concurrent operations and
  * failure scenarios
  */
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class ViewConcurrencyAndFailureIT extends SplitSystemCatalogIT {
 

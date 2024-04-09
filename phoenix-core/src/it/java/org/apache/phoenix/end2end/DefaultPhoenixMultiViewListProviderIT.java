@@ -34,7 +34,7 @@ import static org.apache.phoenix.mapreduce.PhoenixTTLTool.DELETE_ALL_VIEWS;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MAPREDUCE_MULTI_INPUT_QUERY_BATCH_SIZE;
 import static org.junit.Assert.assertEquals;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class DefaultPhoenixMultiViewListProviderIT extends ParallelStatsDisabledIT {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(10) NOT NULL, " +
             "ID CHAR(10) NOT NULL, NUM BIGINT CONSTRAINT " +

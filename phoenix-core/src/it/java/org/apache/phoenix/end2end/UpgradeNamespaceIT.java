@@ -49,7 +49,7 @@ import java.util.Properties;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class UpgradeNamespaceIT extends ParallelStatsDisabledIT {
     @Test
     public void testMapTableToNamespaceDuringUpgrade()

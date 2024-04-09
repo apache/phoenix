@@ -54,7 +54,7 @@ import org.junit.experimental.categories.Category;
  * is set to true and SYSTEM.CATALOG should not be allowed to split.
  * Note that this config must be set on both the client and server
  */
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class SystemCatalogRollbackEnabledIT extends BaseTest {
 
     @BeforeClass

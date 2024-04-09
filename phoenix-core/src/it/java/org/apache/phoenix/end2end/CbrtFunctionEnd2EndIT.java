@@ -34,7 +34,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link CbrtFunction}
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class CbrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

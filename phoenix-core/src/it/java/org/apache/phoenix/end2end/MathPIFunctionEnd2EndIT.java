@@ -30,7 +30,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link MathPIFunction}
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class MathPIFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     @Test

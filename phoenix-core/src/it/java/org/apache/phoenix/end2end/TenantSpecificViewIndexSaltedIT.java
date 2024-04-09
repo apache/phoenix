@@ -25,8 +25,8 @@ import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class TenantSpecificViewIndexSaltedIT extends BaseTenantSpecificViewIndexIT {
 
     private final Integer saltBuckets;

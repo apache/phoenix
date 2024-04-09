@@ -35,7 +35,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link AbsFunction}
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class AbsFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String TABLE_NAME = generateUniqueName();

@@ -41,7 +41,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link SqrtFunction}
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class GetSetObjectIT extends ParallelStatsDisabledIT {
 
     // Temporals are tested in DateTimeIT

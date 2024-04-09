@@ -47,7 +47,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class AutoPartitionViewsIT extends ParallelStatsDisabledIT {
 

@@ -63,7 +63,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
 public class SequenceIT extends ParallelStatsDisabledIT {
     private static final String SELECT_NEXT_VALUE_SQL = "SELECT NEXT VALUE FOR %s";
     private static final String SCHEMA_NAME = "S";

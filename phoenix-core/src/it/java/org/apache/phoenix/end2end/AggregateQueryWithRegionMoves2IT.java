@@ -38,7 +38,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class AggregateQueryWithRegionMoves2IT extends AggregateQueryWithRegionMovesIT {
 
     private static final Logger LOGGER =

@@ -53,7 +53,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category(ParallelStatsEnabledTest.class)
+@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public abstract class BaseViewIT extends ParallelStatsEnabledIT {
 	

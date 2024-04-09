@@ -38,7 +38,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category(ParallelStatsEnabledTest.class)
+@Category({ParallelStatsEnabledTest.class, SupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class TransactionalViewIT extends ParallelStatsEnabledIT {
 

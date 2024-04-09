@@ -45,7 +45,7 @@ import org.apache.phoenix.util.QueryUtil;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are disabled.
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
 
     private static void initData(Connection conn, String tableName) throws Exception {

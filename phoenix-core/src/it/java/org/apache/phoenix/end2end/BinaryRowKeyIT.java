@@ -35,7 +35,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class BinaryRowKeyIT extends ParallelStatsDisabledIT {
 
     private static void initTableValues(String tableName) throws SQLException {

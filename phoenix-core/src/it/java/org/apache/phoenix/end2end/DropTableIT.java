@@ -26,7 +26,7 @@ import java.sql.Statement;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class DropTableIT extends ParallelStatsDisabledIT {
 
     @Test

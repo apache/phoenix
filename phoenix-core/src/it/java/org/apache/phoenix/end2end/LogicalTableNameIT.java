@@ -57,7 +57,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class LogicalTableNameIT extends LogicalTableNameBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(LogicalTableNameIT.class);
 

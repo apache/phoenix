@@ -49,7 +49,7 @@ import org.junit.experimental.categories.Category;
  * @since 0.1
  */
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
 public class ToCharFunctionIT extends ParallelStatsDisabledIT {
     
     private String TO_CHAR_TABLE_NAME;

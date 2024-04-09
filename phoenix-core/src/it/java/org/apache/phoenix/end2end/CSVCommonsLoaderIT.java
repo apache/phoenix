@@ -51,7 +51,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
 
     private static final String DATATYPE_TABLE = "DATATYPE";

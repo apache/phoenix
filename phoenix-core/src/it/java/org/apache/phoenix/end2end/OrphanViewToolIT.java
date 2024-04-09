@@ -56,7 +56,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(OrphanViewToolIT.class);

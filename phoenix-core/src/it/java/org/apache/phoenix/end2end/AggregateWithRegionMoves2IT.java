@@ -36,7 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
 public class AggregateWithRegionMoves2IT extends AggregateWithRegionMovesIT {
 
     private static final Logger LOGGER =
