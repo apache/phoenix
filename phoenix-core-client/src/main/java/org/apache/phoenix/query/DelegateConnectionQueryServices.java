@@ -89,6 +89,15 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
         return getDelegate().getAllTableRegions(tableName);
     }
 
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+        byte[] endRowKey) throws SQLException {
+        return getDelegate().getTableRegions(tableName, startRowKey, endRowKey);
+    }
+
     @Override
     public void addTable(PTable table, long resolvedTime) throws SQLException {
         getDelegate().addTable(table, resolvedTime);

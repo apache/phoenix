@@ -37,6 +37,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertThrows;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -48,6 +49,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
+import java.time.Duration;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
@@ -74,7 +76,6 @@ import org.apache.phoenix.schema.export.DefaultSchemaWriter;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -110,6 +111,8 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     private String tableDDLOptions;
     private final boolean columnEncoded;
     private static final Logger LOGGER = LoggerFactory.getLogger(AlterTableIT.class);
+
+    private final long oneDayInMillis = Duration.ofDays(1).toMillis();
 
     public AlterTableIT(boolean columnEncoded) {
         this.columnEncoded = columnEncoded;
@@ -1794,6 +1797,105 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
             LOGGER.info("Last DDL timestamp after changing property : " + newLastDDLTimestamp);
             assertTrue("LastDDLTimestamp should have been updated",
                     newLastDDLTimestamp > oldLastDDLTimestamp);
+        }
+    }
+
+    @Test
+    public void testChangeTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        Long maxLookbackAge = oneDayInMillis;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE  " + fullTableName +
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer) MAX_LOOKBACK_AGE=" + maxLookbackAge;
+            conn.createStatement().execute(ddl);
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
+            maxLookbackAge = 3L * oneDayInMillis;
+            alterTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
+            maxLookbackAge = 2L * oneDayInMillis;
+            alterTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
+            maxLookbackAge = 0L;
+            alterTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
+            assertMaxLookbackAge(fullTableName, maxLookbackAge);
+        }
+    }
+
+    @Test
+    public void testChangeTableLevelMaxLookbackAgeToInvalid() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = "CREATE TABLE  " + fullTableName +
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer) MAX_LOOKBACK_AGE=" + oneDayInMillis;
+            conn.createStatement().execute(ddl);
+        }
+        assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "2309.3"));
+        assertThrows(IllegalArgumentException.class, () -> alterTableLevelMaxLookbackAge(fullTableName, "forty"));
+    }
+
+    @Test
+    public void testMaxLookbackAgeOfChildViewsAndIndexesWithAlterTable() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        Long maxLookbackAge = oneDayInMillis;
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String ddl = "CREATE TABLE  " + fullDataTableName +
+                    "  (a_string varchar not null PRIMARY KEY, col1 integer) MAX_LOOKBACK_AGE=" + maxLookbackAge;
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullDataTableName, maxLookbackAge);
+            String indexName = generateUniqueName();
+            String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+            ddl = "CREATE INDEX " + indexName + " ON " + fullDataTableName + " (COL1)";
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullIndexName, maxLookbackAge);
+            String childViewName = generateUniqueName();
+            String fullChildViewName = SchemaUtil.getTableName(schemaName, childViewName);
+            ddl = "CREATE VIEW " + fullChildViewName + " AS SELECT * FROM " + fullDataTableName;
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullChildViewName, maxLookbackAge);
+            String childViewIndexName = generateUniqueName();
+            String fullChildViewIndexName = SchemaUtil.getTableName(schemaName, childViewIndexName);
+            ddl = "CREATE INDEX " + childViewIndexName + " ON " + fullChildViewName + " (COL1)";
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullChildViewIndexName, maxLookbackAge);
+            String grandChildViewName = generateUniqueName();
+            String fullGrandChildViewName = SchemaUtil.getTableName(schemaName, grandChildViewName);
+            ddl = "CREATE VIEW " + fullGrandChildViewName + " (col2 varchar) AS SELECT * FROM " + fullChildViewName;
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullGrandChildViewName, maxLookbackAge);
+            String grandChildViewIndexName = generateUniqueName();
+            String fullGrandChildViewIndexName = SchemaUtil.getTableName(schemaName, grandChildViewIndexName);
+            ddl = "CREATE INDEX " + grandChildViewIndexName + " ON " + fullGrandChildViewName + " (COL2)";
+            stmt.execute(ddl);
+            assertMaxLookbackAge(fullGrandChildViewIndexName, maxLookbackAge);
+            maxLookbackAge = 2 * oneDayInMillis;
+            alterTableLevelMaxLookbackAge(fullDataTableName, maxLookbackAge.toString());
+            assertMaxLookbackAge(fullDataTableName, maxLookbackAge);
+            assertMaxLookbackAge(fullIndexName, maxLookbackAge);
+            assertMaxLookbackAge(fullChildViewName, maxLookbackAge);
+            assertMaxLookbackAge(fullChildViewIndexName, maxLookbackAge);
+            assertMaxLookbackAge(fullGrandChildViewName, maxLookbackAge);
+            assertMaxLookbackAge(fullGrandChildViewIndexName, maxLookbackAge);
+        }
+    }
+
+    private void assertMaxLookbackAge(String fullTableName, Long expectedMaxLookbackAge) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            assertEquals(expectedMaxLookbackAge, pconn.getTableNoCache(fullTableName).getMaxLookbackAge());
+        }
+    }
+
+    private void alterTableLevelMaxLookbackAge(String fullTableName, String maxLookbackAge) throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl  = "ALTER TABLE " + fullTableName + " SET MAX_LOOKBACK_AGE = " + maxLookbackAge;
+            conn.createStatement().execute(ddl);
         }
     }
 }

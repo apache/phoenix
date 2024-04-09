@@ -128,6 +128,11 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
 import org.apache.hadoop.hbase.master.HMaster;
 import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
@@ -146,6 +151,7 @@ import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
@@ -2169,5 +2175,43 @@ public abstract class BaseTest {
             }
         }
         return false;
+    }
+
+    protected Long queryTableLevelMaxLookbackAge(String fullTableName) throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+            return pconn.getTableNoCache(fullTableName).getMaxLookbackAge();
+        }
+    }
+
+    public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
+            IOException, InterruptedException {
+        Scan scan = new Scan();
+        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
+                getAdmin();
+        org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
+        Table table = hbaseConn.getTable(tableName);
+        boolean deletedRows = false;
+        try (ResultScanner scanner = table.getScanner(scan)) {
+            for (Result r : scanner) {
+                Delete del = new Delete(r.getRow());
+                table.delete(del);
+                deletedRows = true;
+            }
+        } catch (Exception e) {
+            //if the table doesn't exist, we have no rows to delete. Easier to catch
+            //than to pre-check for existence
+        }
+        //don't flush/compact if we didn't write anything, because we'll hang forever
+        if (deletedRows) {
+            getUtility().getAdmin().flush(tableName);
+            TestUtil.majorCompact(getUtility(), tableName);
+        }
+    }
+
+    static public void resetIndexRegionObserverFailPoints() {
+        IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+        IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
     }
 }
