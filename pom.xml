@@ -102,7 +102,7 @@
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
-    <netty-bom.version>4.1.104.Final</netty-bom.version>
+    <netty-bom.version>4.1.108.Final</netty-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
