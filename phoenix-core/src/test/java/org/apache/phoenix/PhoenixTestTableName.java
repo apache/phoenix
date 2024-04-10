@@ -40,7 +40,10 @@ public class PhoenixTestTableName extends TestWatcher {
         if (lastIndex == -1) {
             return className;
         }
-
+        String testName = className.substring(lastIndex+1).toUpperCase();
+        if(testName.contains("$")){
+            return testName.replace("$", "_");
+        }
         return className.substring(lastIndex+1).toUpperCase();
     }
 
