@@ -380,11 +380,14 @@ public class QueryServicesOptions {
      * Disable caching re-design if you use Online Data Format Change since the cutover logic
      * is currently incompatible and clients may not learn about the physical table change.
      * See https://issues.apache.org/jira/browse/PHOENIX-7284.
+     *
+     * Disable caching re-design if your clients will not have ADMIN perms to call region server
+     * RPC. See https://issues.apache.org/jira/browse/HBASE-28508
      */
     public static final long DEFAULT_UPDATE_CACHE_FREQUENCY
-                = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER");
-    public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = true;
-    public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = true;
+                = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS");
+    public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = false;
+    public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = false;
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
                                                                             = Long.toString(0L);
 

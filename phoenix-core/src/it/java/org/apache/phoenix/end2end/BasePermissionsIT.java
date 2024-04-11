@@ -16,7 +16,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -46,6 +45,7 @@ import org.apache.hadoop.hbase.security.access.AccessController;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.security.access.UserPermission;
 import org.apache.hadoop.hbase.shaded.protobuf.ResponseConverter;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil.RegionServerThread;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -145,7 +145,6 @@ public abstract class BasePermissionsIT extends BaseTest {
     private static final int NUM_RECORDS = 5;
 
     boolean isNamespaceMapped;
-    boolean areHBaseApiPermsRelaxed;
 
     private String schemaName;
     private String tableName;
@@ -160,7 +159,6 @@ public abstract class BasePermissionsIT extends BaseTest {
     BasePermissionsIT(final boolean isNamespaceMapped) throws Exception {
         this.isNamespaceMapped = isNamespaceMapped;
         this.tableName = generateUniqueName();
-        areHBaseApiPermsRelaxed = areHBaseAPIPermsRelaxed();
     }
 
     static void initCluster(boolean isNamespaceMapped) throws Exception {
@@ -169,7 +167,6 @@ public abstract class BasePermissionsIT extends BaseTest {
 
     static void initCluster(boolean isNamespaceMapped, boolean useCustomAccessController) throws Exception {
         if (null != testUtil) {
-            ServerMetadataCacheTestImpl.resetCache();
             testUtil.shutdownMiniCluster();
             testUtil = null;
         }
@@ -181,56 +178,15 @@ public abstract class BasePermissionsIT extends BaseTest {
         configureNamespacesOnServer(config, isNamespaceMapped);
         configureStatsConfigurations(config);
         config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
-        setPhoenixRegionServerEndpoint(config);
+
         testUtil.startMiniCluster(1);
         superUser1 = User.createUserForTesting(config, SUPER_USER, new String[0]);
         superUser2 = User.createUserForTesting(config, "superUser2", new String[0]);
 
-        /**
-         * Disable metadata caching re-design on server if required HBase API perms are not relaxed.
-         */
-        if (!areHBaseAPIPermsRelaxed()) {
-            config.setLong(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, 0L);
-            config.setBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, false);
-            config.setBoolean(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, false);
-        }
-    }
-
-    /**
-     * With PHOENIX-6883,
-     * CQSI initialization needs to make an Admin API call to fetch a list of live region servers.
-     *      Permissions were relaxed for that API call in HBASE-28391.
-     * Client needs to make an RPC call to a RegionServer CoProc to validate timestamps which also needs ADMIN perms
-     *      Permissions to be relaxed in HBASE-28508.
-     * See https://issues.apache.org/jira/browse/HBASE-28391 and https://issues.apache.org/jira/browse/HBASE-28508
-     */
-    private static boolean areHBaseAPIPermsRelaxed() {
-        // true for 2.4.18+, 2.5.9+
-        String hbaseVersion = VersionInfo.getVersion();
-        String[] versionArr = hbaseVersion.split("\\.");
-        int majorVersion = Integer.parseInt(versionArr[0]);
-        int minorVersion = Integer.parseInt(versionArr[1]);
-        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
-        if (majorVersion > 2) {
-            return true;
-        }
-        if (majorVersion < 2) {
-            return false;
-        }
-        if (minorVersion > 5) {
-            return true;
-        }
-        if (minorVersion < 4) {
-            return false;
-        }
-        if (minorVersion == 4) {
-            return patchVersion >= 18;
-        }
-        return patchVersion >= 9;
     }
 
     @Before
-    public void initUsersAndTables() throws Throwable {
+    public void initUsersAndTables() {
         Configuration configuration = testUtil.getConfiguration();
 
         regularUser1 = User.createUserForTesting(configuration, "regularUser1_"
@@ -257,21 +213,6 @@ public abstract class BasePermissionsIT extends BaseTest {
         localIdx1TableName = tableName + "_LIDX1";
         view1TableName = tableName + "_V1";
         view2TableName = tableName + "_V2";
-
-        /**
-         * Permissions were relaxed from ADMIN to READ for list decom regionservers API in HBASE-28391.
-         * If that is the case, provide READ permission to all users in the tests.
-         */
-        if (areHBaseAPIPermsRelaxed()) {
-            TableName aclsTable = TableName.valueOf("hbase:acl");
-            testUtil.waitFor(30000, testUtil.predicateTableAvailable(aclsTable));
-            grantPermissions(regularUser1.getName(), Permission.Action.READ);
-            grantPermissions(regularUser2.getName(), Permission.Action.READ);
-            grantPermissions(regularUser3.getName(), Permission.Action.READ);
-            grantPermissions(regularUser4.getName(), Permission.Action.READ);
-            grantPermissions(groupUser.getName(), Permission.Action.READ);
-            grantPermissions(unprivilegedUser.getName(), Permission.Action.READ);
-        }
     }
 
     private static void enablePhoenixHBaseAuthorization(Configuration config,
@@ -399,13 +340,6 @@ public abstract class BasePermissionsIT extends BaseTest {
             props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
         }
         props.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
-        /**
-         * Disable metadata caching re-design on client if required HBase API perms are not relaxed.
-         */
-        if (!areHBaseApiPermsRelaxed) {
-            props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, Long.toString(0L));
-            props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
-        }
         return props;
     }
 
