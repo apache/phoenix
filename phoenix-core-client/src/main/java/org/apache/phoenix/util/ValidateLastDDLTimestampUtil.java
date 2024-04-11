@@ -67,7 +67,6 @@ public class ValidateLastDDLTimestampUtil {
 
     /**
      * Get whether last ddl timestamp validation is enabled on the connection
-     *
      * @param connection
      * @return true if it is enabled, false otherwise
      */
@@ -173,8 +172,6 @@ public class ValidateLastDDLTimestampUtil {
                 requestBuilder.addLastDDLTimestampRequests(innerBuilder);
             }
         }
-
-
         return requestBuilder.build();
     }
 
