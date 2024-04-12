@@ -739,8 +739,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW);
         if (conditionOne || conditionTwo) {
             GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();
-            String regionNameString =
-                new String(regionLocation.getRegion().getRegionName(), StandardCharsets.UTF_8);
             LOGGER.error(
                 "HBase region overlap/inconsistencies on {} , current key: {} , region startKey:"
                     + " {} , region endKey: {} , prev region startKey: {} , prev region endKey: {}",
@@ -752,9 +750,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getStartKey()),
                 prevRegionLocation == null ?
                     "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getEndKey()));
-            throw new IOException(
-                String.format("HBase region information overlap/inconsistencies on region %s",
-                    regionNameString));
         }
         return regionLocation.getRegion().getEndKey();
     }
@@ -769,8 +764,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * {@inheritDoc}.
      */
     @Override
-    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+    public List<HRegionLocation> getTableRegions(final byte[] tableName, final byte[] startRowKey,
+                                                 final byte[] endRowKey) throws SQLException {
         /*
          * Use HConnection.getRegionLocation as it uses the cache in HConnection, while getting
          * all region locations from the HTable doesn't.
@@ -780,6 +775,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
         byte[] currentKey = null;
+        final int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+        final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        final long maxQueryEndTime = startTime + queryTimeout;
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
@@ -800,6 +799,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         && Bytes.compareTo(currentKey, endRowKey) >= 0) {
                         break;
                     }
+                    throwErrorIfQueryTimedOut(startRowKey, endRowKey, maxQueryEndTime,
+                            queryTimeout, table, retryCount, currentKey);
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
@@ -821,6 +822,44 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     SQLExceptionCode.GET_TABLE_REGIONS_FAIL).setRootCause(e).build()
                     .buildException();
             }
+        }
+    }
+
+    /**
+     * Throw Error if the metadata lookup takes longer than query timeout configured.
+     *
+     * @param startRowKey Start RowKey to begin the region metadata lookup from.
+     * @param endRowKey End RowKey to end the region metadata lookup at.
+     * @param maxQueryEndTime Max time to execute the metadata lookup.
+     * @param queryTimeout Query timeout.
+     * @param table Table Name.
+     * @param retryCount Retry Count.
+     * @param currentKey Current Key.
+     * @throws SQLException Throw Error if the metadata lookup takes longer than query timeout.
+     */
+    private static void throwErrorIfQueryTimedOut(byte[] startRowKey, byte[] endRowKey,
+                                                  long maxQueryEndTime,
+                                                  int queryTimeout, TableName table, int retryCount,
+                                                  byte[] currentKey) throws SQLException {
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        if (currentTime >= maxQueryEndTime) {
+            LOGGER.error("getTableRegions has exceeded query timeout {} ms."
+                            + "Table: {}, retryCount: {} , currentKey: {} , "
+                            + "startRowKey: {} , endRowKey: {}",
+                    queryTimeout,
+                    table.getNameAsString(),
+                    retryCount,
+                    Bytes.toStringBinary(currentKey),
+                    Bytes.toStringBinary(startRowKey),
+                    Bytes.toStringBinary(endRowKey)
+            );
+            IOException e = new IOException(
+                    "getTableRegions has exceeded query timeout " + queryTimeout +
+                            "ms");
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
+                    .setRootCause(e).build()
+                    .buildException();
         }
     }
 

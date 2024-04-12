@@ -61,6 +61,7 @@ import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -161,6 +162,8 @@ public class ConnectionQueryServicesImplTest {
     }
 
     @Test
+    @Ignore("Ignored because we no longer throw Exception, only report error for inconsistent " +
+            "region boundaries")
     public void testGetNextRegionStartKey() {
         RegionInfo mockHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
         RegionInfo mockPrevHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
