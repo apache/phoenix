@@ -541,10 +541,8 @@ public class HighAvailabilityTestingUtility {
             conf.setInt(DFS_REPLICATION_KEY, 1); // we only need one replica for testing
 
             // Phoenix Region Server Endpoint needed for metadata caching
-            if (QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
-                conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
-                            PhoenixRegionServerEndpointTestImpl.class.getName());
-            }
+            conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
+                        PhoenixRegionServerEndpointTestImpl.class.getName());
         }
     }
 

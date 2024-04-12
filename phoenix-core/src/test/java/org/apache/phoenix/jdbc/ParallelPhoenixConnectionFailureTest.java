@@ -53,9 +53,6 @@ public class ParallelPhoenixConnectionFailureTest extends BaseTest {
     public void testExecuteQueryChainFailure() throws SQLException {
         HBaseTestingUtility hbaseTestingUtility = new HBaseTestingUtility();
         Properties props = new Properties();
-        // disable last_ddl_timestamp validation for tests which use ConnectionLessQueryService
-        // since there is no hbase connection to get list of live region servers
-        props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
         PhoenixConnection conn1 = (PhoenixConnection) DriverManager.getConnection(url, props);
         PhoenixConnection conn2 = (PhoenixConnection) DriverManager.getConnection(url, props);
         PhoenixConnection connSpy1 = Mockito.spy(conn1);

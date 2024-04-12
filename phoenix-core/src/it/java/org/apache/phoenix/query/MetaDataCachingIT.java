@@ -146,9 +146,9 @@ public class MetaDataCachingIT extends BaseTest {
      */
     @Test
     public void testGlobalClientCacheMetrics() throws Exception {
-        int numThreads = 1;
-        int numTables = 1;
-        int numMaxDML = 1;
+        int numThreads = 5;
+        int numTables = 1; // test with only 1 table because we pick tables randomly in the workload
+        int numMaxDML = 2;
 
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().reset();
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().reset();
@@ -167,8 +167,8 @@ public class MetaDataCachingIT extends BaseTest {
                 numExpectedMisses, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
 
         // (2 hits per upsert + 1 hit per select) per thread
-        assertEquals("Incorrect number of client metadata cache hits",
-                3*numMaxDML*numThreads, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().getValue());
+        assertTrue("number of total metadata cache hits (server+client) should be more than or equal to client cache hits",
+                3*numMaxDML*numThreads <= GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().getValue());
     }
 
     /*

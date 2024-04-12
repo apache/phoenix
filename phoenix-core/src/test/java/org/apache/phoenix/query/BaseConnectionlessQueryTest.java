@@ -89,9 +89,6 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         // test on a wider scale
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
             Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-            // disable last_ddl_timestamp validation for tests which use ConnectionLessQueryService
-            // since there is no hbase connection to get list of live region servers
-            props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
             driver = initDriver(new ReadOnlyProps(props));
             assertTrue(DriverManager.getDriver(url) == driver);
             driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
