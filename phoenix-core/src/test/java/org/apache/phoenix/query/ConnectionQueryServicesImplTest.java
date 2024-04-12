@@ -162,8 +162,6 @@ public class ConnectionQueryServicesImplTest {
     }
 
     @Test
-    @Ignore("Ignored because we no longer throw Exception, only report error for inconsistent " +
-            "region boundaries")
     public void testGetNextRegionStartKey() {
         RegionInfo mockHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
         RegionInfo mockPrevHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
@@ -255,19 +253,11 @@ public class ConnectionQueryServicesImplTest {
     private void testGetNextRegionStartKey(ConnectionQueryServicesImpl mockCqsi,
         HRegionLocation mockRegionLocation, byte[] key, boolean isCorrupted,
         HRegionLocation mockPrevRegionLocation) {
-        try {
-            mockCqsi.getNextRegionStartKey(mockRegionLocation, key, mockPrevRegionLocation);
-            if (isCorrupted) {
-                fail();
-            }
-        } catch (IOException e) {
-            if (!isCorrupted) {
-                fail();
-            }
-        }
+        mockCqsi.getNextRegionStartKey(mockRegionLocation, key, mockPrevRegionLocation);
 
         assertEquals(isCorrupted ? 1 : 0,
-                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().getValue());
+                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric()
+                        .getValue());
     }
 
     @Test

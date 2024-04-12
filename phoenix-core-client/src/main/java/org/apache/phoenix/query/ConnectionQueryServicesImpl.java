@@ -714,7 +714,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey,
-        HRegionLocation prevRegionLocation) throws IOException {
+        HRegionLocation prevRegionLocation) {
         // in order to check the overlap/inconsistencies bad region info, we have to make sure
         // the current endKey always increasing(compare the previous endKey)
 
