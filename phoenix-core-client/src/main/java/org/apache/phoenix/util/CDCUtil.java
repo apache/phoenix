@@ -25,7 +25,6 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.StringTokenizer;
 
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -92,7 +91,7 @@ public class CDCUtil {
         return isCDCIndex(indexTable.getTableName().getString());
     }
 
-    public static Scan initForRawScan(Scan scan) {
+    public static Scan setupScanForCDC(Scan scan) {
         scan.setRaw(true);
         scan.readAllVersions();
         scan.setCacheBlocks(false);

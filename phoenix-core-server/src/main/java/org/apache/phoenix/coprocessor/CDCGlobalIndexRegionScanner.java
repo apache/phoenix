@@ -75,7 +75,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                        final long queryLimit) throws IOException {
         super(innerScanner, region, scan, env, dataTableScan, tupleProjector, indexMaintainer,
                 viewConstants, ptr, pageSizeMs, queryLimit);
-        CDCUtil.initForRawScan(dataTableScan);
+        CDCUtil.setupScanForCDC(dataTableScan);
         cdcDataTableInfo = CDCTableInfo.createFromProto(CDCInfoProtos.CDCTableDef
                 .parseFrom(scan.getAttribute(CDC_DATA_TABLE_DEF)));
         changeBuilder = new CDCChangeBuilder(cdcDataTableInfo);
@@ -93,7 +93,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
 //            stopTimeRange = PLong.INSTANCE.getCodec().decodeLong(
 //              scan.getStopRow(), 0, SortOrder.getDefault());
 //        }
-        return CDCUtil.initForRawScan(prepareDataTableScan(dataRowKeys, true));
+        return CDCUtil.setupScanForCDC(prepareDataTableScan(dataRowKeys, true));
     }
 
     protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {

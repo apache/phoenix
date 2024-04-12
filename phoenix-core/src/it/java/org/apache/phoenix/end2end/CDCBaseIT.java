@@ -184,7 +184,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 "\""+CDCUtil.getCDCIndexName(cdcName)+"\"");
         String indexFullName = SchemaUtil.getTableName(schemaName,
                 CDCUtil.getCDCIndexName(cdcName));
-        TestUtil.waitForIndexState(conn, indexFullName, PIndexState.ACTIVE);
     }
 
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,

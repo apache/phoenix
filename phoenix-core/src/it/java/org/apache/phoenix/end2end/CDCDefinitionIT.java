@@ -38,9 +38,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
 
+import static org.apache.phoenix.schema.PTable.CDCChangeScope.POST;
+import static org.apache.phoenix.schema.PTable.CDCChangeScope.PRE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -104,10 +105,9 @@ public class CDCDefinitionIT extends CDCBaseIT {
         cdcName = generateUniqueName();
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (pre, post)";
         createCDCAndWait(conn, tableName, cdcName, cdc_sql, PTable.IndexType.UNCOVERED_GLOBAL);
-        assertCDCState(conn, cdcName, "PRE,POST", 3);
+        assertCDCState(conn, cdcName, PRE+","+POST, 3);
         assertPTable(cdcName, new HashSet<>(
-                Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST)), tableName,
-                datatableName);
+                Arrays.asList(PRE, POST)), tableName, datatableName);
         assertNoResults(conn, cdcName);
 
         cdcName = generateUniqueName();
@@ -151,8 +151,8 @@ public class CDCDefinitionIT extends CDCBaseIT {
                         saltingConfig[1], null);
                 try {
                     assertCDCState(conn, cdcName, null, 3);
-                    // Index inherits table salt buckets.
                     assertSaltBuckets(conn, cdcName, null);
+                    // Index inherits table salt buckets.
                     assertSaltBuckets(conn, CDCUtil.getCDCIndexName(cdcName),
                             saltingConfig[1] != null ? saltingConfig[1] : saltingConfig[0]);
                     assertNoResults(conn, cdcName);
