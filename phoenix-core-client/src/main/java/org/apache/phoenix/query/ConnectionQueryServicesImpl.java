@@ -739,7 +739,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW);
         if (conditionOne || conditionTwo) {
             GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();
-            LOGGER.error(
+            LOGGER.warn(
                 "HBase region overlap/inconsistencies on {} , current key: {} , region startKey:"
                     + " {} , region endKey: {} , prev region startKey: {} , prev region endKey: {}",
                 regionLocation,
