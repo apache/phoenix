@@ -891,12 +891,14 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             stmt.executeQuery("SELECT k FROM " + tableName + " WHERE v1=1");
             Assert.assertEquals("Query on secondary key should have used index.", indexName, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
 
-            //verify client-2 cache was updated with the index's base table metadata
-            //this would have also updated the index metadata in its cache
+            //verify client-2 cache was updated with the index and base table metadata
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
                     anyLong(), anyLong());
-            Mockito.verify(spyCqs2, Mockito.times(2))
+            Mockito.verify(spyCqs2, Mockito.times(1)).getTable(eq(null),
+                    any(byte[].class), eq(PVarchar.INSTANCE.toBytes(indexName)),
+                    anyLong(), anyLong());
+            Mockito.verify(spyCqs2, Mockito.times(3))
                     .addTable(any(PTable.class), anyLong());
 
             //client-2 queries again with latest metadata
@@ -905,7 +907,7 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             Mockito.verify(spyCqs2, Mockito.times(2)).getTable(eq(null),
                     any(byte[].class), eq(PVarchar.INSTANCE.toBytes(tableName)),
                     anyLong(), anyLong());
-            Mockito.verify(spyCqs2, Mockito.times(2))
+            Mockito.verify(spyCqs2, Mockito.times(3))
                     .addTable(any(PTable.class), anyLong());
         }
     }

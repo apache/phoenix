@@ -3857,7 +3857,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<ImmutableBytesPtr> invalidateList, List<RowLock> locks, long clientTimeStamp,
             List<Mutation> tableMetaData, PColumn columnToDelete, List<byte[]> tableNamesToDelete,
             List<SharedTableState> sharedTablesToDelete, int clientVersion)
-            throws IOException, SQLException {
+            throws Throwable {
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
@@ -3904,6 +3904,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // that a change in index state doesn't
                 // occur while we're dropping it.
                 acquireLock(region, indexKey, locks);
+                // invalidate server metadata cache when dropping index
+                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
+                requests.add(new InvalidateServerMetadataCacheRequest(tenantId,
+                        table.getSchemaName().getBytes(),
+                        table.getTableName().getBytes()));
+
+                invalidateServerMetadataCache(requests);
                 List<Mutation> childLinksMutations = Lists.newArrayList();
                 MetaDataMutationResult result = doDropTable(indexKey, tenantId,
                         index.getSchemaName().getBytes(), index.getTableName().getBytes(),
