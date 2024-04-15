@@ -3907,8 +3907,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // invalidate server metadata cache when dropping index
                 List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
                 requests.add(new InvalidateServerMetadataCacheRequest(tenantId,
-                        table.getSchemaName().getBytes(),
-                        table.getTableName().getBytes()));
+                        index.getSchemaName().getBytes(),
+                        index.getTableName().getBytes()));
 
                 invalidateServerMetadataCache(requests);
                 List<Mutation> childLinksMutations = Lists.newArrayList();
