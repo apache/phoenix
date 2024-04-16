@@ -876,7 +876,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             CompilableStatement compilableStmt = getStatement();
             StatementPlan compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
             // if client is validating timestamps, ensure its metadata cache is up to date.
-            if (QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
+            if (ValidateLastDDLTimestampUtil
+                    .getValidateLastDdlTimestampEnabled(stmt.getConnection())) {
                 Set<TableRef> tableRefs = compilePlan.getSourceRefs();
                 for (TableRef tableRef : tableRefs) {
                     new MetaDataClient(stmt.getConnection()).updateCache(
