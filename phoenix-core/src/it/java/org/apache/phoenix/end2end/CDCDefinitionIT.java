@@ -87,7 +87,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         }
 
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null, null);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null);
         assertCDCState(conn, cdcName, null, 3);
         assertNoResults(conn, cdcName);
 
@@ -100,21 +100,14 @@ public class CDCDefinitionIT extends CDCBaseIT {
         }
 
         conn.createStatement().execute("CREATE CDC IF NOT EXISTS " + cdcName + " ON " + tableName +
-                " INCLUDE (pre, post) INDEX_TYPE=g");
+                " INCLUDE (pre, post)");
 
         cdcName = generateUniqueName();
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (pre, post)";
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, PTable.IndexType.UNCOVERED_GLOBAL);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql);
         assertCDCState(conn, cdcName, PRE+","+POST, 3);
         assertPTable(cdcName, new HashSet<>(
                 Arrays.asList(PRE, POST)), tableName, datatableName);
-        assertNoResults(conn, cdcName);
-
-        cdcName = generateUniqueName();
-        cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INDEX_TYPE=l";
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, PTable.IndexType.LOCAL);
-        assertCDCState(conn, cdcName, null, 2);
-        assertPTable(cdcName, null, tableName, datatableName);
         assertNoResults(conn, cdcName);
 
         conn.close();
@@ -148,7 +141,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
                 String cdcName = generateUniqueName();
                 String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, null,
-                        saltingConfig[1], null);
+                        saltingConfig[1]);
                 try {
                     assertCDCState(conn, cdcName, null, 3);
                     assertSaltBuckets(conn, cdcName, null);

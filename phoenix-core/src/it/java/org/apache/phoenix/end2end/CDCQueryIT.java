@@ -137,7 +137,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
         }
 
@@ -154,7 +154,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
             // Testing with flushed data adds more coverage.
             getUtility().getAdmin().flush(TableName.valueOf(datatableName));
@@ -249,7 +249,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
         }
 
@@ -266,7 +266,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
             // Testing with flushed data adds more coverage.
             getUtility().getAdmin().flush(TableName.valueOf(datatableName));
@@ -330,7 +330,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
         }
 
@@ -400,7 +400,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
         }
 
@@ -482,7 +482,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
             conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
         }
@@ -500,7 +500,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
             // Testing with flushed data adds more coverage.
             getUtility().getAdmin().flush(TableName.valueOf(datatableName));
@@ -583,7 +583,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
         }
 
@@ -608,7 +608,7 @@ public class CDCQueryIT extends CDCBaseIT {
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets, null);
+                        indexSaltBuckets);
             }
         }
 
@@ -645,7 +645,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets, null);
+            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
         }
 
         String tenantId = multitenant ? "1000" : null;

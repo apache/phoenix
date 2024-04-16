@@ -25,7 +25,6 @@ import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
-import static org.apache.phoenix.util.CDCUtil.CDC_INDEX_TYPE_LOCAL;
 
 import java.sql.SQLException;
 import java.util.Map;
@@ -360,20 +359,6 @@ public enum TableProperty {
         @Override
         public Object getPTableValue(PTable table) {
             return table.getMaxLookbackAge();
-        }
-    },
-
-    INDEX_TYPE(PhoenixDatabaseMetaData.CDC_INDEX_TYPE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, false, false, false) {
-        @Override
-        public Object getValue(Object value) {
-            return value != null && value.toString().toUpperCase().equals(CDC_INDEX_TYPE_LOCAL) ?
-                    PTable.IndexType.LOCAL :
-                    PTable.IndexType.UNCOVERED_GLOBAL;
-        }
-
-        @Override
-        public Object getPTableValue(PTable table) {
-            return null;
         }
     },
 

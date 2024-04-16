@@ -511,11 +511,10 @@ public class QueryParserTest {
         parseCreateCDCSimple("create cdc foo on bar", false);
         parseCreateCDCSimple("create cdc foo on s.bar", false);
         parseCreateCDCSimple("create cdc if not exists foo on bar", true);
-        parseCreateCDCSimple("create cdc foo on bar index_type=g", false);
-        parseCreateCDCSimple("create cdc foo on bar index_type=l", false);
+        parseCreateCDCSimple("create cdc foo on bar", false);
         CreateCDCStatement stmt = null;
-        stmt = parseCreateCDCSimple("create cdc foo on bar TTL=100, INDEX_TYPE=g", false);
-        assertEquals(Arrays.asList(new Pair("TTL", 100), new Pair("INDEX_TYPE", "g")),
+        stmt = parseCreateCDCSimple("create cdc foo on bar TTL=100", false);
+        assertEquals(Arrays.asList(new Pair("TTL", 100)),
                 stmt.getProps().get(""));
         stmt = parseCreateCDCSimple("create cdc foo on bar include (pre)", false);
         assertEquals(new HashSet<>(Arrays.asList(PTable.CDCChangeScope.PRE)),

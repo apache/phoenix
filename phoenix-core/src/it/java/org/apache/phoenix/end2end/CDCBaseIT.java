@@ -95,14 +95,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected void createTable(Connection conn, String table_sql,
                                PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                               Integer nSaltBuckets, boolean immutable, PTable.ImmutableStorageScheme immutableStorageScheme)
-            throws Exception {
-        createTable(conn, table_sql, encodingScheme, multitenant, nSaltBuckets, null, immutable, immutableStorageScheme);
-    }
-
-    protected void createTable(Connection conn, String table_sql,
-                               PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                               Integer nSaltBuckets, PTable.IndexType indexType, boolean immutable,
+                               Integer nSaltBuckets, boolean immutable,
                                PTable.ImmutableStorageScheme immutableStorageScheme)
             throws Exception {
         createTable(conn, table_sql, new HashMap<String, Object>() {{
@@ -110,7 +103,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                     new Byte(encodingScheme.getSerializedMetadataValue()) : null);
             put(TableProperty.MULTI_TENANT.getPropertyName(), multitenant);
             put(TableProperty.SALT_BUCKETS.getPropertyName(), nSaltBuckets);
-            put(TableProperty.INDEX_TYPE.getPropertyName(), indexType);
             put(TableProperty.IMMUTABLE_ROWS.getPropertyName(), immutable);
             put(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName(), immutableStorageScheme != null ?
                     immutableStorageScheme.name() : null);
@@ -133,15 +125,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         if (nSaltBuckets != null) {
             props.add(TableProperty.SALT_BUCKETS.getPropertyName() + "=" + nSaltBuckets);
         }
-        PTable.IndexType indexType = (PTable.IndexType) TableProperty.INDEX_TYPE.getValue(
-                tableProps);
-        if (indexType != null && indexType == PTable.IndexType.LOCAL) {
-            props.add(TableProperty.INDEX_TYPE.getPropertyName() + "=" +
-                    (indexType == PTable.IndexType.LOCAL ? "l" : "g"));
-        }
-        if (nSaltBuckets != null) {
-            props.add(TableProperty.INDEX_TYPE.getPropertyName() + "=" + indexType);
-        }
         Boolean immutableTable = (Boolean) TableProperty.IMMUTABLE_ROWS.getValue(tableProps);
         if (immutableTable) {
             props.add(TableProperty.IMMUTABLE_ROWS.getPropertyName() + "=true");
@@ -159,31 +142,18 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
                                     String cdc_sql) throws Exception {
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null, null);
-    }
-
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
-                                  String cdc_sql, PTable.IndexType indexType) throws Exception{
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null, indexType);
+        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null);
     }
 
     protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
                                     String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
                                     Integer nSaltBuckets) throws Exception {
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, nSaltBuckets, null);
-    }
-
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
-                                    String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
-                                    Integer nSaltBuckets, PTable.IndexType indexType) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
-        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, indexType, false, null);
+        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, false, null);
         String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
         tableName = SchemaUtil.getTableNameFromFullName(tableName);
         IndexToolIT.runIndexTool(false, schemaName, tableName,
                 "\""+CDCUtil.getCDCIndexName(cdcName)+"\"");
-        String indexFullName = SchemaUtil.getTableName(schemaName,
-                CDCUtil.getCDCIndexName(cdcName));
     }
 
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,

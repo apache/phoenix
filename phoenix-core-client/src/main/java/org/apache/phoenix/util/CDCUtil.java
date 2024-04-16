@@ -34,7 +34,6 @@ import org.apache.phoenix.schema.PTable;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "__CDC__";
-    public static final String CDC_INDEX_TYPE_LOCAL = "L";
 
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope

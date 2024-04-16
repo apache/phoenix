@@ -1739,13 +1739,11 @@ public class MetaDataClient {
                 statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
 
-        IndexType indexType = (IndexType) TableProperty.INDEX_TYPE.getValue(tableProps);
         PhoenixStatement pstmt = new PhoenixStatement(connection);
         String dataTableFullName = SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
                 statement.getDataTable().getTableName());
-        String createIndexSql = "CREATE " +
-                (indexType == IndexType.LOCAL ? "LOCAL " : "UNCOVERED ") +
-                "INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "") +
+        String createIndexSql = "CREATE UNCOVERED INDEX " +
+                (statement.isIfNotExists() ? "IF NOT EXISTS " : "") +
                 "\"" + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName()) + "\"" +
                 " ON " + dataTableFullName + " (" + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
         List<String> indexProps = new ArrayList<>();
