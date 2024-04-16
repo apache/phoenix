@@ -36,6 +36,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDate;
@@ -44,6 +45,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -75,6 +77,78 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
             }
         }
         assertTrue(GLOBAL_PAGED_ROWS_COUNTER.getMetric().getValue() > 0);
+    }
+
+    @Test
+    public void testScanWithLimit() throws Exception {
+        final String tablename = "T_" + generateUniqueName();
+        final String indexName = "I_" + generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tablename +
+                    "(id1 integer not null, id2 integer not null, val varchar constraint pk primary key (id1, id2))";
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            PreparedStatement stmt = conn.prepareStatement("upsert into " + tablename + " VALUES(?, ?, ?)");
+            // upsert 50 rows
+            for (int i = 0; i < 5; ++i) {
+                for (int j = 0; j < 10; ++j) {
+                    stmt.setInt(1, i);
+                    stmt.setInt(2, j);
+                    stmt.setString(3, "abcdefghijklmnopqrstuvwxyz");
+                    stmt.executeUpdate();
+                }
+                conn.commit();
+            }
+            // delete first 40 rows
+            stmt = conn.prepareStatement("delete from " + tablename + " where id1 = ? and id2 = ?");
+            for (int i = 0; i < 4; ++i) {
+                for (int j = 0; j < 10; ++j) {
+                    stmt.setInt(1, i);
+                    stmt.setInt(2, j);
+                    stmt.executeUpdate();
+                }
+                conn.commit();
+            }
+            int limit = 10;
+            stmt = conn.prepareStatement("select * from " + tablename + " where id1 >= 3 limit " + limit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                int expectedRowCount = 0;
+                int expectedId1 = 4;
+                int expectedId2 = 0;
+                while (rs.next()) {
+                    ++expectedRowCount;
+                    assertEquals(expectedId1, rs.getInt(1));
+                    assertEquals(expectedId2, rs.getInt(2));
+                    expectedId2++;
+                }
+                assertEquals(expectedRowCount, limit);
+                assertServerPagingMetric(tablename, rs, true);
+            }
+
+            ddl = "create index " + indexName + " ON " + tablename + " (id2, id1) INCLUDE (val)";
+            conn.createStatement().execute(ddl);
+            conn.commit();
+
+            stmt = conn.prepareStatement("select * from " + tablename + " limit " + limit);
+            try (ResultSet rs = stmt.executeQuery()) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains(indexName));
+                int expectedRowCount = 0;
+                int expectedId1 = 4;
+                int expectedId2 = 0;
+                while (rs.next()) {
+                    ++expectedRowCount;
+                    assertEquals(expectedId1, rs.getInt(1));
+                    assertEquals(expectedId2, rs.getInt(2));
+                    expectedId2++;
+                }
+                assertEquals(expectedRowCount, limit);
+                assertServerPagingMetric(indexName, rs, true);
+            }
+        }
     }
 
     @Test
