@@ -49,7 +49,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
@@ -1175,6 +1174,12 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             }
             
             // verify index metadata was dropped
+            try {
+                viewConn.createStatement().execute("SELECT * FROM " + fullNameViewIndex1 );
+                fail("Index metadata should have been dropped");
+            } catch (TableNotFoundException e) {
+            }
+            
             pconn = viewConn.unwrap(PhoenixConnection.class);
             view = pconn.getTableNoCache(viewOfTable);
             assertEquals("Unexpected number of indexes ", 1, view.getIndexes().size());
