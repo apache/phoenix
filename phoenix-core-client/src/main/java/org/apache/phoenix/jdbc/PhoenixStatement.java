@@ -867,6 +867,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             CompilableStatement compilableStmt = getStatement();
             StatementPlan compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            // if client is validating timestamps, ensure its metadata cache is up to date.
+            if (ValidateLastDDLTimestampUtil
+                    .getValidateLastDdlTimestampEnabled(stmt.getConnection())) {
+                Set<TableRef> tableRefs = compilePlan.getSourceRefs();
+                for (TableRef tableRef : tableRefs) {
+                    new MetaDataClient(stmt.getConnection()).updateCache(
+                            stmt.getConnection().getTenantId(),
+                            tableRef.getTable().getSchemaName().getString(),
+                            tableRef.getTable().getTableName().getString(),
+                            true);
+                }
+                compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            }
             // For a QueryPlan, we need to get its optimized plan; for a MutationPlan, its enclosed QueryPlan
             // has already been optimized during compilation.
             if (compilePlan instanceof QueryPlan) {
