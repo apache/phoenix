@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
@@ -84,6 +85,7 @@ public class StatementContext {
     private QueryLogger queryLogger;
     private boolean isClientSideUpsertSelect;
     private boolean isUncoveredIndex;
+    private AtomicBoolean hasFirstValidResult;
     
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
@@ -111,6 +113,7 @@ public class StatementContext {
         this.queryLogger = context.queryLogger;
         this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
         this.isUncoveredIndex = context.isUncoveredIndex;
+        this.hasFirstValidResult = new AtomicBoolean(context.getHasFirstValidResult());
     }
     /**
      *  Constructor that lets you override whether or not to collect request level metrics.
@@ -155,6 +158,7 @@ public class StatementContext {
         this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled,connection.getLogLevel());
         this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
         this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
+        this.hasFirstValidResult = new AtomicBoolean(false);
     }
 
     /**
@@ -228,6 +232,14 @@ public class StatementContext {
 
     public TableRef getCurrentTable() {
         return currentTable;
+    }
+
+    public boolean getHasFirstValidResult() {
+        return hasFirstValidResult.get();
+    }
+
+    public void setHasFirstValidResult(boolean hasValidResult) {
+        hasFirstValidResult.set(hasValidResult);
     }
 
     public void setCurrentTable(TableRef table) {

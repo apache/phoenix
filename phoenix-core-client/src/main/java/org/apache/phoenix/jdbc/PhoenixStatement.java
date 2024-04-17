@@ -476,14 +476,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 LOGGER.debug("Force updating client metadata cache for {}",
                                         ValidateLastDDLTimestampUtil.getInfoString(tenantId,
                                                 Arrays.asList(getLastQueryPlan().getTableRef())));
-
-                                // if the index metadata was stale, we will update the client cache
-                                // for the parent table, which will also add the new index metadata
-                                PTableType tableType =pTable.getType();
-                                if (tableType == PTableType.INDEX) {
-                                    schemaN = pTable.getParentSchemaName().toString();
-                                    tableN = pTable.getParentTableName().toString();
-                                }
                                 // force update client metadata cache for the table/view
                                 // this also updates the cache for all ancestors in case of a view
                                 new MetaDataClient(connection)
@@ -887,6 +879,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             CompilableStatement compilableStmt = getStatement();
             StatementPlan compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            // if client is validating timestamps, ensure its metadata cache is up to date.
+            if (ValidateLastDDLTimestampUtil
+                    .getValidateLastDdlTimestampEnabled(stmt.getConnection())) {
+                Set<TableRef> tableRefs = compilePlan.getSourceRefs();
+                for (TableRef tableRef : tableRefs) {
+                    new MetaDataClient(stmt.getConnection()).updateCache(
+                            stmt.getConnection().getTenantId(),
+                            tableRef.getTable().getSchemaName().getString(),
+                            tableRef.getTable().getTableName().getString(),
+                            true);
+                }
+                compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+            }
             // For a QueryPlan, we need to get its optimized plan; for a MutationPlan, its enclosed QueryPlan
             // has already been optimized during compilation.
             if (compilePlan instanceof QueryPlan) {
