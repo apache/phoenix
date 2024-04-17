@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -105,7 +106,10 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
         initTable(tableName);
         Connection conn = getConnection();
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        int nRegions = services.getAllTableRegions(tableNameBytes).size();
+        int queryTimeout = services.getProps()
+                .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+        int nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
         int nInitialRegions = nRegions;
         Admin admin = services.getAdmin();
         try {
@@ -113,7 +117,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
             int nTries = 0;
             while (nRegions == nInitialRegions && nTries < 10) {
                 Thread.sleep(1000);
-                nRegions = services.getAllTableRegions(tableNameBytes).size();
+                nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
                 nTries++;
             }
             // Split finished by this time, but cache isn't updated until
@@ -124,7 +128,7 @@ public class SkipScanAfterManualSplitIT extends ParallelStatsDisabledIT {
             String query = "SELECT count(*) FROM " + tableName + " WHERE a IN ('tl','jt',' a',' b',' c',' d')";
             ResultSet rs1 = conn.createStatement().executeQuery(query);
             assertTrue(rs1.next());
-            nRegions = services.getAllTableRegions(tableNameBytes).size();
+            nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
             // Region cache has been updated, as there are more regions now
             assertNotEquals(nRegions, nInitialRegions);
             /*

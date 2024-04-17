@@ -93,6 +93,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -755,9 +756,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     @Override
-    public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
         return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
-            HConstants.EMPTY_END_ROW);
+                HConstants.EMPTY_END_ROW, queryTimeout);
     }
 
     /**
@@ -765,7 +767,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public List<HRegionLocation> getTableRegions(final byte[] tableName, final byte[] startRowKey,
-                                                 final byte[] endRowKey) throws SQLException {
+                                                 final byte[] endRowKey, final int queryTimeout)
+            throws SQLException {
         /*
          * Use HConnection.getRegionLocation as it uses the cache in HConnection, while getting
          * all region locations from the HTable doesn't.
@@ -775,8 +778,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
         byte[] currentKey = null;
-        final int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
-                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
         final long startTime = EnvironmentEdgeManager.currentTimeMillis();
         final long maxQueryEndTime = startTime + queryTimeout;
         while (true) {
@@ -853,13 +854,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     Bytes.toStringBinary(startRowKey),
                     Bytes.toStringBinary(endRowKey)
             );
-            IOException e = new IOException(
-                    "getTableRegions has exceeded query timeout " + queryTimeout +
-                            "ms");
-            throw new SQLExceptionInfo.Builder(
-                    SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
-                    .setRootCause(e).build()
-                    .buildException();
+            final String message = "getTableRegions has exceeded query timeout " + queryTimeout +
+                    "ms";
+            IOException e = new IOException(message);
+            throw new SQLTimeoutException(message,
+                    SQLExceptionCode.OPERATION_TIMED_OUT.getSQLState(),
+                    SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e);
         }
     }
 

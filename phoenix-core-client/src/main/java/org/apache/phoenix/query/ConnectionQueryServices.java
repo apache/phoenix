@@ -99,22 +99,27 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     public TableDescriptor getTableDescriptor(byte[] tableName) throws SQLException;
 
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
-    public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;
+
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException;
 
     /**
      * Retrieve table region locations that cover the startRowKey and endRowKey. The start key
      * of the first region of the returned list must be less than or equal to startRowKey.
      * The end key of the last region of the returned list must be greater than or equal to
-     * endRowKey.
+     * endRowKey. The operation to retrieve the table region locations must be completed within
+     * the query timeout.
      *
-     * @param tableName Table name.
-     * @param startRowKey Start RowKey.
-     * @param endRowKey End RowKey.
+     * @param tableName    Table name.
+     * @param startRowKey  Start RowKey.
+     * @param endRowKey    End RowKey.
+     * @param queryTimeout Phoenix query timeout.
      * @return The list of region locations that cover the startRowKey and endRowKey key boundary.
      * @throws SQLException If fails to retrieve region locations.
      */
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException;
+                                                 byte[] endRowKey,
+                                                 int queryTimeout) throws SQLException;
 
     public PhoenixConnection connect(String url, Properties info) throws SQLException;
 
