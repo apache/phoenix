@@ -456,8 +456,10 @@ public abstract class BaseTest {
     protected static String setUpTestCluster(@Nonnull Configuration conf, ReadOnlyProps overrideProps) throws Exception {
         boolean isDistributedCluster = isDistributedClusterModeEnabled(conf);
         if (!isDistributedCluster) {
+            TEARDOWN_THRESHOLD.set(30);
             return initMiniCluster(conf, overrideProps);
         } else {
+            TEARDOWN_THRESHOLD.set(1);
             return initClusterDistributedMode(conf, overrideProps);
         }
     }
@@ -773,7 +775,7 @@ public abstract class BaseTest {
      * Note, we can't have this value too high since we don't want the shutdown to take too
      * long a time either.
      */
-    private static final int TEARDOWN_THRESHOLD = 1;
+    private static final AtomicInteger TEARDOWN_THRESHOLD = new AtomicInteger(0);
 
     @ClassRule
     public static PhoenixTestTableName phoenixTestTableName = new PhoenixTestTableName();
@@ -784,6 +786,10 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
+        if(!isDistributedClusterModeEnabled(config)){
+            phoenixTestTableName.setTableName("N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1));
+            return phoenixTestTableName.getTableName();
+        }
         return phoenixTestTableName.getTableName() + "_" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1);
     }
     
@@ -811,18 +817,18 @@ public abstract class BaseTest {
     }
 
     public static synchronized void freeResourcesIfBeyondThreshold() throws Exception {
-        if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD) {
+        if (TABLE_COUNTER.get() > TEARDOWN_THRESHOLD.get()) {
             int numTables = TABLE_COUNTER.get();
             TABLE_COUNTER.set(0);
             if (isDistributedClusterModeEnabled(config)) {
                 LOGGER.info("Deleting old tables on distributed cluster because "
                         + "number of tables is likely greater than {}",
-                    TEARDOWN_THRESHOLD);
+                    TEARDOWN_THRESHOLD.get());
                 deletePriorMetaData(HConstants.LATEST_TIMESTAMP, url);
             } else {
                 LOGGER.info("Shutting down mini cluster because number of tables"
                         + " on this mini cluster is likely greater than {}",
-                    TEARDOWN_THRESHOLD);
+                    TEARDOWN_THRESHOLD.get());
                 resetHbase();
             }
         }
@@ -905,7 +911,6 @@ public abstract class BaseTest {
                     continue;
                 }
                 schemaName = SchemaUtil.getEscapedArgument(schemaName);
-
                 LOGGER.info("Dropping schema " + schemaName + " for cleanup.");
                 String ddl = "DROP SCHEMA " + schemaName;
                 conn.createStatement().executeUpdate(ddl);
@@ -957,7 +962,11 @@ public abstract class BaseTest {
         }
         Connection conn = DriverManager.getConnection(url, props);
         try {
-            deletePriorTables(ts, conn, url);
+            if(isDistributedClusterModeEnabled(config)){
+                deleteCurrentTestTables(ts, conn, url);
+            }else{
+                deletePriorTables(ts, conn, url);
+            }
             deletePriorSequences(ts, conn);
             
             // Make sure all tables and views have been dropped
@@ -981,8 +990,50 @@ public abstract class BaseTest {
             conn.close();
         }
     }
-    
     private static void deletePriorTables(long ts, Connection globalConn, String url) throws Exception {
+        DatabaseMetaData dbmd = globalConn.getMetaData();
+        // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
+        // Tables are sorted by TENANT_ID
+        List<String[]> tableTypesList = Arrays.asList(new String[] {PTableType.VIEW.toString()}, new String[] {PTableType.TABLE.toString()});
+        for (String[] tableTypes: tableTypesList) {
+            ResultSet rs = dbmd.getTables(null, null, null, tableTypes);
+            String lastTenantId = null;
+            Connection conn = globalConn;
+            System.out.println("outside");
+            while (rs.next()) {
+                System.out.println("inside");
+                String fullTableName = SchemaUtil.getEscapedTableName(
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
+                        rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+
+                String ddl = "DROP " + rs.getString(PhoenixDatabaseMetaData.TABLE_TYPE) + " " + fullTableName + "  CASCADE";
+                String tenantId = rs.getString(1);
+                if (tenantId != null && !tenantId.equals(lastTenantId))  {
+                    if (lastTenantId != null) {
+                        conn.close();
+                    }
+                    // Open tenant-specific connection when we find a new one
+                    Properties props = PropertiesUtil.deepCopy(globalConn.getClientInfo());
+                    props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+                    conn = DriverManager.getConnection(url, props);
+                    lastTenantId = tenantId;
+                }
+                try {
+                    conn.createStatement().executeUpdate(ddl);
+                } catch (NewerTableAlreadyExistsException ex) {
+                    LOGGER.info("Newer table " + fullTableName + " or its delete marker exists. Ignore current deletion");
+                } catch (TableNotFoundException ex) {
+                    LOGGER.info("Table " + fullTableName + " is already deleted.");
+                }
+            }
+            rs.close();
+            if (lastTenantId != null) {
+                conn.close();
+            }
+        }
+    }
+    
+    private static void deleteCurrentTestTables(long ts, Connection globalConn, String url) throws Exception {
         DatabaseMetaData dbmd = globalConn.getMetaData();
         // Drop VIEWs first, as we don't allow a TABLE with views to be dropped
         // Tables are sorted by TENANT_ID

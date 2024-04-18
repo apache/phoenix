@@ -134,8 +134,8 @@ Running tests on local cluster
 -----------------------
 
 1. To run all IT tests that are part of a defined execution goal in pom.xml (e.g SignOffTests)
-`mvn failsafe:integration-test@SignOffTests failsafe:verify@SignOffTests -Dhbase.profile=2.5 
--Dskip.code-coverage -Dmaven.test.failure.ignore=true -Dhbase.test.cluster.distributed=true 
+`mvn failsafe:integration-test@SignOffTests failsafe:verify@SignOffTests -Dhbase.profile=2.5
+-Dskip.code-coverage -Dmaven.test.failure.ignore=true -Dhbase.test.cluster.distributed=true
 -Dhbase.zookeeper.quorum=localhost -Dhbase.zookeeper.property.clientPort=2181`
 
 Generate Apache Web Site
