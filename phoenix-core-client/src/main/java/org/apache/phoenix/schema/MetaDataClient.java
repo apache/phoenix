@@ -1520,7 +1520,9 @@ public class MetaDataClient {
         String physicalTableName = null;
         PTable dataTable = null;
         try {
-            ColumnResolver resolver = FromCompiler.getResolver(statement, connection, statement.getUdfParseNodes());
+            ColumnResolver resolver
+                    = FromCompiler.getResolverForCreateIndex(
+                            statement, connection, statement.getUdfParseNodes());
             tableRef = resolver.getTables().get(0);
             Date asyncCreatedDate = null;
             if (statement.isAsync()) {

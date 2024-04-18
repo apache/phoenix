@@ -295,8 +295,11 @@ public class FromCompiler {
         }
     }
 
-    public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes)
+    public static ColumnResolver getResolverForCreateIndex(SingleTableStatement statement,
+                           PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes)
             throws SQLException {
+        // use alwaysHitServer=true to ensure client's cache is up-to-date even when client is
+        // validating last_ddl_timestamps and UCF = never.
         SingleTableColumnResolver visitor
                 = new SingleTableColumnResolver(connection, statement.getTable(), true, 0,
                                                     udfParseNodes, true, null);
