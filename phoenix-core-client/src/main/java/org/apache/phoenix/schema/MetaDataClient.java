@@ -200,6 +200,7 @@ import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -1781,11 +1782,7 @@ public class MetaDataClient {
         MutationState state = buildIndex(table, tableRef);
         // If client is validating LAST_DDL_TIMESTAMPS, parent's last_ddl_timestamp changed
         // so remove it from client's cache. It will be refreshed when table is accessed next time.
-        boolean lastDDLTimestampValidationEnabled =
-                connection.getQueryServices().getProps().getBoolean(
-                        QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                        QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
-        if (lastDDLTimestampValidationEnabled) {
+        if(ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
             connection.removeTable(connection.getTenantId(), dataTable.getName().getString(),
                     null, dataTable.getTimeStamp());
         }
