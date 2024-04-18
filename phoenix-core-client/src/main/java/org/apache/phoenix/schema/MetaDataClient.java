@@ -1782,7 +1782,7 @@ public class MetaDataClient {
         MutationState state = buildIndex(table, tableRef);
         // If client is validating LAST_DDL_TIMESTAMPS, parent's last_ddl_timestamp changed
         // so remove it from client's cache. It will be refreshed when table is accessed next time.
-        if(ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
+        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
             connection.removeTable(connection.getTenantId(), dataTable.getName().getString(),
                     null, dataTable.getTimeStamp());
         }

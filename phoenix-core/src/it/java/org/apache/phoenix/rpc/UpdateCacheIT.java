@@ -70,10 +70,9 @@ import org.slf4j.LoggerFactory;
 @Category(ParallelStatsDisabledTest.class)
 public class UpdateCacheIT extends ParallelStatsDisabledIT {
 
-    private boolean isLastDDLTimestampValidationEnabled
-            = QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED
-                && (QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY == Long.MAX_VALUE);
-
+    private boolean isLastDDLTimestampValidationEnabled = config.getBoolean(
+            QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     private static final Logger LOGGER =
         LoggerFactory.getLogger(UpdateCacheIT.class);
 

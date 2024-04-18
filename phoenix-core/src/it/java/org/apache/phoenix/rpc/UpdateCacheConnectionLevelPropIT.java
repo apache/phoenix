@@ -62,9 +62,9 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
     private static Connection conn1;
     private static Connection conn2;
     private static ConnectionQueryServices spyForConn2;
-    private boolean isLastDDLTimestampValidationEnabled
-            = QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED
-            && (QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY == Long.MAX_VALUE);
+    private boolean isLastDDLTimestampValidationEnabled = config.getBoolean(
+            QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
 
     @AfterClass
     public static synchronized void freeResources() {

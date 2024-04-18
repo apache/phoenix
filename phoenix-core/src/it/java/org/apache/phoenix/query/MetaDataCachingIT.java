@@ -23,8 +23,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.schema.*;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.junit.BeforeClass;
@@ -40,12 +38,10 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 @RunWith(RunUntilFailure.class)
@@ -54,6 +50,10 @@ public class MetaDataCachingIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataCachingIT.class);
     private final Random RAND = new Random(11);
+
+    private boolean isLastDDLTimestampValidationEnabled = config.getBoolean(
+            QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -157,7 +157,7 @@ public class MetaDataCachingIT extends BaseTest {
 
         // only 1 miss when the table is created
         int numExpectedMisses = 1;
-        if (QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED) {
+        if (isLastDDLTimestampValidationEnabled) {
             // if we are validating last_ddl_timestamps,
             // region server will see 2 more misses when trying to update its cache
             numExpectedMisses += 2;

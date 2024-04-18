@@ -47,6 +47,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.DelayedOrFailingRegionServer;
 import org.apache.phoenix.util.ReadOnlyProps;
 
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -1283,11 +1284,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 //assert BaseTable is not being queried
                 //if client is validating last_ddl_timestamps with ucf=never,
                 //there will be no metrics for base table (like getTable RPC times/counts).
-                boolean lastDDLTimestampValidationEnabled =
-                        conn.unwrap(PhoenixConnection.class).getQueryServices().getProps().getBoolean(
-                                QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-                                QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
-                if (lastDDLTimestampValidationEnabled) {
+                if (ValidateLastDDLTimestampUtil
+                        .getValidateLastDdlTimestampEnabled(conn.unwrap(PhoenixConnection.class))) {
                     assertFalse(getPhoenixTableClientMetrics().containsKey(dataTable));
                 } else {
                     for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
