@@ -28,6 +28,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 import static org.apache.phoenix.util.TestUtil.DEFAULT_SCHEMA_NAME;
 
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.AfterClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -62,9 +63,8 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
     private static Connection conn1;
     private static Connection conn2;
     private static ConnectionQueryServices spyForConn2;
-    private boolean isLastDDLTimestampValidationEnabled = config.getBoolean(
-            QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+    private boolean isLastDDLTimestampValidationEnabled
+            = ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(config);
 
     @AfterClass
     public static synchronized void freeResources() {

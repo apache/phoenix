@@ -57,6 +57,7 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
@@ -70,9 +71,8 @@ import org.slf4j.LoggerFactory;
 @Category(ParallelStatsDisabledTest.class)
 public class UpdateCacheIT extends ParallelStatsDisabledIT {
 
-    private boolean isLastDDLTimestampValidationEnabled = config.getBoolean(
-            QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+    private boolean isLastDDLTimestampValidationEnabled
+            = ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(config);
     private static final Logger LOGGER =
         LoggerFactory.getLogger(UpdateCacheIT.class);
 

@@ -25,6 +25,7 @@ import org.apache.phoenix.schema.*;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -51,9 +52,8 @@ public class MetaDataCachingIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataCachingIT.class);
     private final Random RAND = new Random(11);
 
-    private boolean isLastDDLTimestampValidationEnabled = config.getBoolean(
-            QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
-            QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+    private boolean isLastDDLTimestampValidationEnabled
+            = ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(config);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
