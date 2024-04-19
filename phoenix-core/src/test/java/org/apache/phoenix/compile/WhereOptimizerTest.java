@@ -3544,8 +3544,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                 PTable viewIndexPTable = tenantConn.unwrap(PhoenixConnection.class).getTable(globalViewIndexName);
                 // PK of view index [_INDEX_ID, tenant_id, KV, PK]
                 byte[] startRow = ByteUtil.concat(PLong.INSTANCE.toBytes(viewIndexPTable.getViewIndexId()),
-                        PChar.INSTANCE.toBytes(tenantId),
-                        PChar.INSTANCE.toBytes("KV"));
+                                                    PChar.INSTANCE.toBytes(tenantId),
+                                                    PChar.INSTANCE.toBytes("KV"));
                 assertArrayEquals(startRow, scan.getStartRow());
             }
         }

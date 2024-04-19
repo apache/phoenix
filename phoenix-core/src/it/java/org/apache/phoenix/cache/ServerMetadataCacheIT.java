@@ -852,6 +852,30 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Test that a client does not see TableNotFoundException when trying to validate
+     * LAST_DDL_TIMESTAMP for a view and its parent after the table was altered and removed from
+     * the client's cache.
+     */
+    @Test
+    public void testQueryViewAfterParentRemovedFromCache() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url = QueryUtil.getConnectionUrl(props, config);
+        ConnectionQueryServices cqs = driver.getConnectionQueryServices(url, props);
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        try (Connection conn = cqs.connect(url, props)) {
+            createTable(conn, tableName);
+            createView(conn, tableName, viewName);
+            query(conn, viewName);
+            // this removes the parent table from the client cache
+            alterTableDropColumn(conn, tableName, "v2");
+            query(conn, viewName);
+        } catch (TableNotFoundException e) {
+            fail("TableNotFoundException should not be encountered by client.");
+        }
+    }
+
+    /**
      * Test query on index with stale last ddl timestamp.
      * Client-1 creates a table and an index on it. Client-2 queries table to populate its cache.
      * Client-1 alters a property on the index. Client-2 queries the table again.
@@ -1324,6 +1348,30 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Test that a client can not create an index on a column after another client dropped the column.
+     */
+    @Test
+    public void testClientCannotCreateIndexOnDroppedColumn() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        String tableName = generateUniqueName();
+        String indexName = generateUniqueName();
+        ConnectionQueryServices spyCqs1 = Mockito.spy(driver.getConnectionQueryServices(url1, props));
+        ConnectionQueryServices spyCqs2 = Mockito.spy(driver.getConnectionQueryServices(url2, props));
+
+        try (Connection conn1 = spyCqs1.connect(url1, props);
+             Connection conn2 = spyCqs2.connect(url2, props)) {
+            createTable(conn1, tableName);
+            alterTableDropColumn(conn2, tableName, "v2");
+            createIndex(conn1, tableName, indexName, "v2");
+            fail("Client should not be able to create index on dropped column.");
+        }
+        catch (ColumnNotFoundException expected) {
+        }
+    }
+
+    /**
      * Test that upserts into a view whose parent was dropped throws a TableNotFoundException.
      */
     @Test
@@ -1606,14 +1654,14 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
             map = viewPTable2.getAncestorLastDDLTimestampMap();
             assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
             assertEquals(2, viewPTable2.getIndexes().size());
-            for (PTable indexT : viewPTable2.getIndexes()) {
+            for (PTable indexOfView : viewPTable2.getIndexes()) {
                 // inherited index
-                if (indexT.getTableName().getString().equals(index2)) {
-                    map = indexT.getAncestorLastDDLTimestampMap();
+                if (indexOfView.getTableName().getString().equals(index2)) {
+                    map = indexOfView.getAncestorLastDDLTimestampMap();
                     assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
                 } else {
                     // view index
-                    map = indexT.getAncestorLastDDLTimestampMap();
+                    map = indexOfView.getAncestorLastDDLTimestampMap();
                     assertEquals(basePTable2.getLastDDLTimestamp(), map.get(basePTable2.getKey()));
                     assertEquals(viewPTable2.getLastDDLTimestamp(), map.get(viewPTable2.getKey()));
                 }
@@ -1724,7 +1772,10 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
             // create index, getTable RPCs for base table
             createIndex(conn1, tableName, indexName, "v2");
-            numTableRPCs += 3; // one rpc each for getting current time, create index, alter index state after building
+            // getting current time,
+            // create index(compile+execute),
+            // alter index state after building(compile+execute)
+            numTableRPCs += 5;
             assertNumGetTableRPC(spyCqs1, tableName, numTableRPCs);
 
 

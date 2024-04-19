@@ -48,6 +48,7 @@ import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -56,6 +57,7 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.mockito.Mockito;
@@ -69,6 +71,8 @@ import org.slf4j.LoggerFactory;
 @Category(ParallelStatsDisabledTest.class)
 public class UpdateCacheIT extends ParallelStatsDisabledIT {
 
+    private boolean isLastDDLTimestampValidationEnabled
+            = ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(config);
     private static final Logger LOGGER =
         LoggerFactory.getLogger(UpdateCacheIT.class);
 
@@ -87,7 +91,13 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
             String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
             Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
             conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA + "TRANSACTIONAL=true,TRANSACTION_PROVIDER='" + provider + "'");
-            helpTestUpdateCache(fullTableName, new int[] {1, 3}, false);
+            int[] expectedRPCs = new int[] {1, 3};
+            if (isLastDDLTimestampValidationEnabled) {
+                // when validating last_ddl_timestamps, no getTable RPCs will be performed
+                // since schema has not changed.
+                expectedRPCs = new int[] {0, 0};
+            }
+            helpTestUpdateCache(fullTableName, expectedRPCs, false);
         }
     }
 
@@ -97,7 +107,13 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         String fullTableName = INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + tableName;
         Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
         conn.createStatement().execute("create table " + fullTableName + TestUtil.TEST_TABLE_SCHEMA);
-        helpTestUpdateCache(fullTableName, new int[] {1, 3}, false);
+        int[] expectedRPCs = new int[] {1, 3};
+        if (isLastDDLTimestampValidationEnabled) {
+            // when validating last_ddl_timestamps, no getTable RPCs will be performed
+            // since schema has not changed.
+            expectedRPCs = new int[] {0, 0};
+        }
+        helpTestUpdateCache(fullTableName, expectedRPCs, false);
     }
 	
     @Test
@@ -217,7 +233,14 @@ public class UpdateCacheIT extends ParallelStatsDisabledIT {
         }
 
         // The indexes should have got the UPDATE_CACHE_FREQUENCY value of their base table
-        helpTestUpdateCache(fullTableName, new int[] {0, 0}, false);
+        int numRPCUpsert = 0;
+        int numRPCSelect = 0;
+        if (isLastDDLTimestampValidationEnabled) {
+            // we created indexes on the table which will bump the last_ddl_timestamp of the table
+            // hence we will do 1 getTable RPC for the upsert
+            numRPCUpsert = 1;
+        }
+        helpTestUpdateCache(fullTableName, new int[] {numRPCUpsert, numRPCSelect}, false);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + localIndex,
                 new int[] {0}, true);
         helpTestUpdateCache(INDEX_DATA_SCHEMA + QueryConstants.NAME_SEPARATOR + globalIndex,

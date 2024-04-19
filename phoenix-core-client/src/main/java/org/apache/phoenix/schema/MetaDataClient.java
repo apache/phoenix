@@ -200,6 +200,7 @@ import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -771,6 +772,7 @@ public class MetaDataClient {
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
             // i.e. explicitly set to 0. We should ideally be checking for something like
             // hasUpdateCacheFrequency().
+
             //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
             //QueryOptimizer needs that to decide whether the index can be used
             if (PIndexState.PENDING_DISABLE.equals(table.getIndexState())) {
@@ -1516,14 +1518,17 @@ public class MetaDataClient {
         Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
         String physicalSchemaName = null;
         String physicalTableName = null;
+        PTable dataTable = null;
         try {
-            ColumnResolver resolver = FromCompiler.getResolver(statement, connection, statement.getUdfParseNodes());
+            ColumnResolver resolver
+                    = FromCompiler.getResolverForCreateIndex(
+                            statement, connection, statement.getUdfParseNodes());
             tableRef = resolver.getTables().get(0);
             Date asyncCreatedDate = null;
             if (statement.isAsync()) {
-                asyncCreatedDate = new Date(tableRef.getTimeStamp());
+                asyncCreatedDate = new Date(tableRef.getCurrentTime());
             }
-            PTable dataTable = tableRef.getTable();
+            dataTable = tableRef.getTable();
             boolean isTenantConnection = connection.getTenantId() != null;
             if (isTenantConnection) {
                 if (dataTable.getType() != PTableType.VIEW) {
@@ -1776,7 +1781,14 @@ public class MetaDataClient {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
 
-        return buildIndex(table, tableRef);
+        MutationState state = buildIndex(table, tableRef);
+        // If client is validating LAST_DDL_TIMESTAMPS, parent's last_ddl_timestamp changed
+        // so remove it from client's cache. It will be refreshed when table is accessed next time.
+        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
+            connection.removeTable(connection.getTenantId(), dataTable.getName().getString(),
+                    null, dataTable.getTimeStamp());
+        }
+        return state;
     }
 
     /**

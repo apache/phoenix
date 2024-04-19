@@ -661,6 +661,9 @@ public abstract class BaseTest {
         if (value == null) {
             value = PhoenixRegionServerEndpointTestImpl.class.getName();
         }
+        else {
+            value = value + "," + PhoenixRegionServerEndpointTestImpl.class.getName();
+        }
         conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, value);
     }
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {

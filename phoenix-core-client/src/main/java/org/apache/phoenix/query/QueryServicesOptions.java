@@ -119,6 +119,7 @@ import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 import java.util.Map.Entry;
 
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -370,10 +371,23 @@ public class QueryServicesOptions {
     //Security defaults
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
-    //default update cache frequency
-    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
+
+    /**
+     * Metadata caching configs, see https://issues.apache.org/jira/browse/PHOENIX-6883.
+     * Disable the boolean flags and set UCF=always to disable the caching re-design.
+     *
+     * Disable caching re-design if you use Online Data Format Change since the cutover logic
+     * is currently incompatible and clients may not learn about the physical table change.
+     * See https://issues.apache.org/jira/browse/PHOENIX-7284.
+     *
+     * Disable caching re-design if your clients will not have ADMIN perms to call region server
+     * RPC. See https://issues.apache.org/jira/browse/HBASE-28508
+     */
+    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY
+                = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS");
     public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = false;
+    public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = false;
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
                                                                             = Long.toString(0L);
 

@@ -162,9 +162,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
                 exception = (SQLException) e;
             }
             connection.commit();
-            PTableKey key = new PTableKey(null, this.tableName);
-            PMetaData metaCache = connection.unwrap(PhoenixConnection.class).getMetaDataCache();
-            List<PTable> indexes = metaCache.getTableRef(key).getTable().getIndexes();
+            List<PTable> indexes = connection.unwrap(PhoenixConnection.class).getTable(this.tableName).getIndexes();
             if (!overThreshold) {
                 if (this.mode == Mode.ASYNC) {
                     assertEquals(PIndexState.BUILDING, indexes.get(0).getIndexState());

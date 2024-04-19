@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -74,6 +75,17 @@ public class ValidateLastDDLTimestampUtil {
         return connection.getQueryServices().getProps()
                 .getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
                         QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+    }
+
+    /**
+     * Get whether last ddl timestamp validation is enabled in the Configuration
+     * @param config
+     * @return true if it is enabled, false otherwise
+     */
+    public static boolean getValidateLastDdlTimestampEnabled(Configuration config) {
+        return config.getBoolean(
+                QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
     }
 
     /**
@@ -196,7 +208,7 @@ public class ValidateLastDDLTimestampUtil {
         byte[] tenantIDBytes = key.getTenantId() == null
                 ? HConstants.EMPTY_BYTE_ARRAY
                 : key.getTenantId().getBytes();
-        byte[] schemaBytes = schemaName == null
+        byte[] schemaBytes = (schemaName == null || schemaName.isEmpty())
                 ?   HConstants.EMPTY_BYTE_ARRAY
                 : key.getSchemaName().getBytes();
         builder.setTenantId(ByteStringer.wrap(tenantIDBytes));
