@@ -1549,6 +1549,20 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             super(services, connectionInfo, info);
         }
 
+        @Override
+        public List<HRegionLocation> getAllTableRegions(byte[] tableName)
+                throws SQLException {
+            if (failExecuteQueryAndClientSideDeletes) {
+                throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL).build().buildException();
+            }
+            try {
+                Thread.sleep(injectDelay);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            return super.getAllTableRegions(tableName);
+        }
+
         // Make plan.iterator() fail (ultimately calls CQSI.getAllTableRegions())
         @Override public List<HRegionLocation> getAllTableRegions(byte[] tableName,
                                                                   int queryTimeout)

@@ -100,6 +100,27 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public HRegionLocation getTableRegionLocation(byte[] tableName, byte[] row) throws SQLException;
 
+    /**
+     * Retrieve the region metadata locations for all regions of the given table.
+     * This method is Deprecated. Use {@link #getAllTableRegions(byte[], int)} instead.
+     *
+     * @param tableName The table name.
+     * @return The list of table region locations.
+     * @throws SQLException If fails to retrieve region locations.
+     */
+    @Deprecated
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException;
+
+    /**
+     * Retrieve the region metadata locations for all regions of the given table.
+     * The operation to retrieve the table region locations must be completed within
+     * the query timeout.
+     *
+     * @param tableName Table name.
+     * @param queryTimeout Phoenix query timeout.
+     * @return The list of region locations.
+     * @throws SQLException If fails to retrieve region locations.
+     */
     public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
             throws SQLException;
 

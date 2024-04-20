@@ -228,6 +228,18 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
             throws SQLException {

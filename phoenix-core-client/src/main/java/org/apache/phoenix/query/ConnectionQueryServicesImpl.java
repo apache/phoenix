@@ -755,6 +755,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return regionLocation.getRegion().getEndKey();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
+                HConstants.EMPTY_END_ROW, queryTimeout);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
             throws SQLException {
