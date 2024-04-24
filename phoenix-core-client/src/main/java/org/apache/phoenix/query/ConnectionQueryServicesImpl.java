@@ -879,8 +879,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     Bytes.toStringBinary(startRowKey),
                     Bytes.toStringBinary(endRowKey)
             );
-            final String message = "getTableRegions has exceeded query timeout " + queryTimeout +
-                    "ms";
+            final String message = "getTableRegions has exceeded query timeout " + queryTimeout
+                    + "ms";
             IOException e = new IOException(message);
             throw new SQLTimeoutException(message,
                     SQLExceptionCode.OPERATION_TIMED_OUT.getSQLState(),

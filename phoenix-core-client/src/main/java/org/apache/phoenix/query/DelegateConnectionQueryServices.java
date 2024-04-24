@@ -113,7 +113,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-                                                 byte[] endRowKey, int queryTimeout) throws SQLException {
+                                                 byte[] endRowKey, int queryTimeout)
+            throws SQLException {
         return getDelegate().getTableRegions(tableName, startRowKey, endRowKey, queryTimeout);
     }
 
