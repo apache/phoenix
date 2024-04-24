@@ -16,7 +16,21 @@
 package org.apache.phoenix.util;
 
 import org.apache.hadoop.hbase.CompareOperator;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.PageFilter;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.execute.ScanPlan;
+import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ParallelScanGrouper;
+import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.matcher.TableTTLInfo;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PSmallint;
@@ -87,6 +101,7 @@ import java.util.stream.Collectors;
 import static org.apache.phoenix.coprocessor.MetaDataProtocol.MIN_SPLITTABLE_SYSTEM_CATALOG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
@@ -94,6 +109,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_BYTES;
+import static org.apache.phoenix.query.QueryConstants.EMPTY_COLUMN_VALUE_BYTES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SCAN_PAGE_SIZE;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
@@ -103,6 +123,8 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 public class ViewUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ViewUtil.class);
+
+    private static final byte[] LINK_ROW = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
 
     /**
      * Find all the descendant views of a given table or view in a depth-first fashion.
@@ -1097,224 +1119,6 @@ public class ViewUtil {
                         MetaDataEndpointImpl.VIEW_MODIFIED_PROPERTY_BYTES);
             }
 
-        }
-    }
-
-    /// TODO : Needs optimization and remove logging
-    public static List<TableTTLInfo> getMatchPatternsForPartitionedTables(String physicalTableName,
-            Configuration configuration, boolean globalViews, boolean tenantViews,
-            boolean viewIndexes) throws SQLException {
-
-        List<TableTTLInfo> tableTTLInfoList = Lists.newArrayList();
-        if (globalViews || viewIndexes) {
-            Set<TableInfo> globalViewSet = getGlobalViews(physicalTableName, configuration);
-            if (globalViewSet.size() > 0) {
-                getTTLInfo(physicalTableName, globalViewSet, configuration,
-                        viewIndexes, tableTTLInfoList);
-            }
-        }
-
-        if (tenantViews || viewIndexes) {
-            Set<TableInfo> tenantViewSet = getTenantViews(physicalTableName, configuration);
-            if (tenantViewSet.size() > 0) {
-                getTTLInfo(physicalTableName, tenantViewSet, configuration,
-                        viewIndexes, tableTTLInfoList);
-            }
-        }
-
-        return tableTTLInfoList;
-    }
-
-    private static Set<TableInfo> getGlobalViews(String physicalTableName, Configuration configuration)
-            throws SQLException {
-
-        Set<TableInfo> globalViewSet = new HashSet<>();
-        try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
-                configuration)) {
-            String
-                    globalViewsSQLFormat =
-                    "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " +
-                            "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " +
-                            "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " +
-                            "FROM SYSTEM.CATALOG " +
-                            "WHERE " + "LINK_TYPE = 2 " +
-                            "AND TABLE_TYPE IS NULL " +
-                            "AND COLUMN_FAMILY = '%s' " +
-                            "AND TENANT_ID IS NULL";
-            String globalViewSQL = String.format(globalViewsSQLFormat, physicalTableName);
-            logger.debug("globalViewSQL:" + globalViewSQL);
-            try (PhoenixPreparedStatement globalViewStmt = serverConnection.prepareStatement(
-                    globalViewSQL).unwrap(PhoenixPreparedStatement.class)) {
-                try (ResultSet globalViewRS = globalViewStmt.executeQuery()) {
-                    while (globalViewRS.next()) {
-                        String tid = globalViewRS.getString("TENANT_ID");
-                        String schem = globalViewRS.getString("TABLE_SCHEM");
-                        String tName = globalViewRS.getString("TABLE_NAME");
-                        String tenantId = tid == null || tid.isEmpty() ? "NULL" : "'" + tid + "'";
-                        String
-                                schemCol =
-                                schem == null || schem.isEmpty() ? "NULL" : "'" + schem + "'";
-                        TableInfo
-                                tableInfo =
-                                new TableInfo(tenantId.getBytes(), schemCol.getBytes(),
-                                        tName.getBytes());
-                        globalViewSet.add(tableInfo);
-                    }
-                }
-            }
-        }
-        return globalViewSet;
-    }
-
-
-    // TODO Bound it by tenantId's from reqion boundaries
-    // TODO Batch getTenantViews() to handle tenant explosions
-    private static Set<TableInfo> getTenantViews(String physicalTableName, Configuration configuration)
-            throws SQLException {
-
-        Set<TableInfo> tenantViewSet = new HashSet<>();
-        try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
-                configuration)) {
-            String
-                    tenantViewsSQLFormat =
-                    "SELECT TENANT_ID,TABLE_SCHEM,TABLE_NAME," +
-                            "COLUMN_NAME AS PHYSICAL_TABLE_TENANT_ID, " +
-                            "COLUMN_FAMILY AS PHYSICAL_TABLE_FULL_NAME " +
-                            "FROM SYSTEM.CATALOG " +
-                            "WHERE LINK_TYPE = 2 " +
-                            "AND COLUMN_FAMILY = '%s' " +
-                            "AND TENANT_ID IS NOT NULL";
-            String tenantViewSQL = String.format(tenantViewsSQLFormat, physicalTableName);
-            logger.debug("tenantViewSQL:" + tenantViewSQL);
-
-            try (PhoenixPreparedStatement tenantViewStmt = serverConnection.prepareStatement(
-                    tenantViewSQL).unwrap(PhoenixPreparedStatement.class)) {
-                try (ResultSet tenantViewRS = tenantViewStmt.executeQuery()) {
-                    while (tenantViewRS.next()) {
-                        String tid = tenantViewRS.getString("TENANT_ID");
-                        String schem = tenantViewRS.getString("TABLE_SCHEM");
-                        String tName = tenantViewRS.getString("TABLE_NAME");
-                        String tenantId = tid == null || tid.isEmpty() ? "NULL" : "'" + tid + "'";
-                        String schemCol = schem == null || schem.isEmpty()
-                                ? "NULL" : "'" + schem + "'";
-                        TableInfo
-                                tableInfo =
-                                new TableInfo(tenantId.getBytes(), schemCol.getBytes(),
-                                        tName.getBytes());
-                        tenantViewSet.add(tableInfo);
-                    }
-                }
-            }
-        }
-        return tenantViewSet;
-    }
-
-    private static void getTTLInfo(String physicalTableName,
-            Set<TableInfo> viewSet, Configuration configuration,
-            boolean isIndexTable, List<TableTTLInfo> tableTTLInfoList)
-            throws SQLException {
-
-        if (viewSet.size() == 0) {
-            return;
-        }
-        String
-                viewsClause =
-                new StringBuilder(viewSet.stream()
-                        .map((v) -> String.format("(%s, %s,'%s')",
-                                Bytes.toString(v.getTenantId()),
-                                Bytes.toString(v.getSchemaName()),
-                                Bytes.toString(v.getTableName())))
-                        .collect(Collectors.joining(","))).toString();
-        String
-                viewsWithTTLSQL =
-                "SELECT TENANT_ID, TABLE_SCHEM, TABLE_NAME, " +
-                        "TTL, ROW_KEY_MATCHER " +
-                        "FROM SYSTEM.CATALOG " +
-                        "WHERE TABLE_TYPE = 'v' AND " +
-                        "(TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
-                        "(" + viewsClause.toString() + ")";
-        logger.debug(
-                String.format("ViewsWithTTLSQL : %s", viewsWithTTLSQL));
-
-        try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
-                configuration)) {
-
-            try (
-                    PhoenixPreparedStatement
-                            viewTTLStmt =
-                            serverConnection.prepareStatement(viewsWithTTLSQL)
-                                    .unwrap(PhoenixPreparedStatement.class)) {
-
-                try (ResultSet viewTTLRS = viewTTLStmt.executeQuery()) {
-                    while (viewTTLRS.next()) {
-                        String tid = viewTTLRS.getString("TENANT_ID");
-                        String schem = viewTTLRS.getString("TABLE_SCHEM");
-                        String tName = viewTTLRS.getString("TABLE_NAME");
-                        int viewTTL = viewTTLRS.getInt("TTL");
-                        byte[] rowKeyMatcher = viewTTLRS.getBytes("ROW_KEY_MATCHER");
-                        byte[]
-                                tenantIdBytes =
-                                tid == null || tid.isEmpty() ? EMPTY_BYTE_ARRAY : tid.getBytes();
-
-                        String fullTableName = SchemaUtil.getTableName(schem, tName);
-                        Properties tenantProps = new Properties();
-                        if (tid != null) {
-                            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tid);
-                        }
-
-                        if (isIndexTable) {
-                            try (Connection
-                                    tableConnection =
-                                    QueryUtil.getConnectionOnServer(tenantProps, configuration)) {
-
-                                PTable
-                                        pTable =
-                                        PhoenixRuntime.getTableNoCache(
-                                                tableConnection, fullTableName);
-                                for (PTable index : pTable.getIndexes()) {
-                                    logger.debug(String.format(
-                                            "index-name = %s, ttl = %d, row-key-prefix = %d",
-                                            index.getName(), index.getTTL(),
-                                            index.getViewIndexId()));
-                                    // Handling the case when it is a table level index.
-                                    // In those cases view-index-id = null
-                                    if (index.getViewIndexId() == null) {
-                                        continue;
-                                    }
-                                    PDataType viewIndexIdType = index.getviewIndexIdType();
-                                    byte[]
-                                            viewIndexIdBytes =
-                                            PSmallint.INSTANCE.toBytes(index.getViewIndexId());
-                                    if (viewIndexIdType.compareTo(PLong.INSTANCE) == 0) {
-                                        viewIndexIdBytes =
-                                                PLong.INSTANCE.toBytes(index.getViewIndexId());
-                                    }
-                                    logger.debug(String.format(
-                                            "index-name = %s, index-id-type = %s, " +
-                                                    "index-id-bytes = %s",
-                                            index.getName(), viewIndexIdType.getSqlTypeName(),
-                                            Bytes.toStringBinary(viewIndexIdBytes)));
-
-                                    tableTTLInfoList.add(
-                                            new TableTTLInfo(pTable.getPhysicalName().getBytes(),
-                                                    tenantIdBytes, index.getTableName().getBytes(),
-                                                    viewIndexIdBytes, index.getTTL()));
-                                }
-
-                            }
-                        } else {
-                            logger.debug(
-                                    String.format("table-name = %s, ttl = %d, row-key-prefix = %s",
-                                            fullTableName, viewTTL,
-                                            Bytes.toStringBinary(rowKeyMatcher)));
-                            tableTTLInfoList.add(
-                                    new TableTTLInfo(physicalTableName.getBytes(),
-                                            tenantIdBytes, fullTableName.getBytes(),
-                                            rowKeyMatcher, viewTTL));
-                        }
-                    }
-                }
-            }
         }
     }
 }

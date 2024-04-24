@@ -37,6 +37,8 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndex
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -1546,6 +1548,13 @@ public class ViewTTLIT extends BaseViewTTLIT {
     public void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
         super.testMajorCompactWhenTTLSetForSomeTenants();
     }
+
+    @Test
+    public void testMajorCompactWithVariousTenantIdTypesAndRegions() throws Exception {
+        super.testMajorCompactWithVariousTenantIdTypesAndRegions(PVarchar.INSTANCE);
+        //super.testMajorCompactWithVariousTenantIdTypesAndRegions(PInteger.INSTANCE);
+    }
+
     @Test
     public void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
         super.testTenantViewsWIthOverlappingRowPrefixes();
