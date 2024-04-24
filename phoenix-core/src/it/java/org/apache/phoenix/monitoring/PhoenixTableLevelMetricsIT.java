@@ -1580,6 +1580,21 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
         @Override
         public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                     byte[] endRowKey) throws SQLException {
+            if (failExecuteQueryAndClientSideDeletes) {
+                throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL)
+                        .build().buildException();
+            }
+            try {
+                Thread.sleep(injectDelay);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            return super.getTableRegions(tableName, startRowKey, endRowKey);
+        }
+
+        @Override
+        public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
                                                      byte[] endRowKey, int queryTimeout) throws SQLException {
             if (failExecuteQueryAndClientSideDeletes) {
                 throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL)

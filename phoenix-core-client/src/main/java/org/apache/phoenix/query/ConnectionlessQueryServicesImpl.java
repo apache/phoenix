@@ -252,6 +252,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                 byte[] endRowKey) throws SQLException {
+        return getTableRegions(tableName, startRowKey, endRowKey,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
                                                  byte[] endRowKey, int queryTimeout) throws SQLException {
         List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
         if (regions != null) {

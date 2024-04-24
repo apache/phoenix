@@ -128,6 +128,23 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
      * Retrieve table region locations that cover the startRowKey and endRowKey. The start key
      * of the first region of the returned list must be less than or equal to startRowKey.
      * The end key of the last region of the returned list must be greater than or equal to
+     * endRowKey.
+     * This method is Deprecated. Use {@link #getTableRegions(byte[], byte[], byte[], int)} instead.
+     *
+     * @param tableName Table name.
+     * @param startRowKey Start RowKey.
+     * @param endRowKey End RowKey.
+     * @return The list of region locations that cover the startRowKey and endRowKey key boundary.
+     * @throws SQLException If fails to retrieve region locations.
+     */
+    @Deprecated
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                 byte[] endRowKey) throws SQLException;
+
+    /**
+     * Retrieve table region locations that cover the startRowKey and endRowKey. The start key
+     * of the first region of the returned list must be less than or equal to startRowKey.
+     * The end key of the last region of the returned list must be greater than or equal to
      * endRowKey. The operation to retrieve the table region locations must be completed within
      * the query timeout.
      *
