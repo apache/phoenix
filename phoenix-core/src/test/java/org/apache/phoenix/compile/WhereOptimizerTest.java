@@ -2530,6 +2530,20 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testScanRangeForPointLookupWithLimit() throws SQLException {
+        String tenantId = "000000000000001";
+        String entityId = "002333333333333";
+        String query = String.format("select * from atable where organization_id='%s' " +
+                        "and entity_id='%s' LIMIT 1", tenantId, entityId);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
+            byte[] stopRow =  ByteUtil.nextKey(startRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+        }
+    }
+
     private static void validateScanRangesForPointLookup(QueryPlan optimizedPlan, byte[] startRow, byte[] stopRow) {
         StatementContext context = optimizedPlan.getContext();
         ScanRanges scanRanges = context.getScanRanges();
@@ -2546,10 +2560,18 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(1, scans.size());
         assertEquals(1, scans.get(0).size());
         Scan scanFromIterator = scans.get(0).get(0);
-        // scan from iterator has same start and stop row [start, start] i.e a Get
-        assertTrue(scanFromIterator.isGetScan());
-        assertTrue(scanFromIterator.includeStartRow());
-        assertTrue(scanFromIterator.includeStopRow());
+        if (optimizedPlan.getLimit() == null) {
+            // scan from iterator has same start and stop row [start, start] i.e a Get
+            assertTrue(scanFromIterator.isGetScan());
+            assertTrue(scanFromIterator.includeStartRow());
+            assertTrue(scanFromIterator.includeStopRow());
+        } else {
+            // in case of limit scan range is same as the one in StatementContext
+            assertArrayEquals(startRow, scanFromIterator.getStartRow());
+            assertTrue(scanFromIterator.includeStartRow());
+            assertArrayEquals(stopRow, scanFromIterator.getStopRow());
+            assertFalse(scanFromIterator.includeStopRow());
+        }
     }
 
     private static StatementContext compileStatementTenantSpecific(String tenantId, String query, List<Object> binds) throws Exception {
