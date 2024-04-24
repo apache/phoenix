@@ -675,7 +675,7 @@ public class PhoenixTestBuilder {
             return baseTable;
         }
 
-        void setBaseTable(PTable baseTable) {
+        public void setBaseTable(PTable baseTable) {
             this.baseTable = baseTable;
         }
 
@@ -712,6 +712,9 @@ public class PhoenixTestBuilder {
          * Setters and Getters
          *****************************
          */
+        public void setTableCreated() {
+            tableCreated = true;
+        }
 
         public boolean isTableCreated() {
             return tableCreated;
@@ -990,8 +993,9 @@ public class PhoenixTestBuilder {
                 this.dataOptions = DataOptions.withDefaults();
             }
             this.dataOptions.tenantId =
-                    String.format(dataOptions.tenantIdFormat, TENANT_COUNTER.incrementAndGet(),
-                            dataOptions.uniqueName);
+                    (this.dataOptions.tenantId == null || this.dataOptions.tenantId.isEmpty())
+                            ? String.format(dataOptions.tenantIdFormat, TENANT_COUNTER.incrementAndGet(), dataOptions.uniqueName)
+                            : this.dataOptions.tenantId;
 
             build();
         }
@@ -1050,7 +1054,7 @@ public class PhoenixTestBuilder {
 
             String tableName = SchemaUtil.normalizeIdentifier(dataOptions.getTableName());
             String globalViewName = SchemaUtil.normalizeIdentifier(dataOptions.getGlobalViewName());
-            String tableSchemaNameToUse = tableOptions.getSchemaName();
+            String tableSchemaNameToUse = "";
             String globalViewSchemaNameToUse = globalViewOptions.getSchemaName();
             String tenantViewSchemaNameToUse = tenantViewOptions.getSchemaName();
 
@@ -1059,6 +1063,8 @@ public class PhoenixTestBuilder {
                 tableSchemaNameToUse = dataOptions.getSchemaName();
                 globalViewSchemaNameToUse = dataOptions.getSchemaName();
                 tenantViewSchemaNameToUse = dataOptions.getSchemaName();
+            } else {
+                tableSchemaNameToUse = tableOptions.getSchemaName();
             }
 
             String
@@ -2045,6 +2051,10 @@ public class PhoenixTestBuilder {
             public String getNextTenantId() {
                 return tenantId = String.format(
                         tenantIdFormat, TENANT_COUNTER.incrementAndGet(), uniqueName);
+            }
+
+            public int getTenantNumber() {
+                return TENANT_COUNTER.get();
             }
 
             public int getViewNumber() {

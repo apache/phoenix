@@ -18,6 +18,8 @@ import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -40,7 +42,8 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptio
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 
-
+import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -55,11 +58,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -105,7 +111,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     static final String COL7_FMT = "g%05d";
     static final String COL8_FMT = "h%05d";
     static final String COL9_FMT = "i%05d";
-    static final int MAX_COMPACTION_CHECKS = 1000;
+    static final int MAX_COMPACTION_CHECKS = 200;
 
     static final String TTL_HEADER_SQL = "SELECT TTL FROM SYSTEM.CATALOG "
             + "WHERE %s AND TABLE_SCHEM = '%s' AND TABLE_NAME = '%s' AND TABLE_TYPE = '%s'";
@@ -546,7 +552,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                             <= compactionRequestedSCN)
                     || (admin.getCompactionState(table)).equals(CompactionState.MAJOR)
                     || admin.getCompactionState(table).equals(CompactionState.MAJOR_AND_MINOR)) {
-                LOGGER.info(String.format("WAITING .............................%d, %d", lastCompactionTimestamp, compactionRequestedSCN));
+                LOGGER.info(String.format("WAITING .............................%d, %d, %d",
+                        lastCompactionTimestamp, compactionRequestedSCN, numChecks));
                 Thread.sleep(100);
             }
             LOGGER.info(String.format("DONE WAITING .............................%d, %d, %d",
@@ -1628,16 +1635,15 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, Tenant vs Global views, various column family options.
-        for (boolean isGlobalViewLocal : Lists.newArrayList(/* true, */false)) {
-            for (boolean isTenantViewLocal : Lists.newArrayList(/* true, */ false)) {
+        for (boolean isGlobalViewLocal : Lists.newArrayList( true, false)) {
+            for (boolean isTenantViewLocal : Lists.newArrayList( /*true, */   false)) {
                 for (OtherOptions options : getTableAndGlobalAndTenantColumnFamilyOptions()) {
 
                     /**
                      * TODO:
-                     * Need to revisit indexing code path,
-                     * as there are some left over rows after delete in these cases.
+                     * Need to revisit, not sure why the compaction does complete?
                      */
-                    //if (!isGlobalViewLocal && !isTenantViewLocal) continue;
+                    if (isGlobalViewLocal && isTenantViewLocal) continue;
 
                     resetEnvironmentEdgeManager();
                     globalViewIndexOptions.setLocal(isGlobalViewLocal);
@@ -1771,6 +1777,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
         schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(globalViewOptions)
                 .withTenantViewOptions(tenantViewOptions)
+                .withDataOptionsDefaults()
                 .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault);
 
         long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
@@ -1783,6 +1790,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
             }
             // build schema for tenant
+            schemaBuilder.getDataOptions().setTenantId(null);
             schemaBuilder.buildWithNewTenant();
             // reset the TTL attribute for the next view
             tenantViewOptions.setTableProps("");
@@ -1859,6 +1867,183 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
             }
         }
 
+
+        PTable table = schemaBuilder.getBaseTable();
+        // validate multi-tenanted base table
+        validateAfterMajorCompaction(
+                table.getSchemaName().toString(),
+                table.getTableName().toString(),
+                false,
+                earliestTimestamp,
+                VIEW_TTL_10_SECS,
+                false,
+                nonCompactedTenantSet * DEFAULT_NUM_ROWS
+        );
+    }
+
+    protected void testMajorCompactWithVariousTenantIdTypesAndRegions(PDataType tenantType) throws Exception {
+
+        // View TTL is set in seconds (for e.g 10 secs)
+        int viewTTL = VIEW_TTL_10_SECS;
+        TableOptions tableOptions = TableOptions.withDefaults();
+        tableOptions.setMultiTenant(false);
+
+        GlobalViewOptions globalViewOptions = GlobalViewOptions.withDefaults();
+
+        TenantViewOptions tenantViewOptions = new TenantViewOptions();
+        tenantViewOptions.setTenantViewColumns(asList("ZID", "COL7", "COL8", "COL9"));
+        tenantViewOptions
+                .setTenantViewColumnTypes(asList("CHAR(15)", "VARCHAR", "VARCHAR", "VARCHAR"));
+
+        DataOptions dataOptions = DataOptions.withDefaults();
+
+        OtherOptions testCaseWhenAllCFMatchAndAllDefault = new OtherOptions();
+        testCaseWhenAllCFMatchAndAllDefault.setTestName("testCaseWhenAllCFMatchAndAllDefault");
+        testCaseWhenAllCFMatchAndAllDefault
+                .setTableCFs(Lists.newArrayList((String) null, null, null));
+        testCaseWhenAllCFMatchAndAllDefault
+                .setGlobalViewCFs(Lists.newArrayList((String) null, null, null));
+        testCaseWhenAllCFMatchAndAllDefault
+                .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
+
+        final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
+        schemaBuilder
+                .withTableOptions(tableOptions)
+                .withGlobalViewOptions(globalViewOptions)
+                .withTenantViewOptions(tenantViewOptions)
+                .withDataOptions(dataOptions)
+                .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault);
+
+        int tenantNum = dataOptions.getTenantNumber();
+        try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
+            String entityTableName = SchemaUtil.getTableName(
+                    dataOptions.getSchemaName(), dataOptions.getTableName());
+            String CO_BASE_TBL_TEMPLATE =
+                    "CREATE TABLE IF NOT EXISTS %s " +
+                            "(OID %s NOT NULL,KP CHAR(3) NOT NULL " +
+                            "CONSTRAINT pk PRIMARY KEY (OID,KP)) " +
+                            "MULTI_TENANT=true,COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0' " +
+                            "SPLIT ON (?, ?, ?)";
+            String createBaseTableSQL = String.format(CO_BASE_TBL_TEMPLATE,
+                    entityTableName, tenantType.getSqlTypeName());
+            try (PreparedStatement pstmt = globalConnection.prepareStatement(createBaseTableSQL)) {
+                switch (tenantType.getSqlType()) {
+                case Types.VARCHAR:
+                case Types.CHAR:
+                    pstmt.setString(1, String.format("00D0t%04d", tenantNum + 3 ));
+                    pstmt.setString(2, String.format("00D0t%04d", tenantNum + 5 ));
+                    pstmt.setString(3, String.format("00D0t%04d", tenantNum + 7 ));
+                    break;
+                case Types.INTEGER:
+                    pstmt.setInt(1, 300000);
+                    pstmt.setInt(2, 500000);
+                    pstmt.setInt(3, 700000);
+                }
+                pstmt.execute();
+            }
+
+            schemaBuilder.setTableCreated();
+            PTableKey
+                    tableKey =
+                    new PTableKey(null, SchemaUtil.normalizeFullTableName(entityTableName));
+            schemaBuilder.setBaseTable(
+                    globalConnection.unwrap(PhoenixConnection.class).getTable(tableKey));
+        }
+
+        long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+        Set<Integer> hasTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3, 7 }));
+        Set<Integer> tenantSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4, 5, 6, 7 }));
+        int nonCompactedTenantSet = tenantSet.size() - hasTTLSet.size();
+        for (int tenant : tenantSet) {
+            // Set TTL only when tenant = 2, 3, 7
+            if (hasTTLSet.contains(tenant)) {
+                tenantViewOptions.setTableProps(String.format("TTL=%d", viewTTL));
+            }
+            // build schema for tenant
+            switch (tenantType.getSqlType()) {
+            case Types.VARCHAR:
+            case Types.CHAR:
+                schemaBuilder.getDataOptions().setTenantId(dataOptions.getNextTenantId());
+                break;
+            case Types.INTEGER:
+                schemaBuilder.getDataOptions().setTenantId(Integer.toString(tenant));
+            }
+
+            schemaBuilder.buildWithNewTenant();
+            // reset the TTL attribute for the next view
+            tenantViewOptions.setTableProps("");
+
+            // Define the test data.
+            //final String groupById = String.format(ID_FMT, 0);
+            DataSupplier dataSupplier = new DataSupplier() {
+
+                @Override public List<Object> getValues(int rowIndex) {
+                    Random rnd = new Random();
+                    String id = String.format(ID_FMT, rowIndex);
+                    String zid = String.format(ZID_FMT, rowIndex);
+                    String col4 = String.format(COL4_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col5 = String.format(COL5_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col6 = String.format(COL6_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col7 = String.format(COL7_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col8 = String.format(COL8_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+                    String col9 = String.format(COL9_FMT, rowIndex + rnd.nextInt(MAX_ROWS));
+
+                    return Lists.newArrayList(
+                            new Object[] { id, zid, col4, col5, col6, col7, col8, col9 });
+                }
+            };
+
+            // Create a test data reader/writer for the above schema.
+            DataWriter dataWriter = new BasicDataWriter();
+            List<String> columns =
+                    Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
+            List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
+            String tenantConnectUrl =
+                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
+            try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
+                writeConnection.setAutoCommit(true);
+                dataWriter.setConnection(writeConnection);
+                dataWriter.setDataSupplier(dataSupplier);
+                dataWriter.setUpsertColumns(columns);
+                dataWriter.setRowKeyColumns(rowKeyColumns);
+                dataWriter.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+                upsertData(dataWriter, DEFAULT_NUM_ROWS);
+
+                // Case : count(1) sql
+                DataReader dataReader = new BasicDataReader();
+                dataReader.setValidationColumns(Arrays.asList("num_rows"));
+                dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
+                dataReader.setDML(String
+                        .format("SELECT count(1) as num_rows from %s HAVING count(1) > 0",
+                                schemaBuilder.getEntityTenantViewName()));
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis();
+
+                // Validate data before and after ttl expiration.
+                if (hasTTLSet.contains(tenant)) {
+                    validateExpiredRowsAreNotReturnedUsingCounts(viewTTL, dataReader, schemaBuilder);
+                } else {
+                    validateRowsAreNotMaskedUsingCounts(scnTimestamp, dataReader, schemaBuilder);
+                }
+
+                // Case : group by sql
+                dataReader.setValidationColumns(Arrays.asList("num_rows"));
+                dataReader.setRowKeyColumns(Arrays.asList("num_rows"));
+                dataReader.setDML(String
+                        .format("SELECT count(1) as num_rows from %s GROUP BY ID HAVING count(1) > 0",
+                                schemaBuilder.getEntityTenantViewName()));
+
+                dataReader.setTargetEntity(schemaBuilder.getEntityTenantViewName());
+
+                // Validate data before and after ttl expiration.
+                if (hasTTLSet.contains(tenant)) {
+                    validateExpiredRowsAreNotReturnedUsingCounts(viewTTL, dataReader, schemaBuilder);
+                } else {
+                    validateRowsAreNotMaskedUsingCounts(scnTimestamp, dataReader, schemaBuilder);
+                }
+            }
+        }
 
         PTable table = schemaBuilder.getBaseTable();
         // validate multi-tenanted base table
