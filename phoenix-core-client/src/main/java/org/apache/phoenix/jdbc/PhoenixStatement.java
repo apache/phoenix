@@ -574,8 +574,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         lastState.getUpdateCount());
                                 if (connection.getAutoCommit()) {
                                     connection.commit();
-                                    lastUpdateCount = connection.getMutationState()
-                                            .getNumUpdatedRowsForAutoCommit();
+                                    if (isAtomicUpsert) {
+                                        lastUpdateCount = connection.getMutationState()
+                                                .getNumUpdatedRowsForAutoCommit();
+                                    }
                                 }
                                 setLastQueryPlan(null);
                                 setLastUpdateCount(lastUpdateCount);
