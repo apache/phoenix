@@ -38,7 +38,9 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -119,6 +121,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
@@ -132,6 +135,7 @@ import java.util.concurrent.TimeUnit;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -232,6 +236,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // The latches of the threads waiting for this batch to complete
       private List<CountDownLatch> waitList = null;
       private Map<ImmutableBytesPtr, MultiMutation> multiMutationMap;
+      // The update status hashmap with key as the operation index of MiniBatchOperationInProgress
+      private Map<Integer, UpdateStatus> updateStatusMap = new HashMap<>();
+
+      public enum UpdateStatus {
+          IGNORE, UPDATE
+      }
 
       //list containing the original mutations from the MiniBatchOperationInProgress. Contains
       // any annotations we were sent by the client, and can be used in hooks that don't get
@@ -283,6 +293,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
       public int getMaxPendingRowCount() {
           return maxPendingRowCount;
+      }
+
+      public UpdateStatus getUpdateStatus(int index) {
+          if (!updateStatusMap.containsKey(index)) {
+              return null;
+          }
+          return updateStatusMap.get(index);
+      }
+
+      public void setUpdateStatus(int index, UpdateStatus updateStatus) {
+          updateStatusMap.put(index, updateStatus);
       }
   }
 
@@ -470,12 +491,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private void ignoreAtomicOperations (MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+  private void ignoreAtomicOperations (MiniBatchOperationInProgress<Mutation> miniBatchOp,
+                                       BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
           if (this.builder.isAtomicOp(m)) {
               miniBatchOp.setOperationStatus(i, IGNORE);
-              continue;
+              context.setUpdateStatus(i, BatchMutateContext.UpdateStatus.IGNORE);
           }
       }
   }
@@ -483,7 +505,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp,
           BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
-          if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+          if (context.getUpdateStatus(i) == BatchMutateContext.UpdateStatus.IGNORE) {
               continue;
           }
           Mutation m = miniBatchOp.getOperation(i);
@@ -534,9 +556,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               List<Mutation> mutations = generateOnDupMutations(context, (Put)m);
               if (!mutations.isEmpty()) {
                   addOnDupMutationsToBatch(miniBatchOp, i, mutations);
+                  context.setUpdateStatus(i, BatchMutateContext.UpdateStatus.UPDATE);
               } else {
-                  // empty list of generated mutations implies ON DUPLICATE KEY IGNORE
-                  miniBatchOp.setOperationStatus(i, IGNORE);
+                  // empty list of generated mutations implies
+                  // 1) ON DUPLICATE KEY IGNORE if row already exists, OR
+                  // 2) ON DUPLICATE KEY UPDATE if CASE expression is specified and in each of
+                  // them the new value is the same as the old value in the ELSE-clause (empty
+                  // cell timestamp will NOT be updated)
+                  byte[] retVal = PInteger.INSTANCE.toBytes(0);
+                  Cell cell = PhoenixKeyValueUtil.newKeyValue(m.getRow(), EMPTY_BYTE_ARRAY,
+                          EMPTY_BYTE_ARRAY, 0, retVal, 0, retVal.length);
+                  // put Result in OperationStatus for returning update status from conditional
+                  // upserts, where 0 represents the row is not updated
+                  Result result = Result.create(new ArrayList<>(Arrays.asList(cell)));
+                  miniBatchOp.setOperationStatus(i,
+                          new OperationStatus(OperationStatusCode.SUCCESS, result));
+                  context.setUpdateStatus(i, BatchMutateContext.UpdateStatus.IGNORE);
               }
           }
       }
@@ -577,7 +612,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // unfortunately, we really should ask if the raw mutation (rather than the combined mutation)
             // should be indexed, which means we need to expose another method on the builder. Such is the
             // way optimization go though.
-            if (miniBatchOp.getOperationStatus(i) != IGNORE && this.builder.isEnabled(m)) {
+            if (context.getUpdateStatus(i) != BatchMutateContext.UpdateStatus.IGNORE
+                    && this.builder.isEnabled(m)) {
                 ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
                 MultiMutation stored = context.multiMutationMap.get(row);
                 if (stored == null) {
@@ -598,9 +634,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     public static void setTimestamps(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                     IndexBuildManager builder, long ts) throws IOException {
+                                     IndexBuildManager builder, long ts,
+                                     BatchMutateContext context) throws IOException {
         for (Integer i = 0; i < miniBatchOp.size(); i++) {
-            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+            if (context.getUpdateStatus(i) == BatchMutateContext.UpdateStatus.IGNORE) {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
@@ -700,7 +737,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private void applyPendingPutMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                           BatchMutateContext context, long now) throws IOException {
         for (Integer i = 0; i < miniBatchOp.size(); i++) {
-            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+            if (context.getUpdateStatus(i) == BatchMutateContext.UpdateStatus.IGNORE) {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
@@ -783,7 +820,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
      * the indexed columns or the where clause columns for partial uncovered indexes.
      */
     private boolean isPartialUncoveredIndexMutation(PhoenixIndexMetaData indexMetaData,
-            MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+            MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context) {
         int indexedColumnCount = 0;
         for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
             indexedColumnCount += indexMaintainer.getIndexedColumns().size();
@@ -799,7 +836,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
         }
         for (int i = 0; i < miniBatchOp.size(); i++) {
-            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+            if (context.getUpdateStatus(i) == BatchMutateContext.UpdateStatus.IGNORE) {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
@@ -1048,7 +1085,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                               BatchMutateContext context) {
         for (int i = 0; i < miniBatchOp.size(); i++) {
-            if (miniBatchOp.getOperationStatus(i) == IGNORE) {
+            if (context.getUpdateStatus(i) == BatchMutateContext.UpdateStatus.IGNORE) {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
@@ -1141,7 +1178,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
             if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic ||
                     context.hasDelete ||  (context.hasUncoveredIndex &&
-                    isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))) {
+                    isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp, context))) {
                 getCurrentRowStates(c, context);
             }
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
@@ -1167,7 +1204,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         long now = EnvironmentEdgeManager.currentTimeMillis();
         // Update the timestamps of the data table mutations to prevent overlapping timestamps (which prevents index
         // inconsistencies as this case isn't handled correctly currently).
-        setTimestamps(miniBatchOp, builder, now);
+        setTimestamps(miniBatchOp, builder, now, context);
 
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
         if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
@@ -1216,8 +1253,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private void releaseLocksForOnDupIgnoreMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
                                                      BatchMutateContext context) {
         for (int i = 0; i < miniBatchOp.size(); i++) {
-            // status of all ON DUPLICATE KEY IGNORE mutations is updated to IGNORE
-            if (miniBatchOp.getOperationStatus(i) != IGNORE) {
+            // update status of all ON DUPLICATE KEY IGNORE mutations is updated to IGNORE
+            if (context.getUpdateStatus(i) != BatchMutateContext.UpdateStatus.IGNORE) {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
@@ -1294,6 +1331,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       try {
           if (success) {
               context.currentPhase = BatchMutatePhase.POST;
+              for (int i = 0; i < miniBatchOp.size(); i++) {
+                  BatchMutateContext.UpdateStatus updateStatus = context.getUpdateStatus(i);
+                  if (BatchMutateContext.UpdateStatus.UPDATE.equals(updateStatus)) {
+                      byte[] retVal = PInteger.INSTANCE.toBytes(1);
+                      Cell cell = PhoenixKeyValueUtil.newKeyValue(
+                              miniBatchOp.getOperation(i).getRow(),
+                              EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY, 0, retVal, 0,
+                              retVal.length);
+                      Result result = Result.create(new ArrayList<>(Arrays.asList(cell)));
+                      miniBatchOp.setOperationStatus(i,
+                              new OperationStatus(OperationStatusCode.SUCCESS, result));
+                  }
+              }
           } else {
               context.currentPhase = BatchMutatePhase.FAILED;
           }
@@ -1434,9 +1484,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
      * to correctly support concurrent index mutations we need to always read the latest
      * data table row from memory.
      * It takes in an atomic Put mutation and generates a list of Put and Delete mutations.
-     * The list will be empty in the case of ON DUPLICATE KEY IGNORE and the row already exists.
-     * In the case of ON DUPLICATE KEY UPDATE, we will generate one Put mutation and optionally
-     * one Delete mutation (with DeleteColumn type cells for all columns set to null).
+     * The mutation list will be empty in two cases:
+     * 1) ON DUPLICATE KEY IGNORE and the row already exists;
+     * 2) ON DUPLICATE KEY UPDATE if CASE expression is specified and in each of them the new
+     * value is the same as the old value in the ELSE-clause.
+     * Otherwise, we will generate one Put mutation and optionally one Delete mutation (with
+     * DeleteColumn type cells for all columns set to null).
      */
   private List<Mutation> generateOnDupMutations(BatchMutateContext context, Put atomicPut) throws IOException {
       List<Mutation> mutations = Lists.newArrayListWithExpectedSize(2);
@@ -1483,6 +1536,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // read the column values requested in the get from the current data row
       List<Cell> cells = IndexUtil.readColumnsFromRow(currentDataRowState, colsReadInExpr);
 
+      // store current cells into a map where the key is column family and the value is a map with
+      // column qualifier as key and a pair of cell and a boolean (is true if the expression is
+      // CaseExpression and Else-clause is evaluated to be true, is null if there is no
+      // expression on this column, otherwise false)
+      Map<ImmutableBytesPtr, Map<ImmutableBytesPtr, Pair<Cell, Boolean>>> currCfCqCellExprMap =
+              new HashMap<>();
+
       if (currentDataRowState == null) { // row doesn't exist
           if (skipFirstOp) {
               if (operations.size() <= 1 && repeat <= 1) {
@@ -1501,6 +1561,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       } else {
           // Base current state off of existing row
           flattenedCells = cells;
+          // store all current cells from currentDataRowState
+          for (Map.Entry<byte[], List<Cell>> entry :
+                  currentDataRowState.getFamilyCellMap().entrySet()) {
+              ImmutableBytesPtr cfKey = new ImmutableBytesPtr(entry.getKey());
+              currCfCqCellExprMap.putIfAbsent(cfKey, new HashMap<>());
+              for (Cell cell : new ArrayList<>(entry.getValue())) {
+                  ImmutableBytesPtr cqKey = new ImmutableBytesPtr(cell.getQualifierArray(),
+                          cell.getQualifierOffset(), cell.getQualifierLength());
+                  currCfCqCellExprMap.get(cfKey).put(cqKey, new Pair<>(cell, null));
+              }
+          }
       }
 
       MultiKeyValueTuple tuple = new MultiKeyValueTuple(flattenedCells);
@@ -1522,7 +1593,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               int adjust = table.getBucketNum() == null ? 1 : 2;
               for (int i = 0; i < expressions.size(); i++) {
                   Expression expression = expressions.get(i);
-                  ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                  ptr.set(EMPTY_BYTE_ARRAY);
                   expression.evaluate(tuple, ptr);
                   PColumn column = table.getColumns().get(i + adjust);
                   Object value = expression.getDataType().toObject(ptr, column.getSortOrder());
@@ -1538,6 +1609,25 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                       column.getSortOrder(), table.rowKeyOrderOptimizable());
                   byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                   row.setValue(column, bytes);
+
+                  // If the column exist in currCfCqCellExprMap that is stored before, set the
+                  // boolean in the value pair from currCfCqCellExprMap, which will be true if the
+                  // expression is CaseExpression and the Else-clause is evaluated to be true
+                  ImmutableBytesPtr cfPtr =
+                          new ImmutableBytesPtr(column.getFamilyName().getBytes());
+                  ImmutableBytesPtr cqPtr =
+                          new ImmutableBytesPtr(column.getColumnQualifierBytes());
+                  if (currCfCqCellExprMap.containsKey(cfPtr)
+                          && currCfCqCellExprMap.get(cfPtr).containsKey(cqPtr)) {
+                      Pair<Cell, Boolean> valuePair = currCfCqCellExprMap.get(cfPtr).get(cqPtr);
+                      if (expression instanceof CaseExpression
+                              && ((CaseExpression) expression).evaluateIndexOf(tuple, ptr)
+                              == expression.getChildren().size() - 1) {
+                          valuePair.setSecond(true);
+                      } else {
+                          valuePair.setSecond(false);
+                      }
+                  }
               }
               List<Cell> updatedCells = Lists.newArrayListWithExpectedSize(estimatedSize);
               List<Mutation> newMutations = row.toRowMutations();
@@ -1560,7 +1650,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   transferAttributes(atomicPut, put);
                   mutations.add(put);
               }
-              put.add(cell);
+              if (checkCellNeedUpdate(cell, currCfCqCellExprMap)) {
+                  put.add(cell);
+              }
           } else {
               if (delete == null) {
                   delete = new Delete(rowKey);
@@ -1570,10 +1662,36 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               delete.add(cell);
           }
       }
+
+      if (put != null) {
+          // if put is empty and delete is null, remove the empty put from mutations,
+          // otherwise we should also add empty cell timestamp for update
+          if (put.isEmpty() && delete == null) {
+              mutations.remove(put);
+          } else {
+              addEmptyKVCells(put, delete, tuple);
+          }
+      }
+
       return mutations;
   }
 
-
+    private void addEmptyKVCells(Put put, Delete delete, MultiKeyValueTuple tuple) throws IOException {
+        Set<byte[]> familySet = new HashSet<>();
+        if (!put.isEmpty()) {
+            familySet.addAll(put.getFamilyCellMap().keySet());
+        }
+        if (delete != null) {
+            familySet.addAll(delete.getFamilyCellMap().keySet());
+        }
+        for (byte[] familyBytes : familySet) {
+            Cell emptyKVCell = tuple.getValue(familyBytes,
+                    QueryConstants.ENCODED_EMPTY_COLUMN_BYTES);
+            if (emptyKVCell != null) {
+                put.add(emptyKVCell);
+            }
+        }
+    }
 
     private static List<Cell> flattenCells(Mutation m) {
         List<Cell> flattenedCells = new ArrayList<>();
@@ -1585,6 +1703,45 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
             flattenedCells.addAll(cells);
         }
+    }
+
+    /**
+     * This function is to check if a cell need to be updated, based on the current cells' values.
+     * The cell will not be updated only if the column exist in the expression in which CASE is
+     * specified and the new value is the same as the old value in the ELSE-clause, otherwise it
+     * should be updated.
+     *
+     * @param cell the cell with new value to be checked
+     * @param cfCqCellMap the column family column qualifier cell map with current value
+     * @return true if the cell need update, false otherwise
+     */
+    private boolean checkCellNeedUpdate(Cell cell, Map<ImmutableBytesPtr, Map<ImmutableBytesPtr,
+            Pair<Cell, Boolean>>> cfCqCellMap) {
+        ImmutableBytesPtr cfKey = new ImmutableBytesPtr(cell.getFamilyArray(),
+                cell.getFamilyOffset(), cell.getFamilyLength());
+        ImmutableBytesPtr cqKey = new ImmutableBytesPtr(cell.getQualifierArray(),
+                cell.getQualifierOffset(), cell.getQualifierLength());
+        // if cell not exist in the map, meaning that they are new and need update
+        if (cfCqCellMap.isEmpty() || !cfCqCellMap.containsKey(cfKey)
+                || !cfCqCellMap.get(cfKey).containsKey(cqKey)) {
+            return true;
+        }
+
+        Pair<Cell, Boolean> valuePair = cfCqCellMap.get(cfKey).get(cqKey);
+        Boolean isInCaseExpressionElseClause = valuePair.getSecond();
+        if (isInCaseExpressionElseClause == null) {
+            return false;
+        }
+        if (isInCaseExpressionElseClause == false) {
+            return true;
+        }
+        Cell oldCell = valuePair.getFirst();
+        ImmutableBytesPtr newValuePtr = new ImmutableBytesPtr(cell.getValueArray(),
+                cell.getValueOffset(), cell.getValueLength());
+        ImmutableBytesPtr oldValuePtr = new ImmutableBytesPtr(oldCell.getValueArray(),
+                oldCell.getValueOffset(), oldCell.getValueLength());
+        return !Bytes.equals(oldValuePtr.get(), oldValuePtr.getOffset(), oldValuePtr.getLength(),
+                newValuePtr.get(), newValuePtr.getOffset(), newValuePtr.getLength());
     }
 
     /**
