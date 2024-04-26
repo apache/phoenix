@@ -508,6 +508,26 @@ public class ByteUtil {
         return newBound;
     }
 
+    public static boolean isEmptyOrNull(byte[] b, int offset, int length) {
+        if (b == null) {
+            return true;
+        }
+        if (Bytes.compareTo(b, HConstants.EMPTY_BYTE_ARRAY) == 0 ) {
+            return true;
+        }
+        if (b.length < offset + length) {
+            throw new IllegalStateException();
+        }
+        boolean result = true;
+        for (int i = (offset + length) - 1; i >= offset; i--) {
+            if (b[i] != 0x0) {
+                result = false;
+                break;
+            }
+        }
+        return result;
+    }
+
     /**
      * Expand the key to length bytes using the fillByte to fill the
      * bytes beyond the current key length.

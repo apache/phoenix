@@ -685,7 +685,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 tableOptions = TableOptions.withDefaults();
         String tableProps = "COLUMN_ENCODED_BYTES=0,DEFAULT_COLUMN_FAMILY='0'";
         tableOptions.setTableProps(tableProps);
-        tableOptions.setSaltBuckets(1);
+        tableOptions.setSaltBuckets(3);
         for (boolean isMultiTenant : Lists.newArrayList(true, false)) {
 
             resetEnvironmentEdgeManager();
@@ -695,10 +695,10 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     DataOptions.withPrefix("SALTED");
 
             // OID, KP for non multi-tenanted views
-            int viewCounter = 1;
+            int tenantNumber = dataOptions.getNextTenantNumber();
             String orgId =
                     String.format(PhoenixTestBuilder.DDLDefaults.DEFAULT_ALT_TENANT_ID_FMT,
-                            viewCounter,
+                            tenantNumber,
                             dataOptions.getUniqueName());
             String keyPrefix = "SLT";
 
@@ -812,7 +812,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                                 schemaBuilder.getEntityGlobalViewName());
 
                 // Validate data before and after ttl expiration.
-                upsertDataAndRunValidations(viewTTL, DEFAULT_NUM_ROWS, dataWriter, dataReader,
+                upsertDataAndRunValidations(viewTTL, DEFAULT_NUM_ROWS * 3, dataWriter, dataReader,
                         schemaBuilder);
             }
 
