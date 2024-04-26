@@ -2057,6 +2057,10 @@ public class PhoenixTestBuilder {
                 return TENANT_COUNTER.get();
             }
 
+            public int getNextTenantNumber() {
+                return TENANT_COUNTER.incrementAndGet();
+            }
+
             public int getViewNumber() {
                 return viewNumber;
             }

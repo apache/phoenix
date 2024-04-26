@@ -328,6 +328,18 @@ public class CompactionScanner implements InternalScanner {
             String regionName = region.getRegionInfo().getEncodedName();
             String startTenantId = "";
             String endTenantId = "";
+            try {
+                startTenantId = rowKeyParser.getStartTenantId();
+                endTenantId = rowKeyParser.getEndTenantId();
+                LOGGER.info(String.format("TenantId information for region %s, %s: %s, %s",
+                        Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
+                        Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
+                        startTenantId,
+                        endTenantId));
+            } catch (SQLException sqle) {
+                LOGGER.error(sqle.getMessage());
+                throw sqle;
+            }
             switch (type) {
             case VIEW_INDEXES:
                 tableList = getMatchPatternsForPartitionedTables(
@@ -344,15 +356,6 @@ public class CompactionScanner implements InternalScanner {
                         regionName, startTenantId, endTenantId);
                 break;
             case TENANT_VIEWS:
-                try {
-                    startTenantId = rowKeyParser.getStartTenantId();
-                    endTenantId = rowKeyParser.getEndTenantId();
-                    LOGGER.info(String.format("TenantId information: %s, %s",
-                            startTenantId,
-                            endTenantId));
-                } catch (SQLException sqle) {
-                    LOGGER.error(sqle.getMessage());
-                }
                 tableList = getMatchPatternsForPartitionedTables(
                         this.baseTable.getName().getString(),
                         env.getConfiguration(),
@@ -1033,89 +1036,52 @@ public class CompactionScanner implements InternalScanner {
             }
             return pkPositions;
         }
-
         public String getStartTenantId() throws SQLException {
-            byte[] startKey = region.getRegionInfo().getStartKey();
-            if (Bytes.compareTo(startKey, HConstants.EMPTY_BYTE_ARRAY) == 0 ) {
-                return "";
-            }
-
-            Cell startKeyCell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
-                    .setRow(startKey)
-                    .setFamily(emptyCF)
-                    .setQualifier(emptyCQ)
-                    .setTimestamp(EnvironmentEdgeManager.currentTimeMillis())
-                    .setType(Cell.Type.Put)
-                    .setValue(HConstants.EMPTY_BYTE_ARRAY)
-                    .build();
-
-            RowKeyTuple inputTuple = new RowKeyTuple();
-            inputTuple.setKey(startKeyCell.getRowArray(),
-                    startKeyCell.getRowOffset(),
-                    startKeyCell.getRowLength());
-
-
-            int tenantIdPosition = isSalted ? 1 : 0;
-            RowKeyColumnExpression expr = colExprs[tenantIdPosition];
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            byte[] convertedValue;
-            String tenantId = "";
-            try {
-                expr.evaluate(inputTuple, ptr);
-                PDataType dataType = pkColumns.get(tenantIdPosition).getDataType();
-                dataType.pad(ptr, expr.getMaxLength(), expr.getSortOrder());
-                convertedValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                tenantId = dataType.toObject(convertedValue).toString();
-
-            } catch(IllegalDataException ex) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE)
-                        .build().buildException();
-            }
-
-//            String tenantId = pkColumns.get(tenantIdPosition).getDataType().toObject(ptr).toString();
-            return tenantId;
+            return getTenantIdFromRegionKey(region.getRegionInfo().getStartKey());
         }
+
         public String getEndTenantId() throws SQLException {
-            byte[] endKey = region.getRegionInfo().getEndKey();
-            if (Bytes.compareTo(endKey, HConstants.EMPTY_BYTE_ARRAY) == 0 ) {
+            return getTenantIdFromRegionKey(region.getRegionInfo().getEndKey());
+        }
+
+        private String getTenantIdFromRegionKey(byte[] regionKey) throws SQLException {
+            // case: when it is the start of the first region or end of the last region
+            if (regionKey != null && ByteUtil.isEmptyOrNull(regionKey, 0, regionKey.length)) {
                 return "";
             }
-
-            Cell endKeyCell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
-                    .setRow(endKey)
+            // Construct a cell from the startKey for us evaluate the tenantId
+            Cell regionKeyCell = CellBuilderFactory.create(CellBuilderType.DEEP_COPY)
+                    .setRow(regionKey)
                     .setFamily(emptyCF)
                     .setQualifier(emptyCQ)
                     .setTimestamp(EnvironmentEdgeManager.currentTimeMillis())
                     .setType(Cell.Type.Put)
                     .setValue(HConstants.EMPTY_BYTE_ARRAY)
                     .build();
-
+            // Constructing a RowKeyTuple for expression evaluation
             RowKeyTuple inputTuple = new RowKeyTuple();
-            inputTuple.setKey(endKeyCell.getRowArray(),
-                    endKeyCell.getRowOffset(),
-                    endKeyCell.getRowLength());
-
-            int tenantIdPosition = isSalted ? 1 : 0;
+            inputTuple.setKey(regionKeyCell.getRowArray(),
+                    regionKeyCell.getRowOffset(),
+                    regionKeyCell.getRowLength());
+            // Evaluating and converting a byte ptr to tenantId
+            // Sometimes the underlying byte ptr is padded with null bytes (0x0)
+            // in case of salted regions.
+            int tenantIdPosition = (isSalted ? 1 : 0);
             RowKeyColumnExpression expr = colExprs[tenantIdPosition];
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            byte[] convertedValue;
             String tenantId = "";
             try {
                 expr.evaluate(inputTuple, ptr);
                 PDataType dataType = pkColumns.get(tenantIdPosition).getDataType();
                 dataType.pad(ptr, expr.getMaxLength(), expr.getSortOrder());
-                //convertedValue = ByteUtil.copyKeyBytesIfNecessary(ptr);
-                tenantId = dataType.toObject(ptr).toString();
-
+                tenantId = ByteUtil.isEmptyOrNull(ptr.get(), ptr.getOffset(),
+                        ptr.getLength()) ? "" : dataType.toObject(ptr).toString();
             } catch(IllegalDataException ex) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE)
                         .build().buildException();
             }
-
-            //String tenantId = pkColumns.get(tenantIdPosition).getDataType().toObject(ptr).toString();
             return tenantId;
         }
-
     }
 
 
