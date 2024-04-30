@@ -90,7 +90,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK_AGE));
         // The following sets the row lock wait duration to 10 ms to test the code path handling
-        // row lock timeouts. Please when there are concurrent mutations the wait time can be
+        // row lock timeouts. When there are concurrent mutations, the wait time can be
         // much longer than 10 ms.
         props.put("hbase.rowlock.wait.duration", "10");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
