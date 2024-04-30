@@ -944,14 +944,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
             List<Scan> scans = Lists.newArrayListWithExpectedSize(1);
             Scan scanFromContext = context.getScan();
             Integer limit = plan.getLimit();
-            if (scanRanges.getPointLookupCount() == 1 && limit == null) {
+            boolean isAggregate = plan.getStatement().isAggregate();
+            if (scanRanges.getPointLookupCount() == 1 && limit == null && !isAggregate) {
                 // leverage bloom filter for single key point lookup by turning scan to
                 // Get Scan#isGetScan(). There should also be no limit on the point lookup query.
-                // The limit check is needed to handle cases where a child view extends the
-                // parent's PK and you insert data through the child but do a point lookup using
-                // the parent's PK. Since the parent's PK is only a prefix of the actual PK we
-                // can't do a Get but need to do a regular scan with the stop key set to the
-                // next key after the start key.
+                // The limit and the aggregate check is needed to handle cases where a child view
+                // extends the parent's PK and you insert data through the child but do a point
+                // lookup using the parent's PK. Since the parent's PK is only a prefix of the
+                // actual PK we can't do a Get but need to do a regular scan with the stop key
+                // set to the next key after the start key.
                 try {
                     scanFromContext = new Scan(context.getScan());
                 } catch (IOException e) {

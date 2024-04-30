@@ -2544,6 +2544,20 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testScanRangeForPointLookupAggregate() throws SQLException {
+        String tenantId = "000000000000001";
+        String entityId = "002333333333333";
+        String query = String.format("select count(*) from atable where organization_id='%s' " +
+                "and entity_id='%s'", tenantId, entityId);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
+            byte[] stopRow =  ByteUtil.nextKey(startRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+        }
+    }
+
     private static void validateScanRangesForPointLookup(QueryPlan optimizedPlan, byte[] startRow, byte[] stopRow) {
         StatementContext context = optimizedPlan.getContext();
         ScanRanges scanRanges = context.getScanRanges();
@@ -2560,7 +2574,7 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(1, scans.size());
         assertEquals(1, scans.get(0).size());
         Scan scanFromIterator = scans.get(0).get(0);
-        if (optimizedPlan.getLimit() == null) {
+        if (optimizedPlan.getLimit() == null && !optimizedPlan.getStatement().isAggregate()) {
             // scan from iterator has same start and stop row [start, start] i.e a Get
             assertTrue(scanFromIterator.isGetScan());
             assertTrue(scanFromIterator.includeStartRow());
