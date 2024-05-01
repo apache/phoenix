@@ -80,11 +80,14 @@ public class ViewTTLIT extends BaseViewTTLIT {
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
             put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
             put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(false));
-            put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0)); // An hour
+            // no max lookback
+            put(BaseScannerRegionObserver.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
             put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
+            put(QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT, String.valueOf(1));
         }};
 
-        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS, DEFAULT_PROPERTIES.entrySet().iterator()));
+        setUpTestDriver(new ReadOnlyProps(ReadOnlyProps.EMPTY_PROPS,
+                        DEFAULT_PROPERTIES.entrySet().iterator()));
     }
 
     @Before
@@ -1746,7 +1749,6 @@ public class ViewTTLIT extends BaseViewTTLIT {
     @Test
     public void testMajorCompactWithVariousTenantIdTypesAndRegions() throws Exception {
         super.testMajorCompactWithVariousTenantIdTypesAndRegions(PVarchar.INSTANCE);
-        //super.testMajorCompactWithVariousTenantIdTypesAndRegions(PInteger.INSTANCE);
     }
 
     @Test

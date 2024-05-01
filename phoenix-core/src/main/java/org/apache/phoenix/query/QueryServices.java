@@ -364,6 +364,7 @@ public interface QueryServices extends SQLCloseable {
     //Property to know whether TTL at View Level is enabled
     public static final String PHOENIX_VIEW_TTL_ENABLED = "phoenix.view.ttl.enabled";
 
+    public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent
