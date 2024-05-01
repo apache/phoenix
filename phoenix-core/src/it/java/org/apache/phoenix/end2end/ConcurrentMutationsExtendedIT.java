@@ -89,6 +89,10 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK_AGE));
+        // The following sets the row lock wait duration to 10 ms to test the code path handling
+        // row lock timeouts. When there are concurrent mutations, the wait time can be
+        // much longer than 10 ms.
+        props.put("hbase.rowlock.wait.duration", "10");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     @Parameterized.Parameters(
@@ -300,9 +304,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testConcurrentUpserts() throws Exception {
-        int nThreads = 4;
-        final int batchSize = 200;
-        final int nRows = 51;
+        int nThreads = 10;
+        final int batchSize = 20;
+        final int nRows = 100;
         final int nIndexValues = 23;
         final String tableName = generateUniqueName();
         final String indexName = generateUniqueName();
@@ -333,6 +337,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                         }
                         conn.commit();
                     } catch (SQLException e) {
+                        System.out.println(e);
                         throw new RuntimeException(e);
                     } finally {
                         doneSignal.countDown();
