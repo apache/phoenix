@@ -1,5 +1,6 @@
 package org.apache.phoenix.end2end;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -529,7 +530,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
     }
 
     long majorCompact(TableName table, long scnTimestamp, boolean flushOnly) throws Exception {
-        try (org.apache.hadoop.hbase.client.Connection connection = ConnectionFactory.createConnection(getUtility().getConfiguration())) {
+        try (org.apache.hadoop.hbase.client.Connection connection =
+                ConnectionFactory.createConnection(getUtility().getConfiguration())) {
             Admin admin = connection.getAdmin();
             if (!admin.tableExists(table)) {
                 return 0;
@@ -585,7 +587,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
             LOGGER.info(String.format("########## compacting table = %s", hbaseBaseTableName));
             majorCompact(TableName.valueOf(hbaseBaseTableName), scnTimestamp, flushOnly);
         } else {
-            LOGGER.info(String.format("########## compacting table = %s", hbaseViewIndexTableName));
+            LOGGER.info(String.format("########## compacting shared index = %s",
+                    hbaseViewIndexTableName));
             majorCompact(TableName.valueOf(hbaseViewIndexTableName), scnTimestamp, flushOnly);
         }
 
@@ -987,12 +990,21 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                         statement.execute(index2Str);
                     }
 
+                    PTable table = schemaBuilder.getBaseTable();
+                    String schemaName = table.getSchemaName().getString();
+                    String tableName = table.getTableName().getString();
+
                     long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
                     // Create multiple tenants, add data and run validations
                     for (int tenant : Arrays.asList(new Integer[] { 1, 2, 3 })) {
                         // build schema for tenant
+                        DataOptions dataOptions = schemaBuilder.getDataOptions();
+                        dataOptions.getNextTenantId();
                         schemaBuilder.buildWithNewTenant();
+
                         String tenantId = schemaBuilder.getDataOptions().getTenantId();
+                        LOGGER.debug(String.format("Building new view with tenant id %s on %s.%s",
+                                tenantId, schemaName, tableName));
 
                         // Define the test data.
                         DataSupplier
@@ -1050,11 +1062,10 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     // Compact data and index rows
                     long scnTimestamp = EnvironmentEdgeManager.currentTimeMillis() +
                             (viewTTL * 1000);
-                    PTable table = schemaBuilder.getBaseTable();
                     // validate multi-tenanted base table
                     validateAfterMajorCompaction(
-                            table.getSchemaName().toString(),
-                            table.getTableName().toString(),
+                            schemaName,
+                            tableName,
                             false,
                             earliestTimestamp,
                             VIEW_TTL_10_SECS,
@@ -1063,8 +1074,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     );
                     // validate multi-tenanted index table
                     validateAfterMajorCompaction(
-                            table.getSchemaName().toString(),
-                            table.getTableName().toString(),
+                            schemaName,
+                            tableName,
                             true,
                             earliestTimestamp,
                             VIEW_TTL_10_SECS,
@@ -1098,7 +1109,6 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         TenantViewIndexOptions
                 tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
 
-        // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
         for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
@@ -1124,9 +1134,13 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     // Create multiple tenants, add data and run validations
                     for (int tenant : Arrays.asList(new Integer[] { 1, 2, 3 })) {
                         // build schema for tenant
+                        DataOptions dataOptions = schemaBuilder.getDataOptions();
+                        dataOptions.getNextTenantId();
                         schemaBuilder.buildWithNewTenant();
 
                         String tenantId = schemaBuilder.getDataOptions().getTenantId();
+                        LOGGER.debug(String.format("Building new view with tenant id %s on %s.%s",
+                                tenantId, schemaName, tableName));
                         String tenantConnectUrl = getUrl() + ';' + TENANT_ID_ATTRIB + '='
                                 + tenantId;
                         try (Connection tenantConn = DriverManager.getConnection(tenantConnectUrl);
