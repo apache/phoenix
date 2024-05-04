@@ -202,6 +202,25 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testQueryTimeoutWithMetadataLookup() throws Exception {
+        PreparedStatement ps = loadDataAndPreparePagedQuery(0, 0);
+        try {
+            ResultSet rs = ps.executeQuery();
+            rs.next();
+            fail("Query timeout is 0ms");
+        } catch (SQLException e) {
+            Throwable t = e;
+            while (t != null && !(t instanceof SQLTimeoutException)) {
+                t = t.getCause();
+            }
+            if (t == null) {
+                fail("Expected query to fail with SQLTimeoutException");
+            }
+            assertEquals(OPERATION_TIMED_OUT.getErrorCode(),
+                    ((SQLTimeoutException)t).getErrorCode());
+        }
+    }
+
     public void testScanningResultIteratorQueryTimeoutForPagingWithNormalLowTimeout() throws Exception {
         //Arrange
         PreparedStatement ps = loadDataAndPreparePagedQuery(30000,30);

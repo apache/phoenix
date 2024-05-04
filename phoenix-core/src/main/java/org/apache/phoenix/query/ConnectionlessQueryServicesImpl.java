@@ -219,9 +219,23 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
-        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                queryTimeout);
     }
 
     /**
@@ -229,7 +243,18 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+                                                 byte[] endRowKey) throws SQLException {
+        return getTableRegions(tableName, startRowKey, endRowKey,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                 byte[] endRowKey, int queryTimeout)
+            throws SQLException {
         List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
         if (regions != null) {
             return regions;

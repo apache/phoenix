@@ -226,7 +226,8 @@ public class ServerCacheClient {
         PTable cacheUsingTable = delegate.getTableRef().getTable();
         ConnectionQueryServices services = delegate.getContext().getConnection().getQueryServices();
         List<HRegionLocation> locations = services.getAllTableRegions(
-                cacheUsingTable.getPhysicalName().getBytes());
+                cacheUsingTable.getPhysicalName().getBytes(),
+                delegate.getContext().getStatement().getQueryTimeoutInMillis());
         int nRegions = locations.size();
         Set<HRegionLocation> servers = new HashSet<>(nRegions);
         cacheUsingTableMap.put(Bytes.mapKey(cacheId), cacheUsingTable);
@@ -268,7 +269,12 @@ public class ServerCacheClient {
         ExecutorService executor = services.getExecutor();
         List<Future<Boolean>> futures = Collections.emptyList();
         try {
-            List<HRegionLocation> locations = services.getAllTableRegions(cacheUsingTable.getPhysicalName().getBytes());
+            int queryTimeout = connection.getQueryServices().getProps()
+                    .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+            List<HRegionLocation> locations =
+                    services.getAllTableRegions(cacheUsingTable.getPhysicalName().getBytes(),
+                            queryTimeout);
             int nRegions = locations.size();
             // Size these based on worst case
             futures = new ArrayList<Future<Boolean>>(nRegions);
@@ -380,7 +386,11 @@ public class ServerCacheClient {
             byte[] tableName = cacheUsingTable.getPhysicalName().getBytes();
             iterateOverTable = services.getTable(tableName);
 
-            List<HRegionLocation> locations = services.getAllTableRegions(tableName);
+            int queryTimeout = connection.getQueryServices().getProps()
+                    .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                            QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+            List<HRegionLocation> locations = services.getAllTableRegions(tableName, queryTimeout);
+
             /**
              * Allow for the possibility that the region we based where to send our cache has split and been relocated
              * to another region server *after* we sent it, but before we removed it. To accommodate this, we iterate
