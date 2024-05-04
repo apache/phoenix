@@ -46,6 +46,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
@@ -210,7 +211,12 @@ public class MapReduceIT extends ParallelStatsDisabledIT {
 
         if (testVerySmallTimeOut) {
             // run job and it should fail due to Timeout
-            assertFalse("Job should fail with QueryTimeout.", job.waitForCompletion(true));
+            try {
+                assertFalse("Job should fail with QueryTimeout.", job.waitForCompletion(true));
+            } catch (RuntimeException e) {
+                assertTrue("Job execution failed with unexpected error.",
+                        e.getCause() instanceof SQLTimeoutException);
+            }
         } else {
             //run
             assertTrue("Job didn't complete successfully! Check logs for reason.", job.waitForCompletion(true));

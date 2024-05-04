@@ -68,7 +68,8 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 		if ((snapshotName = getSnapshotName(conf)) != null) {
 			return getRegionLocationsFromSnapshot(conf, snapshotName);
 		} else {
-			return context.getConnection().getQueryServices().getAllTableRegions(tableName);
+			return context.getConnection().getQueryServices().getAllTableRegions(tableName,
+					context.getStatement().getQueryTimeoutInMillis());
 		}
 	}
 
@@ -84,7 +85,8 @@ public class MapReduceParallelScanGrouper implements ParallelScanGrouper {
 			return getRegionLocationsFromSnapshot(conf, snapshotName);
 		} else {
 			return context.getConnection().getQueryServices()
-					.getTableRegions(tableName, startRegionBoundaryKey, stopRegionBoundaryKey);
+					.getTableRegions(tableName, startRegionBoundaryKey, stopRegionBoundaryKey,
+							context.getStatement().getQueryTimeoutInMillis());
 		}
 	}
 
