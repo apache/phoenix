@@ -82,6 +82,9 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
         return getDelegate().getTableIfExists(tableName);
     }
 
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
         return getDelegate().getAllTableRegions(tableName);
@@ -91,9 +94,28 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
      * {@inheritDoc}.
      */
     @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
+        return getDelegate().getAllTableRegions(tableName, queryTimeout);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+                                                 byte[] endRowKey) throws SQLException {
         return getDelegate().getTableRegions(tableName, startRowKey, endRowKey);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                 byte[] endRowKey, int queryTimeout)
+            throws SQLException {
+        return getDelegate().getTableRegions(tableName, startRowKey, endRowKey, queryTimeout);
     }
 
     @Override
