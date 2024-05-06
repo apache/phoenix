@@ -117,6 +117,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -274,6 +275,7 @@ import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
@@ -6377,10 +6379,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             boolean isRetry) throws Throwable {
         RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest protoRequest =
                 getRequest(invalidateCacheRequests);
-        // TODO Do I need my own executor or can I re-use QueryServices#Executor
-        //  since it is supposed to be used only for scans according to documentation?
         List<CompletableFuture<Void>> futures = new ArrayList<>();
         Map<Future, ServerName> map = new HashMap<>();
+        int poolSize = config.getInt(
+                    PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE,
+                QueryServicesOptions.DEFAULT_PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE);
+        ThreadFactoryBuilder builder = new ThreadFactoryBuilder().setDaemon(true)
+                                        .setNameFormat("metadata-cache-invalidation-pool-%d");
+        Executor executor = Executors.newFixedThreadPool(poolSize, builder.build());
         for (ServerName serverName : serverNames) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
@@ -6411,7 +6417,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     IOException ioe = ClientUtil.parseServiceException(se);
                     throw new CompletionException(ioe);
                 }
-            });
+            }, executor);
             futures.add(future);
             map.put(future, serverName);
         }

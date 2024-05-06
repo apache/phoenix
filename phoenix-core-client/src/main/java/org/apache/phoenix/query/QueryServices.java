@@ -454,6 +454,9 @@ public interface QueryServices extends SQLCloseable {
     // Default to 10 seconds.
     long PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT = 10 * 1000;
     String PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = "phoenix.metadata.invalidate.cache.enabled";
+
+    String PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE =
+            "phoenix.metadata.cache.invalidation.threadPool.size";
     /**
      * Param to determine whether client can disable validation to figure out if any of the
      * descendent views extend primary key of their parents. Since this is a bit of
