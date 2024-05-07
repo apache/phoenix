@@ -25,6 +25,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.*;
 
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -82,6 +83,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class MetaDataUtil {
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataUtil.class);
@@ -1181,5 +1183,17 @@ public class MetaDataUtil {
         } finally {
             connection.setAutoCommit(isAutoCommit);
         }
+    }
+
+    /**
+     * @param conf Cluster configuration
+     * @param maxLookbackAge Input max lookback age
+     * @return Input max lookback age, if not null. If null, fallback to cluster level
+     * max lookback age. Will always return non-null long value.
+     */
+    public static long getMaxLookbackAge(Configuration conf, Long maxLookbackAge) {
+        Preconditions.checkNotNull(conf);
+        return maxLookbackAge != null ? maxLookbackAge :
+                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
     }
 }

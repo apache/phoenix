@@ -20,7 +20,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
-  <version>5.2.0-SNAPSHOT</version>
+  <version>5.3.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Apache Phoenix</name>
   <description>A SQL layer over HBase</description>
@@ -84,7 +84,7 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.4.runtime.version>2.4.17</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
-    <hbase-2.5.runtime.version>2.5.7-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.8-hadoop3</hbase-2.5.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -96,6 +96,7 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
     <test.tmp.dir>${project.build.directory}</test.tmp.dir>
+    <shadeSources>true</shadeSources>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
@@ -123,11 +124,11 @@
     <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.31</joni.version>
-    <omid.version>1.1.1</omid.version>
+    <omid.version>1.1.2</omid.version>
     <stream.version>2.9.5</stream.version>
     <icu4j.version>72.1</icu4j.version>
     <guice.version>5.1.0</guice.version>
-    <zookeeper.version>3.8.3</zookeeper.version>
+    <zookeeper.version>3.8.4</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
     <jetty.version>9.4.53.v20231009</jetty.version>
@@ -1098,12 +1099,48 @@
         <artifactId>hadoop-mapreduce-client-app</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
         <version>${hadoop.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>ch.qos.reload4j</groupId>
+            <artifactId>reload4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-reload4j</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
 
       <!-- HBase dependencies -->

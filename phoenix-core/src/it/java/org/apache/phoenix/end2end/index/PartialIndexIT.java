@@ -33,6 +33,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Assert;
@@ -48,6 +49,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -55,9 +57,19 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.*;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -992,6 +1004,52 @@ public class PartialIndexIT extends BaseTest {
                 assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere())
                         .equals("JSON_EXISTS(JSONCOL,'$.info.address.exists')"));
             }
+        }
+    }
+
+    @Test
+    public void testPartialIndexWithIndexHint() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String dataTableName = generateUniqueName();
+            stmt.execute("create table " + dataTableName + " (id1 varchar not null, id2 integer not null, "
+                    + "A integer constraint pk primary key (id1, id2))" + (salted ? " SALT_BUCKETS=4" : ""));
+            stmt.execute("upsert into " + dataTableName + " values ('id11', 10, 1)");
+            conn.commit();
+            stmt.execute("upsert into " + dataTableName + " values ('id12', 100, 2)");
+            conn.commit();
+            String indexTableName = generateUniqueName();
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
+                    (local ? "LOCAL " : " ") +"INDEX "
+                    + indexTableName + " on " + dataTableName + " (id2, id1) " +
+                    (uncovered ? "" : "INCLUDE (A)") + " WHERE id2 > 50");
+            // Index hint provided and query plan using partial index is usable
+            String selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ "
+                    + "A from " + dataTableName + " WHERE id2 = 100 AND id1 = 'id12'";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
+            String actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + indexTableName));
+            rs = stmt.executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertFalse(rs.next());
+            // Index hint provided but query plan using partial index is not usable so, no data
+            selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ "
+                    + "A from " + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
+            rs = stmt.executeQuery("EXPLAIN " + selectSql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + indexTableName));
+            rs = stmt.executeQuery(selectSql);
+            assertFalse(rs.next());
+            // No index hint so, use data table only as its point lookup
+            selectSql = "SELECT A from " + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
+            rs = stmt.executeQuery("EXPLAIN " + selectSql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + dataTableName));
+            rs = stmt.executeQuery(selectSql);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
         }
     }
 }

@@ -108,6 +108,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * 
@@ -1614,20 +1615,41 @@ public class ScanUtil {
     public static PageFilter removePageFilter(Scan scan) {
         Filter filter = scan.getFilter();
         if (filter != null) {
+            PagingFilter pagingFilter = null;
             if (filter instanceof PagingFilter) {
-                filter = ((PagingFilter) filter).getDelegateFilter();
+                pagingFilter = (PagingFilter) filter;
+                filter = pagingFilter.getDelegateFilter();
                 if (filter == null) {
                     return null;
                 }
             }
             if (filter instanceof PageFilter) {
-                scan.setFilter(null);
+                if (pagingFilter != null) {
+                    pagingFilter.setDelegateFilter(null);
+                    scan.setFilter(pagingFilter);
+                } else {
+                    scan.setFilter(null);
+                }
                 return (PageFilter) filter;
             } else if (filter instanceof FilterList) {
                 return removePageFilterFromFilterList((FilterList) filter);
             }
         }
         return null;
+    }
+
+    public static void setScanAttributeForMaxLookbackAge(Scan scan, Long maxLookbackAge) {
+        Preconditions.checkNotNull(scan);
+        if (maxLookbackAge != null) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
+                    Bytes.toBytes(maxLookbackAge));
+        }
+    }
+
+    public static Long getMaxLookbackAgeFromScanAttribute(Scan scan) {
+        Preconditions.checkNotNull(scan);
+        byte[] maxLookbackAge = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
+        return maxLookbackAge != null ? Bytes.toLong(maxLookbackAge) : null;
     }
 
     /**

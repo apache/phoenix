@@ -42,6 +42,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -1221,4 +1222,29 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
         }
     }
 
+    // Test point lookup over data table with index hint and hinted plan is not applicable
+    @Test
+    public void testRVCOffsetWithNotApplicableIndexHint() throws Exception {
+        String sql = String.format("SELECT /*+ INDEX(%s %s)*/ %s FROM %s "
+                        + "WHERE t_id = 'b' AND k1 = 2 AND k2 = 3 OFFSET (%s)=('a', 1, 2)",
+                TABLE_NAME, INDEX_NAME, TABLE_ROW_KEY,TABLE_NAME,TABLE_ROW_KEY);
+        try (Statement statement = conn.createStatement()){
+            ResultSet rs = statement.executeQuery("EXPLAIN " + sql);
+            String actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            // As hinted plan is not applicable so use data plan which is point lookup
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + TABLE_NAME));
+        }
+    }
+
+    @Test
+    public void testRVCOffsetWithNotApplicableDataPlanAndPointLookup() throws Exception {
+        //'ab' is not an integer so this fails
+        String failureSql = String.format("SELECT %s FROM %s "
+                        + "WHERE t_id = 'b' AND k1 = 2 AND k2 = 3 OFFSET (%s)=('a', 'ab', 2)",
+                TABLE_ROW_KEY,TABLE_NAME,TABLE_ROW_KEY);
+        try (Statement statement = conn.createStatement()){
+            statement.execute(failureSql);
+            fail("Should not allow non coercible values to PK in RVC Offset");
+        } catch (RowValueConstructorOffsetNotCoercibleException e) {}
+    }
 }

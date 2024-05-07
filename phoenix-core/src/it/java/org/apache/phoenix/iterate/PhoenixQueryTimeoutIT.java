@@ -41,13 +41,14 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -199,6 +200,79 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
                     ((SQLTimeoutException)t).getErrorCode());
         } finally {
             BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+        }
+    }
+
+    @Test
+    public void testScanningResultIteratorShouldNotQueryTimeoutForPagingAfterReceivingAValidRow() throws Exception {
+        //Arrange
+        PreparedStatement ps = loadDataAndPreparePagedQuery(10,1);
+
+        ManualEnvironmentEdge injectEdge;
+        injectEdge = new ManualEnvironmentEdge();
+        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        // First query we are executing with timeout of 10ms, so it should not timeout as first row will be retrieved
+        // before 10 ms.
+
+        //Act + Assert
+        try {
+            //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
+            ResultSet rs = ps.executeQuery();
+            while(rs.next()) {
+                injectEdge.incrementValue(10);
+            }
+        } catch (SQLException e) {
+            fail("Query should have run smoothly");
+        } finally {
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+        }
+
+        PreparedStatement failingPs = loadDataAndPreparePagedQuery(0,0);
+        //Second query should timeout as queryTimeout is set to 0ms
+        try {
+            //Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle it.
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
+            ResultSet rs = failingPs.executeQuery();
+            EnvironmentEdgeManager.reset();
+            while(rs.next()) {}
+            fail("Expected query to timeout with a 0 ms timeout");
+        } catch (SQLException e) {
+            //OPERATION_TIMED_OUT Exception expected
+            Throwable t = e;
+            // SQLTimeoutException can be wrapped inside outer exceptions like PhoenixIOException
+            while (t != null && !(t instanceof SQLTimeoutException)) {
+                t = t.getCause();
+            }
+            if (t == null) {
+                fail("Expected query to fail with SQLTimeoutException");
+            }
+            assertEquals(OPERATION_TIMED_OUT.getErrorCode(),
+                    ((SQLTimeoutException)t).getErrorCode());
+        } finally {
+            BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+            EnvironmentEdgeManager.reset();
+        }
+    }
+
+    @Test
+    public void testQueryTimeoutWithMetadataLookup() throws Exception {
+        PreparedStatement ps = loadDataAndPreparePagedQuery(0, 0);
+        try {
+            ResultSet rs = ps.executeQuery();
+            rs.next();
+            fail("Query timeout is 0ms");
+        } catch (SQLException e) {
+            Throwable t = e;
+            while (t != null && !(t instanceof SQLTimeoutException)) {
+                t = t.getCause();
+            }
+            if (t == null) {
+                fail("Expected query to fail with SQLTimeoutException");
+            }
+            assertEquals(OPERATION_TIMED_OUT.getErrorCode(),
+                    ((SQLTimeoutException)t).getErrorCode());
         }
     }
 

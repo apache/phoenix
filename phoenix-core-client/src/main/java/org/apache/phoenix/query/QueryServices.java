@@ -480,6 +480,13 @@ public interface QueryServices extends SQLCloseable {
             "phoenix.paging.start.newscan.startrow.include";
 
     /**
+     * Num of retries while retrieving the region location details for the given table.
+     */
+    String PHOENIX_GET_REGIONS_RETRIES = "phoenix.get.table.regions.retries";
+
+    int DEFAULT_PHOENIX_GET_REGIONS_RETRIES = 10;
+
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();

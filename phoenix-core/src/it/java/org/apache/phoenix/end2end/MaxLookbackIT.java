@@ -60,6 +60,7 @@ import static org.junit.Assert.assertFalse;
 @Category(NeedsOwnMiniClusterTest.class)
 public class MaxLookbackIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;
+    private static final int TABLE_LEVEL_MAX_LOOKBACK_AGE = 10;
     private static final int ROWS_POPULATED = 2;
     public static final int WAIT_AFTER_TABLE_CREATION_MILLIS = 1;
     private String tableDDLOptions;
@@ -110,6 +111,48 @@ public class MaxLookbackIT extends BaseTest {
                 Long.toString(populateTime));
         try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
             connscn.createStatement().executeQuery("select * from " + dataTableName);
+        } catch (SQLException se) {
+            SQLExceptionCode code =
+                    SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE;
+            TestUtil.assertSqlExceptionCode(code, se);
+            return;
+        }
+        Assert.fail("We should have thrown an exception for the too-early SCN");
+    }
+
+    @Test
+    public void testTooLowSCNWithTableLevelMaxLookback() throws Exception {
+        String dataTableName1 = generateUniqueName();
+        StringBuilder optionBuilderForDataTable1 = new StringBuilder(optionBuilder);
+        optionBuilderForDataTable1.append("MAX_LOOKBACK_AGE="+((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000));
+        tableDDLOptions = optionBuilderForDataTable1.toString();
+        createTable(dataTableName1);
+        StringBuilder optionBuilderForDataTable2 = new StringBuilder(optionBuilder);
+        optionBuilderForDataTable2.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
+        String dataTableName2 = generateUniqueName();
+        tableDDLOptions = optionBuilderForDataTable2.toString();
+        createTable(dataTableName2);
+        Assert.assertEquals(new Long((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000),
+                queryTableLevelMaxLookbackAge(dataTableName1));
+        Assert.assertEquals(new Long(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000),
+                queryTableLevelMaxLookbackAge(dataTableName2));
+        injectEdge.setValue(System.currentTimeMillis());
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        //increase long enough to make sure we can find the syscat row for the table
+        injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
+        populateTable(dataTableName1);
+        populateTable(dataTableName2);
+        long populateTime = EnvironmentEdgeManager.currentTimeMillis();
+        injectEdge.incrementValue(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000 + 1000);
+        Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                (populateTime + MAX_LOOKBACK_AGE * 1000));
+        Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                populateTime + (TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000);
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(populateTime));
+        try (Connection connscn = DriverManager.getConnection(getUrl(), props)) {
+            connscn.createStatement().executeQuery("select * from " + dataTableName1 + " where " +
+                    "val3 in (select val3 from " + dataTableName2 + ")");
         } catch (SQLException se) {
             SQLExceptionCode code =
                     SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE;
@@ -186,6 +229,75 @@ public class MaxLookbackIT extends BaseTest {
         }
     }
 
+    @Test
+    public void testRecentlyDeletedRowsNotCompactedAwayWithTableLevelMaxLookback() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            optionBuilder.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
+            tableDDLOptions = optionBuilder.toString();
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+
+            TableName dataTable = TableName.valueOf(dataTableName);
+            populateTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            TableName indexTable = TableName.valueOf(indexName);
+            injectEdge.incrementValue(WAIT_AFTER_TABLE_CREATION_MILLIS);
+            long beforeDeleteSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(5); //make sure we delete at a different ts
+            Statement stmt = conn.createStatement();
+            stmt.execute("DELETE FROM " + dataTableName + " WHERE " + " id = 'a'");
+            Assert.assertEquals(1, stmt.getUpdateCount());
+            conn.commit();
+            //select stmt to get row we deleted
+            String sql = String.format("SELECT * FROM %s WHERE id = 'a'", dataTableName);
+            String indexSql = String.format("SELECT * FROM %s WHERE val1 = 'ab'", dataTableName);
+            int rowsPlusDeleteMarker = ROWS_POPULATED;
+            assertRowExistsAtSCN(getUrl(), sql, beforeDeleteSCN, true);
+            assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
+            flush(dataTable);
+            flush(indexTable);
+            assertRowExistsAtSCN(getUrl(), sql, beforeDeleteSCN, true);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
+            injectEdge.incrementValue(1); //new ts for major compaction
+            majorCompact(dataTable);
+            majorCompact(indexTable);
+            assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
+            assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
+            //wait for the lookback time. After this compactions should purge the deleted row
+            injectEdge.incrementValue(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            long beforeSecondCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
+            String notDeletedRowSql =
+                    String.format("SELECT * FROM %s WHERE id = 'b'", dataTableName);
+            String notDeletedIndexRowSql =
+                    String.format("SELECT * FROM %s WHERE val1 = 'bc'", dataTableName);
+            assertRowExistsAtSCN(getUrl(), notDeletedRowSql, beforeSecondCompactSCN, true);
+            assertRowExistsAtSCN(getUrl(), notDeletedIndexRowSql, beforeSecondCompactSCN, true);
+            assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
+            assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('c', 'cd', 'cde', 'cdef')");
+            conn.commit();
+            injectEdge.incrementValue(1L);
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                    beforeDeleteSCN + MAX_LOOKBACK_AGE * 1000);
+            majorCompact(dataTable);
+            majorCompact(indexTable);
+            //should still be ROWS_POPULATED because we added one and deleted one
+            assertRawRowCount(conn, dataTable, ROWS_POPULATED);
+            assertRawRowCount(conn, indexTable, ROWS_POPULATED);
+
+            //deleted row should be gone, but not deleted row should still be there.
+            assertRowExistsAtSCN(getUrl(), sql, beforeSecondCompactSCN, false);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeSecondCompactSCN, false);
+            assertRowExistsAtSCN(getUrl(), notDeletedRowSql, beforeSecondCompactSCN, true);
+            assertRowExistsAtSCN(getUrl(), notDeletedIndexRowSql, beforeSecondCompactSCN, true);
+        }
+    }
+
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
         ttl = 20;
@@ -254,6 +366,145 @@ public class MaxLookbackIT extends BaseTest {
             assertRawRowCount(conn, dataTable, 0);
             assertRawRowCount(conn, indexTable, 0);
         } finally{
+            conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
+        }
+    }
+
+    @Test
+    public void testTTLAndTableLevelMaxLookbackWithMaxLookbackMoreThanTTL() throws Exception {
+        ttl = 8;
+        long maxLookbackAge = 12;
+        optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
+                append(maxLookbackAge * 1000);
+        tableDDLOptions = optionBuilder.toString();
+        Configuration conf = getUtility().getConfiguration();
+        //disable automatic memstore flushes
+        long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
+                HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
+        conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+            populateTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.incrementValue(1);
+            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
+            TableName dataTable = TableName.valueOf(dataTableName);
+            TableName indexTable = TableName.valueOf(indexName);
+            assertTableHasTtl(conn, dataTable, ttl);
+            assertTableHasTtl(conn, indexTable, ttl);
+            //first make sure we inserted correctly
+            String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
+            String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
+            assertRowExistsAtSCN(getUrl(),sql, afterFirstInsertSCN, true);
+            assertExplainPlan(conn, indexSql, dataTableName, indexName);
+            assertRowExistsAtSCN(getUrl(),indexSql, afterFirstInsertSCN, true);
+            int originalRowCount = 2;
+            assertRawRowCount(conn, dataTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
+            //force a flush
+            flush(dataTable);
+            flush(indexTable);
+            //flush shouldn't have changed it
+            assertRawRowCount(conn, dataTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
+            long timeToAdvance = (ttl * 1000) -
+                    (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
+            if (timeToAdvance > 0) {
+                injectEdge.incrementValue(timeToAdvance);
+            }
+            //make sure it's still on disk
+            assertRawRowCount(conn, dataTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
+            injectEdge.incrementValue(1); //get a new timestamp for compaction
+            majorCompact(dataTable);
+            majorCompact(indexTable);
+            //nothing should have been purged by this major compaction
+            assertRawRowCount(conn, dataTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
+            //now wait till max lookback as max lookback is greater than TTL
+            timeToAdvance = (maxLookbackAge * 1000) -
+                    (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
+            if (timeToAdvance > 0) {
+                injectEdge.incrementValue(timeToAdvance);
+            }
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
+                    afterFirstInsertSCN + ttl * 1000);
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                    afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
+            //make sure that we can compact away the now-expired rows
+            majorCompact(dataTable);
+            majorCompact(indexTable);
+            //note that before HBase 1.4, we don't have HBASE-17956
+            // and this will always return 0 whether it's still on-disk or not
+            assertRawRowCount(conn, dataTable, 0);
+            assertRawRowCount(conn, indexTable, 0);
+        }
+        finally {
+            conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
+        }
+    }
+
+    @Test
+    public void testExpiredRowsAreNotFlushedWithTableLevelMaxLookback() throws Exception {
+        ttl = 8;
+        long maxLookbackAge = 12;
+        optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
+                append(maxLookbackAge * 1000);
+        tableDDLOptions = optionBuilder.toString();
+        int delta = 1;
+        Configuration conf = getUtility().getConfiguration();
+        //disable automatic memstore flushes
+        long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
+                HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
+        conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+            createTable(dataTableName);
+            createIndex(dataTableName, indexName, 1);
+            TableName dataTable = TableName.valueOf(dataTableName);
+            TableName indexTable = TableName.valueOf(indexName);
+            assertTableHasTtl(conn, dataTable, ttl);
+            assertTableHasTtl(conn, indexTable, ttl);
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.incrementValue(delta);
+            populateTable(dataTableName);
+            long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
+            injectEdge.incrementValue(delta);
+            int expectedNumRows = 2;
+            assertRawRowCount(conn, dataTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
+            injectEdge.incrementValue(ttl * 1000);
+            Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
+                    afterFirstInsertSCN + maxLookbackAge * 1000);
+            flush(dataTable);
+            flush(indexTable);
+            assertRawRowCount(conn, dataTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
+            injectEdge.incrementValue(delta);
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('c', 'cd', 'cde', 'cdef')");
+            conn.commit();
+            conn.createStatement().execute("upsert into " + dataTableName +
+                    " values ('d', 'de', 'def', 'defg')");
+            conn.commit();
+            expectedNumRows += 2;
+            injectEdge.incrementValue(delta);
+            assertRawRowCount(conn, dataTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
+            injectEdge.incrementValue(maxLookbackAge * 1000);
+            flush(dataTable);
+            flush(indexTable);
+            // Recent two rows expired so, they won't be flushed
+            assertRawRowCount(conn, dataTable, expectedNumRows - 2);
+            assertRawRowCount(conn, indexTable, expectedNumRows - 2);
+        }
+        finally {
             conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);
         }
     }
