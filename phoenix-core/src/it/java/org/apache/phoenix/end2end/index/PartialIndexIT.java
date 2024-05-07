@@ -900,7 +900,8 @@ public class PartialIndexIT extends BaseTest {
             // such that the new version of the row does not satisfy the index where clause
             // anymore. This should result in deleting the index row.
             String dml =
-                    "UPSERT INTO " + dataTableName + " values ('id2', 0, 2, 9.5, 'd', JSON_MODIFY(jsoncol, '$.info.age', '0')) ";
+                    "UPSERT INTO " + dataTableName + " values ('id2', 0, 2, 9.5, 'd','" + String.format(
+                            json, 0) + "')";
             conn.createStatement().execute(dml);
             rs = conn.createStatement().executeQuery(selectSql);
             assertTrue(rs.next());
