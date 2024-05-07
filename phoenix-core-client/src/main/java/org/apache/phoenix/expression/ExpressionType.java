@@ -194,7 +194,6 @@ public enum ExpressionType {
     RowKeyBytesStringFunction(RowKeyBytesStringFunction.class),
     PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class),
     JsonValueFunction(JsonValueFunction.class),
-    JsonModifyFunction(JsonModifyFunction.class),
     JsonQueryFunction(JsonQueryFunction.class),
     JsonExistsFunction(JsonExistsFunction.class)
     ;

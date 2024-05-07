@@ -17,24 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
-
-import java.sql.ParameterMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
-import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -42,12 +24,11 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.UngroupedAggregateRegionObserverHelper;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -62,6 +43,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -72,13 +54,11 @@ import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnName;
-import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SequenceValueParseNode;
 import org.apache.phoenix.parse.UpsertStatement;
@@ -124,9 +104,20 @@ import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import java.sql.ParameterMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
 
 public class UpsertCompiler {
 
@@ -578,42 +569,8 @@ public class UpsertCompiler {
             }
         }
         boolean isAutoCommit = connection.getAutoCommit();
-        boolean isFunctionEvalNeeded = false;
-        List<AliasedNode> nodesForFunctions = newArrayListWithCapacity(1);
-        List<ParseNode> whereNodes = newArrayListWithCapacity(1);
-        int idx=0;
-        if (valueNodes != null) {
-            for (ParseNode valueNode : valueNodes) {
-                List<PColumn> columns = table.getColumns();
-                if (idx == columns.size()) {
-                    break;
-                }
-                PColumn column = columns.get(idx);
-                ColumnParseNode
-                        cpn =
-                        new ParseNodeFactory().column(null, column.getName().getString(), null);
-                if (SchemaUtil.isPKColumn(column)) {
-                    whereNodes.add(new ParseNodeFactory().equal(cpn, valueNodes.get(idx)));
-                }
-                nodesForFunctions.add(new AliasedNode(null, cpn));
-                if (!valueNode.isStateless()) {
-                    // Function
-                    runOnServer = true;
-                    isFunctionEvalNeeded = true;
-                }
-                idx++;
-            }
-        }
-        SelectStatement selectForEvaluation = null;
-        if (isFunctionEvalNeeded) {
-            selectForEvaluation = SelectStatement.create(SelectStatement.SELECT_STAR, tableNode, nodesForFunctions);
-            selectForEvaluation.combine((new ParseNodeFactory().and(whereNodes)));
-        }
-        if (valueNodes == null || isFunctionEvalNeeded) {
+        if (valueNodes == null) {
             SelectStatement select = upsert.getSelect();
-            if (select == null && isFunctionEvalNeeded) {
-                select = selectForEvaluation;
-            }
             assert(select != null);
             select = SubselectRewriter.flatten(select, connection);
             ColumnResolver selectResolver = FromCompiler.getResolverForQuery(select, connection, false, upsert.getTable().getName());
@@ -722,10 +679,9 @@ public class UpsertCompiler {
         final QueryPlan originalQueryPlan = queryPlanToBe;
         RowProjector projectorToBe = null;
         // Optimize only after all checks have been performed
-        if (valueNodes == null || isFunctionEvalNeeded) {
+        if (valueNodes == null) {
             queryPlanToBe = new QueryOptimizer(services).optimize(queryPlanToBe, statement, targetColumns, parallelIteratorFactoryToBe);
             projectorToBe = queryPlanToBe.getProjector();
-            runOnServer = runOnServer || isFunctionEvalNeeded;
         }
         final List<PColumn> allColumns = allColumnsToBe;
         final RowProjector projector = projectorToBe;
@@ -744,7 +700,7 @@ public class UpsertCompiler {
         ////////////////////////////////////////////////////////////////////
         // UPSERT SELECT
         /////////////////////////////////////////////////////////////////////
-        if (valueNodes == null || isFunctionEvalNeeded) {
+        if (valueNodes == null) {
             // Before we re-order, check that for updatable view columns
             // the projected expression either matches the column name or
             // is a constant with the same required value.
@@ -841,25 +797,6 @@ public class UpsertCompiler {
                     scan.setAttribute(BaseScannerRegionObserverConstants.UPSERT_SELECT_EXPRS, UngroupedAggregateRegionObserverHelper.serialize(projectedExpressions));
                     // Ignore order by - it has no impact
                     final QueryPlan aggPlan = new AggregatePlan(context, select, statementContext.getCurrentTable(), aggProjector, null,null, OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, originalQueryPlan);
-                    if (isFunctionEvalNeeded) {
-                        List<Expression> constantExpressions = Lists.newArrayListWithExpectedSize(valueNodes.size());
-                        UpsertValuesCompiler expressionBuilder = new UpsertValuesCompiler(context);
-                        int nodeIndex = 0;
-                        for (ParseNode valueNode : valueNodes) {
-                            PColumn column = allColumns.get(columnIndexes[nodeIndex]);
-                            expressionBuilder.setColumn(column);
-                            Expression expression = valueNode.accept(expressionBuilder);
-                            if (expression.getDataType() != null && !expression.getDataType().isCastableTo(column.getDataType())) {
-                                throw TypeMismatchException.newException(
-                                        expression.getDataType(), column.getDataType(), "expression: "
-                                                + expression.toString() + " in column " + column);
-                            }
-                            constantExpressions.add(expression);
-                            nodeIndex++;
-                        }
-                        scan.setAttribute(BaseScannerRegionObserverConstants.UPSERT_SELECT_EXPRS,
-                                UngroupedAggregateRegionObserverHelper.serialize(constantExpressions));
-                    }
                     return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context, connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
                 }
             }
