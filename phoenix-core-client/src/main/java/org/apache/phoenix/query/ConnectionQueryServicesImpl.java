@@ -117,7 +117,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -6386,7 +6386,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 QueryServicesOptions.DEFAULT_PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE);
         ThreadFactoryBuilder builder = new ThreadFactoryBuilder().setDaemon(true)
                                         .setNameFormat("metadata-cache-invalidation-pool-%d");
-        Executor executor = Executors.newFixedThreadPool(poolSize, builder.build());
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize, builder.build());
         for (ServerName serverName : serverNames) {
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 try {
@@ -6448,6 +6448,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 invalidateServerMetadataCacheWithRetries(admin, failedServers,
                         invalidateCacheRequests, true);
             }
+        } finally {
+            executor.shutdown();
         }
     }
 
