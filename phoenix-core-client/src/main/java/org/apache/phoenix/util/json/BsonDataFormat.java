@@ -157,6 +157,7 @@ public class BsonDataFormat implements JsonDataFormat {
         return conf;
     }
 
+    // Transform to an in memory BsonDocument instance
     private BsonDocument fromRaw(RawBsonDocument rawDocument) {
         // Transform to an in memory BsonDocument instance
         BsonBinaryReader
