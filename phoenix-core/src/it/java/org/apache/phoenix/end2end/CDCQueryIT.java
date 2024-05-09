@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -181,18 +182,20 @@ public class CDCQueryIT extends CDCBaseIT {
                 assertFalse(rs.next());
             }
 
-            verifyChanges(tenantId, conn.createStatement().executeQuery(
-                    "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName), changes,
-                    CHANGE_IMG, true);
-            verifyChanges(tenantId, conn.createStatement().executeQuery(
+            List<String> dataCols = Arrays.asList("V1", "V2", "B.VB");
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    datatableName, dataCols, changes, CHANGE_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ PHOENIX_ROW_TIMESTAMP(), K," +
-                                    "\"CDC JSON\" FROM " + cdcFullName), changes,
-                    CHANGE_IMG, true);
-            verifyChanges(tenantId, conn.createStatement().executeQuery(
-                    "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                    changes, PRE_POST_IMG, true);
-            verifyChanges(tenantId, conn.createStatement().executeQuery("SELECT * FROM " + cdcFullName),
-                    changes, new HashSet<>(), true);
+                                    "\"CDC JSON\" FROM " + cdcFullName), datatableName, dataCols,
+                    changes, CHANGE_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
+                    datatableName, dataCols, changes, PRE_POST_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT * FROM " + cdcFullName),
+                    datatableName, dataCols, changes, new HashSet<>());
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
                 put("SELECT 'dummy', k, \"CDC JSON\" FROM " + cdcFullName,
@@ -275,6 +278,7 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
+        List<String> dataCols = Arrays.asList("V1", "V2");
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
             //try (Statement stmt = conn.createStatement()) {
@@ -287,15 +291,15 @@ public class CDCQueryIT extends CDCBaseIT {
             //        }
             //    }
             //}
-            verifyChanges(tenantId, conn.createStatement().executeQuery(
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                            changes, PRE_POST_IMG, false);
-            verifyChanges(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName), changes,
-                    CHANGE_IMG, false);
-            verifyChanges(tenantId, conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
-                    "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
-                    changes, CHANGE_IMG, false);
+                    datatableName, dataCols, changes, PRE_POST_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    datatableName, dataCols, changes, CHANGE_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
+                            "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
+                    datatableName, dataCols, changes, CHANGE_IMG);
         }
     }
 
@@ -508,11 +512,12 @@ public class CDCQueryIT extends CDCBaseIT {
                     CDCUtil.getCDCIndexName(cdcName))));
         }
 
+        List<String> dataCols = Arrays.asList("V0", "V1", "V1V2", "V2", "B.VB", "V3");
         try (Connection conn = newConnection(tenantId)) {
-            verifyChanges(tenantId, conn.createStatement().executeQuery(
-                    "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + SchemaUtil.getTableName(
-                            schemaName, cdcName)),
-                    changes, CHANGE_IMG, true);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + SchemaUtil.getTableName(
+                                    schemaName, cdcName)),
+                    datatableName, dataCols, changes, CHANGE_IMG);
         }
     }
 
