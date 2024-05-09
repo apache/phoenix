@@ -40,7 +40,6 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -56,7 +55,6 @@ import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 // NOTE: To debug the query execution, add the below condition or the equivalent where you need a
 // breakpoint.

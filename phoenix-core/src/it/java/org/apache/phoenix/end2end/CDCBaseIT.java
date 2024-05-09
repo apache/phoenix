@@ -24,6 +24,7 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
@@ -40,10 +41,10 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Stream;
@@ -231,13 +232,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return DriverManager.getConnection(getUrl(), props);
     }
 
-    private Map<String, Object> addChange(Connection conn, Map preImage,
-                                          long changeTS, String changeType, String tableName,
-                                          Map<String, Object> pks, Map<String, Object> values)
-            throws SQLException {
+    private ChangeRow addChange(Connection conn, String tableName,
+                                ChangeRow changeRow) throws SQLException {
+        Map<String, Object> values = changeRow.change;
+        Map<String, Object> pks = changeRow.pks;
+        long changeTS = changeRow.changeTS;
         if (conn != null) {
             String sql;
-            if (changeType == CDC_DELETE_EVENT_TYPE) {
+            if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
                 String predicates = pks.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).
                         collect(joining(", "));
                 sql = "DELETE FROM " + tableName + " WHERE " + predicates;
@@ -255,27 +257,66 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 stmt.execute(sql);
             }
         }
-        Map<String, Object> cdcChange = new HashMap<>();
-        cdcChange.put(CDC_EVENT_TYPE, changeType);
-        cdcChange.put(CDC_PRE_IMAGE, preImage);
-        if (changeType == CDC_UPSERT_EVENT_TYPE) {
-            Map<String, Object> changeImage = new HashMap<>();
-            changeImage.putAll(values);
-            cdcChange.put(CDC_CHANGE_IMAGE, changeImage);
-            Map<String, Object> postImage = new HashMap<>();
-            postImage.putAll(preImage);
-            postImage.putAll(changeImage);
-            cdcChange.put(CDC_POST_IMAGE, postImage);
-        }
-        return cdcChange;
+        return changeRow;
     }
 
-    protected List<ChangeRow> generateMutations(long startTS, String tenantId,
-                                                Map<String, String> pkColumns,
-                                                Map<String, String> dataColumns)
+    protected List<List<ChangeRow>> generateMutations(long startTS, String tenantId,
+                                                      Map<String, String> pkColumns,
+                                                      Map<String, String> dataColumns,
+                                                      int nRows, int nBatches)
     {
+        Random rand = new Random();
+        // Generate unique rows
+        List<Map<String, Object>> rows = new ArrayList<>(nRows);
+        Set<Map<String, Object>> rowSet = new HashSet<>(nRows);
+        for (int i = 0; i < nRows; ++i) {
+            Map<String, Object> row = generateRandomData(rand, pkColumns, false);
+            if (rowSet.contains(row)) {
+                --i;
+                continue;
+            }
+            rows.add(row);
+            rowSet.add(row);
+        }
 
-        return null;
+        // Generate the batches. At each batch, determine the row participation and type of
+        // operation and the data columns for upserts.
+        List<List<ChangeRow>> batches = new ArrayList<>(nBatches);
+        long batchTS = startTS;
+        for (int i = 0; i < nBatches; ++i) {
+            List<ChangeRow> batch = new ArrayList<>();
+            for (int j = 0; j < nRows; ++j) {
+                if (rand.nextInt(nRows) % 2 == 0) {
+                    boolean isDelete = rand.nextInt(5) == 0;
+                    if (isDelete) {
+                        batch.add(new ChangeRow(tenantId, batchTS, rows.get(j), null));
+                    }
+                    else {
+                        batch.add(new ChangeRow(tenantId, batchTS, rows.get(j),
+                                generateRandomData(rand, dataColumns, true)));
+                    }
+                }
+            }
+            batches.add(batch);
+            batchTS += 100;
+        }
+
+        return batches;
+    }
+
+    private Map<String, Object> generateRandomData(Random rand, Map<String, String> columns,
+                                                   boolean nullOK) {
+        Map<String, Object> row = new HashMap<>();
+        for (Map.Entry<String, String> pkCol: columns.entrySet()) {
+            if (rand.nextInt(5) == 0) {
+                row.put(pkCol.getKey(), null);
+            }
+            else {
+                PDataType dt = PDataType.fromSqlTypeName(pkCol.getValue());
+                row.put(pkCol.getKey(), dt.getSampleValue());
+            }
+        }
+        return row;
     }
 
     // FIXME: Add the following with consecutive upserts on the sake PK (no delete in between):
@@ -293,40 +334,37 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         Map<String, Object> rowid1 = new HashMap() {{ put("K", 1); }};
         Map<String, Object> rowid2 = new HashMap() {{ put("K", 2); }};
         Map<String, Object> rowid3 = new HashMap() {{ put("K", 3); }};
-        Map<String, Object> c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12;
         for (String tid: tenantids) {
             try (Connection conn = committer.getConnection(tid)) {
-                c1 = addChange(conn, new HashMap(), startTS,
-                        CDC_UPSERT_EVENT_TYPE, tableName, rowid1, new TreeMap<String, Object>() {{
+                changes.add(addChange(conn, tableName,
+                        new ChangeRow(tid, startTS, rowid1, new TreeMap<String, Object>() {{
                             put("V1", 100L);
                             put("V2", 1000L);
                             put("B.VB", 10000L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid1, c1));
-                c2 = addChange(conn, new HashMap(), startTS,
-                        CDC_UPSERT_EVENT_TYPE, tableName, rowid2, new TreeMap<String, Object>() {{
+                        }})
+                ));
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS,
+                        rowid2, new TreeMap<String, Object>() {{
                             put("V1", 200L);
                             put("V2", 2000L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid2, c2));
+                        }})
+                ));
                 committer.commit(conn);
 
-                c3 = addChange(conn, new HashMap(), startTS += 100,
-                        CDC_UPSERT_EVENT_TYPE,
-                        tableName, rowid3, new TreeMap<String, Object>() {{
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100,
+                        rowid3, new TreeMap<String, Object>() {{
                             put("V1", 300L);
                             put("V2", null);
                             put("B.VB", null);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid3, c3));
+                        }})
+                ));
                 committer.commit(conn);
 
-                c4 = addChange(conn, (Map) c1.get(CDC_POST_IMAGE),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 101L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid1, c4));
+                        }})
+                ));
                 committer.commit(conn);
             }
             if (datatableNameForDDL != null && !dropV3Done) {
@@ -337,61 +375,53 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 dropV3Done = true;
             }
             try (Connection conn = newConnection(tid)) {
-                c5 = addChange(conn, (Map) c4.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c5));
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
                 committer.commit(conn);
 
-                c6 = addChange(conn, new HashMap(),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 102L);
                             put("V2", 1002L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid1, c6));
+                        }})
+                ));
                 committer.commit(conn);
 
-                c7 = addChange(conn, (Map) c6.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c7));
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                null)));
                 committer.commit(conn);
 
-                c8 = addChange(conn, (Map) c2.get(CDC_POST_IMAGE),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid2,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid2,
                         new TreeMap<String, Object>() {{
                             put("V1", 201L);
                             put("V2", null);
                             put("B.VB", 20001L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid2, c8));
+                        }}
+                )));
                 committer.commit(conn);
 
-                c9 = addChange(conn, new HashMap(),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 103L);
                             put("V2", 1003L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid1, c9));
+                        }})
+                ));
                 committer.commit(conn);
 
-                c10 = addChange(conn, (Map) c9.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c10));
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
                 committer.commit(conn);
 
-                c11 = addChange(conn, new HashMap(),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 104L);
                             put("V2", 1004L);
-                        }});
-                changes.add(new ChangeRow(tid, startTS, rowid1, c11));
+                        }})
+                ));
                 committer.commit(conn);
 
-                c12 = addChange(conn, (Map) c11.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c12));
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
                 committer.commit(conn);
             }
         }
@@ -428,9 +458,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                         (Map<String, Object>) cdcObj.get(CDC_PRE_IMAGE), dataCols));
             }
             if (changeScopes.contains(PTable.CDCChangeScope.CHANGE)) {
-                assertEquals(changeDesc, fillInNulls(
-                                (Map<String, Object>) changeRow.change.get(CDC_CHANGE_IMAGE),
-                                dataCols),
+                assertEquals(changeDesc, fillInNulls(changeRow.change, dataCols),
                         fillInNulls((Map<String, Object>) cdcObj.get(CDC_CHANGE_IMAGE), dataCols));
             }
             if (changeRow.getChangeType() != CDC_DELETE_EVENT_TYPE
@@ -498,70 +526,61 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         Map<String, Object> rowid1 = new HashMap() {{ put("K", 1); }};
         Map<String, Object> rowid2 = new HashMap() {{ put("K", 2); }};
         Map<String, Object> rowid3 = new HashMap() {{ put("K", 3); }};
-        Map<String, Object> c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12;
         for (String tid: tenantids) {
             try (Connection conn = newConnection(tid)) {
-                c1 = addChange(conn, new HashMap(), startTS,
-                        CDC_UPSERT_EVENT_TYPE, tableName, rowid1, new TreeMap<String, Object>() {{
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                        new TreeMap<String, Object>() {{
                             put("V1", 100L);
                             put("V2", 1000L);
-                        }});
+                        }})
+                ));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c1));
-                c2 = addChange(conn, new HashMap(), startTS += 100,
-                        CDC_UPSERT_EVENT_TYPE, tableName, rowid2, new TreeMap<String, Object>() {{
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid2,
+                        new TreeMap<String, Object>() {{
                             put("V1", 200L);
-                        }});
+                        }})
+                ));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid2, c2));
-                c3 = addChange(conn, new HashMap(), startTS += 100,
-                        CDC_UPSERT_EVENT_TYPE,
-                        tableName, rowid3, new TreeMap<String, Object>() {{
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid3,
+                        new TreeMap<String, Object>() {{
                             put("V1", 300L);
                             put("V2", null);
-                        }});
+                        }})
+                ));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid3, c3));
-                c4 = addChange(conn, (Map) c1.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c4));
-                c5 = addChange(conn, new HashMap(),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 102L);
                             put("V2", 1002L);
-                        }});
+                        }})
+                ));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c5));
-                c6 = addChange(conn, (Map) c5.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c6));
-                c7 = addChange(conn, new HashMap(),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 103L);
                             put("V2", 1003L);
-                        }});
+                        }})
+                ));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c7));
-                c8 = addChange(conn, (Map) c7.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c8));
-                c9 = addChange(conn, new HashMap(),
-                        startTS += 100, CDC_UPSERT_EVENT_TYPE, tableName, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 104L);
                             put("V2", 1004L);
-                        }});
+                        }})
+                ));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c9));
-                c10 = addChange(conn, (Map) c9.get(CDC_POST_IMAGE), startTS += 100,
-                        CDC_DELETE_EVENT_TYPE, tableName, rowid1, null);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                null)));
                 committer.commit(conn);
-                changes.add(new ChangeRow(tid, startTS, rowid1, c10));
             }
         }
         committer.reset();
@@ -578,20 +597,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             return tenantId;
         }
 
-        public Map<String, Object> getPreImage() {
-            return (Map<String, Object>) change.get(CDC_PRE_IMAGE);
-        }
-
-        public Map<String, Object> getChangeImage() {
-            return (Map<String, Object>) change.get(CDC_CHANGE_IMAGE);
-        }
-
-        public Map<String, Object> getPostImage() {
-            return (Map<String, Object>) change.get(CDC_POST_IMAGE);
-        }
-
         public String getChangeType() {
-            return (String) change.get(CDC_EVENT_TYPE);
+            return change == null ? CDC_DELETE_EVENT_TYPE : CDC_UPSERT_EVENT_TYPE;
         }
 
         ChangeRow(String tenantid, long changeTS, Map<String, Object> pks, Map<String, Object> change) {
