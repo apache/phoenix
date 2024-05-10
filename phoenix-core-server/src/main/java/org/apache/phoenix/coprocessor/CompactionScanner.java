@@ -94,19 +94,18 @@ public class CompactionScanner implements InternalScanner {
         this.emptyCQ = emptyCQ;
         this.config = env.getConfiguration();
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
-        this.maxLookbackInMillis = maxLookbackInMillis;
         String columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
         String tableName = region.getRegionInfo().getTable().getNameAsString();
         Long overriddenMaxLookback =
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
-        maxLookbackInMillis = overriddenMaxLookback == null ?
+        this.maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback);
         // The oldest scn is current time - maxLookbackInMillis. Phoenix sets the scan time range
         // for scn queries [0, scn). This means that the maxlookback size should be
         // maxLookbackInMillis + 1 so that the oldest scn does not return empty row
-        this.maxLookbackWindowStart = maxLookbackInMillis == 0 ?
-                compactionTime : compactionTime - (maxLookbackInMillis + 1);
+        this.maxLookbackWindowStart = this.maxLookbackInMillis == 0 ?
+                compactionTime : compactionTime - (this.maxLookbackInMillis + 1);
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
         ttl = cfd.getTimeToLive();
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;

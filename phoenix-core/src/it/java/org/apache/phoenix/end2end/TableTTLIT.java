@@ -131,8 +131,8 @@ public class TableTTLIT extends BaseTest {
                     { true, false, KeepDeletedCells.FALSE, 5, 50, null},
                     { true, false, KeepDeletedCells.TRUE, 1, 25, null},
                     { true, false, KeepDeletedCells.TTL, 5, 100, null},
-                    { false, false, KeepDeletedCells.FALSE, 1, 100, 15},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50, 15},
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, 0},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, 0},
                     { false, false, KeepDeletedCells.TTL, 1, 25, 15}});
     }
 
@@ -155,7 +155,7 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMaskingAndCompaction() throws Exception {
         final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
-        final int maxDeleteCounter = maxLookbackAge;
+        final int maxDeleteCounter = maxLookbackAge == 0 ? 1 : maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
         final int maxMaskingCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
@@ -233,9 +233,6 @@ public class TableTTLIT extends BaseTest {
 
     @Test
     public void testRowSpansMultipleTTLWindows() throws Exception {
-        if (tableLevelMaxLooback != null) {
-            return;
-        }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
