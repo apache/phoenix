@@ -78,6 +78,8 @@ public class TTLRegionScanner extends BaseRegionScanner {
         isMaskingEnabled = emptyCF != null && emptyCQ != null &&
                 env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                         QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+        LOG.debug("TTLRegionScanner params: ttl: {} , ttlWindowStart: {}", this.ttl,
+                this.ttlWindowStart);
     }
 
     private void init() throws IOException {
