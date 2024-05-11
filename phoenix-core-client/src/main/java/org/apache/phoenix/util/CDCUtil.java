@@ -19,6 +19,8 @@
 package org.apache.phoenix.util;
 
 import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -30,7 +32,9 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PDataType;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "__CDC__";
@@ -112,5 +116,25 @@ public class CDCUtil {
         }
         return DescVarLengthFastByteComparisons.compareTo(columnQual1,
                 0, columnQual1.length, columnQual2, 0, columnQual2.length);
+    }
+
+    public static Object getColumnEncodedValue(Object value, PDataType dataType) {
+        if (value != null) {
+            if (dataType.getSqlType() == Types.BINARY || dataType.getSqlType() == Types.VARBINARY
+                    || dataType.getSqlType() == Types.LONGVARBINARY) {
+                // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
+                // avoid copying bytes.
+                value = Base64.getEncoder().encodeToString((byte[]) value);
+            } else {
+                if (dataType.getSqlType() == Types.DATE
+                        || dataType.getSqlType() == Types.TIMESTAMP
+                        || dataType.getSqlType() == Types.TIME
+                        || dataType.getSqlType() == Types.TIME_WITH_TIMEZONE
+                        || dataType.getSqlType() == Types.TIMESTAMP_WITH_TIMEZONE) {
+                    value = value.toString();
+                }
+            }
+        }
+        return value;
     }
 }

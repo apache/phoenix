@@ -253,22 +253,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     }
 
     private Object getColumnValue(byte[] cellValue, int offset, int length, PDataType dataType) {
+        Object value;
         if (dataType.getSqlType() == Types.BINARY) {
-            // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
-            // avoid copying bytes.
-            return Base64.getEncoder().encodeToString(
-                    ImmutableBytesPtr.copyBytesIfNecessary(cellValue, offset, length));
+            value = ImmutableBytesPtr.copyBytesIfNecessary(cellValue, offset, length);
         } else {
-            Object value = dataType.toObject(cellValue, offset, length);
-            if (dataType.getSqlType() == Types.DATE
-                    || dataType.getSqlType() == Types.TIMESTAMP
-                    || dataType.getSqlType() == Types.TIME
-                    || dataType.getSqlType() == Types.TIME_WITH_TIMEZONE
-                    || dataType.getSqlType() == Types.TIMESTAMP_WITH_TIMEZONE) {
-                value = value.toString();
-            }
-            return value;
+            value = dataType.toObject(cellValue, offset, length);
         }
+        return CDCUtil.getColumnEncodedValue(value, dataType);
     }
-
 }

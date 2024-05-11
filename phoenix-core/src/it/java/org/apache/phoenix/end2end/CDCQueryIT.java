@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
+import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
@@ -29,11 +30,15 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -44,9 +49,13 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
@@ -65,6 +74,8 @@ import static org.junit.Assert.assertTrue;
 @RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
 public class CDCQueryIT extends CDCBaseIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CDCQueryIT.class);
+
     // Offset of the first column, depending on whether PHOENIX_ROW_TIMESTAMP() is in the schema
     // or not.
     private final boolean forView;
@@ -180,20 +191,24 @@ public class CDCQueryIT extends CDCBaseIT {
                 assertFalse(rs.next());
             }
 
-            List<String> dataCols = Arrays.asList("V1", "V2", "B.VB");
+            Map<String, String> dataColumns = new TreeMap<String, String>() {{
+                put("V1", "INTEGER");
+                put("V2", "INTEGER");
+                put("B.VB", "INTEGER");
+            }};
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
-                    datatableName, dataCols, changes, CHANGE_IMG);
+                    datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ PHOENIX_ROW_TIMESTAMP(), K," +
-                                    "\"CDC JSON\" FROM " + cdcFullName), datatableName, dataCols,
+                                    "\"CDC JSON\" FROM " + cdcFullName), datatableName, dataColumns,
                     changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                    datatableName, dataCols, changes, PRE_POST_IMG);
+                    datatableName, dataColumns, changes, PRE_POST_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT * FROM " + cdcFullName),
-                    datatableName, dataCols, changes, new HashSet<>());
+                    datatableName, dataColumns, changes, new HashSet<>());
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
                 put("SELECT 'dummy', k, \"CDC JSON\" FROM " + cdcFullName,
@@ -226,6 +241,120 @@ public class CDCQueryIT extends CDCBaseIT {
                 }
             }
         }
+    }
+
+    @Test
+    public void testSelectGeneric() throws Exception {
+        String cdcName, cdc_sql;
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
+        String datatableName = tableName;
+        Map<String, String> pkColumns = new TreeMap<String, String>() {{
+            put("K1", "INTEGER");
+            put("K2", "VARCHAR");
+        }};
+        Map<String, String> dataColumns = new TreeMap<String, String>() {{
+            put("V1", "INTEGER");
+            put("V2", "VARCHAR");
+            put("V3", "DOUBLE");
+            put("V4", "DATE");
+            put("V5", "TIME");
+            put("V6", "TIMESTAMP");
+            put("V7", "VARBINARY");
+        }};
+        try (Connection conn = newConnection()) {
+            createTable(conn, tableName, pkColumns, dataColumns, multitenant, encodingScheme,
+                    tableSaltBuckets, false, null);
+            if (forView) {
+                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
+                createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
+                        encodingScheme);
+                tableName = viewName;
+            }
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            if (!dataBeforeCDC) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
+            }
+        }
+
+        String tenantId = multitenant ? "1000" : null;
+        String[] tenantids = {tenantId};
+        if (multitenant) {
+            tenantids = new String[] {tenantId, "2000"};
+        }
+
+        long startTS = System.currentTimeMillis();
+        Map<String, List<Set<ChangeRow>>> allBatches = new HashMap<>(tenantids.length);
+        for (String tid: tenantids) {
+            allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 10, 5));
+            int bnr = 1, mnr = 0;
+            for (Set<ChangeRow> batch: allBatches.get(tid)) {
+                for (ChangeRow changeRow : batch) {
+                    LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " + changeRow);
+                }
+                ++bnr;
+            }
+            applyMutations(COMMIT_SUCCESS, tableName, tid, allBatches.get(tid));
+        }
+
+        SingleCellIndexIT.dumpTable(datatableName);
+
+        if (dataBeforeCDC) {
+            try (Connection conn = newConnection()) {
+                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+                        indexSaltBuckets);
+            }
+            // Testing with flushed data adds more coverage.
+            getUtility().getAdmin().flush(TableName.valueOf(datatableName));
+            getUtility().getAdmin().flush(TableName.valueOf(SchemaUtil.getTableName(schemaName,
+                    CDCUtil.getCDCIndexName(cdcName))));
+        }
+
+
+        String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
+        try (Connection conn = newConnection(tenantId)) {
+            // For debug: uncomment to see the exact results logged to console.
+            try (Statement stmt = conn.createStatement()) {
+                try (ResultSet rs = stmt.executeQuery(
+                        "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName)) {
+                    for (int i = 0; rs.next(); ++i) {
+                        LOGGER.debug("CDC row: " + (i+1) + " timestamp="
+                                + rs.getDate(1).getTime() + " "
+                                + collectColumns(pkColumns, rs) + ", " + CDC_JSON_COL_NAME + "="
+                                + rs.getString(pkColumns.size() + 2));
+                    }
+                }
+            }
+
+
+            List<ChangeRow> changes = new ArrayList<>();
+            for (Set<ChangeRow> batch: allBatches.get(tenantId)) {
+                changes.addAll(batch);
+            }
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    datatableName, dataColumns, changes, CHANGE_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
+                    datatableName, dataColumns, changes, PRE_POST_IMG);
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName),
+                    datatableName, dataColumns, changes, ALL_IMG);
+        }
+    }
+
+    private static String collectColumns(Map<String, String> pkColumns, ResultSet rs) {
+        return pkColumns.keySet().stream().map(
+                k -> {
+                    try {
+                        return k + "=" + rs.getObject(k);
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).collect(
+                Collectors.joining(", "));
     }
 
     private void _testSelectCDCImmutable(PTable.ImmutableStorageScheme immutableStorageScheme)
@@ -276,7 +405,10 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
-        List<String> dataCols = Arrays.asList("V1", "V2");
+        Map<String, String> dataColumns = new TreeMap<String, String>() {{
+            put("V1", "INTEGER");
+            put("V2", "INTEGER");
+        }};
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
             //try (Statement stmt = conn.createStatement()) {
@@ -291,13 +423,13 @@ public class CDCQueryIT extends CDCBaseIT {
             //}
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
-                    datatableName, dataCols, changes, PRE_POST_IMG);
+                    datatableName, dataColumns, changes, PRE_POST_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
-                    datatableName, dataCols, changes, CHANGE_IMG);
+                    datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
                             "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
-                    datatableName, dataCols, changes, CHANGE_IMG);
+                    datatableName, dataColumns, changes, CHANGE_IMG);
         }
     }
 
@@ -510,116 +642,19 @@ public class CDCQueryIT extends CDCBaseIT {
                     CDCUtil.getCDCIndexName(cdcName))));
         }
 
-        List<String> dataCols = Arrays.asList("V0", "V1", "V1V2", "V2", "B.VB", "V3");
+        Map<String, String> dataColumns = new TreeMap<String, String>() {{
+            put("V0", "INTEGER");
+            put("V1", "INTEGER");
+            put("V1V2", "INTEGER");
+            put("V2", "INTEGER");
+            put("B.VB", "INTEGER");
+            put("V3", "INTEGER");
+        }};
         try (Connection conn = newConnection(tenantId)) {
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + SchemaUtil.getTableName(
                                     schemaName, cdcName)),
-                    datatableName, dataCols, changes, CHANGE_IMG);
-        }
-    }
-
-    private void assertCDCBinaryAndDateColumn(ResultSet rs,
-                                              List<byte []> byteColumnValues,
-                                              List<Date> dateColumnValues,
-                                              Timestamp timestamp) throws Exception {
-        assertEquals(true, rs.next());
-        assertEquals(1, rs.getInt(2));
-
-        Map<String, Object> row1 = new HashMap<String, Object>(){{
-            put(CDC_EVENT_TYPE, CDC_UPSERT_EVENT_TYPE);
-        }};
-        Map<String, Object> postImage = new HashMap<>();
-        postImage.put("A_BINARY",
-                Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
-        postImage.put("D", dateColumnValues.get(0).toString());
-        postImage.put("T", timestamp.toString());
-        row1.put(CDC_POST_IMAGE, postImage);
-        Map<String, Object> changeImage = new HashMap<>();
-        changeImage.put("A_BINARY",
-                Base64.getEncoder().encodeToString(byteColumnValues.get(0)));
-        changeImage.put("D", dateColumnValues.get(0).toString());
-        changeImage.put("T", timestamp.toString());
-        row1.put(CDC_CHANGE_IMAGE, changeImage);
-        row1.put(CDC_PRE_IMAGE, new HashMap<String, String>() {{
-        }});
-        assertEquals(row1, gson.fromJson(rs.getString(3),
-                HashMap.class));
-
-        assertEquals(true, rs.next());
-        assertEquals(2, rs.getInt(2));
-        HashMap<String, Object> row2Json = gson.fromJson(rs.getString(3),
-                HashMap.class);
-        String row2BinaryColStr = (String) ((Map)((Map)row2Json.get(CDC_CHANGE_IMAGE))).get("A_BINARY");
-        byte[] row2BinaryCol = Base64.getDecoder().decode(row2BinaryColStr);
-
-        assertEquals(0, DescVarLengthFastByteComparisons.compareTo(byteColumnValues.get(1),
-                0, byteColumnValues.get(1).length, row2BinaryCol, 0, row2BinaryCol.length));
-    }
-
-    @Test
-    public void testCDCBinaryAndDateColumn() throws Exception {
-        List<byte []> byteColumnValues = new ArrayList<>();
-        byteColumnValues.add( new byte[] {0,0,0,0,0,0,0,0,0,1});
-        byteColumnValues.add(new byte[] {0,0,0,0,0,0,0,0,0,2});
-        List<Date> dateColumnValues = new ArrayList<>();
-        dateColumnValues.add(Date.valueOf("2024-02-01"));
-        dateColumnValues.add(Date.valueOf("2024-01-31"));
-        Timestamp timestampColumnValue = Timestamp.valueOf("2024-01-31 12:12:14");
-        String cdcName, cdc_sql;
-        String schemaName = withSchemaName ? generateUniqueName() : null;
-        String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
-        try (Connection conn = newConnection()) {
-            createTable(conn, "CREATE TABLE  " + tableName + " (" +
-                    (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "") +
-                    "k INTEGER NOT NULL, a_binary binary(10), d Date, t TIMESTAMP, " +
-                    "CONSTRAINT PK PRIMARY KEY " +
-                    (multitenant ? "(TENANT_ID, k) " : "(k)") + ")", encodingScheme, multitenant,
-                    tableSaltBuckets, false, null);
-            if (forView) {
-                String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
-                createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
-                        encodingScheme);
-                tableName = viewName;
-            }
-            cdcName = generateUniqueName();
-            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            if (!dataBeforeCDC) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-        }
-
-        String tenantId = multitenant ? "1000" : null;
-        try (Connection conn = newConnection(tenantId)) {
-            String upsertQuery = "UPSERT INTO " + tableName + " (k, a_binary, d, t) VALUES (?, ?, ?, ?)";
-            PreparedStatement stmt = conn.prepareStatement(upsertQuery);
-            stmt.setInt(1, 1);
-            stmt.setBytes(2, byteColumnValues.get(0));
-            stmt.setDate(3, dateColumnValues.get(0));
-            stmt.setTimestamp(4, timestampColumnValue);
-            stmt.execute();
-            conn.commit();
-            stmt.setInt(1, 2);
-            stmt.setBytes(2, byteColumnValues.get(1));
-            stmt.setDate(3, dateColumnValues.get(1));
-            stmt.setTimestamp(4, timestampColumnValue);
-            stmt.execute();
-            conn.commit();
-        }
-
-        if (dataBeforeCDC) {
-            try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-        }
-
-        try (Connection conn = newConnection(tenantId)) {
-            assertCDCBinaryAndDateColumn(conn.createStatement().executeQuery
-                    ("SELECT /*+ CDC_INCLUDE(PRE, POST, CHANGE) */ * FROM " +
-                    SchemaUtil.getTableName(schemaName, cdcName)),
-                    byteColumnValues, dateColumnValues, timestampColumnValue);
+                    datatableName, dataColumns, changes, CHANGE_IMG);
         }
     }
 

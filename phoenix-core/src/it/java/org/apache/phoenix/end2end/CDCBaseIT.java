@@ -20,25 +20,32 @@ package org.apache.phoenix.end2end;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,12 +54,12 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.*;
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
-import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
@@ -64,10 +71,15 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class CDCBaseIT extends ParallelStatsDisabledIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CDCBaseIT.class);
+
     static final HashSet<PTable.CDCChangeScope> CHANGE_IMG =
             new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE));
     static final HashSet<PTable.CDCChangeScope> PRE_POST_IMG = new HashSet<>(
             Arrays.asList(PTable.CDCChangeScope.PRE, PTable.CDCChangeScope.POST));
+    static final HashSet<PTable.CDCChangeScope> ALL_IMG = new HashSet<>(
+            Arrays.asList(PTable.CDCChangeScope.CHANGE, PTable.CDCChangeScope.PRE,
+                    PTable.CDCChangeScope.POST));
 
     protected ManualEnvironmentEdge injectEdge;
     protected Gson gson = new GsonBuilder()
@@ -136,6 +148,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                     + immutableStorageScheme.name());
         }
         table_sql += " " + String.join(", ", props);
+        LOGGER.debug("Creating table with SQL: " + table_sql);
         conn.createStatement().execute(table_sql);
     }
 
@@ -234,36 +247,45 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
     private ChangeRow addChange(Connection conn, String tableName,
                                 ChangeRow changeRow) throws SQLException {
-        Map<String, Object> values = changeRow.change;
         Map<String, Object> pks = changeRow.pks;
+        Map<String, Object> values = changeRow.change;
         long changeTS = changeRow.changeTS;
         if (conn != null) {
             String sql;
             if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
-                String predicates = pks.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue()).
-                        collect(joining(", "));
+                String predicates = pks.entrySet().stream().map(e -> e.getKey() + " = ?").
+                        collect(joining(" AND "));
                 sql = "DELETE FROM " + tableName + " WHERE " + predicates;
             } else {
                 String columnList = Stream.concat(pks.keySet().stream(),
                         values.keySet().stream()).collect(joining(", "));
-                String valueList =
-                        Stream.concat(pks.values().stream(), values.values().stream())
-                                .map(v -> String.valueOf(v)).collect(joining(", "));
-                sql = "UPSERT INTO " + tableName + " (" + columnList + ") VALUES (" + valueList + ")";
+                String bindSql = Stream.generate(() -> "?").limit(
+                        pks.size() + values.size()).collect(joining(", "));
+                sql = "UPSERT INTO " + tableName + " (" + columnList + ") VALUES (" + bindSql + ")";
             }
             cal.setTimeInMillis(changeTS);
             injectEdge.setValue(changeTS);
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute(sql);
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                int bindCnt = 1;
+                for (Object val: pks.values()) {
+                    stmt.setObject(bindCnt, val);
+                    ++bindCnt;
+                }
+                if (changeRow.getChangeType() != CDC_DELETE_EVENT_TYPE) {
+                    for (Object val: values.values()) {
+                        stmt.setObject(bindCnt, val);
+                        ++bindCnt;
+                    }
+                }
+                stmt.executeUpdate();
             }
         }
         return changeRow;
     }
 
-    protected List<List<ChangeRow>> generateMutations(long startTS, String tenantId,
-                                                      Map<String, String> pkColumns,
-                                                      Map<String, String> dataColumns,
-                                                      int nRows, int nBatches)
+    protected List<Set<ChangeRow>> generateMutations(long startTS, Map<String, String> pkColumns,
+                                                     Map<String, String> dataColumns,
+                                                     int nRows, int nBatches)
     {
         Random rand = new Random();
         // Generate unique rows
@@ -281,20 +303,25 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
         // Generate the batches. At each batch, determine the row participation and type of
         // operation and the data columns for upserts.
-        List<List<ChangeRow>> batches = new ArrayList<>(nBatches);
+        List<Set<ChangeRow>> batches = new ArrayList<>(nBatches);
+        Set<Map<String, Object>> mutatedRows = new HashSet<>(nRows);
         long batchTS = startTS;
         for (int i = 0; i < nBatches; ++i) {
-            List<ChangeRow> batch = new ArrayList<>();
+            Set<ChangeRow> batch = new TreeSet<>();
             for (int j = 0; j < nRows; ++j) {
                 if (rand.nextInt(nRows) % 2 == 0) {
-                    boolean isDelete = rand.nextInt(5) == 0;
+                    boolean isDelete = mutatedRows.contains(rows.get(j))
+                            && rand.nextInt(5) == 0;
+                    ChangeRow changeRow;
                     if (isDelete) {
-                        batch.add(new ChangeRow(tenantId, batchTS, rows.get(j), null));
+                        changeRow = new ChangeRow(null, batchTS, rows.get(j), null);
                     }
                     else {
-                        batch.add(new ChangeRow(tenantId, batchTS, rows.get(j),
-                                generateRandomData(rand, dataColumns, true)));
+                        changeRow = new ChangeRow(null, batchTS, rows.get(j),
+                                generateRandomData(rand, dataColumns, true));
                     }
+                    batch.add(changeRow);
+                    mutatedRows.add(rows.get(j));
                 }
             }
             batches.add(batch);
@@ -308,15 +335,54 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                                                    boolean nullOK) {
         Map<String, Object> row = new HashMap<>();
         for (Map.Entry<String, String> pkCol: columns.entrySet()) {
-            if (rand.nextInt(5) == 0) {
+            if (nullOK && rand.nextInt(5) == 0) {
                 row.put(pkCol.getKey(), null);
             }
             else {
                 PDataType dt = PDataType.fromSqlTypeName(pkCol.getValue());
-                row.put(pkCol.getKey(), dt.getSampleValue());
+                row.put(pkCol.getKey(), dt instanceof PVarchar || dt instanceof PVarbinary
+                        ? dt.getSampleValue(5) : dt.getSampleValue());
             }
         }
         return row;
+    }
+
+    protected void applyMutations(CommitAdapter committer, String datatableName, String tid,
+                                  List<Set<ChangeRow>> batches) throws Exception {
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        try (Connection conn = committer.getConnection(tid)) {
+            for (Set<ChangeRow> batch: batches) {
+                for (ChangeRow changeRow: batch) {
+                    addChange(conn, datatableName, changeRow);
+                }
+                committer.commit(conn);
+            }
+        }
+    }
+
+    protected void createTable(Connection conn, String tableName, Map<String, String> pkColumns,
+                               Map<String, String> dataColumns, boolean multitenant,
+                               PTable.QualifierEncodingScheme encodingScheme,
+                               Integer tableSaltBuckets, boolean immutable,
+                               PTable.ImmutableStorageScheme immutableStorageScheme)
+            throws Exception {
+        List<String> pkConstraintCols = new ArrayList<>();
+        if (multitenant) {
+            pkConstraintCols.add("TENANT_ID");
+        }
+        pkConstraintCols.addAll(pkColumns.keySet());
+        String pkConstraintSql = "CONSTRAINT PK PRIMARY KEY (" +
+                String.join(", ", pkConstraintCols) + ")";
+        String pkColSql = pkColumns.entrySet().stream().map(
+                e -> e.getKey() + " " + e.getValue() + " NOT NULL").collect(joining(", "));
+        String dataColSql = dataColumns.entrySet().stream().map(
+                e -> e.getKey() + " " + e.getValue()).collect(joining(", "));
+        String tableSql = "CREATE TABLE " + tableName + " ("
+                + (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "")
+                + pkColSql + ", " + dataColSql + ", " + pkConstraintSql + ")"
+            ;
+        createTable(conn, tableSql, encodingScheme, multitenant, tableSaltBuckets, immutable,
+                immutableStorageScheme);
     }
 
     // FIXME: Add the following with consecutive upserts on the sake PK (no delete in between):
@@ -429,87 +495,109 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return changes;
     }
 
-    private void _copyScopeIfRelevant(Set<PTable.CDCChangeScope> changeScopes,
-                                      PTable.CDCChangeScope changeScope,
-                                      Map<String, Object> change, Map<String, Object> expChange,
-                                      String scopeKeyName) {
-        if (changeScopes.contains(changeScope) && change.containsKey(scopeKeyName)) {
-            expChange.put(scopeKeyName, change.get(scopeKeyName));
-        }
-    }
-
     protected void verifyChangesViaSCN(String tenantId, ResultSet rs, String dataTableName,
-                                       List<String> dataCols, List<ChangeRow> changes,
+                                       Map<String, String> dataColumns, List<ChangeRow> changes,
                                        Set<PTable.CDCChangeScope> changeScopes) throws Exception {
         for (int i = 0, changenr = 0; i < changes.size(); ++i) {
             ChangeRow changeRow = changes.get(i);
-            if (changeRow.getTenantID() != tenantId) {
+            if (changeRow.getTenantID() != null && changeRow.getTenantID() != tenantId) {
                 continue;
             }
             String changeDesc = "Change " + (changenr+1) + ": " + changeRow;
             assertTrue(changeDesc, rs.next());
-            Map cdcObj = gson.fromJson(rs.getString(3), HashMap.class);
+            // TODO: Verify PK columns as well.
+            Map cdcObj = gson.fromJson(rs.getString(changeRow.pks.size()+2),
+                    HashMap.class);
             if (cdcObj.containsKey(CDC_PRE_IMAGE)
                     && ! ((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
                     && changeScopes.contains(PTable.CDCChangeScope.PRE)) {
                 Map<String, Object> preImage = getRowImage(changeDesc, tenantId, dataTableName,
-                        dataCols, changeRow, changeRow.changeTS);
+                        dataColumns, changeRow, changeRow.changeTS);
                 assertEquals(changeDesc, preImage, fillInNulls(
-                        (Map<String, Object>) cdcObj.get(CDC_PRE_IMAGE), dataCols));
+                        (Map<String, Object>) cdcObj.get(CDC_PRE_IMAGE), dataColumns.keySet()));
             }
             if (changeScopes.contains(PTable.CDCChangeScope.CHANGE)) {
-                assertEquals(changeDesc, fillInNulls(changeRow.change, dataCols),
-                        fillInNulls((Map<String, Object>) cdcObj.get(CDC_CHANGE_IMAGE), dataCols));
+                assertEquals(changeDesc, encodeValues(
+                        fillInNulls(changeRow.change, dataColumns.keySet()), dataColumns),
+                        fillInNulls((Map<String, Object>) cdcObj.get(CDC_CHANGE_IMAGE),
+                                dataColumns.keySet()));
             }
             if (changeRow.getChangeType() != CDC_DELETE_EVENT_TYPE
                     && changeScopes.contains(PTable.CDCChangeScope.POST)) {
                 Map<String, Object> postImage = getRowImage(changeDesc, tenantId, dataTableName,
-                        dataCols, changeRow, changeRow.changeTS + 1);
+                        dataColumns, changeRow, changeRow.changeTS + 1);
                 assertEquals(changeDesc, postImage, fillInNulls(
-                        (Map<String, Object>) cdcObj.get(CDC_POST_IMAGE), dataCols));
+                        (Map<String, Object>) cdcObj.get(CDC_POST_IMAGE), dataColumns.keySet()));
             }
             ++changenr;
         }
     }
 
     protected Map<String, Object> getRowImage(String changeDesc, String tenantId,
-                                              String dataTableName, List<String> dataCols,
+                                              String dataTableName, Map<String, String> dataColumns,
                                               ChangeRow changeRow, long scnTimestamp)
                                               throws Exception {
         Map<String, Object> image = new HashMap<>();
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scnTimestamp));
-        Map<String, String> projections = dataCols.stream().collect(toMap(s -> s,
+        Map<String, String> projections = dataColumns.keySet().stream().collect(toMap(s -> s,
                 s -> s.replaceFirst(".*\\.", "")));
         String projection = projections.values().stream().collect(joining(", "));
         String predicates = changeRow.pks.entrySet().stream().map(
-                e -> e.getKey() + "=" + e.getValue()).collect(
-                joining(", "));
+                e -> e.getKey() + " = ?").collect(joining(" AND "));
         try (Connection conn = newConnection(tenantId, props)) {
+            PreparedStatement stmt = conn.prepareStatement("SELECT " + projection + " FROM "
+                    + dataTableName + " WHERE " + predicates);
+            int bindCnt = 1;
+            for (Object val: changeRow.pks.values()) {
+                stmt.setObject(bindCnt, val);
+                ++bindCnt;
+            }
             // Create projection without namespace.
-            ResultSet rs = conn.createStatement().executeQuery(
-                    "SELECT " + projection + " FROM " + dataTableName + " WHERE " + predicates);
+            ResultSet rs = stmt.executeQuery();
             assertTrue(changeDesc, rs.next());
             for (String colName: projections.keySet()) {
-                Object val = rs.getObject(projections.get(colName));
-                // Our JSON parser uses Long and Double types.
-                if (val instanceof Byte || val instanceof Short || val instanceof Integer) {
-                    val = ((Number) val).longValue();
-                }
-                else if (val instanceof Float) {
-                    val = ((Number) val).doubleValue();
-                }
-                image.put(colName, val);
+                PDataType dt = PDataType.fromSqlTypeName(dataColumns.get(colName));
+                image.put(colName, getJsonEncodedValue(rs.getObject(projections.get(colName)), dt));
             }
         }
         return image;
     }
 
-    private Map<String, Object> fillInNulls(Map<String, Object> image, List<String> dataCols) {
+    private Object getJsonEncodedValue(Object val, PDataType dt) {
+        // Our JSON parser uses Long and Double types.
+        if (val instanceof Byte || val instanceof Short || val instanceof Integer) {
+            val = ((Number) val).longValue();
+        }
+        else if (val instanceof Float) {
+            val = ((Number) val).doubleValue();
+        }
+        else {
+            val = CDCUtil.getColumnEncodedValue(val, dt);
+        }
+        return val;
+    }
+
+    private Map<String, Object> fillInNulls(Map<String, Object> image, Collection<String> dataCols) {
         if (image != null) {
+            image = new HashMap<>(image);
             for (String colName : dataCols) {
                 if (!image.containsKey(colName)) {
                     image.put(colName, null);
+                }
+            }
+        }
+        return image;
+    }
+
+    private Map<String, Object> encodeValues(Map<String, Object> image,
+                                            Map<String, String> dataColumns) {
+        if (image != null) {
+            image = new HashMap<>(image);
+            for (Map.Entry<String, String> col : dataColumns.entrySet()) {
+                if (image.containsKey(col.getKey())) {
+                    image.put(col.getKey(), getJsonEncodedValue(
+                            image.get(col.getKey()), PDataType.fromSqlTypeName(col.getValue())));
                 }
             }
         }
@@ -587,7 +675,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return changes;
     }
 
-    protected class ChangeRow {
+    protected class ChangeRow implements Comparable<ChangeRow> {
         private final String tenantId;
         private final long changeTS;
         private final Map<String, Object> pks;
@@ -612,12 +700,32 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             return gson.toJson(this);
         }
 
-        public Map<String, Object> getPrimaryKeys() {
-            return pks;
-        }
+        // This implementation only comapres the rows by PK only as it is simply meant to have a
+        // consistent order in the same batch.
+        @Override
+        public int compareTo(ChangeRow o) {
+            // Quick check to make sure they both have the same PK.
+            if (pks.size() != o.pks.size() || ! pks.keySet().stream().allMatch(
+                    k -> o.pks.containsKey(k))) {
+                throw new RuntimeException("Incompatible row for comparison: " + pks + " vs " +
+                        o.pks);
+            }
 
-        public long getChangeTimestamp() {
-            return changeTS;
+            int res;
+            for (String col: pks.keySet()) {
+                Object val1 = pks.get(col);
+                Object val2 = o.pks.get(col);
+                if (val1 instanceof byte[]) {
+                    res = Bytes.compareTo((byte[]) val1, (byte[]) val2);
+                }
+                else {
+                    res = ((Comparable) val1).compareTo(val2);
+                }
+                if (res != 0) {
+                    return res;
+                }
+            }
+            return 0;
         }
     }
 
