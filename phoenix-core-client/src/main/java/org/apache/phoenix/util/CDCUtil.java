@@ -120,6 +120,7 @@ public class CDCUtil {
 
     public static Object getColumnEncodedValue(Object value, PDataType dataType) {
         if (value != null) {
+            // TODO: Need suport for DECIMAL, NUMERIC and array types.
             if (dataType.getSqlType() == Types.BINARY || dataType.getSqlType() == Types.VARBINARY
                     || dataType.getSqlType() == Types.LONGVARBINARY) {
                 // Unfortunately, Base64.Encoder has no option to specify offset and length so can't

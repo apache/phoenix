@@ -221,7 +221,7 @@ public class CDCQueryIT extends CDCBaseIT {
                         " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC",
                         new int[]{1, 1, 1, 1, 2, 1, 1, 1, 1, 3, 2, 1});
             }};
-            Map dummyChange = new HashMap() {{
+            Map<String, String> dummyChange = new HashMap() {{
                 put(CDC_EVENT_TYPE, "dummy");
             }};
             for (Map.Entry<String, int[]> testQuery : testQueries.entrySet()) {
@@ -231,7 +231,8 @@ public class CDCQueryIT extends CDCBaseIT {
                         assertEquals(true, rs.next());
                         assertEquals("Index: " + i + " for query: " + testQuery.getKey(),
                                 k, rs.getInt(2));
-                        Map change = gson.fromJson(rs.getString(3), HashMap.class);
+                        Map<String, Object> change = gson.fromJson(rs.getString(3),
+                                HashMap.class);
                         change.put(CDC_EVENT_TYPE, "dummy");
                         // Verify that we are getting nothing but the event type as we specified
                         // no change scopes.
@@ -251,16 +252,18 @@ public class CDCQueryIT extends CDCBaseIT {
         String datatableName = tableName;
         Map<String, String> pkColumns = new TreeMap<String, String>() {{
             put("K1", "INTEGER");
-            put("K2", "VARCHAR");
+            put("K2", "INTEGER");
         }};
         Map<String, String> dataColumns = new TreeMap<String, String>() {{
             put("V1", "INTEGER");
             put("V2", "VARCHAR");
-            put("V3", "DOUBLE");
-            put("V4", "DATE");
-            put("V5", "TIME");
-            put("V6", "TIMESTAMP");
-            put("V7", "VARBINARY");
+            put("V3", "CHAR");
+            put("V4", "DOUBLE");
+            put("V5", "DATE");
+            put("V6", "TIME");
+            put("V7", "TIMESTAMP");
+            put("V8", "VARBINARY");
+            put("V9", "BINARY");
         }};
         try (Connection conn = newConnection()) {
             createTable(conn, tableName, pkColumns, dataColumns, multitenant, encodingScheme,

@@ -25,6 +25,8 @@ import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
+import org.apache.phoenix.schema.types.PBinaryBase;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -292,7 +294,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         List<Map<String, Object>> rows = new ArrayList<>(nRows);
         Set<Map<String, Object>> rowSet = new HashSet<>(nRows);
         for (int i = 0; i < nRows; ++i) {
-            Map<String, Object> row = generateRandomData(rand, pkColumns, false);
+            Map<String, Object> row = generateSampleData(rand, pkColumns, false);
             if (rowSet.contains(row)) {
                 --i;
                 continue;
@@ -318,7 +320,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                     }
                     else {
                         changeRow = new ChangeRow(null, batchTS, rows.get(j),
-                                generateRandomData(rand, dataColumns, true));
+                                generateSampleData(rand, dataColumns, true));
                     }
                     batch.add(changeRow);
                     mutatedRows.add(rows.get(j));
@@ -331,7 +333,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return batches;
     }
 
-    private Map<String, Object> generateRandomData(Random rand, Map<String, String> columns,
+    private Map<String, Object> generateSampleData(Random rand, Map<String, String> columns,
                                                    boolean nullOK) {
         Map<String, Object> row = new HashMap<>();
         for (Map.Entry<String, String> pkCol: columns.entrySet()) {
@@ -340,8 +342,9 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
             else {
                 PDataType dt = PDataType.fromSqlTypeName(pkCol.getValue());
-                row.put(pkCol.getKey(), dt instanceof PVarchar || dt instanceof PVarbinary
-                        ? dt.getSampleValue(5) : dt.getSampleValue());
+                row.put(pkCol.getKey(), dt instanceof PChar || dt instanceof PVarchar
+                        || dt instanceof PBinaryBase ? dt.getSampleValue(5)
+                        : dt.getSampleValue());
             }
         }
         return row;
@@ -376,7 +379,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         String pkColSql = pkColumns.entrySet().stream().map(
                 e -> e.getKey() + " " + e.getValue() + " NOT NULL").collect(joining(", "));
         String dataColSql = dataColumns.entrySet().stream().map(
-                e -> e.getKey() + " " + e.getValue()).collect(joining(", "));
+                e -> e.getKey() + " " + (
+                        // Some types need a size.
+                        e.getValue().equals("CHAR") || e.getValue().equals("BINARY")
+                                ? e.getValue() + "(5)" : e.getValue()
+                )).collect(joining(", "));
         String tableSql = "CREATE TABLE " + tableName + " ("
                 + (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "")
                 + pkColSql + ", " + dataColSql + ", " + pkConstraintSql + ")"
@@ -505,9 +512,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
             String changeDesc = "Change " + (changenr+1) + ": " + changeRow;
             assertTrue(changeDesc, rs.next());
-            // TODO: Verify PK columns as well.
-            Map cdcObj = gson.fromJson(rs.getString(changeRow.pks.size()+2),
-                    HashMap.class);
+            for (Map.Entry<String, Object> pkCol: changeRow.pks.entrySet()) {
+                assertEquals(changeDesc, pkCol.getValue(), rs.getObject(pkCol.getKey()));
+            }
+            Map<String, Object> cdcObj = gson.fromJson(rs.getString(
+                            changeRow.pks.size()+2), HashMap.class);
             if (cdcObj.containsKey(CDC_PRE_IMAGE)
                     && ! ((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
                     && changeScopes.contains(PTable.CDCChangeScope.PRE)) {

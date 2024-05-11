@@ -121,7 +121,7 @@ public class CDCChangeBuilder {
         }
     }
 
-    public Map buildCDCEvent() {
+    public Map<String, Object> buildCDCEvent() {
         assert (changeType != null) : "Not expected when no event was detected";
         Map<String, Object> cdcChange = new HashMap<>();
         if (isPreImageInScope) {
