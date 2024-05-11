@@ -1,0 +1,83 @@
+[
+  {
+  "info": {
+    "type": 1,
+    "address": {
+      "town": "Bristol",
+      "county": "Avon",
+      "country": "England",
+      "exists": true
+    },
+    "tags": [
+      "Sport",
+      "Water polo"
+    ]
+  },
+  "type": "Basic",
+  "name": "AndersenFamily"
+},
+  {
+    "info": {
+      "type": 2,
+      "address": {
+        "town": "Bristol2",
+        "county": "Avon2",
+        "country": "France"
+      },
+      "tags": [
+        "Cricket",
+        "Foot Ball"
+      ]
+    },
+    "type": "Normal",
+    "name": "SomeFamily"
+  },
+  {
+    "info": {
+      "type": 3,
+      "address": {
+        "town": "Bristol3",
+        "county": "Avon3",
+        "country": "Australia"
+      },
+      "tags": [
+        "Rugby",
+        "Ice Hockey"
+      ]
+    },
+    "type": "Advanced",
+    "name": "AdvancedFamily"
+  },
+  {
+    "info": {
+      "type": 4,
+      "address": {
+        "town": "Bristol4",
+        "county": "Avon4",
+        "country": "Antarctica"
+      },
+      "tags": [
+        "HorseRide",
+        "Dolphine"
+      ]
+    },
+    "type": "Advanced",
+    "name": "AntarcticaFamily"
+  },
+  {
+    "info": {
+      "type": 5,
+      "address": {
+        "town": "Bristol5",
+        "county": "Avon5",
+        "country": "Europe"
+      },
+      "tags": [
+        "Jumping",
+        "Hopping"
+      ]
+    },
+    "type": "Normal",
+    "name": "EuropeFamily"
+  }
+]
