@@ -183,10 +183,6 @@
                       <shadedPattern>${shaded.package}.org.apache.tephra</shadedPattern>
                     </relocation>
                     <relocation>
-                        <pattern>org.apache.omid</pattern>
-                        <shadedPattern>${shaded.package}.org.apache.omid</shadedPattern>
-                    </relocation>
-                    <relocation>
                         <pattern>org.apache.commons-collections4</pattern>
                         <shadedPattern>${shaded.package}.org.apache.commons-collections4</shadedPattern>
                     </relocation>
