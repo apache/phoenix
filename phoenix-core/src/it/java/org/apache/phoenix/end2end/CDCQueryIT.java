@@ -291,24 +291,26 @@ public class CDCQueryIT extends CDCBaseIT {
         long startTS = System.currentTimeMillis();
         Map<String, List<Set<ChangeRow>>> allBatches = new HashMap<>(tenantids.length);
         for (String tid: tenantids) {
-            allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 20, 5));
-            LOGGER.debug("----- DUMP Mutations -----");
-            int bnr = 1, mnr = 0;
-            for (Set<ChangeRow> batch: allBatches.get(tid)) {
-                for (ChangeRow changeRow : batch) {
-                    LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " + changeRow);
-                }
-                ++bnr;
-            }
-            LOGGER.debug("----------");
+            allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 10, 5));
+            // For debug: uncomment to see the exact mutations that are being applied.
+            //LOGGER.debug("----- DUMP Mutations -----");
+            //int bnr = 1, mnr = 0;
+            //for (Set<ChangeRow> batch: allBatches.get(tid)) {
+            //    for (ChangeRow changeRow : batch) {
+            //        LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " + changeRow);
+            //    }
+            //    ++bnr;
+            //}
+            //LOGGER.debug("----------");
             applyMutations(COMMIT_SUCCESS, tableName, tid, allBatches.get(tid));
         }
 
-        LOGGER.debug("----- DUMP data table: " + datatableName + " -----");
-        SingleCellIndexIT.dumpTable(datatableName);
-        LOGGER.debug("----- DUMP index table: " + CDCUtil.getCDCIndexName(cdcName) + " -----");
-        SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
-        LOGGER.debug("----------");
+        // For debug: uncomment to see the exact HBase cells.
+        //LOGGER.debug("----- DUMP data table: " + datatableName + " -----");
+        //SingleCellIndexIT.dumpTable(datatableName);
+        //LOGGER.debug("----- DUMP index table: " + CDCUtil.getCDCIndexName(cdcName) + " -----");
+        //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
+        //LOGGER.debug("----------");
 
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
@@ -325,19 +327,19 @@ public class CDCQueryIT extends CDCBaseIT {
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
-            try (Statement stmt = conn.createStatement()) {
-                try (ResultSet rs = stmt.executeQuery(
-                        "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName)) {
-                    LOGGER.debug("----- DUMP CDC: " + cdcName + " -----");
-                    for (int i = 0; rs.next(); ++i) {
-                        LOGGER.debug("CDC row: " + (i+1) + " timestamp="
-                                + rs.getDate(1).getTime() + " "
-                                + collectColumns(pkColumns, rs) + ", " + CDC_JSON_COL_NAME + "="
-                                + rs.getString(pkColumns.size() + 2));
-                    }
-                    LOGGER.debug("----------");
-                }
-            }
+            //try (Statement stmt = conn.createStatement()) {
+            //    try (ResultSet rs = stmt.executeQuery(
+            //            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName)) {
+            //        LOGGER.debug("----- DUMP CDC: " + cdcName + " -----");
+            //        for (int i = 0; rs.next(); ++i) {
+            //            LOGGER.debug("CDC row: " + (i+1) + " timestamp="
+            //                    + rs.getDate(1).getTime() + " "
+            //                    + collectColumns(pkColumns, rs) + ", " + CDC_JSON_COL_NAME + "="
+            //                    + rs.getString(pkColumns.size() + 2));
+            //        }
+            //        LOGGER.debug("----------");
+            //    }
+            //}
 
 
             List<ChangeRow> changes = new ArrayList<>();

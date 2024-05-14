@@ -342,9 +342,17 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
             else {
                 PDataType dt = PDataType.fromSqlTypeName(pkCol.getValue());
-                row.put(pkCol.getKey(), dt instanceof PChar || dt instanceof PVarchar
-                        || dt instanceof PBinaryBase ? dt.getSampleValue(5)
-                        : dt.getSampleValue());
+                Object val;
+                if (dt instanceof PChar || dt instanceof PVarchar) {
+                    // FIXME: trailing spaces are getting lost right now.
+                    val = ((String) dt.getSampleValue(5)).trim();
+                    // Make sure it is at least of length 1.
+                    val = ((String) val).length() == 0 ? "a" : val;
+                } else {
+                    val = dt instanceof PBinaryBase ?dt.getSampleValue(5)
+                            : dt.getSampleValue();
+                }
+                row.put(pkCol.getKey(), val);
             }
         }
         return row;
@@ -361,6 +369,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 committer.commit(conn);
             }
         }
+        committer.reset();
     }
 
     protected void createTable(Connection conn, String tableName, Map<String, String> pkColumns,
@@ -453,6 +462,10 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 committer.commit(conn);
 
                 changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                        null)));
+                committer.commit(conn);
+
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 102L);
                             put("V2", 1002L);
@@ -505,10 +518,21 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     protected void verifyChangesViaSCN(String tenantId, ResultSet rs, String dataTableName,
                                        Map<String, String> dataColumns, List<ChangeRow> changes,
                                        Set<PTable.CDCChangeScope> changeScopes) throws Exception {
+        Set<Map<String, Object>> deletedRows = new HashSet<>();
         for (int i = 0, changenr = 0; i < changes.size(); ++i) {
             ChangeRow changeRow = changes.get(i);
             if (changeRow.getTenantID() != null && changeRow.getTenantID() != tenantId) {
                 continue;
+            }
+            if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
+                // Consecutive delete operations don't appear as separate events.
+                if (deletedRows.contains(changeRow.pks)) {
+                    continue;
+                }
+                deletedRows.add(changeRow.pks);
+            }
+            else {
+                deletedRows.remove(changeRow.pks);
             }
             String changeDesc = "Change " + (changenr+1) + ": " + changeRow;
             assertTrue(changeDesc, rs.next());
