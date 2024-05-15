@@ -1351,6 +1351,7 @@ public class MutationState implements SQLCloseable {
                 Table hTable = connection.getQueryServices().getTable(htableName);
                 List<Mutation> currentMutationBatch = null;
                 boolean areAllBatchesSuccessful = false;
+                Object[] resultObjects = null;
 
                 try {
                     if (table.isTransactional()) {
@@ -1375,18 +1376,21 @@ public class MutationState implements SQLCloseable {
                     while (itrListMutation.hasNext()) {
                         final List<Mutation> mutationBatch = itrListMutation.next();
                         currentMutationBatch = mutationBatch;
-                        Object[] resultObjects = new Object[mutationBatch.size()];
+                        if (connection.getAutoCommit() && mutationBatch.size() == 1) {
+                            resultObjects = new Object[mutationBatch.size()];
+                        }
                         if (shouldRetryIndexedMutation) {
                             // if there was an index write failure, retry the mutation in a loop
                             final Table finalHTable = hTable;
                             final ImmutableBytesWritable finalindexMetaDataPtr =
                                     indexMetaDataPtr;
                             final PTable finalPTable = table;
+                            final Object[] finalResultObjects = resultObjects;
                             PhoenixIndexFailurePolicyHelper.doBatchWithRetries(new MutateCommand() {
                                 @Override
                                 public void doMutation() throws IOException {
                                     try {
-                                        finalHTable.batch(mutationBatch, resultObjects);
+                                        finalHTable.batch(mutationBatch, finalResultObjects);
                                     } catch (InterruptedException e) {
                                         Thread.currentThread().interrupt();
                                         throw new IOException(e);
@@ -1428,17 +1432,15 @@ public class MutationState implements SQLCloseable {
                             hTable.batch(mutationBatch, resultObjects);
                         }
 
-                        if (connection.getAutoCommit()) {
-                            for (int i = 0; i < mutationBatch.size(); i++) {
-                                Result result = (Result) resultObjects[i];
-                                if (result != null && !result.isEmpty()) {
-                                    Cell cell = result.rawCells()[0];
-                                    numUpdatedRowsForAutoCommit = PInteger.INSTANCE.getCodec()
-                                            .decodeInt(cell.getValueArray(), cell.getValueOffset(),
-                                                    SortOrder.getDefault());
-                                } else {
-                                    numUpdatedRowsForAutoCommit = 1;
-                                }
+                        if (resultObjects != null) {
+                            Result result = (Result) resultObjects[0];
+                            if (result != null && !result.isEmpty()) {
+                                Cell cell = result.rawCells()[0];
+                                numUpdatedRowsForAutoCommit = PInteger.INSTANCE.getCodec()
+                                        .decodeInt(cell.getValueArray(), cell.getValueOffset(),
+                                                SortOrder.getDefault());
+                            } else {
+                                numUpdatedRowsForAutoCommit = 1;
                             }
                         }
 

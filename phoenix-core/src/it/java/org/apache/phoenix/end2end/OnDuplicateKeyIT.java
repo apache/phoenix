@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -29,6 +30,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -307,6 +309,25 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
         assertEquals(10,rs.getLong(2));
         assertFalse(rs.next()); 
         
+        conn.close();
+    }
+
+    @Test
+    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
+    public void testIgnoreReturnValue() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+        String tableName = generateUniqueName();
+        String ddl = " create table " + tableName + "(pk varchar primary key, counter1 bigint, counter2 bigint)";
+        conn.createStatement().execute(ddl);
+        createIndex(conn, tableName);
+        conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES('a',10)");
+
+        int actualReturnValue = conn.createStatement().executeUpdate(
+                "UPSERT INTO " + tableName + " VALUES('a',0) ON DUPLICATE KEY IGNORE");
+        assertEquals(0, actualReturnValue);
+
         conn.close();
     }
     
@@ -1119,6 +1140,74 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             assertTrue(timestampList4.get(0) > timestampList3.get(0)
                     && timestampList4.get(1) > timestampList3.get(1)
                     && timestampList4.get(2) > timestampList3.get(2));
+        }
+    }
+
+    @Test
+    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
+    public void testBatchedUpsertOnDupKeyAutoCommit() throws Exception {
+        testBatchedUpsertOnDupKey(true);
+    }
+
+    @Test
+    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
+    public void testBatchedUpsertOnDupKeyNoAutoCommit() throws Exception {
+        testBatchedUpsertOnDupKey(false);
+    }
+
+    private void testBatchedUpsertOnDupKey(boolean autocommit) throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(autocommit);
+
+            Statement stmt = conn.createStatement();
+
+            stmt.execute("create table " + tableName + "(pk varchar primary key, " +
+                    "counter1 integer, counter2 integer, approval varchar)");
+            createIndex(conn, tableName);
+
+            stmt.execute("UPSERT INTO " + tableName + " VALUES('a', 0, 10, 'NONE')");
+            conn.commit();
+
+            stmt.addBatch("UPSERT INTO " + tableName +
+                    " (pk, counter1, counter2) VALUES ('a', 0, 10) ON DUPLICATE KEY IGNORE");
+            stmt.addBatch("UPSERT INTO " + tableName +
+                    " (pk, counter1, counter2) VALUES ('a', 0, 10) ON DUPLICATE KEY UPDATE" +
+                    " counter1 = CASE WHEN counter1 < 1 THEN 1 ELSE counter1 END");
+
+            stmt.addBatch("UPSERT INTO " + tableName +
+                    " (pk, counter1, counter2) VALUES ('b', 0, 9) ON DUPLICATE KEY IGNORE");
+            String dml =  "UPSERT INTO " + tableName +
+                    " (pk, counter1, counter2) VALUES ('b', 0, 10) ON DUPLICATE KEY UPDATE" +
+                    " counter2 = CASE WHEN counter2 < 11 THEN counter2 + 1 ELSE counter2 END," +
+                    " approval = CASE WHEN counter2 < 10 THEN 'NONE'" +
+                    " WHEN counter2 < 11 THEN 'MANAGER_APPROVAL'" +
+                    " ELSE approval END";
+            stmt.addBatch(dml);
+            stmt.addBatch(dml);
+            stmt.addBatch(dml);
+
+            int[] actualReturnValues = stmt.executeBatch();
+            int[] expectedReturnValues = new int[]{0, 1, 1, 1, 1, 0};
+            if (!autocommit) {
+                conn.commit();
+                expectedReturnValues = new int[]{1, 1, 1, 1, 1, 1};
+            }
+            assertArrayEquals(expectedReturnValues, actualReturnValues);
+
+            ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
+            assertTrue(rs.next());
+            assertEquals("a", rs.getString("pk"));
+            assertEquals(1, rs.getInt("counter1"));
+            assertEquals(10, rs.getInt("counter2"));
+            assertEquals("NONE", rs.getString("approval"));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString("pk"));
+            assertEquals(0, rs.getInt("counter1"));
+            assertEquals(11, rs.getInt("counter2"));
+            assertEquals("MANAGER_APPROVAL", rs.getString("approval"));
+            assertFalse(rs.next());
         }
     }
 
