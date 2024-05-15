@@ -374,12 +374,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
             CompactionRequest request) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        long maxLookbackAge = getMaxLookbackAge(c);
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options,
-                    isMaxLookbackTimeEnabled(maxLookbackAge) || request.isMajor());
+            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf))
+                    || request.isMajor();
+            setScanOptionsForFlushesAndCompactions(options, retainAllVersions);
             return;
         }
+        long maxLookbackAge = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
                     scanType, maxLookbackAge);
@@ -390,13 +392,15 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public void preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
             ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        long maxLookbackAge = getMaxLookbackAge(c);
+
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options,
-                    isMaxLookbackTimeEnabled(maxLookbackAge));
+            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
+            setScanOptionsForFlushesAndCompactions(options, retainAllVersions);
             return;
         }
 
+        long maxLookbackAge = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
                     ScanType.COMPACT_RETAIN_DELETES, maxLookbackAge);
@@ -408,12 +412,13 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             ObserverContext<RegionCoprocessorEnvironment> c, Store store, ScanOptions options)
             throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
-        long maxLookbackAge = getMaxLookbackAge(c);
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options,
-                    isMaxLookbackTimeEnabled(maxLookbackAge));
+            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
+            setScanOptionsForFlushesAndCompactions(options, retainAllVersions);
             return;
         }
+        long maxLookbackAge = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
             MemoryCompactionPolicy inMemPolicy =
                     store.getColumnFamilyDescriptor().getInMemoryCompaction();
