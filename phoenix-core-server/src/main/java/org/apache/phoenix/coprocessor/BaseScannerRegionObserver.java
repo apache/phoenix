@@ -357,7 +357,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 
-    public void setScanOptionsForFlushesAndCompactions(ScanOptions options,
+    public void setScanOptionsForFlushesAndCompactions(Store store, ScanOptions options,
             boolean retainAllVersions) {
         // We want the store to give us all the deleted cells to StoreCompactionScanner
         options.setKeepDeletedCells(KeepDeletedCells.TTL);
@@ -365,6 +365,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         if (retainAllVersions) {
             options.setMaxVersions(Integer.MAX_VALUE);
             options.setMinVersions(Integer.MAX_VALUE);
+        } else {
+            options.setMinVersions(Math.max(Math.max(options.getMaxVersions(),
+                    store.getColumnFamilyDescriptor().getMaxVersions()), 1));
+            options.setMinVersions(Math.max(Math.max(options.getMinVersions(),
+                    store.getColumnFamilyDescriptor().getMaxVersions()), 1));
         }
 
     }
@@ -378,7 +383,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             boolean retainAllVersions =  isMaxLookbackTimeEnabled(
                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf))
                     || request.isMajor();
-            setScanOptionsForFlushesAndCompactions(options, retainAllVersions);
+            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
             return;
         }
         long maxLookbackAge = getMaxLookbackAge(c);
@@ -396,7 +401,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         if (isPhoenixTableTTLEnabled(conf)) {
             boolean retainAllVersions =  isMaxLookbackTimeEnabled(
                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
-            setScanOptionsForFlushesAndCompactions(options, retainAllVersions);
+            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
             return;
         }
 
@@ -415,7 +420,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         if (isPhoenixTableTTLEnabled(conf)) {
             boolean retainAllVersions =  isMaxLookbackTimeEnabled(
                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
-            setScanOptionsForFlushesAndCompactions(options, retainAllVersions);
+            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
             return;
         }
         long maxLookbackAge = getMaxLookbackAge(c);
@@ -442,7 +447,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options, true);
+            setScanOptionsForFlushesAndCompactions(store, options, true);
             return;
         }
         if (!storeFileScanDoesntNeedAlteration(options)) {

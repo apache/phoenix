@@ -243,6 +243,8 @@ public class TableTTLIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = 0");
+            conn.commit();
             final int flushCount = 10;
             byte[] row = Bytes.toBytes("a");
             for (int i = 0; i < flushCount; i++) {
