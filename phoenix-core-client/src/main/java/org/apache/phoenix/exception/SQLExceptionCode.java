@@ -370,13 +370,13 @@ public enum SQLExceptionCode {
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new SequenceAlreadyExistsException(info.getSchemaName(), info.getTableName());
+            return new SequenceAlreadyExistsException(info.getSchemaName(), info.getSequenceName());
         }
     }),
     SEQUENCE_UNDEFINED(1201, "42Z01", "Sequence undefined.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new SequenceNotFoundException(info.getSchemaName(), info.getTableName());
+            return new SequenceNotFoundException(info.getSchemaName(), info.getSequenceName());
         }
     }),
     START_WITH_MUST_BE_CONSTANT(1202, "42Z02", "Sequence START WITH value must be an integer or long constant."),
@@ -398,7 +398,7 @@ public enum SQLExceptionCode {
     AUTO_PARTITION_SEQUENCE_UNDEFINED(1217, "42Z17", "Auto Partition Sequence undefined", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
-            return new SequenceNotFoundException(info.getSchemaName(), info.getTableName());
+            return new SequenceNotFoundException(info.getSchemaName(), info.getSequenceName());
         }
     }),
     CANNOT_UPDATE_PK_ON_DUP_KEY(1218, "42Z18", "Primary key columns may not be udpated in ON DUPLICATE KEY UPDATE clause." ),

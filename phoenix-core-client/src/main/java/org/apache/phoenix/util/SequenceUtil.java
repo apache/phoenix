@@ -81,9 +81,9 @@ public class SequenceUtil {
     /**
      * Helper function that returns a {@link SQLException}
      */
-    public static SQLException getException(String schemaName, String tableName,
+    public static SQLException getException(String schemaName, String sequenceName,
             SQLExceptionCode code) {
-        return new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(tableName)
+        return new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setSequenceName(sequenceName)
                 .build().buildException();
     }
     

@@ -3440,7 +3440,7 @@ public class MetaDataClient {
                 throw new ConcurrentTableMutationException(schemaName, tableName);
             case AUTO_PARTITION_SEQUENCE_NOT_FOUND:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_PARTITION_SEQUENCE_UNDEFINED)
-                       .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+                       .setSchemaName(schemaName).setSequenceName(tableName).build().buildException();
             case CANNOT_COERCE_AUTO_PARTITION_ID:
             case UNABLE_TO_CREATE_CHILD_LINK:
             case PARENT_TABLE_NOT_FOUND:

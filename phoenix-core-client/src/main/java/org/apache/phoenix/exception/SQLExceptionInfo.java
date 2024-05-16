@@ -45,6 +45,7 @@ public class SQLExceptionInfo {
     public static final String MAX_PHOENIX_COLUMN_SIZE_BYTES = "maxPhoenixColumnSizeBytes";
     public static final String PHOENIX_COLUMN_SIZE_BYTES = "phoenixColumnSizeBytes";
     public static final String HA_GROUP_INFO = "haGroupInfo";
+    public static final String SEQUENCE_NAME = "sequenceName";
 
     private final Throwable rootCause;
     private final SQLExceptionCode code; // Should always have one.
@@ -61,6 +62,7 @@ public class SQLExceptionInfo {
     private final int phoenixColumnSizeBytes;
     private final int maxPhoenixColumnSizeBytes;
     private final String haGroupInfo;
+    private final String sequenceName;
 
     public static class Builder {
         private Throwable rootCause;
@@ -78,6 +80,7 @@ public class SQLExceptionInfo {
         private int phoenixColumnSizeBytes;
         private int maxPhoenixColumnSizeBytes;
         private String haGroupInfo;
+        private String sequenceName;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -161,6 +164,11 @@ public class SQLExceptionInfo {
         public String toString() {
             return code.toString();
         }
+
+        public Builder setSequenceName(String sequenceName) {
+            this.sequenceName = sequenceName;
+            return this;
+        }
     }
 
     private SQLExceptionInfo(Builder builder) {
@@ -179,6 +187,7 @@ public class SQLExceptionInfo {
         maxPhoenixColumnSizeBytes = builder.maxPhoenixColumnSizeBytes;
         phoenixColumnSizeBytes = builder.phoenixColumnSizeBytes;
         haGroupInfo = builder.haGroupInfo;
+        sequenceName = builder.sequenceName;
     }
 
     @Override
@@ -191,6 +200,10 @@ public class SQLExceptionInfo {
             } else {
                 builder.append(" ").append(message);
             }
+        }
+        if (sequenceName != null) {
+            builder.append(" ").append(SEQUENCE_NAME).append("=").append(sequenceName);
+            return builder.toString();
         }
         if (functionName != null) {
             builder.append(" ").append(FUNCTION_NAME).append("=").append(functionName);
@@ -287,5 +300,8 @@ public class SQLExceptionInfo {
 
     public String getHaGroupInfo() {
         return haGroupInfo;
+    }
+    public String getSequenceName() {
+        return sequenceName;
     }
 }
