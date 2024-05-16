@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -131,8 +132,8 @@ public class TableTTLIT extends BaseTest {
                     { true, false, KeepDeletedCells.FALSE, 5, 50, null},
                     { true, false, KeepDeletedCells.TRUE, 1, 25, null},
                     { true, false, KeepDeletedCells.TTL, 5, 100, null},
-                    { false, false, KeepDeletedCells.FALSE, 1, 100, 15},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50, 15},
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, 0},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, 0},
                     { false, false, KeepDeletedCells.TTL, 1, 25, 15}});
     }
 
@@ -155,7 +156,7 @@ public class TableTTLIT extends BaseTest {
     @Test
     public void testMaskingAndCompaction() throws Exception {
         final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
-        final int maxDeleteCounter = maxLookbackAge;
+        final int maxDeleteCounter = maxLookbackAge == 0 ? 1 : maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
         final int maxMaskingCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
@@ -232,10 +233,51 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Test
-    public void testRowSpansMultipleTTLWindows() throws Exception {
-        if (tableLevelMaxLooback != null) {
+    public void testFlushesAndMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
+            throws Exception {
+        final int maxLookbackAge = tableLevelMaxLooback != null
+                ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
+        if (maxLookbackAge > 0) {
             return;
         }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = 0");
+            conn.commit();
+            final int flushCount = 10;
+            byte[] row = Bytes.toBytes("a");
+            for (int i = 0; i < flushCount; i++) {
+                // Generate more row versions than the maximum cell versions for the table
+                int updateCount = RAND.nextInt(10) + versions;
+                for (int j = 0; j < updateCount; j++) {
+                    updateRow(conn, tableName, "a");
+                }
+                flush(TableName.valueOf(tableName));
+                // At every flush, extra cell versions should be removed.
+                // MAX_COLUMN_INDEX table columns and one empty column will be retained for
+                // each row version.
+                TestUtil.assertRawCellCount(conn, TableName.valueOf(tableName), row,
+                        (i + 1) * (MAX_COLUMN_INDEX + 1) * versions);
+            }
+            // Run one minor compaction (in case no minor compaction has happened yet)
+            Admin admin = utility.getAdmin();
+            admin.compact(TableName.valueOf(tableName));
+            int waitCount = 0;
+            while (TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
+                    Bytes.toBytes("a")) < flushCount * (MAX_COLUMN_INDEX + 1) * versions) {
+                // Wait for major compactions to happen
+                Thread.sleep(1000);
+                waitCount++;
+                if (waitCount > 30) {
+                    Assert.fail();
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testRowSpansMultipleTTLWindows() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
@@ -299,6 +341,16 @@ public class TableTTLIT extends BaseTest {
             }
             updateColumn(conn, tableName1, id, columnIndex, value);
             updateColumn(conn, tableName2, id, columnIndex, value);
+        }
+        conn.commit();
+    }
+
+    private void updateRow(Connection conn, String tableName, String id)
+            throws SQLException {
+
+        for (int i = 1; i <= MAX_COLUMN_INDEX; i++) {
+            String value = Integer.toString(RAND.nextInt(1000));
+            updateColumn(conn, tableName, id, i, value);
         }
         conn.commit();
     }
