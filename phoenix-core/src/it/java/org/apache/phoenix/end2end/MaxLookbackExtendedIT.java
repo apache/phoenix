@@ -22,17 +22,22 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -45,7 +50,9 @@ import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -60,6 +67,9 @@ import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -281,6 +291,62 @@ public class MaxLookbackExtendedIT extends BaseTest {
         }
     }
 
+    @Test(timeout=60000L)
+    public void testViewIndexIsCompacted() throws Exception {
+        String baseTable =  SchemaUtil.getTableName("SCHEMA1", generateUniqueName());
+        String globalViewName = generateUniqueName();
+        String fullGlobalViewName = SchemaUtil.getTableName("SCHEMA2", globalViewName);
+        String globalViewIdx =  generateUniqueName();
+        TableName dataTable = TableName.valueOf(baseTable);
+        TableName indexTable = TableName.valueOf("_IDX_" + baseTable);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute("CREATE TABLE " + baseTable
+                    + " (TENANT_ID CHAR(15) NOT NULL, PK2 INTEGER NOT NULL, PK3 INTEGER NOT NULL, "
+                    + "COL1 VARCHAR, COL2 VARCHAR, COL3 CHAR(15) CONSTRAINT PK PRIMARY KEY"
+                    + "(TENANT_ID, PK2, PK3)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + fullGlobalViewName
+                    + " AS SELECT * FROM " + baseTable);
+            conn.createStatement().execute("CREATE INDEX " + globalViewIdx + " ON "
+                    + fullGlobalViewName + " (COL1) INCLUDE (COL2)");
+
+            conn.createStatement().executeUpdate("UPSERT INTO  " + fullGlobalViewName
+                    + " (TENANT_ID, PK2, PK3, COL1, COL2) VALUES ('TenantId1',1, 2, 'a', 'b')");
+            conn.commit();
+
+            String query = "SELECT COL2 FROM " + fullGlobalViewName + " WHERE  COL1 = 'a'";
+            // Verify that query uses the global view index
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            PTable table = ((PhoenixResultSet)rs).getContext().getCurrentTable().getTable();
+            assertTrue(table.getSchemaName().getString().equals("SCHEMA2") &&
+                    table.getTableName().getString().equals(globalViewIdx));
+            assertTrue(rs.next());
+            assertEquals("b", rs.getString(1));
+            assertFalse(rs.next());
+            // Force a flush
+            flush(dataTable);
+            flush(indexTable);
+            assertRawRowCount(conn, dataTable, 1);
+            assertRawRowCount(conn, indexTable, 1);
+            // Delete the row from both tables
+            conn.createStatement().execute("DELETE FROM " + fullGlobalViewName
+                            + " WHERE TENANT_ID = 'TenantId1'");
+            conn.commit();
+            // Force a flush
+            flush(dataTable);
+            flush(indexTable);
+            assertRawRowCount(conn, dataTable, 1);
+            assertRawRowCount(conn, indexTable, 1);
+            // Move change beyond the max lookback window
+            injectEdge.setValue(System.currentTimeMillis() + MAX_LOOKBACK_AGE * 1000 + 1);
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            // Major compact both tables
+            majorCompact(dataTable);
+            majorCompact(indexTable);
+            // Everything should have been purged by major compaction
+            assertRawRowCount(conn, dataTable, 0);
+            assertRawRowCount(conn, indexTable, 0);
+        }
+    }
     @Test(timeout=60000L)
     public void testTTLAndMaxLookbackAge() throws Exception {
         Configuration conf = getUtility().getConfiguration();
