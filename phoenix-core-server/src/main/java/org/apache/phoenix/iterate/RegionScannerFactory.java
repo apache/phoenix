@@ -107,8 +107,8 @@ public abstract class RegionScannerFactory {
    * re-throws as DoNotRetryIOException to prevent needless retrying hanging the query
    * for 30 seconds. Unfortunately, until HBASE-7481 gets fixed, there's no way to do
    * the same from a custom filter.
-   * @param arrayKVRefs
-   * @param arrayFuncRefs
+   * @param serverParsedKVRefs
+   * @param serverParsedFuncRefs
    * @param offset starting position in the rowkey.
    * @param scan
    * @param tupleProjector
@@ -118,8 +118,9 @@ public abstract class RegionScannerFactory {
    * @param viewConstants
    */
   public RegionScanner getWrappedScanner(final RegionCoprocessorEnvironment env,
-      final RegionScanner regionScanner, final Set<KeyValueColumnExpression> arrayKVRefs,
-      final Expression[] arrayFuncRefs, final int offset, final Scan scan,
+          final RegionScanner regionScanner, final Set<KeyValueColumnExpression> serverParsedKVRefs,
+          final Expression[] serverParsedFuncRefs,
+          final int offset, final Scan scan,
       final ColumnReference[] dataColumns, final TupleProjector tupleProjector,
       final Region dataRegion, final IndexMaintainer indexMaintainer,
       PhoenixTransactionContext tx,
@@ -284,10 +285,11 @@ public abstract class RegionScannerFactory {
                 }
             }
           }
-          Cell arrayElementCell = null;
-          if (arrayFuncRefs != null && arrayFuncRefs.length > 0 && arrayKVRefs.size() > 0) {
-            int arrayElementCellPosition = replaceArrayIndexElement(arrayKVRefs, arrayFuncRefs, result);
-            arrayElementCell = result.get(arrayElementCellPosition);
+          Cell serverParsedResultCell = null;
+          if (serverParsedFuncRefs != null && serverParsedFuncRefs.length > 0 && serverParsedKVRefs.size() > 0) {
+            int resultPosition = replaceServerParsedExpressionElement(serverParsedKVRefs,
+                    serverParsedFuncRefs, result);
+            serverParsedResultCell = result.get(resultPosition);
           }
           if (projector != null) {
             Tuple toProject = useQualifierAsListIndex ? new PositionBasedResultTuple(result) :
@@ -301,8 +303,8 @@ public abstract class RegionScannerFactory {
             result.clear();
             result.add(tupleWithDynColsIfReqd.mergeWithDynColsListBytesAndGetValue(0,
                     serializedDynColsList));
-            if (arrayElementCell != null) {
-              result.add(arrayElementCell);
+            if (serverParsedResultCell != null) {
+              result.add(serverParsedResultCell);
             }
           }
           if (extraLimit >= 0 && --extraLimit == 0) {
@@ -413,38 +415,40 @@ public abstract class RegionScannerFactory {
         return next;
       }
 
-      private int replaceArrayIndexElement(final Set<KeyValueColumnExpression> arrayKVRefs,
-          final Expression[] arrayFuncRefs, List<Cell> result) {
+      private int replaceServerParsedExpressionElement(
+              final Set<KeyValueColumnExpression> serverParsedKVRefs,
+              final Expression[] serverParsedFuncRefs, List<Cell> result) {
         // make a copy of the results array here, as we're modifying it below
         MultiKeyValueTuple tuple = new MultiKeyValueTuple(ImmutableList.copyOf(result));
         // The size of both the arrays would be same?
         // Using KeyValueSchema to set and retrieve the value
         // collect the first kv to get the row
         Cell rowKv = result.get(0);
-        for (KeyValueColumnExpression kvExp : arrayKVRefs) {
+        for (KeyValueColumnExpression kvExp : serverParsedKVRefs) {
           if (kvExp.evaluate(tuple, ptr)) {
             ListIterator<Cell> itr = result.listIterator();
             while (itr.hasNext()) {
               Cell kv = itr.next();
               if (Bytes.equals(kvExp.getColumnFamily(), 0, kvExp.getColumnFamily().length,
-                  kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength())
-                  && Bytes.equals(kvExp.getColumnQualifier(), 0, kvExp.getColumnQualifier().length,
-                  kv.getQualifierArray(), kv.getQualifierOffset(), kv.getQualifierLength())) {
-                // remove the kv that has the full array values.
+                      kv.getFamilyArray(), kv.getFamilyOffset(),
+                      kv.getFamilyLength()) && Bytes.equals(kvExp.getColumnQualifier(), 0,
+                      kvExp.getColumnQualifier().length, kv.getQualifierArray(),
+                      kv.getQualifierOffset(), kv.getQualifierLength())) {
+                // remove the kv that has the full array/json values.
                 itr.remove();
                 break;
               }
             }
           }
         }
-        byte[] value = kvSchema.toBytes(tuple, arrayFuncRefs,
-            kvSchemaBitSet, ptr);
-        // Add a dummy kv with the exact value of the array index
+        byte[] value = kvSchema.toBytes(tuple, serverParsedFuncRefs, kvSchemaBitSet, ptr);
+        // Add a dummy kv with the exact value of the array index or json value
         result.add(new KeyValue(rowKv.getRowArray(), rowKv.getRowOffset(), rowKv.getRowLength(),
-            QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, 0, QueryConstants.ARRAY_VALUE_COLUMN_FAMILY.length,
-            QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,
-            QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
-            KeyValue.Type.codeToType(rowKv.getType().getCode()), value, 0, value.length));
+                QueryConstants.ARRAY_VALUE_COLUMN_FAMILY, 0,
+                QueryConstants.ARRAY_VALUE_COLUMN_FAMILY.length,
+                QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER, 0,
+                QueryConstants.ARRAY_VALUE_COLUMN_QUALIFIER.length, HConstants.LATEST_TIMESTAMP,
+                KeyValue.Type.codeToType(rowKv.getType().getCode()), value, 0, value.length));
         return getArrayCellPosition(result);
       }
 

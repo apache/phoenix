@@ -34,7 +34,7 @@ import org.apache.phoenix.util.QueryUtil;
  */
 public abstract class ComparisonParseNode extends BinaryParseNode {
 
-    ComparisonParseNode(ParseNode lhs, ParseNode rhs) {
+    public ComparisonParseNode(ParseNode lhs, ParseNode rhs) {
         super(lhs, rhs);
     }
 
