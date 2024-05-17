@@ -1206,24 +1206,6 @@ public class SchemaUtil {
         }
     }
 
-    /**
-     * Pads the data in ptr by the required amount for fixed width data types
-     */
-    public static void padData(String tableName, PColumn column, ImmutableBytesWritable ptr) {
-        PDataType type = column.getDataType();
-        byte[] byteValue = ptr.get();
-        boolean isNull = type.isNull(byteValue);
-        Integer maxLength = column.getMaxLength();
-        if (!isNull && type.isFixedWidth() && maxLength != null) {
-            if (ptr.getLength() < maxLength) {
-                type.pad(ptr, maxLength, column.getSortOrder());
-            } else if (ptr.getLength() > maxLength) {
-                throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
-                        column.getScale(), column.getName().getString());
-            }
-        }
-    }
-
 	public static int getIsNullableInt(boolean isNullable) {
 		return isNullable ? ResultSetMetaData.columnNullable : ResultSetMetaData.columnNoNulls;
 	}

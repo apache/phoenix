@@ -344,8 +344,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 PDataType dt = PDataType.fromSqlTypeName(pkCol.getValue());
                 Object val;
                 if (dt instanceof PChar || dt instanceof PVarchar) {
-                    // FIXME: trailing spaces are getting lost right now.
-                    val = ((String) dt.getSampleValue(5)).trim();
+                    val = dt.getSampleValue(5);
+                    val = dt instanceof PChar ? ((String) val).trim() : val;
                     // Make sure it is at least of length 1.
                     val = ((String) val).length() == 0 ? "a" : val;
                 } else {
