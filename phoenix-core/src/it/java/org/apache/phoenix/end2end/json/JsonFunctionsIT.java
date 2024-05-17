@@ -123,6 +123,62 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testSimpleJsonModify() throws Exception {
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String tableName = generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)  COLUMN_ENCODED_BYTES=0";
+            conn.createStatement().execute(ddl);
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            stmt.setInt(1, 1);
+            stmt.setInt(2, 2);
+            stmt.setString(3, basicJson);
+            stmt.execute();
+            conn.commit();
+
+            String upsert ="UPSERT INTO " + tableName + " (pk, col) VALUES(1,2" +
+                    ") ON DUPLICATE KEY UPDATE jsoncol = JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')";
+            conn.createStatement().execute(upsert);
+
+            // Querying now should give the old value since we haven't committed.
+            String query="SELECT JSON_VALUE(jsoncol, '$.info.address.town') FROM " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Bristol", rs.getString(1));
+
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (pk, col) VALUES(1,2" +
+                    ") ON DUPLICATE KEY UPDATE jsoncol = JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')");
+
+            // Querying now should give the old value since we haven't committed.
+            query="SELECT JSON_VALUE(jsoncol, '$.info.tags[1]') FROM " + tableName;
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Water polo", rs.getString(1));
+
+            conn.createStatement().execute("UPSERT INTO " + tableName + " (pk, col) VALUES(1,2" +
+                    ") ON DUPLICATE KEY UPDATE jsoncol = JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')");
+            conn.commit();
+            String queryTemplate ="SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
+                    "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), JSON_QUERY(jsoncol, '$.info') " +
+                    " FROM " + tableName +
+                    " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
+            query = String.format(queryTemplate, "AndersenFamily");
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Basic", rs.getString(1));
+            assertEquals("Manchester", rs.getString(2));
+            assertEquals("alto1", rs.getString(3));
+            assertEquals("[\"Sport\", \"alto1\", \"Books\"]", rs.getString(4));
+            assertEquals("{\"type\": 1, \"address\": {\"town\": \"Manchester\", \"county\": \"Avon\", \"country\": \"England\", \"exists\": true}, \"tags\": [\"Sport\", \"alto1\", \"Books\"]}", rs.getString(5));
+
+            // Now check for empty match
+            query = String.format(queryTemplate, "Windsors");
+            rs = conn.createStatement().executeQuery(query);
+            assertFalse(rs.next());
+        }
+    }
+
+    @Test
     public void testSimpleJsonDatatypes() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
