@@ -550,7 +550,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     /**
      * After PHOENIX-6767 point lookup queries don't require to get table regions using
-     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[], int)}  to prepare scans
      * so custom driver defined here inject failures or delays don't have effect.
      * Hence skipping the test.
      */
@@ -574,7 +574,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     /**
      * After PHOENIX-6767 point lookup queries don't require to get table regions using
-     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[], int)}  to prepare scans
      * so custom driver {@link PhoenixMetricsTestingDriver} defined here inject failures or delays
      * don't have effect. Hence skipping the test.
      */
@@ -1089,7 +1089,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     /**
      * After PHOENIX-6767 point lookup queries don't require to get table regions using
-     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[], int)}  to prepare scans
      * so custom driver defined here inject failures or delays don't have effect.
      * Hence skipping the test.
      */
@@ -1133,7 +1133,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     /**
      * After PHOENIX-6767 point lookup queries don't require to get table regions using
-     * {@link ConnectionQueryServices#getAllTableRegions(byte[])}  to prepare scans
+     * {@link ConnectionQueryServices#getAllTableRegions(byte[], int)}  to prepare scans
      * so custom driver defined here inject failures or delays don't have effect.
      * Hence skipping the test.
      */
@@ -1549,8 +1549,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             super(services, connectionInfo, info);
         }
 
-        // Make plan.iterator() fail (ultimately calls CQSI.getAllTableRegions())
-        @Override public List<HRegionLocation> getAllTableRegions(byte[] tableName)
+        @Override
+        public List<HRegionLocation> getAllTableRegions(byte[] tableName)
                 throws SQLException {
             if (failExecuteQueryAndClientSideDeletes) {
                 throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL).build().buildException();
@@ -1563,9 +1563,39 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             return super.getAllTableRegions(tableName);
         }
 
+        // Make plan.iterator() fail (ultimately calls CQSI.getAllTableRegions())
+        @Override public List<HRegionLocation> getAllTableRegions(byte[] tableName,
+                                                                  int queryTimeout)
+                throws SQLException {
+            if (failExecuteQueryAndClientSideDeletes) {
+                throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL).build().buildException();
+            }
+            try {
+                Thread.sleep(injectDelay);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            return super.getAllTableRegions(tableName, queryTimeout);
+        }
+
         @Override
         public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-            byte[] endRowKey) throws SQLException {
+                                                     byte[] endRowKey) throws SQLException {
+            if (failExecuteQueryAndClientSideDeletes) {
+                throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL)
+                        .build().buildException();
+            }
+            try {
+                Thread.sleep(injectDelay);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            return super.getTableRegions(tableName, startRowKey, endRowKey);
+        }
+
+        @Override
+        public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                     byte[] endRowKey, int queryTimeout) throws SQLException {
             if (failExecuteQueryAndClientSideDeletes) {
                 throw new SQLExceptionInfo.Builder(GET_TABLE_REGIONS_FAIL)
                     .build().buildException();
@@ -1575,7 +1605,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
-            return super.getTableRegions(tableName, startRowKey, endRowKey);
+            return super.getTableRegions(tableName, startRowKey, endRowKey, queryTimeout);
         }
     }
 

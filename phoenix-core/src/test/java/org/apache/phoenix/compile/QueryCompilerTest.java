@@ -78,7 +78,6 @@ import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
-import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -2563,7 +2562,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
             ScanRanges ranges=plan.getContext().getScanRanges();
 
             List<HRegionLocation> regionLocations=
-                    conn.getQueryServices().getAllTableRegions(Bytes.toBytes("SALT_TEST2900"));
+                    conn.getQueryServices().getAllTableRegions(Bytes.toBytes("SALT_TEST2900"),
+                            60000);
             for (HRegionLocation regionLocation : regionLocations) {
                 assertTrue(ranges.intersectRegion(regionLocation.getRegion().getStartKey(),
                     regionLocation.getRegion().getEndKey(), false));

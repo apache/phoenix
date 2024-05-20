@@ -38,6 +38,13 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
  * @since 0.1
  */
 public class SelectStatement implements FilterableStatement {
+    public static final SelectStatement SELECT_STAR =
+            new SelectStatement(
+                    null, null, false,
+                    Arrays.asList(),
+                    null, Collections.<ParseNode>emptyList(),
+                    null, Collections.<OrderByNode>emptyList(),
+                    null, null, 0, false, false, Collections.<SelectStatement>emptyList(), new HashMap<String, UDFParseNode>(1));
     public static final SelectStatement SELECT_ONE =
             new SelectStatement(
                     null, null, false, 
@@ -65,7 +72,13 @@ public class SelectStatement implements FilterableStatement {
                 select.getSelect(), select.getWhere(), select.getGroupBy(), select.getHaving(), 
                 select.getOrderBy(), select.getLimit(), select.getOffset(), select.getBindCount(), select.isAggregate(), select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
     }
-    
+
+    public static SelectStatement create(SelectStatement select, TableNode tableNode, List<AliasedNode> selects) {
+        return new SelectStatement(tableNode, select.getHint(), select.isDistinct(),
+                selects, select.getWhere(), select.getGroupBy(), select.getHaving(),
+                select.getOrderBy(), select.getLimit(), select.getOffset(), select.getBindCount(), select.isAggregate(), select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
+    }
+
     public SelectStatement combine(ParseNode where) {
         if (where == null) {
             return this;

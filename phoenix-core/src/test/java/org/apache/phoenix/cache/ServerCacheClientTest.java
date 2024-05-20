@@ -18,11 +18,14 @@ package org.apache.phoenix.cache;
 import static org.junit.Assert.assertEquals;
 
 import java.sql.SQLException;
+import java.util.HashMap;
+
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -32,11 +35,13 @@ public class ServerCacheClientTest {
         PhoenixConnection connection = Mockito.mock(PhoenixConnection.class);
         ConnectionQueryServices services = Mockito.mock(ConnectionQueryServices.class);
         Mockito.when(services.getExecutor()).thenReturn(null);
+        Mockito.when(services.getProps()).thenReturn(new ReadOnlyProps(new HashMap<>()));
         Mockito.when(connection.getQueryServices()).thenReturn(services);
         byte[] tableName = Bytes.toBytes("TableName");
         PTableImpl pTable =  Mockito.mock(PTableImpl.class);
         Mockito.when(pTable.getPhysicalName()).thenReturn(PNameFactory.newName("TableName"));
-        Mockito.when(services.getAllTableRegions(tableName)).thenThrow(new SQLException("Test Exception"));
+        Mockito.when(services.getAllTableRegions(tableName, 600000)).thenThrow(new SQLException(
+                "Test Exception"));
         ServerCacheClient client = new ServerCacheClient(connection);
         try {
             client.addServerCache(null, null, null, null, pTable, false);

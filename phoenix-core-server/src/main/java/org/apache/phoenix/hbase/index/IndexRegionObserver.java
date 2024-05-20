@@ -210,7 +210,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
 
   public static class BatchMutateContext {
-      private BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
+      private volatile BatchMutatePhase currentPhase = BatchMutatePhase.PRE;
       // The max of reference counts on the pending rows of this batch at the time this batch arrives
       private int maxPendingRowCount = 0;
       private final int clientVersion;
@@ -273,12 +273,24 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
 
       public CountDownLatch getCountDownLatch() {
-          if (waitList == null) {
-              waitList = new ArrayList<>();
+          synchronized (this) {
+              if (waitList == null) {
+                  waitList = new ArrayList<>();
+              }
+              CountDownLatch countDownLatch = new CountDownLatch(1);
+              waitList.add(countDownLatch);
+              return countDownLatch;
           }
-          CountDownLatch countDownLatch = new CountDownLatch(1);
-          waitList.add(countDownLatch);
-          return countDownLatch;
+      }
+
+      public void countDownAllLatches() {
+          synchronized (this) {
+              if (waitList != null) {
+                  for (CountDownLatch countDownLatch : waitList) {
+                      countDownLatch.countDown();
+                  }
+              }
+          }
       }
 
       public int getMaxPendingRowCount() {
@@ -1083,11 +1095,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     private void waitForPreviousConcurrentBatch(TableName table, BatchMutateContext context)
             throws Throwable {
-        boolean done;
-        BatchMutatePhase phase;
-        done = true;
+        boolean done = true;
         for (BatchMutateContext lastContext : context.lastConcurrentBatchContext.values()) {
-            phase = lastContext.getCurrentPhase();
+            BatchMutatePhase phase = lastContext.getCurrentPhase();
 
             if (phase == BatchMutatePhase.PRE) {
                 CountDownLatch countDownLatch = lastContext.getCountDownLatch();
@@ -1207,7 +1217,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // Release the locks before making RPC calls for index updates
             unlockRows(context);
             // Do the first phase index updates
-            doPre(c, context, miniBatchOp);
+            doPre(context);
             // Acquire the locks again before letting the region proceed with data table updates
             lockRows(context);
             if (context.lastConcurrentBatchContext != null) {
@@ -1293,9 +1303,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     /**
-     * When this hook is called, all the rows in the batch context are locked. Because the rows
-     * are locked, we can safely make updates to the context object and perform the necessary
-     * cleanup.
+     * When this hook is called, all the rows in the batch context are locked if the batch of
+     * mutations is successful. Because the rows are locked, we can safely make updates to
+     * pending row states in memory and perform the necessary cleanup in that case.
+     *
+     * However, when the batch fails, then some of the rows may not be locked. In that case,
+     * we remove the pending row states from the concurrent hash map without updating them since
+     * pending rows states become invalid when a batch fails.
      */
   @Override
   public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> c,
@@ -1313,11 +1327,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           } else {
               context.currentPhase = BatchMutatePhase.FAILED;
           }
-          if (context.waitList != null) {
-              for (CountDownLatch countDownLatch : context.waitList) {
-                  countDownLatch.countDown();
-              }
-          }
+          context.countDownAllLatches();
           removePendingRows(context);
           if (context.indexUpdates != null) {
               context.indexUpdates.clear();
@@ -1377,6 +1387,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   private void removePendingRows(BatchMutateContext context) {
+      if (context.currentPhase == BatchMutatePhase.FAILED) {
+          // This batch failed. All concurrent batches will fail too. So we can remove
+          // all rows of this batch from the memory as the in-memory row images are not valid
+          // anymore. Please note that when a batch fails, some of the rows may not have been
+          // locked and so it is not safe to update the pending row entries in that case.
+          for (ImmutableBytesPtr rowKey : context.rowsToLock) {
+              pendingRows.remove(rowKey);
+          }
+          return;
+      }
       for (RowLock rowLock : context.rowLocks) {
           ImmutableBytesPtr rowKey = rowLock.getRowKey();
           PendingRow pendingRow = pendingRows.get(rowKey);
@@ -1389,10 +1409,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
   }
 
-  private void doPre(ObserverContext<RegionCoprocessorEnvironment> c, BatchMutateContext context,
-                     MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-      long start = EnvironmentEdgeManager.currentTimeMillis();
+  private void doPre(BatchMutateContext context) throws IOException {
+      long start = 0;
       try {
+          start = EnvironmentEdgeManager.currentTimeMillis();
           if (failPreIndexUpdatesForTesting) {
               throw new DoNotRetryIOException("Simulating the first (i.e., pre) index table write failure");
           }
@@ -1410,8 +1430,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           lockRows(context);
           rethrowIndexingException(e);
       }
-      throw new RuntimeException(
-              "Somehow didn't complete the index update, but didn't return succesfully either!");
   }
 
   private void extractExpressionsAndColumns(DataInputStream input,

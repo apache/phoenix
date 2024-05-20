@@ -484,7 +484,7 @@ public interface QueryServices extends SQLCloseable {
      */
     String PHOENIX_GET_REGIONS_RETRIES = "phoenix.get.table.regions.retries";
 
-    int DEFAULT_PHOENIX_GET_REGIONS_RETRIES = 3;
+    int DEFAULT_PHOENIX_GET_REGIONS_RETRIES = 10;
 
     /**
      * Get executor service used for parallel scans

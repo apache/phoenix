@@ -110,8 +110,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  */
 public class ConnectionlessQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices  {
     private static ServerName SERVER_NAME = ServerName.parseServerName(HConstants.LOCALHOST + Addressing.HOSTNAME_PORT_SEPARATOR + HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT);
-    private static final GuidePostsCacheProvider
-            GUIDE_POSTS_CACHE_PROVIDER = new GuidePostsCacheProvider();
     private final ReadOnlyProps props;
     private PMetaData metaData;
     private final Map<SequenceKey, SequenceInfo> sequenceMap = Maps.newHashMap();
@@ -120,7 +118,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     private volatile boolean initialized;
     private volatile SQLException initializationException;
     private final Map<String, List<HRegionLocation>> tableSplits = Maps.newHashMap();
-    private final GuidePostsCacheWrapper guidePostsCache;
+    private GuidePostsCacheWrapper guidePostsCache;
     private final Configuration config;
 
     private User user;
@@ -153,9 +151,6 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         // set replication required parameter
         ConfigUtil.setReplicationConfigIfAbsent(this.config);
         this.props = new ReadOnlyProps(this.config.iterator());
-
-        this.guidePostsCache = GUIDE_POSTS_CACHE_PROVIDER.getGuidePostsCache(props.get(GUIDE_POSTS_CACHE_FACTORY_CLASS,
-                QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS), null, config);
     }
 
     private PMetaData newEmptyMetaData() {
@@ -228,9 +223,23 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
-        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                queryTimeout);
     }
 
     /**
@@ -238,7 +247,18 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+                                                 byte[] endRowKey) throws SQLException {
+        return getTableRegions(tableName, startRowKey, endRowKey,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                 byte[] endRowKey, int queryTimeout)
+            throws SQLException {
         List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
         if (regions != null) {
             return regions;
@@ -387,6 +407,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                 }
                 return;
             }
+            guidePostsCache =
+                    (new GuidePostsCacheProvider()).getGuidePostsCache(
+                        props.getProperty(GUIDE_POSTS_CACHE_FACTORY_CLASS,
+                            QueryServicesOptions.DEFAULT_GUIDE_POSTS_CACHE_FACTORY_CLASS),
+                        null, config);
             SQLException sqlE = null;
             PhoenixConnection metaConnection = null;
             try {

@@ -139,7 +139,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                     region.getRegionInfo().getTable().getNameAsString());
             throw new DoNotRetryIOException(cause.getMessage(), cause);
         }
-        if(isLocalIndex) {
+        if (isLocalIndex) {
             ScanUtil.setupLocalIndexScan(scan);
         }
     }
@@ -357,20 +357,33 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 
-    public void setScanOptionsForFlushesAndCompactions(ScanOptions options) {
+    public void setScanOptionsForFlushesAndCompactions(Store store, ScanOptions options,
+            boolean retainAllVersions) {
         // We want the store to give us all the deleted cells to StoreCompactionScanner
         options.setKeepDeletedCells(KeepDeletedCells.TTL);
         options.setTTL(HConstants.FOREVER);
-        options.setMaxVersions(Integer.MAX_VALUE);
-        options.setMinVersions(Integer.MAX_VALUE);
+        if (retainAllVersions) {
+            options.setMaxVersions(Integer.MAX_VALUE);
+            options.setMinVersions(Integer.MAX_VALUE);
+        } else {
+            options.setMinVersions(Math.max(Math.max(options.getMaxVersions(),
+                    store.getColumnFamilyDescriptor().getMaxVersions()), 1));
+            options.setMinVersions(Math.max(Math.max(options.getMinVersions(),
+                    store.getColumnFamilyDescriptor().getMaxVersions()), 1));
+        }
+
     }
+
     @Override
     public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
             ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
             CompactionRequest request) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options);
+            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf))
+                    || request.isMajor();
+            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
             return;
         }
         long maxLookbackAge = getMaxLookbackAge(c);
@@ -384,10 +397,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public void preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
             ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
+
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options);
+            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
+            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
             return;
         }
+
         long maxLookbackAge = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
@@ -401,7 +418,9 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options);
+            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
+                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
+            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
             return;
         }
         long maxLookbackAge = getMaxLookbackAge(c);
@@ -428,7 +447,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(options);
+            setScanOptionsForFlushesAndCompactions(store, options, true);
             return;
         }
         if (!storeFileScanDoesntNeedAlteration(options)) {
