@@ -23,9 +23,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.ToNumberPolicy;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -93,9 +90,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                     PTable.CDCChangeScope.POST));
 
     protected ManualEnvironmentEdge injectEdge;
-    protected Gson gson = new GsonBuilder()
-            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
-            .create();
     protected Calendar cal = Calendar.getInstance();
 
     protected void createTable(Connection conn, String table_sql)
