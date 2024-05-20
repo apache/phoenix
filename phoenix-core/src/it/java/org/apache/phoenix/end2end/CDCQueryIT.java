@@ -231,8 +231,8 @@ public class CDCQueryIT extends CDCBaseIT {
                         assertEquals(true, rs.next());
                         assertEquals("Index: " + i + " for query: " + testQuery.getKey(),
                                 k, rs.getInt(2));
-                        Map<String, Object> change = gson.fromJson(rs.getString(3),
-                                HashMap.class);
+                        Map<String, Object> change = mapper.reader(
+                                HashMap.class).readValue(rs.getString(3));
                         change.put(CDC_EVENT_TYPE, "dummy");
                         // Verify that we are getting nothing but the event type as we specified
                         // no change scopes.

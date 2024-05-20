@@ -17,6 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
@@ -28,7 +34,6 @@ import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBinaryBase;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -74,6 +79,10 @@ import static org.junit.Assert.fail;
 
 public class CDCBaseIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCBaseIT.class);
+    protected static final ObjectMapper mapper = new ObjectMapper();
+    static {
+        mapper.configure(DeserializationFeature.USE_LONG_FOR_INTS, true);
+    }
 
     static final HashSet<PTable.CDCChangeScope> CHANGE_IMG =
             new HashSet<>(Arrays.asList(PTable.CDCChangeScope.CHANGE));
@@ -539,8 +548,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             for (Map.Entry<String, Object> pkCol: changeRow.pks.entrySet()) {
                 assertEquals(changeDesc, pkCol.getValue(), rs.getObject(pkCol.getKey()));
             }
-            Map<String, Object> cdcObj = gson.fromJson(rs.getString(
-                            changeRow.pks.size()+2), HashMap.class);
+            Map<String, Object> cdcObj = mapper.reader(HashMap.class).readValue(
+                    rs.getString(changeRow.pks.size()+2));
             if (cdcObj.containsKey(CDC_PRE_IMAGE)
                     && ! ((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
                     && changeScopes.contains(PTable.CDCChangeScope.PRE)) {
@@ -708,10 +717,21 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return changes;
     }
 
+    @JsonAutoDetect(
+            fieldVisibility = JsonAutoDetect.Visibility.NONE,
+            setterVisibility = JsonAutoDetect.Visibility.NONE,
+            getterVisibility = JsonAutoDetect.Visibility.NONE,
+            isGetterVisibility = JsonAutoDetect.Visibility.NONE,
+            creatorVisibility = JsonAutoDetect.Visibility.NONE
+    )
     protected class ChangeRow implements Comparable<ChangeRow> {
+        @JsonProperty
         private final String tenantId;
+        @JsonProperty
         private final long changeTS;
+        @JsonProperty
         private final Map<String, Object> pks;
+        @JsonProperty
         private final Map<String, Object> change;
 
         public String getTenantID() {
@@ -730,7 +750,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         }
 
         public String toString() {
-            return gson.toJson(this);
+            try {
+                return mapper.writerFor(ChangeRow.class).writeValueAsString(this);
+            } catch (JsonProcessingException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         // This implementation only comapres the rows by PK only as it is simply meant to have a

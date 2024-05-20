@@ -218,7 +218,6 @@
     <glassfish.el.version>3.0.1-b08</glassfish.el.version>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
     <hbase.shaded.package>org.apache.hadoop.hbase.shaded</hbase.shaded.package>
-    <gson.version>2.9.1</gson.version>
   </properties>
 
   <build>
@@ -1756,11 +1755,6 @@
         <groupId>org.glassfish</groupId>
         <artifactId>javax.el</artifactId>
         <version>${glassfish.el.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>com.google.code.gson</groupId>
-        <artifactId>gson</artifactId>
-        <version>${gson.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

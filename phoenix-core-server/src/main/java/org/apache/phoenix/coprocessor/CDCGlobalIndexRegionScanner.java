@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.apache.hadoop.hbase.Cell;
@@ -42,6 +43,7 @@ import org.apache.phoenix.util.CDCChangeBuilder;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.JacksonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +53,7 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
@@ -232,9 +235,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         return false;
     }
 
-    private Result getCDCImage(byte[] indexRowKey, Cell firstCell) {
-        Gson gson = new GsonBuilder().serializeNulls().create();
-        byte[] value = gson.toJson(changeBuilder.buildCDCEvent()).getBytes(StandardCharsets.UTF_8);
+    private Result getCDCImage(byte[] indexRowKey, Cell firstCell) throws JsonProcessingException {
+        byte[] value = JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(
+                changeBuilder.buildCDCEvent());
         CellBuilder builder = CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY);
         Result cdcRow = Result.create(Arrays.asList(builder
                 .setRow(indexRowKey)
