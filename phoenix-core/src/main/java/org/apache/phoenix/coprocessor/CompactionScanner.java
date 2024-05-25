@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -57,6 +58,9 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
@@ -77,6 +81,9 @@ import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBAL_INDEXES;
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_INDEXES;
+import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_VIEWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
@@ -194,6 +201,10 @@ public class CompactionScanner implements InternalScanner {
         boolean isViewTTLEnabled =
                 env.getConfiguration().getBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED,
                         QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
+        boolean isLongViewIndexEnabled =
+                env.getConfiguration().getBoolean(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB,
+                        QueryServicesOptions.DEFAULT_LONG_VIEW_INDEX_ENABLED);
+
         int viewTTLTenantViewsPerScanLimit = -1;
         if (isViewTTLEnabled) {
             // if view ttl enabled then we need to limit the number of rows scanned
@@ -240,8 +251,8 @@ public class CompactionScanner implements InternalScanner {
                     currentTime);
 
             return isPartitioned ?
-                    new PartitionedTableTTLTracker(baseTable, isSalted, 
-                            isSharedIndex, viewTTLTenantViewsPerScanLimit) :
+                    new PartitionedTableTTLTracker(baseTable, isSalted, isSharedIndex,
+                            isLongViewIndexEnabled, viewTTLTenantViewsPerScanLimit) :
                     new NonPartitionedTableTTLTracker(baseTable, store);
 
         } catch (SQLException e) {
@@ -284,23 +295,55 @@ public class CompactionScanner implements InternalScanner {
         storeScanner.close();
     }
 
-    private enum MatcherType {
-        SHARED_INDEXES, GLOBAL_VIEWS, TENANT_VIEWS
+    enum MatcherType {
+        GLOBAL_VIEWS, GLOBAL_INDEXES, TENANT_VIEWS, TENANT_INDEXES
     }
-    /// TODO : Needs optimization(sharedIndex) and remove logging
+
+    /**
+     * Helper class for managing various RowKeyMatchers and TTLCaches
+     * For matcher types =>
+     * GLOBAL_VIEWS:
+     * GLOBAL_INDEXES:
+     *      Assumption is that the number of Global views in a system is bounded.(can fit in memory)
+     *      Reads the ROW_KEY_MATCHER and TTL attribute from SYSCAT for all global views.
+     *      SYSCAT query is not batched.
+     *
+     * TENANT_VIEWS:
+     *      Reads the ROW_KEY_MATCHER and TTL attribute from SYSCAT in a batched fashion.
+     *      TENANT_ID from the region startKey is used to further filter the SYSCAT query.
+     *      The batch size is controlled by viewTTLTenantViewsPerScanLimit attribute.
+     *      Special case: when the data type of the TENANT_ID is not a VARCHAR/CHAR,
+     *      then SYSCAT queries cannot be bounded or batched using the TENANT_ID,
+     *      since the TENANT_ID attribute in SYSCAT is a VARCHAR.
+     *
+     * TENANT_INDEXES:
+     *      Reads the ROW_KEY_MATCHER and TTL attribute from SYSCAT in a batched fashion.
+     *      Since TENANT_ID is not the leading part of the row key and thus not in a
+     *      lexicographic order for a given region,
+     *      the TENANT_ID cannot be used to query SYSCAT in a batch of more than one.
+     *      The batch size is configured to one => uses the TENANT_ID of the current row.
+     *
+     */
+    /// TODO : Needs to convert debug to trace logging.
     private class PartitionedTableRowKeyMatcher  {
+
+        private static final int NO_BATCH = -1;
+        private static final int BATCH_SIZE_ONE = 1;
 
         private boolean isSharedIndex = false;
         private boolean isMultiTenant = false;
         private boolean isSalted = false;
+        private boolean shouldBatchCatalogAccess = true;
         private RowKeyParser rowKeyParser;
         private PTable baseTable;
         private RowKeyMatcher globalViewMatcher;
         private RowKeyMatcher tenantViewMatcher;
-        private RowKeyMatcher sharedIndexMatcher;
-        private TableTTLInfoCache sharedIndexTTLCache;
+        private RowKeyMatcher globalIndexMatcher;
+        private RowKeyMatcher tenantIndexMatcher;
         private TableTTLInfoCache globalViewTTLCache;
         private TableTTLInfoCache tenantViewTTLCache;
+        private TableTTLInfoCache globalIndexTTLCache;
+        private TableTTLInfoCache tenantIndexTTLCache;
         private String startTenantId = "";
         private String endTenantId = "";
         private String lastTenantId = "";
@@ -311,12 +354,17 @@ public class CompactionScanner implements InternalScanner {
                 PTable table,
                 boolean isSalted,
                 boolean isSharedIndex,
+                boolean isLongViewIndexEnabled,
                 int viewTTLTenantViewsPerScanLimit) throws SQLException {
             this.baseTable = table;
-            this.sharedIndexTTLCache = new TableTTLInfoCache();
             this.globalViewTTLCache = new TableTTLInfoCache();
+            this.globalIndexTTLCache = new TableTTLInfoCache();
             this.tenantViewTTLCache = new TableTTLInfoCache();
-            this.rowKeyParser = new RowKeyParser(baseTable);
+            this.tenantIndexTTLCache = new TableTTLInfoCache();
+            this.rowKeyParser = new RowKeyParser(baseTable, isLongViewIndexEnabled);
+            PDataType tenantIdType = this.rowKeyParser.getTenantIdDataType();
+            this.shouldBatchCatalogAccess = (tenantIdType.getSqlType() == Types.VARCHAR ||
+                    tenantIdType.getSqlType() == Types.CHAR);
             this.isSharedIndex = isSharedIndex || localIndex ;
             this.isSalted = isSalted;
             this.isMultiTenant = table.isMultiTenant();
@@ -324,54 +372,84 @@ public class CompactionScanner implements InternalScanner {
             initializeMatchers();
         }
 
-        // Initialize the various matchers
+
+        /**
+         * Initialize the various matchers
+         * Case : multi-tenant
+         * @throws SQLException
+         */
+
         private void initializeMatchers() throws SQLException {
 
             if (this.isSharedIndex) {
-                this.sharedIndexMatcher = initializeMatcher(MatcherType.SHARED_INDEXES);
+                this.globalIndexMatcher = initializeMatcher(GLOBAL_INDEXES);
+                if (isMultiTenant) {
+                    this.tenantIndexMatcher = initializeMatcher(TENANT_INDEXES);
+                }
             } else if (this.isMultiTenant) {
                 this.globalViewMatcher = initializeMatcher(MatcherType.GLOBAL_VIEWS);
-                this.tenantViewMatcher = initializeMatcher(MatcherType.TENANT_VIEWS);
+                this.tenantViewMatcher = initializeMatcher(TENANT_VIEWS);
             } else {
                 this.globalViewMatcher = initializeMatcher(MatcherType.GLOBAL_VIEWS);
             }
         }
-        // Initialize matcher as per type
+
+        // Queries SYSCAT to find the ROW_KEY_MATCHER and TTL attributes for various matcher types.
+        // The attributes are populated/initialized into local cache objects.
+        // TTL => TableTTLInfoCache
+        // ROW_KEY_MATCHER => RowKeyMatcher (TrieIndex)
         private RowKeyMatcher initializeMatcher(MatcherType type) throws SQLException {
             List<TableTTLInfo> tableList;
             RowKeyMatcher matcher  = new RowKeyMatcher();
             String regionName = region.getRegionInfo().getEncodedName();
-            try {
-                startTenantId = rowKeyParser.getTenantIdFromRowKey(
-                        region.getRegionInfo().getStartKey());
-                endTenantId = rowKeyParser.getTenantIdFromRowKey(
-                        region.getRegionInfo().getEndKey()
-                );
-            } catch (SQLException sqle) {
-                LOGGER.error(sqle.getMessage());
-                throw sqle;
-            }
+
+            // Defaults to no batching
+            int catalogAccessBatchSize = NO_BATCH;
             switch (type) {
-            case SHARED_INDEXES:
+            case GLOBAL_INDEXES:
                 tableList = getMatchPatternsForPartitionedTables(
                         this.baseTable.getName().getString(),
                         env.getConfiguration(),
-                        false, false, true,
-                        regionName, startTenantId, viewTTLTenantViewsPerScanLimit);
+                        false, false, true, false,
+                        regionName, startTenantId, catalogAccessBatchSize);
+                break;
+            case TENANT_INDEXES:
+                catalogAccessBatchSize = shouldBatchCatalogAccess ?
+                        BATCH_SIZE_ONE : catalogAccessBatchSize;
+                tableList = getMatchPatternsForPartitionedTables(
+                        this.baseTable.getName().getString(),
+                        env.getConfiguration(),
+                        false, false, false, true,
+                        regionName, startTenantId, catalogAccessBatchSize);
                 break;
             case GLOBAL_VIEWS:
                 tableList = getMatchPatternsForPartitionedTables(
                         this.baseTable.getName().getString(),
                         env.getConfiguration(),
-                        true, false, false,
-                        regionName, startTenantId, viewTTLTenantViewsPerScanLimit);
+                        true, false, false, false,
+                        regionName, startTenantId, catalogAccessBatchSize);
                 break;
             case TENANT_VIEWS:
+                try {
+                    startTenantId = rowKeyParser.getTenantIdFromRowKey(
+                            region.getRegionInfo().getStartKey());
+                    endTenantId = rowKeyParser.getTenantIdFromRowKey(
+                            region.getRegionInfo().getEndKey()
+                    );
+                } catch (SQLException sqle) {
+                    LOGGER.error(sqle.getMessage());
+                    throw sqle;
+                }
+
+                catalogAccessBatchSize =
+                        shouldBatchCatalogAccess ?
+                                viewTTLTenantViewsPerScanLimit :
+                                catalogAccessBatchSize;
                 tableList = getMatchPatternsForPartitionedTables(
                         this.baseTable.getName().getString(),
                         env.getConfiguration(),
-                        false, true, false,
-                        regionName, startTenantId, viewTTLTenantViewsPerScanLimit);
+                        false, true, false, false,
+                        regionName, startTenantId, catalogAccessBatchSize);
 
                 break;
             default:
@@ -385,8 +463,11 @@ public class CompactionScanner implements InternalScanner {
                     // each new/unique ttlInfo object added returns a unique tableId.
                     int tableId = -1;
                     switch (type) {
-                    case SHARED_INDEXES:
-                         tableId = sharedIndexTTLCache.addTable(m);
+                    case GLOBAL_INDEXES:
+                        tableId = globalIndexTTLCache.addTable(m);
+                        break;
+                    case TENANT_INDEXES:
+                         tableId = tenantIndexTTLCache.addTable(m);
                          break;
                     case GLOBAL_VIEWS:
                         tableId = globalViewTTLCache.addTable(m);
@@ -399,7 +480,7 @@ public class CompactionScanner implements InternalScanner {
                     // map the match pattern to the tableId using matcher index.
                     matcher.put(m.getMatchPattern(), tableId);
                     if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(String.format("Matcher updated %s : %s", type.toString(), m));
+                        LOGGER.debug("Matcher updated (init) {} : {}", type.toString(), m);
                     }
 
                 }
@@ -415,20 +496,38 @@ public class CompactionScanner implements InternalScanner {
             return matcher;
         }
 
-        // The tenant views that have TTL set are queried in batches.
-        // Refresh the tenant view matcher with the next batch of tenant views that have ttl set.
+        // The tenant views/indexes that have TTL set are queried in batches.
+        // Refresh the tenant view/index matcher with the next batch of tenant views
+        // that have ttl set.
         private void refreshMatcher(MatcherType type) throws SQLException {
             List<TableTTLInfo> tableList;
             String regionName = region.getRegionInfo().getEncodedName();
+            int catalogAccessBatchSize = -1;
             switch (type) {
-            case TENANT_VIEWS:
-                this.tenantViewMatcher  = new RowKeyMatcher();
-                this.tenantViewTTLCache = new TableTTLInfoCache();
+            case TENANT_INDEXES:
+                this.tenantIndexMatcher = new RowKeyMatcher();
+                this.tenantIndexTTLCache = new TableTTLInfoCache();
+                catalogAccessBatchSize = shouldBatchCatalogAccess ? 1 : catalogAccessBatchSize;
                 tableList = getMatchPatternsForPartitionedTables(
                         this.baseTable.getName().getString(),
                         env.getConfiguration(),
-                        false, true, false,
-                        regionName, currentTenantId, viewTTLTenantViewsPerScanLimit);
+                        false, false, false, true,
+                        regionName, currentTenantId, catalogAccessBatchSize);
+
+                break;
+
+            case TENANT_VIEWS:
+                this.tenantViewMatcher  = new RowKeyMatcher();
+                this.tenantViewTTLCache = new TableTTLInfoCache();
+                catalogAccessBatchSize =
+                        shouldBatchCatalogAccess ?
+                                viewTTLTenantViewsPerScanLimit :
+                                catalogAccessBatchSize;
+                tableList = getMatchPatternsForPartitionedTables(
+                        this.baseTable.getName().getString(),
+                        env.getConfiguration(),
+                        false, true, false, false,
+                        regionName, currentTenantId, catalogAccessBatchSize);
 
                 break;
             default:
@@ -441,36 +540,35 @@ public class CompactionScanner implements InternalScanner {
                     // each new/unique ttlInfo object added returns a unique tableId.
                     int tableId = -1;
                     switch (type) {
+                    case TENANT_INDEXES:
+                        tableId = tenantIndexTTLCache.addTable(m);
+                        // map the match pattern to the tableId using matcher index.
+                        this.tenantIndexMatcher.put(m.getMatchPattern(), tableId);
+                        if (LOGGER.isDebugEnabled()) {
+                            LOGGER.debug("Matcher updated (refresh) {} : {}", type.toString(), m);
+                        }
+                        break;
                     case TENANT_VIEWS:
                         tableId = tenantViewTTLCache.addTable(m);
                         // map the match pattern to the tableId using matcher index.
                         this.tenantViewMatcher.put(m.getMatchPattern(), tableId);
                         if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug(String.format("Updated %s : %s", type.toString(), m));
+                            LOGGER.debug("Matcher updated (refresh) {} : {}", type.toString(), m);
                         }
                         break;
                     }
                 }
             });
-            try {
-                startTenantId = rowKeyParser.getTenantIdFromRowKey(
-                        region.getRegionInfo().getStartKey());
-                endTenantId = rowKeyParser.getTenantIdFromRowKey(
-                        region.getRegionInfo().getEndKey()
-                );
-                LOGGER.debug(String.format("Matcher refreshed for type t=%s:- " +
-                                "rs=%s, re=%s, s=%s, e=%s, c=%s, l=%s",
-                        type,
-                        Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
-                        Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
-                        startTenantId,
-                        endTenantId,
-                        currentTenantId,
-                        lastTenantId));
-            } catch (SQLException sqle) {
-                LOGGER.error(sqle.getMessage());
-                throw sqle;
-            }
+            LOGGER.debug("Matcher refreshed for type t={}:- " +
+                            "rs={}, re={}, s={}, e={}, c={}, l={}",
+                    type,
+                    Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
+                    Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
+                    startTenantId,
+                    endTenantId,
+                    currentTenantId,
+                    lastTenantId);
+
         }
 
 
@@ -481,26 +579,36 @@ public class CompactionScanner implements InternalScanner {
             TableTTLInfoCache tableTTLInfoCache = null;
             RowKeyMatcher matcher = null;
 
-            if (this.isSharedIndex && matcherType.compareTo(MatcherType.SHARED_INDEXES) == 0) {
-                matcher = this.sharedIndexMatcher;
-                tableTTLInfoCache = this.sharedIndexTTLCache;
+            if (this.isSharedIndex && matcherType.compareTo(TENANT_INDEXES) == 0) {
+                if (shouldBatchCatalogAccess) {
+                    currentTenantId = rowKeyParser.getTenantIdFromRowKey(rowkey, true);
+                    if ((Bytes.BYTES_COMPARATOR.compare(
+                            Bytes.toBytes(currentTenantId),
+                            Bytes.toBytes(lastTenantId)) != 0) || (!shouldBatchCatalogAccess)) {
+                        refreshMatcher(TENANT_INDEXES);
+                    }
+                }
+                matcher = this.tenantIndexMatcher;
+                tableTTLInfoCache = this.tenantIndexTTLCache;
+            } else if (this.isSharedIndex &&
+                    (matcherType.compareTo(GLOBAL_INDEXES) == 0)) {
+                matcher = this.globalIndexMatcher;
+                tableTTLInfoCache = this.globalIndexTTLCache;
             } else if (this.isMultiTenant &&
-                    (matcherType.compareTo(MatcherType.TENANT_VIEWS) == 0)) {
+                    (matcherType.compareTo(TENANT_VIEWS) == 0)) {
                 // Check whether we need to retrieve the next batch of tenants
                 // If the current tenant from the row is greater than the last tenant row
                 // in the tenantViewTTLCache/tenantViewMatcher then refresh the cache.
-                currentTenantId = rowKeyParser.getTenantIdFromRowKey(rowkey);
-                if (Bytes.BYTES_COMPARATOR.compare(
-                        Bytes.toBytes(currentTenantId),
-                        Bytes.toBytes(lastTenantId)) > 0) {
-                    refreshMatcher(MatcherType.TENANT_VIEWS);
+                if (shouldBatchCatalogAccess) {
+                    currentTenantId = rowKeyParser.getTenantIdFromRowKey(rowkey);
+                    if ((Bytes.BYTES_COMPARATOR.compare(
+                            Bytes.toBytes(currentTenantId),
+                            Bytes.toBytes(lastTenantId)) > 0) || (!shouldBatchCatalogAccess)) {
+                        refreshMatcher(TENANT_VIEWS);
+                    }
                 }
                 matcher = this.tenantViewMatcher;
                 tableTTLInfoCache = this.tenantViewTTLCache;
-            } else if (this.isMultiTenant &&
-                    (matcherType.compareTo(MatcherType.GLOBAL_VIEWS) == 0)) {
-                matcher = this.globalViewMatcher;
-                tableTTLInfoCache = this.globalViewTTLCache;
             } else if (matcherType.compareTo(MatcherType.GLOBAL_VIEWS) == 0) {
                 matcher = this.globalViewMatcher;
                 tableTTLInfoCache = this.globalViewTTLCache;
@@ -512,15 +620,13 @@ public class CompactionScanner implements InternalScanner {
             TableTTLInfo tableTTLInfo = tableTTLInfoCache != null ?
                     tableTTLInfoCache.getTableById(tableId) : null;
 
-            if (matcherType.compareTo(MatcherType.TENANT_VIEWS) == 0) {
-                LOGGER.debug(String.format("Matcher condition for row r=%s:- " +
-                                "s=%s, e=%s, c=%s, l=%s",
-                        Bytes.toStringBinary(rowkey),
-                        startTenantId,
-                        endTenantId,
-                        currentTenantId,
-                        lastTenantId));
-            }
+            LOGGER.debug(String.format("Matcher condition for row r=%s:- " +
+                            "s=%s, e=%s, c=%s, l=%s",
+                    Bytes.toStringBinary(rowkey),
+                    startTenantId,
+                    endTenantId,
+                    currentTenantId,
+                    lastTenantId));
 
             return tableTTLInfo;
 
@@ -533,7 +639,7 @@ public class CompactionScanner implements InternalScanner {
          * @param configuration
          * @param globalViews
          * @param tenantViews
-         * @param sharedIndexes
+         * @param tenantIndexes
          * @param regionName
          * @param startTenantId
          * @param batchSize
@@ -542,26 +648,26 @@ public class CompactionScanner implements InternalScanner {
          */
         private List<TableTTLInfo> getMatchPatternsForPartitionedTables(String physicalTableName,
                 Configuration configuration, boolean globalViews, boolean tenantViews,
-                boolean sharedIndexes,
+                boolean globalIndexes, boolean tenantIndexes,
                 String regionName,
                 String startTenantId, int batchSize) throws SQLException {
 
             List<TableTTLInfo> tableTTLInfoList = Lists.newArrayList();
-            if (globalViews || sharedIndexes) {
+            if (globalViews || globalIndexes) {
                 Set<TableInfo> globalViewSet = getGlobalViews(physicalTableName, configuration);
                 if (globalViewSet.size() > 0) {
                     getTTLInfo(physicalTableName, globalViewSet, configuration,
-                            sharedIndexes, tableTTLInfoList);
+                            globalIndexes, tableTTLInfoList);
                 }
             }
 
-            if (tenantViews || sharedIndexes) {
-                // Batching is enabled only for TENANT_VIEWS.
+            if (tenantViews || tenantIndexes) {
+                // Batching is enabled only for TENANT_VIEWS AND TENANT_INDEXES.
                 Set<TableInfo> tenantViewSet = getNextTenantViews(physicalTableName, configuration,
-                        regionName, startTenantId, sharedIndexes ? -1 : batchSize);
+                        regionName, startTenantId, batchSize);
                 if (tenantViewSet.size() > 0) {
                     getTTLInfo(physicalTableName, tenantViewSet, configuration,
-                            sharedIndexes, tableTTLInfoList);
+                            tenantIndexes, tableTTLInfoList);
                 }
             }
 
@@ -656,7 +762,10 @@ public class CompactionScanner implements InternalScanner {
 
                 String tenantViewSQL = String.format(tenantViewsSQLFormat, physicalTableName);
                 LOGGER.debug("tenantViewSQL: {}", tenantViewSQL);
-                LOGGER.debug(String.format("getTenantViews region-name = %s, start-key = %s, batch = %d",
+                LOGGER.debug(String.format("getTenantViews " +
+                                "region-name = %s, " +
+                                "start-tenant-id = %s, " +
+                                "batch = %d",
                         regionName,
                         startTenantId,
                         batchSize));
@@ -837,13 +946,14 @@ public class CompactionScanner implements InternalScanner {
             return tenantViewMatcher;
         }
 
-        public RowKeyMatcher getSharedIndexMatcher() {
-            return sharedIndexMatcher;
+        public RowKeyMatcher getGlobalIndexMatcher() {
+            return globalIndexMatcher;
         }
 
-        public TableTTLInfoCache getSharedIndexTTLCache() {
-            return sharedIndexTTLCache;
+        public RowKeyMatcher getTenantIndexMatcher() {
+            return tenantIndexMatcher;
         }
+
 
         public TableTTLInfoCache getGlobalViewTTLCache() {
             return globalViewTTLCache;
@@ -851,6 +961,14 @@ public class CompactionScanner implements InternalScanner {
 
         public TableTTLInfoCache getTenantViewTTLCache() {
             return tenantViewTTLCache;
+        }
+
+        public TableTTLInfoCache getGlobalIndexTTLCache() {
+            return globalIndexTTLCache;
+        }
+
+        public TableTTLInfoCache getTenantIndexTTLCache() {
+            return tenantIndexTTLCache;
         }
 
         public int getNumGlobalEntries() {
@@ -861,8 +979,12 @@ public class CompactionScanner implements InternalScanner {
             return tenantViewMatcher == null ? 0 : tenantViewMatcher.getNumEntries();
         }
 
-        public int getNumViewIndexEntries() {
-            return sharedIndexMatcher == null ? 0 : sharedIndexMatcher.getNumEntries();
+        public int getNumGlobalIndexEntries() {
+            return globalIndexMatcher == null ? 0 : globalIndexMatcher.getNumEntries();
+        }
+
+        public int getNumTenantIndexEntries() {
+            return tenantIndexMatcher == null ? 0 : tenantIndexMatcher.getNumEntries();
         }
 
         public int getNumTablesInGlobalCache() {
@@ -873,8 +995,12 @@ public class CompactionScanner implements InternalScanner {
             return tenantViewTTLCache == null ? 0 : tenantViewTTLCache.getNumTablesInCache();
         }
 
-        public int getNumTablesInViewIndexCache() {
-            return sharedIndexTTLCache == null ? 0 : sharedIndexTTLCache.getNumTablesInCache();
+        public int getNumTablesInGlobalIndexCache() {
+            return globalIndexTTLCache == null ? 0 : globalIndexTTLCache.getNumTablesInCache();
+        }
+
+        public int getNumTablesInTenantIndexCache() {
+            return tenantIndexTTLCache == null ? 0 : tenantIndexTTLCache.getNumTablesInCache();
         }
 
         public int getNumTablesInCache() {
@@ -884,7 +1010,9 @@ public class CompactionScanner implements InternalScanner {
             totalNumTables +=
                     tenantViewTTLCache == null ? 0 : tenantViewTTLCache.getNumTablesInCache();
             totalNumTables +=
-                    sharedIndexTTLCache == null ? 0 : sharedIndexTTLCache.getNumTablesInCache();
+                    globalIndexTTLCache == null ? 0 : globalIndexTTLCache.getNumTablesInCache();
+            totalNumTables +=
+                    tenantIndexTTLCache == null ? 0 : tenantIndexTTLCache.getNumTablesInCache();
             return totalNumTables;
         }
 
@@ -897,7 +1025,7 @@ public class CompactionScanner implements InternalScanner {
      */
     private interface TTLTracker {
         // Set the TTL for the given row in the row-context being tracked.
-        void setTTL(Cell firstCell);
+        void setTTL(Cell firstCell) throws IOException;
         // get the row context for the current row.
         RowContext getRowContext();
         // set the row context for the current row.
@@ -958,6 +1086,7 @@ public class CompactionScanner implements InternalScanner {
         private boolean isSharedIndex = false;
         private boolean isMultiTenant = false;
         private boolean isSalted = false;
+        private boolean isLongViewIndexEnabled = false;
         private int startingPKPosition;
         private PartitionedTableRowKeyMatcher tableRowKeyMatcher;
 
@@ -965,62 +1094,22 @@ public class CompactionScanner implements InternalScanner {
                 PTable table,
                 boolean isSalted,
                 boolean isSharedIndex,
+                boolean isLongViewIndexEnabled,
                 int viewTTLTenantViewsPerScanLimit
-        ) {
+        ) throws IOException {
 
             try {
                 // Initialize the various matcher indexes
                 this.tableRowKeyMatcher =
                         new PartitionedTableRowKeyMatcher(table, isSalted, isSharedIndex,
-                                viewTTLTenantViewsPerScanLimit);
+                                isLongViewIndexEnabled, viewTTLTenantViewsPerScanLimit);
                 this.ttl = table.getTTL() != TTL_NOT_DEFINED ? table.getTTL() : DEFAULT_TTL;
                 this.isSharedIndex = isSharedIndex || localIndex;
+                this.isLongViewIndexEnabled = isLongViewIndexEnabled;
                 this.isSalted = isSalted;
                 this.isMultiTenant = table.isMultiTenant();
 
-                int startingPKPosition = 0;
-                if (this.isMultiTenant && this.isSalted && this.isSharedIndex) {
-                    // case multi-tenanted, salted, is a shared-index =>
-                    // startingPKPosition = 1 skip the salt-byte and starting at the viewIndexId
-                    startingPKPosition = 1;
-                } else if (this.isMultiTenant && this.isSalted && !this.isSharedIndex) {
-                    // case multi-tenanted, salted, not a shared-index =>
-                    // startingPKPosition = 2 skip salt byte + tenant-id to search the global space
-                    // if above search returned no results
-                    // then search using the following start position
-                    // startingPKPosition = 1 skip salt-byte to search the tenant space
-                    startingPKPosition = 2;
-                } else if (this.isMultiTenant && !this.isSalted && this.isSharedIndex) {
-                    // case multi-tenanted, not-salted, is a shared-index =>
-                    // startingPKPosition = 0, the first key will the viewIndexId
-                    startingPKPosition = 0;
-                } else if (this.isMultiTenant && !this.isSalted && !this.isSharedIndex) {
-                    // case multi-tenanted, not-salted, not a shared-index =>
-                    // startingPKPosition = 1 skip tenant-id to search the global space
-                    // if above search returned no results
-                    // then search using the following start position
-                    // startingPKPosition = 0 to search the tenant space
-                    startingPKPosition = 1;
-                } else if (!this.isMultiTenant && this.isSalted && this.isSharedIndex) {
-                    // case non-multi-tenanted, salted, shared-index =>
-                    // startingPKPosition = 1 skip salt-byte search using the viewIndexId
-                    startingPKPosition = 1;
-                } else if (!this.isMultiTenant && this.isSalted && !this.isSharedIndex) {
-                    // case non-multi-tenanted, salted, not a shared-index =>
-                    // start at the view-index-id position after skipping the salt byte
-                    // startingPKPosition = 1 skip salt-byte
-                    startingPKPosition = 1;
-                } else if (!this.isMultiTenant && !this.isSalted && this.isSharedIndex) {
-                    // case non-multi-tenanted, not-salted, is a shared-index =>
-                    // startingPKPosition = 0 the first key will the viewIndexId
-                    startingPKPosition = 0;
-                } else {
-                    // case non-multi-tenanted, not-salted, not a view-index-table  =>
-                    // startingPKPosition = 0
-                    startingPKPosition = 0;
-                }
-
-                this.startingPKPosition = startingPKPosition;
+                this.startingPKPosition = getStartingPKPosition();;
                 LOGGER.info(String.format(
                         "PartitionedTableTTLTracker params:- " + 
                                 "region-name = %s, table-name = %s,  " +
@@ -1032,28 +1121,78 @@ public class CompactionScanner implements InternalScanner {
 
             } catch (SQLException e) {
                 LOGGER.error(String.format("Failed to read from catalog: " + e.getMessage()));
+                throw new IOException(e);
             } finally {
                 if (tableRowKeyMatcher != null) {
                     LOGGER.info(String.format(
-                            "PartitionedTableTTLTracker stats for region = %s:-" +
-                                    "global-entries = %d, %d, " +
-                                    "tenant-entries = %d, %d, " +
-                                    "shared-index-entries = %d, %d ",
+                            "PartitionedTableTTLTracker stats " +
+                                    "(index-entries, table-entries) for region = %s:-" +
+                                    "global-views = %d, %d, " +
+                                    "tenant-views = %d, %d, " +
+                                    "global-indexes = %d, %d ",
+                                    "tenant-indexes = %d, %d ",
                             region.getRegionInfo().getEncodedName(),
                             tableRowKeyMatcher.getNumGlobalEntries(),
                             tableRowKeyMatcher.getNumTablesInGlobalCache(),
                             tableRowKeyMatcher.getNumTenantEntries(),
                             tableRowKeyMatcher.getNumTablesInTenantCache(),
-                            tableRowKeyMatcher.getNumViewIndexEntries(),
-                            tableRowKeyMatcher.getNumTablesInViewIndexCache()));
+                            tableRowKeyMatcher.getNumGlobalIndexEntries(),
+                            tableRowKeyMatcher.getNumTablesInGlobalIndexCache(),
+                            tableRowKeyMatcher.getNumTenantIndexEntries(),
+                            tableRowKeyMatcher.getNumTablesInTenantIndexCache()));
                 } else {
                     LOGGER.error(String.format("Failed to initialize: tableRowKeyMatcher is null"));
                 }
             }
         }
 
+        private int getStartingPKPosition() {
+            int startingPKPosition = 0;
+            if (this.isMultiTenant && this.isSalted && this.isSharedIndex) {
+                // case multi-tenanted, salted, is a shared-index =>
+                // startingPKPosition = 1 skip the salt-byte and starting at the viewIndexId
+                startingPKPosition = 1;
+            } else if (this.isMultiTenant && this.isSalted && !this.isSharedIndex) {
+                // case multi-tenanted, salted, not a shared-index =>
+                // startingPKPosition = 2 skip salt byte + tenant-id to search the global space
+                // if above search returned no results
+                // then search using the following start position
+                // startingPKPosition = 1 skip salt-byte to search the tenant space
+                startingPKPosition = 2;
+            } else if (this.isMultiTenant && !this.isSalted && this.isSharedIndex) {
+                // case multi-tenanted, not-salted, is a shared-index =>
+                // startingPKPosition = 0, the first key will the viewIndexId
+                startingPKPosition = 0;
+            } else if (this.isMultiTenant && !this.isSalted && !this.isSharedIndex) {
+                // case multi-tenanted, not-salted, not a shared-index =>
+                // startingPKPosition = 1 skip tenant-id to search the global space
+                // if above search returned no results
+                // then search using the following start position
+                // startingPKPosition = 0 to search the tenant space
+                startingPKPosition = 1;
+            } else if (!this.isMultiTenant && this.isSalted && this.isSharedIndex) {
+                // case non-multi-tenanted, salted, shared-index =>
+                // startingPKPosition = 1 skip salt-byte search using the viewIndexId
+                startingPKPosition = 1;
+            } else if (!this.isMultiTenant && this.isSalted && !this.isSharedIndex) {
+                // case non-multi-tenanted, salted, not a shared-index =>
+                // start at the view-index-id position after skipping the salt byte
+                // startingPKPosition = 1 skip salt-byte
+                startingPKPosition = 1;
+            } else if (!this.isMultiTenant && !this.isSalted && this.isSharedIndex) {
+                // case non-multi-tenanted, not-salted, is a shared-index =>
+                // startingPKPosition = 0 the first key will the viewIndexId
+                startingPKPosition = 0;
+            } else {
+                // case non-multi-tenanted, not-salted, not a view-index-table  =>
+                // startingPKPosition = 0
+                startingPKPosition = 0;
+            }
+            return startingPKPosition;
+        }
+
         @Override
-        public void setTTL(Cell firstCell) {
+        public void setTTL(Cell firstCell) throws IOException {
 
             boolean matched = false;
             TableTTLInfo tableTTLInfo = null;
@@ -1069,8 +1208,9 @@ public class CompactionScanner implements InternalScanner {
                                 Arrays.asList(0, 1) :
                                 Arrays.asList(0)) :
                         tableRowKeyMatcher.getRowKeyParser().parsePKPositions(firstCell);
-                // The startingPKPosition was initialized(constructor) in the following manner
-                // case multi-tenant, salted, is-view-index-table  => startingPKPosition = 1
+                // The startingPKPosition was initialized in the following manner =>
+                // see getStartingPKPosition()
+                // case multi-tenant, salted, is-shared-index  => startingPKPosition = 1
                 // case multi-tenant, salted, not-shared-index => startingPKPosition = 2
                 // case multi-tenant, not-salted, is-shared-index => startingPKPosition = 0
                 // case multi-tenant, not-salted, not-shared-index => startingPKPosition = 1
@@ -1083,8 +1223,12 @@ public class CompactionScanner implements InternalScanner {
                 Integer tableId = null;
                 // Search using the starting offset (startingPKPosition offset)
                 if (isSharedIndex) {
-                    // case index table
-                    tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, MatcherType.SHARED_INDEXES);
+                    // case index table, first check the global indexes
+                    tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, GLOBAL_INDEXES);
+                    if (tableTTLInfo == null) {
+                        tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, TENANT_INDEXES);
+                    }
+
                 } else if (isMultiTenant) {
                     // case multi-tenant, non-index tables, global space
                     tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, MatcherType.GLOBAL_VIEWS);
@@ -1094,20 +1238,20 @@ public class CompactionScanner implements InternalScanner {
                         pkPosition = this.isSalted ? 1 : 0;
                         offset = pkPositions.get(pkPosition);
                         // case multi-tenant, non-index tables, tenant space
-                        tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, MatcherType.TENANT_VIEWS);
+                        tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, TENANT_VIEWS);
                     }
                 } else {
                     // case non-multi-tenant and non-index tables, global space
                     tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, MatcherType.GLOBAL_VIEWS);
                 }
-                //tableTTLInfo = ttlCache.getTableById(tableId);
                 matched = tableTTLInfo != null;
                 matchedOffset = matched ? offset : -1;
                 rowTTLInSecs = matched ? tableTTLInfo.getTTL() : ttl; /* in secs */
                 this.rowContext = new RowContext();
                 this.rowContext.setTTL(rowTTLInSecs);
-            } catch (Exception e) {
+            } catch (SQLException e) {
                 LOGGER.error(String.format("Exception when visiting table: " + e.getMessage()));
+                throw new IOException(e);
             } finally {
                 if (LOGGER.isDebugEnabled()) {
                     LOGGER.debug(String.format("visiting row-key = %s, region = %s, " +
@@ -1148,23 +1292,154 @@ public class CompactionScanner implements InternalScanner {
     }
 
     public class RowKeyParser {
-        private final RowKeyColumnExpression[] colExprs;
-        private final List<PColumn> pkColumns;
+        private final RowKeyColumnExpression[] baseTableColExprs;
+        private final List<PColumn> baseTablePKColumns;
+        private final PColumn[] sharedIndexPKColumns;
         private final boolean isSalted;
+        private final boolean isLongViewIndexEnabled;
         private final boolean isMultiTenant;
+        private final PDataType tenantDataType;
 
-        public RowKeyParser(PTable table) {
+        public RowKeyParser(PTable table, boolean isLongViewIndexEnabled) {
+            this.isLongViewIndexEnabled = isLongViewIndexEnabled;
             isSalted = table.getBucketNum() != null;
             isMultiTenant = table.isMultiTenant();
 
-            pkColumns = table.getPKColumns();
-            colExprs = new RowKeyColumnExpression[pkColumns.size()];
-            for (int i = 0; i < pkColumns.size(); i++) {
-                PColumn column = pkColumns.get(i);
-                colExprs[i] = new RowKeyColumnExpression(column, new RowKeyValueAccessor(pkColumns, i));
+            // Get the TENANT_ID data type, this will be used to determine if the queries to
+            // SYSCAT will be batched.
+            tenantDataType = table.getRowKeySchema().getField(isSalted ? 1 : 0).getDataType();
+
+            // Initialize the ColumnExpressions for the base table PK Columns
+            baseTablePKColumns = table.getPKColumns();
+            baseTableColExprs = new RowKeyColumnExpression[baseTablePKColumns.size()];
+            int saltPos = isSalted ? 0 : -1;
+            for (int i = 0; i < baseTablePKColumns.size(); i++) {
+                PColumn column = baseTablePKColumns.get(i);
+                baseTableColExprs[i] = new RowKeyColumnExpression(
+                        column,
+                        new RowKeyValueAccessor(baseTablePKColumns, i));
             }
+
+            // Initialize the shared index PK columns to be used in getTenantIdFromRowKey()
+            // to create a RowKeyColumnExpression for tenantId parsing.
+            // position 0 : salt byte if salted else index_id
+            // position 1 : index_id if salted else tenant_id
+            // position 2 : tenant_id if salted and multi-tenanted else empty
+            sharedIndexPKColumns = new PColumn[3];
+            if (saltPos == 0) {
+                sharedIndexPKColumns[saltPos] = baseTablePKColumns.get(saltPos);
+            }
+            final int tenantPos = isMultiTenant ? (saltPos + 1) : -1;
+            if ((tenantPos == 0) ||  (tenantPos == 1)) {
+                sharedIndexPKColumns[tenantPos] = new PColumn() {
+
+                    @Override
+                    public PName getName() {
+                        return PNameFactory.newName("_INDEX_ID");
+                    }
+
+                    @Override
+                    public PName getFamilyName() {
+                        return null;
+                    }
+
+                    @Override
+                    public int getPosition() {
+                        return tenantPos;
+                    }
+
+                    @Override
+                    public Integer getArraySize() {
+                        return 0;
+                    }
+
+                    @Override
+                    public byte[] getViewConstant() {
+                        return new byte[0];
+                    }
+
+                    @Override
+                    public boolean isViewReferenced() {
+                        return false;
+                    }
+
+                    @Override
+                    public int getEstimatedSize() {
+                        return 0;
+                    }
+
+                    @Override
+                    public String getExpressionStr() {
+                        return "";
+                    }
+
+                    @Override
+                    public long getTimestamp() {
+                        return 0;
+                    }
+
+                    @Override
+                    public boolean isDerived() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isExcluded() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isRowTimestamp() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean isDynamic() {
+                        return false;
+                    }
+
+                    @Override
+                    public byte[] getColumnQualifierBytes() {
+                        return new byte[0];
+                    }
+
+                    @Override
+                    public boolean isNullable() {
+                        return false;
+                    }
+
+                    @Override
+                    public PDataType getDataType() {
+                        return RowKeyParser.this.isLongViewIndexEnabled ?
+                                PLong.INSTANCE : PSmallint.INSTANCE;
+                    }
+
+                    @Override
+                    public Integer getMaxLength() {
+                        return 0;
+                    }
+
+                    @Override
+                    public Integer getScale() {
+                        return 0;
+                    }
+
+                    @Override
+                    public SortOrder getSortOrder() {
+                        return SortOrder.ASC;
+                    }
+                };
+                sharedIndexPKColumns[tenantPos+1] = baseTablePKColumns.get(tenantPos);
+            }
+
         }
 
+        // accessor method for tenantDataType
+        public PDataType getTenantIdDataType() {
+            return tenantDataType;
+        }
+
+        // Parse the row key cell to find the PK position boundaries
         public List<Integer> parsePKPositions(Cell inputCell)  {
             RowKeyTuple inputTuple = new RowKeyTuple();
             inputTuple.setKey(inputCell.getRowArray(),
@@ -1174,11 +1449,12 @@ public class CompactionScanner implements InternalScanner {
             int lastPos = 0;
             List<Integer> pkPositions = new ArrayList<>();
             pkPositions.add(lastPos);
-            for (int i = 0; i < colExprs.length; i++) {
-                RowKeyColumnExpression expr = colExprs[i];
+            // Use the RowKeyColumnExpression to parse the PK positions
+            for (int i = 0; i < baseTableColExprs.length; i++) {
+                RowKeyColumnExpression expr = baseTableColExprs[i];
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 expr.evaluate(inputTuple, ptr);
-                int separatorLength = pkColumns.get(i).getDataType().isFixedWidth() ? 0 : 1;
+                int separatorLength = baseTablePKColumns.get(i).getDataType().isFixedWidth() ? 0 : 1;
                 int endPos = lastPos + ptr.getLength() + separatorLength;
                 pkPositions.add(endPos);
                 lastPos = endPos;
@@ -1186,9 +1462,15 @@ public class CompactionScanner implements InternalScanner {
             return pkPositions;
         }
 
+        // Parse the row key to extract the TENANT_ID as a String
         private String getTenantIdFromRowKey(byte[] rowKey) throws SQLException {
+            return getTenantIdFromRowKey(rowKey, false);
+        }
+
+        // Parse the row key to extract the TENANT_ID as a String
+        private String getTenantIdFromRowKey(byte[] rowKey, boolean isSharedIndex) throws SQLException {
             // case: when it is the start of the first region or end of the last region
-            if (rowKey != null && ByteUtil.isEmptyOrNull(rowKey, 0, rowKey.length)) {
+            if ((rowKey != null && ByteUtil.isEmptyOrNull(rowKey, 0, rowKey.length)) || (!isMultiTenant)) {
                 return "";
             }
             // Construct a cell from the rowKey for us evaluate the tenantId
@@ -1200,27 +1482,43 @@ public class CompactionScanner implements InternalScanner {
                     .setType(Cell.Type.Put)
                     .setValue(HConstants.EMPTY_BYTE_ARRAY)
                     .build();
-            // Constructing a RowKeyTuple for expression evaluation
-            RowKeyTuple inputTuple = new RowKeyTuple();
-            inputTuple.setKey(rowKeyCell.getRowArray(),
-                    rowKeyCell.getRowOffset(),
-                    rowKeyCell.getRowLength());
             // Evaluating and converting a byte ptr to tenantId
             // Sometimes the underlying byte ptr is padded with null bytes (0x0)
             // in case of salted regions.
-            int tenantIdPosition = (isSalted ? 1 : 0);
-            RowKeyColumnExpression expr = colExprs[tenantIdPosition];
+            int tenantIdPosition = (isSalted ? 1 : 0) + (isSharedIndex ? 1 : 0);
+            RowKeyColumnExpression expr;
+            PDataType dataType;
+            RowKeyTuple inputTuple = new RowKeyTuple();
+            if (isSharedIndex) {
+                expr = new RowKeyColumnExpression(
+                        sharedIndexPKColumns[tenantIdPosition],
+                        new RowKeyValueAccessor(Arrays.asList(sharedIndexPKColumns), tenantIdPosition));
+                dataType = sharedIndexPKColumns[tenantIdPosition].getDataType();
+
+                // Constructing a RowKeyTuple for expression evaluation
+                inputTuple.setKey(rowKeyCell.getRowArray(),
+                        rowKeyCell.getRowOffset(),
+                        rowKeyCell.getRowLength());
+            } else {
+                expr = baseTableColExprs[tenantIdPosition];
+                dataType = baseTablePKColumns.get(tenantIdPosition).getDataType();
+                inputTuple.setKey(rowKeyCell.getRowArray(),
+                        rowKeyCell.getRowOffset(),
+                        rowKeyCell.getRowLength());
+            }
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             String tenantId = "";
             try {
                 expr.evaluate(inputTuple, ptr);
-                PDataType dataType = pkColumns.get(tenantIdPosition).getDataType();
                 dataType.pad(ptr, expr.getMaxLength(), expr.getSortOrder());
                 tenantId = ByteUtil.isEmptyOrNull(ptr.get(), ptr.getOffset(),
                         ptr.getLength()) ? "" : dataType.toObject(ptr).toString();
             } catch(IllegalDataException ex) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE)
                         .build().buildException();
+            }
+            finally {
+                LOGGER.debug("TenantId in getTenantIdFromRowKey: {}", tenantId);
             }
             return tenantId;
         }
