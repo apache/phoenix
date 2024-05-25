@@ -38,6 +38,7 @@ import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptio
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -1519,7 +1520,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
 
 
     @Test
-    public void testTablesIndexesAndViewIndexes() throws Exception {
+    public void testMajorCompactWithSimpleIndexedBaseTables() throws Exception {
         super.testMajorCompactWithSimpleIndexedBaseTables();
     }
     @Test
@@ -1551,10 +1552,16 @@ public class ViewTTLIT extends BaseViewTTLIT {
     public void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
         super.testMajorCompactWhenTTLSetForSomeTenants();
     }
+    @Test
+    public void testMajorCompactWithGlobalAndTenantViewHierarchy() throws Exception {
+        super.testMajorCompactWithGlobalAndTenantViewHierarchy();
+    }
 
     @Test
     public void testMajorCompactWithVariousTenantIdTypesAndRegions() throws Exception {
         super.testMajorCompactWithVariousTenantIdTypesAndRegions(PVarchar.INSTANCE);
+        super.testMajorCompactWithVariousTenantIdTypesAndRegions(PInteger.INSTANCE);
+        super.testMajorCompactWithVariousTenantIdTypesAndRegions(PLong.INSTANCE);
     }
 
     @Test
