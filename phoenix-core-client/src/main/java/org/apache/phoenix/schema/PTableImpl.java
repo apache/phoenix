@@ -219,7 +219,7 @@ public class PTableImpl implements PTable {
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
-    private Long maxLookbackAge;
+    private Integer maxLookbackAge;
 
     public static class Builder {
         private PTableKey key;
@@ -286,7 +286,7 @@ public class PTableImpl implements PTable {
         private String externalSchemaId;
         private String streamingTopicName;
         private String indexWhere;
-        private Long maxLookbackAge;
+        private Integer maxLookbackAge;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -714,7 +714,7 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setMaxLookbackAge(Long maxLookbackAge) {
+        public Builder setMaxLookbackAge(Integer maxLookbackAge) {
             if (maxLookbackAge != null) {
                 propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge));
             }
@@ -2041,7 +2041,7 @@ public class PTableImpl implements PTable {
             indexWhere =
                     (String) PVarchar.INSTANCE.toObject(table.getIndexWhere().toByteArray());
         }
-        Long maxLookbackAge = null;
+        Integer maxLookbackAge = null;
         if (table.hasMaxLookbackAge()) {
             maxLookbackAge = table.getMaxLookbackAge();
         }
@@ -2398,7 +2398,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public Long getMaxLookbackAge() {
+    public Integer getMaxLookbackAge() {
         return maxLookbackAge;
     }
 

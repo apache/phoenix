@@ -239,7 +239,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         }
         // Create the following objects only for rebuilds by IndexTool
         hTableFactory = IndexWriterUtils.getDefaultDelegateHTableFactory(env);
-        maxLookBackInMills = MetaDataUtil.getMaxLookbackAge(config, ScanUtil.getMaxLookbackAgeFromScanAttribute(scan));
+        maxLookBackInMills = MetaDataUtil.getMaxLookbackAge(config,
+                ScanUtil.getMaxLookbackAgeFromScanAttribute(scan)) * 1000;
         rowCountPerTask = config.getInt(INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY,
                 DEFAULT_INDEX_VERIFY_ROW_COUNTS_PER_TASK);
 

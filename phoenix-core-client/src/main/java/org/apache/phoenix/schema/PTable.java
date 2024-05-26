@@ -1001,7 +1001,7 @@ public interface PTable extends PMetaDataEntity {
     /**
      * Returns: Table level max lookback age if configured else null.
      */
-    Long getMaxLookbackAge();
+    Integer getMaxLookbackAge();
     /**
      * Class to help track encoded column qualifier counters per column family.
      */

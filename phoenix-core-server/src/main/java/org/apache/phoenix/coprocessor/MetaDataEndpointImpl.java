@@ -85,6 +85,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
+import static org.apache.phoenix.schema.PTable.LinkType.PARENT_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
@@ -1443,8 +1444,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 : oldTable != null ? oldTable.getIndexWhere() : null);
 
         Cell maxLookbackAgeKv = tableKeyValues[MAX_LOOKBACK_AGE_INDEX];
-        Long maxLookbackAge = maxLookbackAgeKv == null ? null :
-                PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
+        Integer maxLookbackAge = maxLookbackAgeKv == null ? null :
+                PLong.INSTANCE.getCodec().decodeInt(maxLookbackAgeKv.getValueArray(),
                         maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
         if (tableType == PTableType.VIEW) {
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
@@ -1623,7 +1624,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         return builder.build();
     }
 
-    private Long scanMaxLookbackAgeFromParent(byte[] key, long clientTimeStamp) throws IOException {
+    private Integer scanMaxLookbackAgeFromParent(byte[] key, long clientTimeStamp) throws IOException {
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         try(Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
@@ -1654,7 +1655,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 else {
                     byte[] maxLookbackAgeInBytes = result.getValue(TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
                     if (maxLookbackAgeInBytes != null) {
-                        return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
+                        return PInteger.INSTANCE.getCodec().decodeInt(maxLookbackAgeInBytes, 0,
+                                SortOrder.getDefault());
                     }
                 }
                 result = scanner.next();

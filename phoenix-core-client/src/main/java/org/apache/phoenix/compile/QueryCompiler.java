@@ -193,20 +193,20 @@ public class QueryCompiler {
             return;
         }
         List<TableRef> involvedTables = resolver.getTables();
-        Long maxLookBackAgeInMillis = null;
+        Integer maxLookBackAge = null;
         for(TableRef tableRef: involvedTables) {
             PTable table = tableRef.getTable();
-            if (maxLookBackAgeInMillis == null) {
-                maxLookBackAgeInMillis = table.getMaxLookbackAge();
+            if (maxLookBackAge == null) {
+                maxLookBackAge = table.getMaxLookbackAge() ;
             }
             else if (table.getMaxLookbackAge() != null) {
-                maxLookBackAgeInMillis = Long.min(maxLookBackAgeInMillis, table.getMaxLookbackAge());
+                maxLookBackAge = Integer.min(maxLookBackAge, table.getMaxLookbackAge());
             }
         }
         Configuration conf = conn.getQueryServices().getConfiguration();
-        maxLookBackAgeInMillis = MetaDataUtil.getMaxLookbackAge(conf, maxLookBackAgeInMillis);
+        maxLookBackAge = MetaDataUtil.getMaxLookbackAge(conf, maxLookBackAge);
         long now = EnvironmentEdgeManager.currentTimeMillis();
-        if (maxLookBackAgeInMillis > 0 && now - maxLookBackAgeInMillis > scn){
+        if (maxLookBackAge > 0 && now - ((long) maxLookBackAge * 1000) > scn){
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.CANNOT_QUERY_TABLE_WITH_SCN_OLDER_THAN_MAX_LOOKBACK_AGE)
                 .build().buildException();

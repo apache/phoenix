@@ -20,6 +20,8 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -357,21 +359,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 
-    public void setScanOptionsForFlushesAndCompactions(Store store, ScanOptions options,
-            boolean retainAllVersions) {
+    public void setScanOptionsForFlushesAndCompactions(Store store, ScanOptions options) {
         // We want the store to give us all the deleted cells to StoreCompactionScanner
         options.setKeepDeletedCells(KeepDeletedCells.TTL);
         options.setTTL(HConstants.FOREVER);
-        if (retainAllVersions) {
-            options.setMaxVersions(Integer.MAX_VALUE);
-            options.setMinVersions(Integer.MAX_VALUE);
-        } else {
-            options.setMinVersions(Math.max(Math.max(options.getMaxVersions(),
-                    store.getColumnFamilyDescriptor().getMaxVersions()), 1));
-            options.setMinVersions(Math.max(Math.max(options.getMinVersions(),
-                    store.getColumnFamilyDescriptor().getMaxVersions()), 1));
-        }
-
+        options.setMaxVersions(Integer.MAX_VALUE);
+        options.setMinVersions(Integer.MAX_VALUE);
     }
 
     @Override
@@ -380,16 +373,13 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             CompactionRequest request) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
-                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf))
-                    || request.isMajor();
-            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
+            setScanOptionsForFlushesAndCompactions(store, options);
             return;
         }
-        long maxLookbackAge = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
+        long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
+        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    scanType, maxLookbackAge);
+                    scanType, maxLookbackAgeInMillis);
         }
     }
 
@@ -399,16 +389,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         Configuration conf = c.getEnvironment().getConfiguration();
 
         if (isPhoenixTableTTLEnabled(conf)) {
-            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
-                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
-            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
+            setScanOptionsForFlushesAndCompactions(store, options);
             return;
         }
 
-        long maxLookbackAge = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
+        long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
+        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    ScanType.COMPACT_RETAIN_DELETES, maxLookbackAge);
+                    ScanType.COMPACT_RETAIN_DELETES, maxLookbackAgeInMillis);
         }
     }
 
@@ -418,13 +406,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            boolean retainAllVersions =  isMaxLookbackTimeEnabled(
-                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf));
-            setScanOptionsForFlushesAndCompactions(store, options, retainAllVersions);
+            setScanOptionsForFlushesAndCompactions(store, options);
             return;
         }
-        long maxLookbackAge = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
+        long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
+        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             MemoryCompactionPolicy inMemPolicy =
                     store.getColumnFamilyDescriptor().getInMemoryCompaction();
             ScanType scanType;
@@ -437,7 +423,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 scanType = ScanType.COMPACT_RETAIN_DELETES;
             }
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    scanType, maxLookbackAge);
+                    scanType, maxLookbackAgeInMillis);
         }
     }
 
@@ -447,7 +433,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(store, options, true);
+            setScanOptionsForFlushesAndCompactions(store, options);
             return;
         }
         if (!storeFileScanDoesntNeedAlteration(options)) {
@@ -555,7 +541,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    private static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
+    private static int getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
         String fullTableName = tableName.getNameAsString();
         Configuration conf = c.getEnvironment().getConfiguration();

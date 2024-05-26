@@ -32,9 +32,11 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -59,6 +61,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
+import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -174,8 +177,28 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration compactionConfig;
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
-    private boolean isPhoenixTableTTLEnabled;
 
+    private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
+
+    public static void setMaxLookbackInMillis(String tableName, String columnFamilyName,
+            long maxLookbackInMillis) {
+        if (tableName == null || columnFamilyName == null) {
+            return;
+        }
+        maxLookbackMap.put(tableName + CompactionScanner.SEPARATOR + columnFamilyName,
+                maxLookbackInMillis);
+    }
+
+    public static long getMaxLookbackInMillis(String tableName, String columnFamilyName,
+            long maxLookbackInMillis) {
+        if (tableName == null || columnFamilyName == null) {
+            return maxLookbackInMillis;
+        }
+        Long value = maxLookbackMap.get(tableName + CompactionScanner.SEPARATOR + columnFamilyName);
+        return value == null
+                ? maxLookbackInMillis
+                : maxLookbackMap.get(tableName + CompactionScanner.SEPARATOR + columnFamilyName);
+    }
     @Override
     public Optional<RegionObserver> getRegionObserver() {
         return Optional.of(this);
@@ -205,9 +228,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                 e.getConfiguration().getInt(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER,
                         QueryServicesOptions.DEFAULT_INDEX_REBUILD_RPC_RETRIES_COUNTER));
         indexWriteProps = new ReadOnlyProps(indexWriteConfig.iterator());
-        isPhoenixTableTTLEnabled =
-                e.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     Configuration getUpsertSelectConfig() {
@@ -582,91 +602,134 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
+    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
+            InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
+        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+            return scanner;
+        } else {
+            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+                @Override public InternalScanner run() throws Exception {
+                    String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable()
+                            .getNameAsString();
+                    long maxLookbackInMillis =
+                            UngroupedAggregateRegionObserver.getMaxLookbackInMillis(
+                                    tableName, store.getColumnFamilyName(),
+                                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
+                                            c.getEnvironment().getConfiguration()));
+                    maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
+                            store.getColumnFamilyName(), maxLookbackInMillis);
+                    return new CompactionScanner(c.getEnvironment(), store, scanner,
+                            maxLookbackInMillis, null, null, false, true);
+                }
+            });
+        }
+    }
+
+    @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                       InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
                                       CompactionRequest request) throws IOException {
-        if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
-            final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
-            // Compaction and split upcalls run with the effective user context of the requesting user.
-            // This will lead to failure of cross cluster RPC if the effective user is not
-            // the login user. Switch to the login user context to ensure we have the expected
-            // security context.
-            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-                @Override
-                public InternalScanner run() throws Exception {
-                    InternalScanner internalScanner = scanner;
-                    if (request.isMajor()) {
-                        boolean isDisabled = false;
-                        boolean isMultiTenantIndexTable = false;
-                        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
-                            isMultiTenantIndexTable = true;
-                        }
-                        final String fullTableName = isMultiTenantIndexTable ?
-                                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(),
-                                        MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
-                                tableName.getNameAsString();
-                        PTable table = null;
-                        try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
-                                compactionConfig).unwrap(PhoenixConnection.class)) {
-                            table = conn.getTableNoCache(fullTableName);
-                        } catch (Exception e) {
-                            if (e instanceof TableNotFoundException) {
-                                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
-                                        + fullTableName);
-                                // non-Phoenix HBase tables won't be found, do nothing
-                            } else {
-                                LOGGER.error(
-                                        "Unable to modify compaction scanner to retain deleted "
-                                                + "cells for a table with disabled Index; "
-                                                + fullTableName, e);
-                            }
-                        }
-                        // The previous indexing design needs to retain delete markers and deleted
-                        // cells to rebuild disabled indexes. Thus, we skip major compaction for
-                        // them. GlobalIndexChecker is the coprocessor introduced by the current
-                        // indexing design.
-                        if (table != null &&
-                                !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
-                                !ServerUtil.hasCoprocessor(c.getEnvironment(),
-                                GlobalIndexChecker.class.getName())) {
-                            List<PTable>
-                                    indexes =
-                                    PTableType.INDEX.equals(table.getType()) ?
-                                            Lists.newArrayList(table) :
-                                            table.getIndexes();
-                            // FIXME need to handle views and indexes on views as well
-                            for (PTable index : indexes) {
-                                if (index.getIndexDisableTimestamp() != 0) {
-                                    LOGGER.info("Modifying major compaction scanner to retain "
-                                            + "deleted cells for a table with disabled index: "
-                                            + fullTableName);
-                                    isDisabled = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
-                            internalScanner =
-                                    new CompactionScanner(c.getEnvironment(), store, scanner,
-                                            MetaDataUtil.getMaxLookbackAge(
-                                                    c.getEnvironment().getConfiguration(), table.getMaxLookbackAge()),
-                                            SchemaUtil.getEmptyColumnFamily(table),
-                                            table.getEncodingScheme()
-                                                    == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                                                    QueryConstants.EMPTY_COLUMN_BYTES :
-                                                    table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME)
-                                            );
+
+        final TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
+        // Compaction and split upcalls run with the effective user context of the requesting user.
+        // This will lead to failure of cross cluster RPC if the effective user is not
+        // the login user. Switch to the login user context to ensure we have the expected
+        // security context.
+        return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
+            @Override
+            public InternalScanner run() throws Exception {
+                InternalScanner internalScanner = scanner;
+                boolean keepDeleted = false;
+                boolean isMultiTenantIndexTable = false;
+                if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                    isMultiTenantIndexTable = true;
+                }
+                final String fullTableName = isMultiTenantIndexTable ?
+                        SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(),
+                                MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
+                        tableName.getNameAsString();
+                PTable table = null;
+                Integer maxLookbackAge = null;
+                try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
+                        compactionConfig).unwrap(PhoenixConnection.class)) {
+                    table = conn.getTableNoCache(fullTableName);
+                    maxLookbackAge = table.getMaxLookbackAge();
+                    if (table.getType() == PTableType.INDEX) {
+                        // TODO: We should not need to get max lookback from the data table
+                        String dataTableName = table.getParentName().getString();
+                        PTable dataTable = conn.getTableNoCache(dataTableName);
+                        maxLookbackAge = dataTable.getMaxLookbackAge();
+                    }
+                    UngroupedAggregateRegionObserver.setMaxLookbackInMillis(
+                            tableName.getNameAsString(),
+                            store.getColumnFamilyName(),
+                            (long) MetaDataUtil.getMaxLookbackAge(
+                                    c.getEnvironment().getConfiguration(),
+                                    maxLookbackAge) * 1000);
+                } catch (Exception e) {
+                    if (e instanceof TableNotFoundException) {
+                        LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
+                                + fullTableName);
+                        // non-Phoenix HBase tables won't be found, do nothing
+                    } else {
+                        LOGGER.error(
+                                "Unable to modify compaction scanner to retain deleted "
+                                        + "cells for a table with disabled Index; "
+                                        + fullTableName, e);
+                    }
+                }
+                // The previous indexing design needs to retain delete markers and deleted
+                // cells to rebuild disabled indexes. Thus, we skip major compaction for
+                // them. GlobalIndexChecker is the coprocessor introduced by the current
+                // indexing design.
+                if (table != null &&
+                        !PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME.equals(fullTableName) &&
+                        !ServerUtil.hasCoprocessor(c.getEnvironment(),
+                        GlobalIndexChecker.class.getName())) {
+                    List<PTable>
+                            indexes =
+                            PTableType.INDEX.equals(table.getType()) ?
+                                    Lists.newArrayList(table) :
+                                    table.getIndexes();
+                    // FIXME need to handle views and indexes on views as well
+                    for (PTable index : indexes) {
+                        if (index.getIndexDisableTimestamp() != 0) {
+                            LOGGER.info("Modifying major compaction scanner to retain "
+                                    + "deleted cells for a table with disabled index: "
+                                    + fullTableName);
+                            keepDeleted = true;
+                            break;
                         }
                     }
+                }
+                if (table != null
+                        && isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                    internalScanner =
+                            new CompactionScanner(c.getEnvironment(), store, scanner,
+                                    MetaDataUtil.getMaxLookbackAge(
+                                            c.getEnvironment().getConfiguration(),
+                                            maxLookbackAge) * 1000,
+                                    SchemaUtil.getEmptyColumnFamily(table),
+                                    table.getEncodingScheme()
+                                            == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                                            QueryConstants.EMPTY_COLUMN_BYTES :
+                                            table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME),
+                                    request.isMajor() || request.isAllFiles(), keepDeleted
+                                    );
+                }
+                if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
                     try {
                         long clientTimeStamp = EnvironmentEdgeManager.currentTimeMillis();
-                        DelegateRegionCoprocessorEnvironment compactionConfEnv =
+                        DelegateRegionCoprocessorEnvironment
+                                compactionConfEnv =
                                 new DelegateRegionCoprocessorEnvironment(c.getEnvironment(),
                                         ConnectionType.COMPACTION_CONNECTION);
-                        StatisticsCollector statisticsCollector =
+                        StatisticsCollector
+                                statisticsCollector =
                                 StatisticsCollectorFactory.createStatisticsCollector(
-                                compactionConfEnv, tableName.getNameAsString(), clientTimeStamp,
-                                store.getColumnFamilyDescriptor().getName());
+                                        compactionConfEnv, tableName.getNameAsString(),
+                                        clientTimeStamp,
+                                        store.getColumnFamilyDescriptor().getName());
                         statisticsCollector.init();
                         internalScanner =
                                 statisticsCollector.createCompactionScanner(compactionConfEnv,
@@ -678,11 +741,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             LOGGER.warn("Unable to collect stats for " + tableName, e);
                         }
                     }
-                    return internalScanner;
                 }
-            });
-        }
-        return scanner;
+                return internalScanner;
+            }
+        });
     }
 
     static PTable deserializeTable(byte[] b) {
