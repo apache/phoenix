@@ -223,10 +223,10 @@ public class CompactionScanner implements InternalScanner {
         boolean hasMore = storeScanner.next(result);
         inputCellCount += result.size();
         if (!result.isEmpty()) {
-            printRow(result, "Input for " + tableName, true); // This is for debugging
+            // printRow(result, "Input for " + tableName, true); // This is for debugging
             phoenixLevelRowCompactor.compact(result, false);
             outputCellCount += result.size();
-            printRow(result, "Output for " + tableName, true); // This is for debugging
+            // printRow(result, "Output for " + tableName, true); // This is for debugging
         }
         return hasMore;
     }

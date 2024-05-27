@@ -180,24 +180,22 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
 
     private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
 
-    public static void setMaxLookbackInMillis(String tableName, String columnFamilyName,
-            long maxLookbackInMillis) {
-        if (tableName == null || columnFamilyName == null) {
+    public static void setMaxLookbackInMillis(String tableName, long maxLookbackInMillis) {
+        if (tableName == null) {
             return;
         }
-        maxLookbackMap.put(tableName + CompactionScanner.SEPARATOR + columnFamilyName,
+        maxLookbackMap.put(tableName,
                 maxLookbackInMillis);
     }
 
-    public static long getMaxLookbackInMillis(String tableName, String columnFamilyName,
-            long maxLookbackInMillis) {
-        if (tableName == null || columnFamilyName == null) {
+    public static long getMaxLookbackInMillis(String tableName, long maxLookbackInMillis) {
+        if (tableName == null) {
             return maxLookbackInMillis;
         }
-        Long value = maxLookbackMap.get(tableName + CompactionScanner.SEPARATOR + columnFamilyName);
+        Long value = maxLookbackMap.get(tableName);
         return value == null
                 ? maxLookbackInMillis
-                : maxLookbackMap.get(tableName + CompactionScanner.SEPARATOR + columnFamilyName);
+                : maxLookbackMap.get(tableName);
     }
     @Override
     public Optional<RegionObserver> getRegionObserver() {
@@ -613,7 +611,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             .getNameAsString();
                     long maxLookbackInMillis =
                             UngroupedAggregateRegionObserver.getMaxLookbackInMillis(
-                                    tableName, store.getColumnFamilyName(),
+                                    tableName,
                                     BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
                                             c.getEnvironment().getConfiguration()));
                     maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
@@ -656,10 +654,9 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     maxLookbackAge = table.getMaxLookbackAge();
                     UngroupedAggregateRegionObserver.setMaxLookbackInMillis(
                             tableName.getNameAsString(),
-                            store.getColumnFamilyName(),
-                            (long) MetaDataUtil.getMaxLookbackAge(
+                            MetaDataUtil.getMaxLookbackAge(
                                     c.getEnvironment().getConfiguration(),
-                                    maxLookbackAge) * 1000L);
+                                    maxLookbackAge));
                 } catch (Exception e) {
                     if (e instanceof TableNotFoundException) {
                         LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
@@ -702,7 +699,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             new CompactionScanner(c.getEnvironment(), store, scanner,
                                     MetaDataUtil.getMaxLookbackAge(
                                             c.getEnvironment().getConfiguration(),
-                                            maxLookbackAge) * 1000,
+                                            maxLookbackAge),
                                     SchemaUtil.getEmptyColumnFamily(table),
                                     table.getEncodingScheme()
                                             == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
