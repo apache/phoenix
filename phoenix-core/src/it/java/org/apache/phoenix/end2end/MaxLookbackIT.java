@@ -24,10 +24,8 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
@@ -126,17 +124,17 @@ public class MaxLookbackIT extends BaseTest {
     public void testTooLowSCNWithTableLevelMaxLookback() throws Exception {
         String dataTableName1 = generateUniqueName();
         StringBuilder optionBuilderForDataTable1 = new StringBuilder(optionBuilder);
-        optionBuilderForDataTable1.append("MAX_LOOKBACK_AGE=" + (TABLE_LEVEL_MAX_LOOKBACK_AGE + 3));
+        optionBuilderForDataTable1.append("MAX_LOOKBACK_AGE="+((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000));
         tableDDLOptions = optionBuilderForDataTable1.toString();
         createTable(dataTableName1);
         StringBuilder optionBuilderForDataTable2 = new StringBuilder(optionBuilder);
-        optionBuilderForDataTable2.append("MAX_LOOKBACK_AGE="+ TABLE_LEVEL_MAX_LOOKBACK_AGE);
+        optionBuilderForDataTable2.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
         String dataTableName2 = generateUniqueName();
         tableDDLOptions = optionBuilderForDataTable2.toString();
         createTable(dataTableName2);
-        Assert.assertEquals(new Integer(TABLE_LEVEL_MAX_LOOKBACK_AGE + 3),
+        Assert.assertEquals(new Long((TABLE_LEVEL_MAX_LOOKBACK_AGE + 3) * 1000),
                 queryTableLevelMaxLookbackAge(dataTableName1));
-        Assert.assertEquals(new Integer(TABLE_LEVEL_MAX_LOOKBACK_AGE),
+        Assert.assertEquals(new Long(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000),
                 queryTableLevelMaxLookbackAge(dataTableName2));
         injectEdge.setValue(System.currentTimeMillis());
         EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -233,9 +231,9 @@ public class MaxLookbackIT extends BaseTest {
 
     @Test
     public void testRecentlyDeletedRowsNotCompactedAwayWithTableLevelMaxLookback() throws Exception {
-        try(PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
-            optionBuilder.append("MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE);
+            optionBuilder.append("MAX_LOOKBACK_AGE="+(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000));
             tableDDLOptions = optionBuilder.toString();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -268,7 +266,7 @@ public class MaxLookbackIT extends BaseTest {
             majorCompact(dataTable);
             majorCompact(indexTable);
             assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
-            //assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
+            assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             //wait for the lookback time. After this compactions should purge the deleted row
             injectEdge.incrementValue(TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
             long beforeSecondCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
@@ -377,15 +375,14 @@ public class MaxLookbackIT extends BaseTest {
         ttl = 8;
         long maxLookbackAge = 12;
         optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
-                append(maxLookbackAge);
+                append(maxLookbackAge * 1000);
         tableDDLOptions = optionBuilder.toString();
         Configuration conf = getUtility().getConfiguration();
         //disable automatic memstore flushes
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
                 HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
         conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
-        try(PhoenixConnection conn =
-                DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -435,7 +432,7 @@ public class MaxLookbackIT extends BaseTest {
                 injectEdge.incrementValue(timeToAdvance);
             }
             Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() >
-                    afterFirstInsertSCN + ttl * 1000L);
+                    afterFirstInsertSCN + ttl * 1000);
             Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
                     afterFirstInsertSCN + MAX_LOOKBACK_AGE * 1000);
             //make sure that we can compact away the now-expired rows
@@ -456,7 +453,7 @@ public class MaxLookbackIT extends BaseTest {
         ttl = 8;
         long maxLookbackAge = 12;
         optionBuilder.append("TTL=").append(ttl).append(", MAX_LOOKBACK_AGE=").
-                append(maxLookbackAge);
+                append(maxLookbackAge * 1000);
         tableDDLOptions = optionBuilder.toString();
         int delta = 1;
         Configuration conf = getUtility().getConfiguration();
@@ -464,8 +461,7 @@ public class MaxLookbackIT extends BaseTest {
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
                 HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
         conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
-        try(PhoenixConnection conn =
-                DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -483,7 +479,7 @@ public class MaxLookbackIT extends BaseTest {
             int expectedNumRows = 2;
             assertRawRowCount(conn, dataTable, expectedNumRows);
             assertRawRowCount(conn, indexTable, expectedNumRows);
-            injectEdge.incrementValue(ttl * 1000L);
+            injectEdge.incrementValue(ttl * 1000);
             Assert.assertTrue(EnvironmentEdgeManager.currentTimeMillis() <
                     afterFirstInsertSCN + maxLookbackAge * 1000);
             flush(dataTable);

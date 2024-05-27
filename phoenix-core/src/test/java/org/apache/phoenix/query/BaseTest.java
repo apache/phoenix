@@ -2155,7 +2155,7 @@ public abstract class BaseTest {
         return false;
     }
 
-    protected Integer queryTableLevelMaxLookbackAge(String fullTableName) throws Exception {
+    protected Long queryTableLevelMaxLookbackAge(String fullTableName) throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
             return pconn.getTableNoCache(fullTableName).getMaxLookbackAge();

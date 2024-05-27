@@ -1191,9 +1191,9 @@ public class MetaDataUtil {
      * @return Input max lookback age, if not null. If null, fallback to cluster level
      * max lookback age. Will always return non-null long value.
      */
-    public static int getMaxLookbackAge(Configuration conf, Integer maxLookbackAge) {
+    public static long getMaxLookbackAge(Configuration conf, Long maxLookbackAge) {
         Preconditions.checkNotNull(conf);
         return maxLookbackAge != null ? maxLookbackAge :
-                BaseScannerRegionObserverConstants.getMaxLookbackAge(conf);
+                BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
     }
 }

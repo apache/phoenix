@@ -1638,7 +1638,7 @@ public class ScanUtil {
         return null;
     }
 
-    public static void setScanAttributeForMaxLookbackAge(Scan scan, Integer maxLookbackAge) {
+    public static void setScanAttributeForMaxLookbackAge(Scan scan, Long maxLookbackAge) {
         Preconditions.checkNotNull(scan);
         if (maxLookbackAge != null) {
             scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
@@ -1646,10 +1646,10 @@ public class ScanUtil {
         }
     }
 
-    public static Integer getMaxLookbackAgeFromScanAttribute(Scan scan) {
+    public static Long getMaxLookbackAgeFromScanAttribute(Scan scan) {
         Preconditions.checkNotNull(scan);
         byte[] maxLookbackAge = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
-        return maxLookbackAge != null ? Bytes.toInt(maxLookbackAge) : null;
+        return maxLookbackAge != null ? Bytes.toLong(maxLookbackAge) : null;
     }
 
     /**

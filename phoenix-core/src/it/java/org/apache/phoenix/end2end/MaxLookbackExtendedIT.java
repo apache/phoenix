@@ -426,7 +426,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             assertExplainPlan(conn, indexSql, dataTableName, indexName);
-            long timeToAdvance = (MAX_LOOKBACK_AGE * 1000) -
+            long timeToAdvance = (MAX_LOOKBACK_AGE * 1000L) -
                 (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
             if (timeToAdvance > 0) {
                 injectEdge.incrementValue(timeToAdvance);
@@ -441,7 +441,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             //now wait the TTL
-            timeToAdvance = (ttl * 1000) -
+            timeToAdvance = (ttl * 1000L) -
                 (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
             if (timeToAdvance > 0) {
                 injectEdge.incrementValue(timeToAdvance);
@@ -459,7 +459,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             Assert.assertEquals(0, rs.getInt(1));
             // Increment the time by max lookback age and make sure that we can compact away
             // the now-expired rows
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000L);
             majorCompact(dataTable);
             majorCompact(indexTable);
             assertRawRowCount(conn, dataTable, 0);

@@ -2119,7 +2119,7 @@ public class MetaDataClient {
 
             String schemaVersion = (String) TableProperty.SCHEMA_VERSION.getValue(tableProps);
             String streamingTopicName = (String) TableProperty.STREAMING_TOPIC_NAME.getValue(tableProps);
-            Integer maxLookbackAge = (Integer) TableProperty.MAX_LOOKBACK_AGE.getValue(tableProps);
+            Long maxLookbackAge = (Long) TableProperty.MAX_LOOKBACK_AGE.getValue(tableProps);
 
             if (maxLookbackAge != null && tableType != TABLE) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.

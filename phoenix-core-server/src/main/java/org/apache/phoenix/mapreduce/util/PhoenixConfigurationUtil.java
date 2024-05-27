@@ -922,16 +922,16 @@ public final class PhoenixConfigurationUtil {
             DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER);
     }
 
-    public static void setMaxLookbackAge(Configuration configuration, Integer maxLookbackAge) {
+    public static void setMaxLookbackAge(Configuration configuration, Long maxLookbackAge) {
         Preconditions.checkNotNull(configuration);
         if (maxLookbackAge != null) {
-            configuration.setInt(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE, maxLookbackAge);
+            configuration.setLong(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE, maxLookbackAge);
         }
     }
 
-    public static Integer getMaxLookbackAge(Configuration configuration) {
+    public static Long getMaxLookbackAge(Configuration configuration) {
         Preconditions.checkNotNull(configuration);
         String maxLookbackAgeStr = configuration.get(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
-        return maxLookbackAgeStr != null ? Integer.valueOf(maxLookbackAgeStr) : null;
+        return maxLookbackAgeStr != null ? Long.valueOf(maxLookbackAgeStr) : null;
     }
 }

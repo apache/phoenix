@@ -649,23 +649,17 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                 MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
                         tableName.getNameAsString();
                 PTable table = null;
-                Integer maxLookbackAge = null;
+                Long maxLookbackAge = null;
                 try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                         compactionConfig).unwrap(PhoenixConnection.class)) {
                     table = conn.getTableNoCache(fullTableName);
                     maxLookbackAge = table.getMaxLookbackAge();
-                    if (table.getType() == PTableType.INDEX) {
-                        // TODO: We should not need to get max lookback from the data table
-                        String dataTableName = table.getParentName().getString();
-                        PTable dataTable = conn.getTableNoCache(dataTableName);
-                        maxLookbackAge = dataTable.getMaxLookbackAge();
-                    }
                     UngroupedAggregateRegionObserver.setMaxLookbackInMillis(
                             tableName.getNameAsString(),
                             store.getColumnFamilyName(),
                             (long) MetaDataUtil.getMaxLookbackAge(
                                     c.getEnvironment().getConfiguration(),
-                                    maxLookbackAge) * 1000);
+                                    maxLookbackAge) * 1000L);
                 } catch (Exception e) {
                     if (e instanceof TableNotFoundException) {
                         LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "

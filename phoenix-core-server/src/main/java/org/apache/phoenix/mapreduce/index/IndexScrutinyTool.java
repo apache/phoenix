@@ -514,13 +514,13 @@ public class IndexScrutinyTool extends Configured implements Tool {
         }
     }
 
-    private void validateTimestamp(Configuration configuration, long ts, Integer dataTableMaxLookback) {
-        int maxLookBackAge = MetaDataUtil.getMaxLookbackAge(configuration, dataTableMaxLookback);
-        if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE) {
-            long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge * 1000;
+    private void validateTimestamp(Configuration configuration, long ts, Long dataTableMaxLookback) {
+        long maxLookBackAge = MetaDataUtil.getMaxLookbackAge(configuration, dataTableMaxLookback);
+        if (maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L) {
+            long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
             if (ts < minTimestamp){
                 throw new IllegalArgumentException("Index scrutiny can't look back past the configured" +
-                    " max lookback age: " + maxLookBackAge + " seconds");
+                    " max lookback age: " + maxLookBackAge / 1000 + " seconds");
             }
         }
     }

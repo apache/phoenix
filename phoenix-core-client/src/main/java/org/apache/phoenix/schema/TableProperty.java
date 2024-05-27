@@ -346,7 +346,7 @@ public enum TableProperty {
                 return null;
             }
             else if (value instanceof Integer) {
-                return Integer.valueOf((Integer) value);
+                return Long.valueOf((Integer) value);
             }
             else if (value instanceof Long) {
                 return value;

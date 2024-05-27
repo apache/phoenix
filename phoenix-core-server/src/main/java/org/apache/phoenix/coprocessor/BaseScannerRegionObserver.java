@@ -20,8 +20,6 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -359,7 +357,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 dataRegion, indexMaintainer, null, viewConstants, null, null, projector, ptr, useQualiferAsListIndex);
     }
 
-    public void setScanOptionsForFlushesAndCompactions(Store store, ScanOptions options) {
+    public void setScanOptionsForFlushesAndCompactions(ScanOptions options) {
         // We want the store to give us all the deleted cells to StoreCompactionScanner
         options.setKeepDeletedCells(KeepDeletedCells.TTL);
         options.setTTL(HConstants.FOREVER);
@@ -373,7 +371,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             CompactionRequest request) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(store, options);
+            setScanOptionsForFlushesAndCompactions(options);
             return;
         }
         long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
@@ -389,7 +387,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         Configuration conf = c.getEnvironment().getConfiguration();
 
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(store, options);
+            setScanOptionsForFlushesAndCompactions(options);
             return;
         }
 
@@ -406,7 +404,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(store, options);
+            setScanOptionsForFlushesAndCompactions(options);
             return;
         }
         long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
@@ -433,7 +431,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
 
         Configuration conf = c.getEnvironment().getConfiguration();
         if (isPhoenixTableTTLEnabled(conf)) {
-            setScanOptionsForFlushesAndCompactions(store, options);
+            setScanOptionsForFlushesAndCompactions(options);
             return;
         }
         if (!storeFileScanDoesntNeedAlteration(options)) {
@@ -541,7 +539,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    private static int getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
+    private static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
         String fullTableName = tableName.getNameAsString();
         Configuration conf = c.getEnvironment().getConfiguration();
