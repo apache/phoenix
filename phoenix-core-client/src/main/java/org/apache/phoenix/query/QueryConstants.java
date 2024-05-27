@@ -373,7 +373,7 @@ public interface QueryConstants {
             EXTERNAL_SCHEMA_ID + " VARCHAR, \n" +
             STREAMING_TOPIC_NAME + " VARCHAR, \n" +
             INDEX_WHERE + " VARCHAR, \n" +
-            MAX_LOOKBACK_AGE + " BIGINT, \n" +
+            MAX_LOOKBACK_AGE + " INTEGER, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

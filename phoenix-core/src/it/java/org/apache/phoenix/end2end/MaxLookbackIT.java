@@ -263,10 +263,7 @@ public class MaxLookbackIT extends BaseTest {
             flush(dataTable);
             flush(indexTable);
             assertRowExistsAtSCN(getUrl(), sql, beforeDeleteSCN, true);
-            // TODO Index does not inherit max lookback
-            PTable index = conn.getTable(indexName);
-            System.out.println("Index table max lookback age: " + index.getMaxLookbackAge());
-            //assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
+            assertRowExistsAtSCN(getUrl(), indexSql, beforeDeleteSCN, true);
             injectEdge.incrementValue(1); //new ts for major compaction
             majorCompact(dataTable);
             majorCompact(indexTable);
@@ -282,7 +279,7 @@ public class MaxLookbackIT extends BaseTest {
             assertRowExistsAtSCN(getUrl(), notDeletedRowSql, beforeSecondCompactSCN, true);
             assertRowExistsAtSCN(getUrl(), notDeletedIndexRowSql, beforeSecondCompactSCN, true);
             assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
-            //assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
+            assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('c', 'cd', 'cde', 'cdef')");
             conn.commit();
@@ -387,7 +384,8 @@ public class MaxLookbackIT extends BaseTest {
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
                 HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
         conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
-        try(PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try(PhoenixConnection conn =
+                DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -429,10 +427,7 @@ public class MaxLookbackIT extends BaseTest {
             majorCompact(indexTable);
             //nothing should have been purged by this major compaction
             assertRawRowCount(conn, dataTable, originalRowCount);
-            // TODO Index does not inherit max lookback
-            PTable index = conn.getTable(indexName);
-            System.out.println("Index table max lookback age: " + index.getMaxLookbackAge());
-            //assertRawRowCount(conn, indexTable, originalRowCount);
+            assertRawRowCount(conn, indexTable, originalRowCount);
             //now wait till max lookback as max lookback is greater than TTL
             timeToAdvance = (maxLookbackAge * 1000) -
                     (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
@@ -469,7 +464,8 @@ public class MaxLookbackIT extends BaseTest {
         long oldMemstoreFlushInterval = conf.getLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL,
                 HRegion.DEFAULT_CACHE_FLUSH_INTERVAL);
         conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, 0L);
-        try(PhoenixConnection conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
+        try(PhoenixConnection conn =
+                DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
             String dataTableName = generateUniqueName();
             String indexName = generateUniqueName();
             createTable(dataTableName);
@@ -493,10 +489,7 @@ public class MaxLookbackIT extends BaseTest {
             flush(dataTable);
             flush(indexTable);
             assertRawRowCount(conn, dataTable, expectedNumRows);
-            // TODO Index does not inherit max lookback
-            PTable index = conn.getTable(indexName);
-            System.out.println("Index table max lookback age: " + index.getMaxLookbackAge());
-            //assertRawRowCount(conn, indexTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
             injectEdge.incrementValue(delta);
             conn.createStatement().execute("upsert into " + dataTableName +
                     " values ('c', 'cd', 'cde', 'cdef')");
@@ -507,13 +500,13 @@ public class MaxLookbackIT extends BaseTest {
             expectedNumRows += 2;
             injectEdge.incrementValue(delta);
             assertRawRowCount(conn, dataTable, expectedNumRows);
-            //assertRawRowCount(conn, indexTable, expectedNumRows);
+            assertRawRowCount(conn, indexTable, expectedNumRows);
             injectEdge.incrementValue(maxLookbackAge * 1000);
             flush(dataTable);
             flush(indexTable);
             // Recent two rows expired so, they won't be flushed
             assertRawRowCount(conn, dataTable, expectedNumRows - 2);
-            //assertRawRowCount(conn, indexTable, expectedNumRows - 2);
+            assertRawRowCount(conn, indexTable, expectedNumRows - 2);
         }
         finally {
             conf.setLong(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, oldMemstoreFlushInterval);

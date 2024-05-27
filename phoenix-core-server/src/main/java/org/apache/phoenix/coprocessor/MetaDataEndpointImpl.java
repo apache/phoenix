@@ -1445,7 +1445,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         Cell maxLookbackAgeKv = tableKeyValues[MAX_LOOKBACK_AGE_INDEX];
         Integer maxLookbackAge = maxLookbackAgeKv == null ? null :
-                PLong.INSTANCE.getCodec().decodeInt(maxLookbackAgeKv.getValueArray(),
+                PInteger.INSTANCE.getCodec().decodeInt(maxLookbackAgeKv.getValueArray(),
                         maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
         if (tableType == PTableType.VIEW) {
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
