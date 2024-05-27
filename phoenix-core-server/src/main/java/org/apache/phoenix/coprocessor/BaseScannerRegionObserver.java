@@ -374,7 +374,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
+        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
                     scanType, maxLookbackAgeInMillis);
@@ -391,7 +391,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             return;
         }
 
-        long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
+        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
                     ScanType.COMPACT_RETAIN_DELETES, maxLookbackAgeInMillis);
