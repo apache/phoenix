@@ -53,6 +53,7 @@ import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
@@ -70,6 +71,9 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.hbase.index.AbstractValueGetter;
+import org.apache.phoenix.hbase.index.ValueGetter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -114,6 +118,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext.PhoenixVisibilit
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
@@ -602,6 +607,61 @@ public class MutationState implements SQLCloseable {
         return ptr;
     }
 
+    private List<Mutation> getCDCDeleteMutations(PTable table, PTable index,
+                                                 Long mutationTimestamp,
+                                                 List<Mutation> mutationList) throws
+            SQLException {
+        final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+        IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+        List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(mutationList.size());
+        for (final Mutation mutation : mutationList) {
+            // Only generate extra row mutations for DELETE
+            if (mutation instanceof Delete) {
+                ptr.set(mutation.getRow());
+                ValueGetter getter = new AbstractValueGetter() {
+                    @Override
+                    public byte[] getRowKey() {
+                        return mutation.getRow();
+                    }
+                    @Override
+                    public ImmutableBytesWritable getLatestValue(ColumnReference ref, long ts) {
+                        // Always return null for our empty key value, as this will cause the index
+                        // maintainer to always treat this Put as a new row.
+                        if (IndexUtil.isEmptyKeyValue(table, ref)) {
+                            return null;
+                        }
+                        byte[] family = ref.getFamily();
+                        byte[] qualifier = ref.getQualifier();
+                        Map<byte[], List<Cell>> familyMap = mutation.getFamilyCellMap();
+                        List<Cell> kvs = familyMap.get(family);
+                        if (kvs == null) {
+                            return null;
+                        }
+                        for (Cell kv : kvs) {
+                            if (Bytes.compareTo(kv.getFamilyArray(), kv.getFamilyOffset(),
+                                    kv.getFamilyLength(), family, 0, family.length) == 0
+                                    && Bytes.compareTo(kv.getQualifierArray(),
+                                    kv.getQualifierOffset(), kv.getQualifierLength(),
+                                    qualifier, 0, qualifier.length) == 0) {
+                                ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+                                connection.getKeyValueBuilder().getValueAsPtr(kv, ptr);
+                                return ptr;
+                            }
+                        }
+                        return null;
+                    }
+                };
+                ImmutableBytesPtr key = new ImmutableBytesPtr(maintainer.buildRowKey(
+                        getter, ptr, null, null, mutationTimestamp));
+                PRow row = table.newRow(
+                        connection.getKeyValueBuilder(), mutationTimestamp, key, false);
+                row.delete();
+                indexMutations.addAll(row.toRowMutations());
+            }
+        }
+        return indexMutations;
+    }
+
     private Iterator<Pair<PTable, List<Mutation>>> addRowMutations(final TableRef tableRef,
             final MultiRowMutationState values, final long mutationTimestamp, final long serverTimestamp,
             boolean includeAllIndexes, final boolean sendAll) {
@@ -635,6 +695,7 @@ public class MutationState implements SQLCloseable {
 
                 List<Mutation> indexMutations = null;
                 try {
+
                     if (!mutationsPertainingToIndex.isEmpty()) {
                         if (table.isTransactional()) {
                             if (indexMutationsMap == null) {
@@ -678,6 +739,19 @@ public class MutationState implements SQLCloseable {
                             }
                         }
                     }
+
+                    if (CDCUtil.isCDCIndex(index)) {
+                        List<Mutation> cdcMutations = getCDCDeleteMutations(
+                                table, index, mutationTimestamp, mutationList);
+                        if (cdcMutations.size() > 0) {
+                            if (indexMutations == null) {
+                                indexMutations = cdcMutations;
+                            } else {
+                                indexMutations.addAll(cdcMutations);
+                            }
+                        }
+                    }
+
                 } catch (SQLException | IOException e) {
                     throw new IllegalDataException(e);
                 }

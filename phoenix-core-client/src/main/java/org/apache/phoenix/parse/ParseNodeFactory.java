@@ -25,8 +25,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.hbase.CompareOperator;
@@ -374,6 +376,14 @@ public class ParseNodeFactory {
                 props, ifNotExists, indexType, async, bindCount, udfParseNodes, where);
     }
 
+    public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
+                                        Set<PTable.CDCChangeScope> includeScopes,
+                                        ListMultimap<String, Pair<String, Object>> props,
+                                        boolean ifNotExists, int bindCount) {
+        return new CreateCDCStatement(cdcObj, dataTable, includeScopes,
+                props, ifNotExists, bindCount);
+    }
+
     public CreateSequenceStatement createSequence(TableName tableName, ParseNode startsWith,
             ParseNode incrementBy, ParseNode cacheSize, ParseNode minValue, ParseNode maxValue,
             boolean cycle, boolean ifNotExits, int bindCount) {
@@ -429,12 +439,24 @@ public class ParseNodeFactory {
         return new DropIndexStatement(indexName, tableName, ifExists);
     }
 
+    public DropCDCStatement dropCDC(NamedNode cdcObjName, TableName tableName, boolean ifExists) {
+        return new DropCDCStatement(cdcObjName, tableName, ifExists);
+    }
+
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async, ListMultimap<String,Pair<String,Object>> props) {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
     }
 
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state) {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false, false);
+    }
+
+    public AlterCDCStatement alterCDC(NamedTableNode cdcTableNode, String dataTableName, boolean ifExist) {
+        return new AlterCDCStatement(cdcTableNode, dataTableName, ifExist);
+    }
+
+    public AlterCDCStatement alterCDC(NamedTableNode cdcTableNode, String dataTableName, boolean ifExist, ListMultimap<String,Pair<String,Object>> props) {
+        return new AlterCDCStatement(cdcTableNode, dataTableName, ifExist, props);
     }
 
     public TraceStatement trace(boolean isTraceOn, double samplingRate) {
@@ -450,6 +472,10 @@ public class ParseNodeFactory {
     }
 
     public NamedNode indexName(String name) {
+        return new NamedNode(name);
+    }
+
+    public NamedNode cdcName(String name) {
         return new NamedNode(name);
     }
 

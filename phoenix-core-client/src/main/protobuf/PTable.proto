@@ -30,6 +30,7 @@ enum PTableType {
   VIEW = 2;
   INDEX = 3;
   JOIN = 4;
+  CDC = 5;
 }
 
 message PColumn {
@@ -119,6 +120,7 @@ message PTable {
   optional bytes streamingTopicName=52;
   optional bytes indexWhere=53;
   optional int64 maxLookbackAge = 54;
+  optional string CDCIncludeScopes=55;
 }
 
 message EncodedCQCounter {

@@ -360,6 +360,14 @@ public enum TableProperty {
         public Object getPTableValue(PTable table) {
             return table.getMaxLookbackAge();
         }
+    },
+
+    INCLUDE(PhoenixDatabaseMetaData.CDC_INCLUDE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY,
+            true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getCDCIncludeScopes();
+        }
     };
 
     private final String propertyName;

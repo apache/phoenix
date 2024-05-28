@@ -19,9 +19,11 @@
 package org.apache.phoenix.iterate;
 
 import static org.apache.phoenix.coprocessorclient.ScanRegionObserverConstants.WILDCARD_SCAN_INCLUDES_DYNAMIC_COLUMNS;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.phoenix.coprocessor.CDCGlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.UncoveredGlobalIndexRegionScanner;
 import org.apache.phoenix.coprocessor.UncoveredLocalIndexRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -193,9 +195,15 @@ public abstract class RegionScannerFactory {
                             dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
                             pageSizeMs, offset, actualStartKey, extraLimit);
                   } else {
-                    s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
-                            dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
-                            pageSizeMs, extraLimit);
+                      if (scan.getAttribute(CDC_DATA_TABLE_DEF) != null) {
+                          s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                                  pageSizeMs, extraLimit);
+                      } else {
+                          s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
+                                  dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr,
+                                  pageSizeMs, extraLimit);
+                      }
                   }
               }
           }

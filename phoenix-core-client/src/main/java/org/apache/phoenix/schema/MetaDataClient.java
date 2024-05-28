@@ -19,6 +19,17 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
+import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
+import static org.apache.phoenix.schema.PTableType.CDC;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
+import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
+import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -77,14 +88,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM;
@@ -100,17 +109,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
-import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
-import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSet;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newLinkedHashSetWithExpectedSize;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.INDEX_NAME;
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.REBUILD_ALL;
-import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
-import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILURES;
 import static org.apache.phoenix.query.QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
@@ -159,6 +162,9 @@ import java.util.HashSet;
 import java.util.Objects;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
+import org.apache.phoenix.parse.CreateCDCStatement;
+import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
@@ -199,6 +205,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol.SharedTableState;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
@@ -356,9 +363,10 @@ public class MetaDataClient {
                     SCHEMA_VERSION + "," +
                     STREAMING_TOPIC_NAME + "," +
                     INDEX_WHERE + "," +
-                    MAX_LOOKBACK_AGE +
+                    MAX_LOOKBACK_AGE + "," +
+                    CDC_INCLUDE_TABLE +
                     ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, " +
-                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE
             + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -1028,7 +1036,9 @@ public class MetaDataClient {
                         true, NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
             }
         }
-        table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null, null, tableProps, commonFamilyProps);
+        table = createTableInternal(statement, splits, parent, viewStatement, viewType,
+                viewIndexIdType, viewColumnConstants, isViewColumnReferenced, false, null,
+                null, null, tableProps, commonFamilyProps);
 
         if (table == null || table.getType() == PTableType.VIEW
                 || statement.isNoVerify() /*|| table.isTransactional()*/) {
@@ -1186,9 +1196,10 @@ public class MetaDataClient {
                 + " IS NULL AND " + LAST_STATS_UPDATE_TIME + " IS NOT NULL";
             try (PreparedStatement selectStatsStmt = connection.prepareStatement(query)) {
                 selectStatsStmt.setString(1, physicalName.getString());
-                ResultSet rs = selectStatsStmt.executeQuery(query);
-                if (rs.next()) {
-                    msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                try (ResultSet rs = selectStatsStmt.executeQuery(query)) {
+                    if (rs.next()) {
+                        msSinceLastUpdate = rs.getLong(1) - rs.getLong(2);
+                    }
                 }
             }
         }
@@ -1690,7 +1701,7 @@ public class MetaDataClient {
                     statement.getWhere(), statement.getBindCount(), null);
             table = createTableInternal(tableStatement, splits, dataTable, null, null,
                     getViewIndexDataType() ,null, null, allocateIndexId,
-                    statement.getIndexType(), asyncCreatedDate, tableProps, commonFamilyProps);
+                    statement.getIndexType(), asyncCreatedDate, null, tableProps, commonFamilyProps);
         }
         finally {
             deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
@@ -1720,6 +1731,80 @@ public class MetaDataClient {
         }
 
         return buildIndex(table, tableRef);
+    }
+
+    public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
+        ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
+        TableRef tableRef = resolver.getTables().get(0);
+        PTable dataTable = tableRef.getTable();
+
+        Map<String, Object> tableProps = Maps.newHashMapWithExpectedSize(
+                statement.getProps().size());
+        Map<String, Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
+                statement.getProps().size() + 1);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
+
+        PhoenixStatement pstmt = new PhoenixStatement(connection);
+        String dataTableFullName = SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
+                statement.getDataTable().getTableName());
+        String createIndexSql = "CREATE UNCOVERED INDEX " +
+                (statement.isIfNotExists() ? "IF NOT EXISTS " : "") +
+                "\"" + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName()) + "\"" +
+                " ON " + dataTableFullName + " (" + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
+        List<String> indexProps = new ArrayList<>();
+        Object saltBucketNum = TableProperty.SALT_BUCKETS.getValue(tableProps);
+        if (saltBucketNum != null) {
+            indexProps.add("SALT_BUCKETS=" + saltBucketNum);
+        }
+        Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+        if (columnEncodedBytes != null) {
+            indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
+        }
+        createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
+        try {
+            pstmt.execute(createIndexSql);
+        } catch (SQLException e) {
+            if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
+                throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
+                        statement.getCdcObjName().getName()).setRootCause(
+                                e).build().buildException();
+            }
+            throw e;
+        }
+
+        List<PColumn> pkColumns = dataTable.getPKColumns();
+        List<ColumnDef> columnDefs = new ArrayList<>();
+        List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
+        int pkOffset = dataTable.getBucketNum() != null ? 1 : 0;
+        for (int i = pkOffset; i < pkColumns.size(); ++i) {
+            PColumn pcol = pkColumns.get(i);
+            columnDefs.add(FACTORY.columnDef(FACTORY.columnName(pcol.getName().getString()),
+                    pcol.getDataType().getSqlTypeName(), false, null, false, pcol.getMaxLength(),
+                    pcol.getScale(), false, pcol.getSortOrder(), "", null, false));
+            pkColumnDefs.add(FACTORY.columnDefInPkConstraint(FACTORY.columnName(
+                    pcol.getName().getString()), pcol.getSortOrder(), pcol.isRowTimestamp()));
+        }
+        columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME),
+                PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null,
+                null, false, SortOrder.getDefault(), "", null, false));
+        tableProps = new HashMap<>();
+        if (dataTable.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+            // CDC table doesn't need SINGLE_CELL_ARRAY_WITH_OFFSETS encoding, so override it.
+            tableProps.put(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName(),
+                    ONE_CELL_PER_COLUMN.name());
+        }
+        if (dataTable.isMultiTenant()) {
+            tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
+        }
+        CreateTableStatement tableStatement = FACTORY.createTable(
+                FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),
+                null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
+                Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
+                statement.getBindCount(), null);
+        createTableInternal(tableStatement, null, dataTable, null, null, null,
+                null, null, false, null,
+                null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
+        return new MutationState(0, 0, connection);
     }
 
     /**
@@ -1944,7 +2029,7 @@ public class MetaDataClient {
         }
         return false;
     }
-    
+
     /**
      * While adding or dropping columns we write a cell to the SYSTEM.MUTEX table with the rowkey of the
      * physical table to prevent conflicting concurrent modifications. For eg two client adding a column
@@ -2016,11 +2101,12 @@ public class MetaDataClient {
     }
 
     private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
-            final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
-            final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
-            IndexType indexType, Date asyncCreatedDate,
-            Map<String,Object> tableProps,
-            Map<String,Object> commonFamilyProps) throws SQLException {
+                                       final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
+                                       final byte[][] viewColumnConstants, final BitSet isViewColumnReferenced, boolean allocateIndexId,
+                                       IndexType indexType, Date asyncCreatedDate,
+                                       Set<PTable.CDCChangeScope> cdcIncludeScopes,
+                                       Map<String, Object> tableProps,
+                                       Map<String, Object> commonFamilyProps) throws SQLException {
         final PTableType tableType = statement.getTableType();
         boolean wasAutoCommit = connection.getAutoCommit();
         TableName tableNameNode = null;
@@ -2129,6 +2215,8 @@ public class MetaDataClient {
                         .build()
                         .buildException();
             }
+            String cdcIncludeScopesStr = cdcIncludeScopes == null ? null :
+                    CDCUtil.makeChangeScopeStringFromEnums(cdcIncludeScopes);
 
             if (parent != null && tableType == PTableType.INDEX) {
                 timestamp = TransactionUtil.getTableTimestamp(connection, transactionProvider != null, transactionProvider);
@@ -2168,37 +2256,40 @@ public class MetaDataClient {
                 storeNulls = parent.getStoreNulls();
                 parentTableName = parent.getTableName().getString();
                 // Pass through data table sequence number so we can check it hasn't changed
-                PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                incrementStatement.setString(1, tenantIdStr);
-                incrementStatement.setString(2, schemaName);
-                incrementStatement.setString(3, parentTableName);
-                incrementStatement.setLong(4, parent.getSequenceNumber());
-                incrementStatement.execute();
-                // Get list of mutations and add to table meta data that will be passed to server
-                // to guarantee order. This row will always end up last
-                tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
-                connection.rollback();
+                try (PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM)) {
+                    incrementStatement.setString(1, tenantIdStr);
+                    incrementStatement.setString(2, schemaName);
+                    incrementStatement.setString(3, parentTableName);
+                    incrementStatement.setLong(4, parent.getSequenceNumber());
+                    incrementStatement.execute();
+                    // Get list of mutations and add to table meta data that will be passed to server
+                    // to guarantee order. This row will always end up last
+                    tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+                    connection.rollback();
+                }
 
                 // Add row linking from data table row to index table row
-                PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                linkStatement.setString(1, tenantIdStr);
-                linkStatement.setString(2, schemaName);
-                linkStatement.setString(3, parentTableName);
-                linkStatement.setString(4, tableName);
-                linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
-                linkStatement.setLong(6, parent.getSequenceNumber());
-                linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
-                linkStatement.execute();
+                try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK)) {
+                    linkStatement.setString(1, tenantIdStr);
+                    linkStatement.setString(2, schemaName);
+                    linkStatement.setString(3, parentTableName);
+                    linkStatement.setString(4, tableName);
+                    linkStatement.setByte(5, LinkType.INDEX_TABLE.getSerializedValue());
+                    linkStatement.setLong(6, parent.getSequenceNumber());
+                    linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
+                    linkStatement.execute();
+                }
 
                 // Add row linking index table to parent table for indexes on views
                 if (parent.getType() == PTableType.VIEW) {
-	                linkStatement = connection.prepareStatement(CREATE_VIEW_INDEX_PARENT_LINK);
-	                linkStatement.setString(1, tenantIdStr);
-	                linkStatement.setString(2, schemaName);
-	                linkStatement.setString(3, tableName);
-	                linkStatement.setString(4, parent.getName().getString());
-	                linkStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
-	                linkStatement.execute();
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_INDEX_PARENT_LINK)) {
+                        linkStatement.setString(1, tenantIdStr);
+                        linkStatement.setString(2, schemaName);
+                        linkStatement.setString(3, tableName);
+                        linkStatement.setString(4, parent.getName().getString());
+                        linkStatement.setByte(5, LinkType.VIEW_INDEX_PARENT_TABLE.getSerializedValue());
+                        linkStatement.execute();
+                    }
                 }
             }
 
@@ -2230,7 +2321,7 @@ public class MetaDataClient {
             }
 
             // Can't set any of these on views or shared indexes on views
-            if (tableType != PTableType.VIEW && !allocateIndexId) {
+            if (tableType != PTableType.VIEW && tableType != PTableType.CDC && !allocateIndexId) {
                 saltBucketNum = (Integer) TableProperty.SALT_BUCKETS.getValue(tableProps);
                 if (saltBucketNum != null) {
                     if (saltBucketNum < 0 || saltBucketNum > SaltingUtil.MAX_BUCKET_NUM) {
@@ -2336,8 +2427,8 @@ public class MetaDataClient {
                 .setSchemaName(schemaName).setTableName(tableName)
                 .build().buildException();
             }
-            if (TableProperty.TTL.getValue(commonFamilyProps) != null 
-                    && transactionProvider != null 
+            if (TableProperty.TTL.getValue(commonFamilyProps) != null
+                    && transactionProvider != null
                     && transactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                 throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
                 .setMessage(transactionProvider.name())
@@ -2467,31 +2558,46 @@ public class MetaDataClient {
                     }
                     pkColumns = newLinkedHashSet(parent.getPKColumns());
 
-                    // Add row linking view to its parent 
-                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK);
-                    linkStatement.setString(1, tenantIdStr);
-                    linkStatement.setString(2, schemaName);
-                    linkStatement.setString(3, tableName);
-                    linkStatement.setString(4, parent.getName().getString());
-                    linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
-                    linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
-                    linkStatement.execute();
+                    // Add row linking view to its parent
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_VIEW_LINK)) {
+                        linkStatement.setString(1, tenantIdStr);
+                        linkStatement.setString(2, schemaName);
+                        linkStatement.setString(3, tableName);
+                        linkStatement.setString(4, parent.getName().getString());
+                        linkStatement.setByte(5, LinkType.PARENT_TABLE.getSerializedValue());
+                        linkStatement.setString(6, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                        linkStatement.execute();
+                    }
                     // Add row linking parent to view
-                    // TODO From 4.16 write the child links to SYSTEM.CHILD_LINK directly 
-                    linkStatement = connection.prepareStatement(CREATE_CHILD_LINK);
-                    linkStatement.setString(1, parent.getTenantId() == null ? null : parent.getTenantId().getString());
-                    linkStatement.setString(2, parent.getSchemaName() == null ? null : parent.getSchemaName().getString());
-                    linkStatement.setString(3, parent.getTableName().getString());
-                    linkStatement.setString(4, tenantIdStr);
-                    linkStatement.setString(5, SchemaUtil.getTableName(schemaName, tableName));
-                    linkStatement.setByte(6, LinkType.CHILD_TABLE.getSerializedValue());
-                    linkStatement.execute();
+                    // TODO From 4.16 write the child links to SYSTEM.CHILD_LINK directly
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_CHILD_LINK)) {
+                        linkStatement.setString(1, parent.getTenantId() == null ? null : parent.getTenantId().getString());
+                        linkStatement.setString(2, parent.getSchemaName() == null ? null : parent.getSchemaName().getString());
+                        linkStatement.setString(3, parent.getTableName().getString());
+                        linkStatement.setString(4, tenantIdStr);
+                        linkStatement.setString(5, SchemaUtil.getTableName(schemaName, tableName));
+                        linkStatement.setByte(6, LinkType.CHILD_TABLE.getSerializedValue());
+                        linkStatement.execute();
+                    }
                 }
             } else {
                 columns = new LinkedHashMap<PColumn,PColumn>(colDefs.size());
                 pkColumns = newLinkedHashSetWithExpectedSize(colDefs.size() + 1); // in case salted
             }
-            
+
+            if (tableType == PTableType.CDC) {
+                if (parent.getType() == VIEW) {
+                    physicalNames = Collections.singletonList(
+                            PNameFactory.newName(MetaDataUtil.getViewIndexPhysicalName(
+                                    parent.getBaseTableLogicalName(), isNamespaceMapped)));
+                }
+                else {
+                    physicalNames = Collections.singletonList(
+                            PNameFactory.newName(SchemaUtil.getTableName(schemaName,
+                                    CDCUtil.getCDCIndexName(tableName))));
+                }
+            }
+
             // Don't add link for mapped view, as it just points back to itself and causes the drop to
             // fail because it looks like there's always a view associated with it.
             if (!physicalNames.isEmpty()) {
@@ -2502,29 +2608,30 @@ public class MetaDataClient {
                     && !physicalNames.get(0).getString().equals(SchemaUtil.getPhysicalHBaseTableName(
                         schemaName, tableName, isNamespaceMapped).getString()))) {
                     // Add row linking from data table row to physical table row
-                    PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK);
-                    for (PName physicalName : physicalNames) {
-                        linkStatement.setString(1, tenantIdStr);
-                        linkStatement.setString(2, schemaName);
-                        linkStatement.setString(3, tableName);
-                        linkStatement.setString(4, physicalName.getString());
-                        linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
-                        if (tableType == PTableType.VIEW) {
-                            if (parent.getType() == PTableType.TABLE) {
-                                linkStatement.setString(4, SchemaUtil.getTableName(parent.getSchemaName().getString(),parent.getTableName().getString()));
+                    try (PreparedStatement linkStatement = connection.prepareStatement(CREATE_LINK)) {
+                        for (PName physicalName : physicalNames) {
+                            linkStatement.setString(1, tenantIdStr);
+                            linkStatement.setString(2, schemaName);
+                            linkStatement.setString(3, tableName);
+                            linkStatement.setString(4, physicalName.getString());
+                            linkStatement.setByte(5, LinkType.PHYSICAL_TABLE.getSerializedValue());
+                            if (tableType == PTableType.VIEW) {
+                                if (parent.getType() == PTableType.TABLE) {
+                                    linkStatement.setString(4, SchemaUtil.getTableName(parent.getSchemaName().getString(), parent.getTableName().getString()));
+                                    linkStatement.setLong(6, parent.getSequenceNumber());
+                                } else { //This is a grandchild view, find the physical base table
+                                    PTable logicalTable = connection.getTable(new PTableKey(null, SchemaUtil.replaceNamespaceSeparator(physicalName)));
+                                    linkStatement.setString(4, SchemaUtil.getTableName(logicalTable.getSchemaName().getString(), logicalTable.getTableName().getString()));
+                                    linkStatement.setLong(6, logicalTable.getSequenceNumber());
+                                }
+                                // Set link to logical name
+                                linkStatement.setString(7, null);
+                            } else {
                                 linkStatement.setLong(6, parent.getSequenceNumber());
-                            } else { //This is a grandchild view, find the physical base table
-                                PTable logicalTable = connection.getTable(new PTableKey(null, SchemaUtil.replaceNamespaceSeparator(physicalName)));
-                                linkStatement.setString(4, SchemaUtil.getTableName(logicalTable.getSchemaName().getString(),logicalTable.getTableName().getString()));
-                                linkStatement.setLong(6, logicalTable.getSequenceNumber());
+                                linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
                             }
-                            // Set link to logical name
-                            linkStatement.setString(7, null);
-                        } else {
-                            linkStatement.setLong(6, parent.getSequenceNumber());
-                            linkStatement.setString(7, PTableType.INDEX.getSerializedValue());
+                            linkStatement.execute();
                         }
-                        linkStatement.execute();
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
                     connection.rollback();
@@ -2551,7 +2658,7 @@ public class MetaDataClient {
                 /*
                  * We can't control what column qualifiers are used in HTable mapped to Phoenix views. So we are not
                  * able to encode column names.
-                 */  
+                 */
                 if (viewType != MAPPED) {
                     /*
                      * For regular phoenix views, use the storage scheme of the physical table since they all share the
@@ -2569,14 +2676,14 @@ public class MetaDataClient {
             // System tables have hard-coded column qualifiers. So we can't use column encoding for them.
             else if (!SchemaUtil.isSystemTable(Bytes.toBytes(SchemaUtil.getTableName(schemaName, tableName)))|| SchemaUtil.isLogTable(schemaName, tableName)) {
                 /*
-                 * Indexes inherit the storage scheme of the parent data tables. Otherwise, we always attempt to 
-                 * create tables with encoded column names. 
-                 * 
-                 * Also of note is the case with shared indexes i.e. local indexes and view indexes. In these cases, 
-                 * column qualifiers for covered columns don't have to be unique because rows of the logical indexes are 
+                 * Indexes inherit the storage scheme of the parent data tables. Otherwise, we always attempt to
+                 * create tables with encoded column names.
+                 *
+                 * Also of note is the case with shared indexes i.e. local indexes and view indexes. In these cases,
+                 * column qualifiers for covered columns don't have to be unique because rows of the logical indexes are
                  * partitioned by the virtue of indexId present in the row key. As such, different shared indexes can use
                  * potentially overlapping column qualifiers.
-                 * 
+                 *
                  */
                 if (parent != null) {
                     Byte encodingSchemeSerializedByte = (Byte) TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
@@ -2610,7 +2717,9 @@ public class MetaDataClient {
                         }
                     }
 
-                    if (parent.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS && immutableStorageScheme == ONE_CELL_PER_COLUMN) {
+                    if (tableType != CDC &&
+                            parent.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS &&
+                            immutableStorageScheme == ONE_CELL_PER_COLUMN) {
                         throw new SQLExceptionInfo.Builder(
                                 SQLExceptionCode.INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE)
                                 .setSchemaName(schemaName).setTableName(tableName).build()
@@ -2824,7 +2933,7 @@ public class MetaDataClient {
                         column.getFamilyName());
                 }
             }
-            
+
             // We need a PK definition for a TABLE or mapped VIEW
             if (!wasPKDefined && pkColumnsNames.isEmpty() && tableType != PTableType.VIEW && viewType != ViewType.MAPPED) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.PRIMARY_KEY_MISSING)
@@ -2916,7 +3025,7 @@ public class MetaDataClient {
                         .build();
                 connection.addTable(table, MetaDataProtocol.MIN_TABLE_TIMESTAMP);
             }
-            
+
             // Update column qualifier counters
             if (EncodedColumnsUtil.usesEncodedColumnNames(encodingScheme)) {
                 // Store the encoded column counter for phoenix entities that have their own hbase
@@ -2940,12 +3049,13 @@ public class MetaDataClient {
                     }
                 }
                 if (tableType == VIEW && !changedCqCounters.isEmpty()) {
-                    PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                    incrementStatement.setString(1, null);
-                    incrementStatement.setString(2, viewPhysicalTable.getSchemaName().getString());
-                    incrementStatement.setString(3, viewPhysicalTable.getTableName().getString());
-                    incrementStatement.setLong(4, viewPhysicalTable.getSequenceNumber() + 1);
-                    incrementStatement.execute();
+                    try (PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM)) {
+                        incrementStatement.setString(1, null);
+                        incrementStatement.setString(2, viewPhysicalTable.getSchemaName().getString());
+                        incrementStatement.setString(3, viewPhysicalTable.getTableName().getString());
+                        incrementStatement.setLong(4, viewPhysicalTable.getSequenceNumber() + 1);
+                        incrementStatement.execute();
+                    }
                 }
                 if (connection.getMutationState().toMutations(timestamp).hasNext()) {
                     tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
@@ -3054,7 +3164,9 @@ public class MetaDataClient {
                     defaultCreateState = PIndexState.BUILDING;
                 }
             }
-            PIndexState indexState = parent == null || tableType == PTableType.VIEW  ? null : defaultCreateState;
+            PIndexState indexState = parent == null ||
+                    (tableType == PTableType.VIEW || tableType == PTableType.CDC) ?
+                    null : defaultCreateState;
             if (indexState == null && tableProps.containsKey(INDEX_STATE)) {
                 indexState = PIndexState.fromSerializedValue(tableProps.get(INDEX_STATE).toString());
             }
@@ -3166,6 +3278,7 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setString(35, streamingTopicName);
             }
+
             if (tableType == INDEX && statement.getWhereClause() != null) {
                 tableUpsert.setString(36, statement.getWhereClause().toString());
             } else {
@@ -3177,23 +3290,32 @@ public class MetaDataClient {
             else {
                 tableUpsert.setLong(37, maxLookbackAge);
             }
+
+            if (cdcIncludeScopesStr == null) {
+                tableUpsert.setNull(38, Types.VARCHAR);
+            } else {
+                tableUpsert.setString(38, cdcIncludeScopesStr);
+            }
+
             tableUpsert.execute();
 
             if (asyncCreatedDate != null) {
-                PreparedStatement setAsync = connection.prepareStatement(SET_ASYNC_CREATED_DATE);
-                setAsync.setString(1, tenantIdStr);
-                setAsync.setString(2, schemaName);
-                setAsync.setString(3, tableName);
-                setAsync.setDate(4, asyncCreatedDate);
-                setAsync.execute();
+                try (PreparedStatement setAsync = connection.prepareStatement(SET_ASYNC_CREATED_DATE)) {
+                    setAsync.setString(1, tenantIdStr);
+                    setAsync.setString(2, schemaName);
+                    setAsync.setString(3, tableName);
+                    setAsync.setDate(4, asyncCreatedDate);
+                    setAsync.execute();
+                }
             } else {
                 Date syncCreatedDate = new Date(EnvironmentEdgeManager.currentTimeMillis());
-                PreparedStatement setSync = connection.prepareStatement(SET_INDEX_SYNC_CREATED_DATE);
-                setSync.setString(1, tenantIdStr);
-                setSync.setString(2, schemaName);
-                setSync.setString(3, tableName);
-                setSync.setDate(4, syncCreatedDate);
-                setSync.execute();
+                try (PreparedStatement setSync = connection.prepareStatement(SET_INDEX_SYNC_CREATED_DATE)) {
+                    setSync.setString(1, tenantIdStr);
+                    setSync.setString(2, schemaName);
+                    setSync.setString(3, tableName);
+                    setSync.setDate(4, syncCreatedDate);
+                    setSync.execute();
+                }
             }
             tableMetaData.addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
             connection.rollback();
@@ -3327,6 +3449,7 @@ public class MetaDataClient {
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
                         .setMaxLookbackAge(maxLookbackAge)
+                        .setCDCIncludeScopes(cdcIncludeScopes)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
                 addTableToCache(result);
@@ -3529,6 +3652,26 @@ public class MetaDataClient {
         String tableName = statement.getIndexName().getName();
         String parentTableName = statement.getTableName().getTableName();
 		return dropTable(schemaName, tableName, parentTableName, PTableType.INDEX, statement.ifExists(), false, false);
+    }
+
+    public MutationState dropCDC(DropCDCStatement statement) throws SQLException {
+        String schemaName = statement.getTableName().getSchemaName();
+        String cdcTableName = statement.getCdcObjName().getName();
+        String parentTableName = statement.getTableName().getTableName();
+        // Dropping the virtual CDC Table
+        dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
+                false, false);
+
+        String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
+        // Dropping the uncovered index associated with the CDC Table
+        try {
+            return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,
+                    statement.ifExists(), false, false);
+        } catch (SQLException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
+                    .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause())
+                    .build().buildException();
+        }
     }
 
     private MutationState dropFunction(String functionName,
@@ -3809,8 +3952,8 @@ public class MetaDataClient {
         // Ordinal position is 1-based and we don't count SALT column in ordinal position
         int totalColumnCount = table.getColumns().size() + (table.getBucketNum() == null ? 0 : -1);
         final long seqNum = table.getSequenceNumber() + 1;
-        PreparedStatement tableUpsert = connection.prepareStatement(MUTATE_TABLE);
         String tenantId = connection.getTenantId() == null ? null : connection.getTenantId().getString();
+        PreparedStatement tableUpsert = connection.prepareStatement(MUTATE_TABLE);
         try {
             tableUpsert.setString(1, tenantId);
             tableUpsert.setString(2, schemaName);
@@ -4304,9 +4447,8 @@ public class MetaDataClient {
                 // Add column metadata afterwards, maintaining the order so columns have more predictable ordinal position
                 tableMetaData.addAll(columnMetaData);
                 if (!changedCqCounters.isEmpty()) {
-                    PreparedStatement linkStatement;
-                        linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER);
-                        for (Entry<String, Integer> entry : changedCqCounters.entrySet()) {    
+                    try (PreparedStatement linkStatement = connection.prepareStatement(UPDATE_ENCODED_COLUMN_COUNTER)) {
+                        for (Entry<String, Integer> entry : changedCqCounters.entrySet()) {
                             linkStatement.setString(1, tenantIdToUse);
                             linkStatement.setString(2, tableForCQCounters.getSchemaName().getString());
                             linkStatement.setString(3, tableForCQCounters.getTableName().getString());
@@ -4314,16 +4456,18 @@ public class MetaDataClient {
                             linkStatement.setInt(5, entry.getValue());
                             linkStatement.execute();
                         }
+                    }
 
                     // When a view adds its own columns, then we need to increase the sequence number of the base table
                     // too since we want clients to get the latest PTable of the base table.
                     if (tableType == VIEW) {
-                        PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM);
-                        incrementStatement.setString(1, null);
-                        incrementStatement.setString(2, tableForCQCounters.getSchemaName().getString());
-                        incrementStatement.setString(3, tableForCQCounters.getTableName().getString());
-                        incrementStatement.setLong(4, tableForCQCounters.getSequenceNumber() + 1);
-                        incrementStatement.execute();
+                        try (PreparedStatement incrementStatement = connection.prepareStatement(INCREMENT_SEQ_NUM)) {
+                            incrementStatement.setString(1, null);
+                            incrementStatement.setString(2, tableForCQCounters.getSchemaName().getString());
+                            incrementStatement.setString(3, tableForCQCounters.getTableName().getString());
+                            incrementStatement.setLong(4, tableForCQCounters.getSequenceNumber() + 1);
+                            incrementStatement.execute();
+                        }
                     }
                     tableMetaData.addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
                     connection.rollback();

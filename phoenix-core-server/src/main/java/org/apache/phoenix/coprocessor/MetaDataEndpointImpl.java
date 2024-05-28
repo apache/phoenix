@@ -87,7 +87,9 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
+import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
@@ -254,6 +256,7 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -369,6 +372,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
     private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
+    private static final Cell CDC_INCLUDE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, CDC_INCLUDE_BYTES);
     private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
 
@@ -414,7 +419,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             EXTERNAL_SCHEMA_ID_KV,
             STREAMING_TOPIC_NAME_KV,
             INDEX_WHERE_KV,
-            MAX_LOOKBACK_AGE_KV
+            MAX_LOOKBACK_AGE_KV,
+            CDC_INCLUDE_KV
     );
 
     static {
@@ -462,6 +468,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
     private static final int STREAMING_TOPIC_NAME_INDEX =
         TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
+    private static final int CDC_INCLUDE_INDEX = TABLE_KV_COLUMNS.indexOf(CDC_INCLUDE_KV);
     private static final int INDEX_WHERE_INDEX =
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
 
@@ -1434,6 +1441,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
             oldTable != null ? oldTable.getStreamingTopicName() : null);
 
+        Cell includeSpecKv = tableKeyValues[CDC_INCLUDE_INDEX];
+        String includeSpec = includeSpecKv != null ?
+                (String) PVarchar.INSTANCE.toObject(includeSpecKv.getValueArray(),
+                        includeSpecKv.getValueOffset(), includeSpecKv.getValueLength())
+                : null;
+        builder.setCDCIncludeScopes(includeSpec != null ?
+                CDCUtil.makeChangeScopeEnumsFromString(includeSpec) :
+                oldTable != null ? oldTable.getCDCIncludeScopes() : null);
+
         Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];
         String indexWhere = indexWhereKv != null
                 ? (String) PVarchar.INSTANCE.toObject(indexWhereKv.getValueArray(),
@@ -1465,8 +1481,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = Lists.newArrayList();
         List<PName> physicalTables = Lists.newArrayList();
-        PName parentTableName = tableType == INDEX ? dataTableName : null;
-        PName parentSchemaName = tableType == INDEX ? schemaName : null;
+        PName parentTableName = tableType == INDEX || tableType == CDC ? dataTableName : null;
+        PName parentSchemaName = tableType == INDEX || tableType == CDC ? schemaName : null;
         PName parentLogicalName = null;
         EncodedCQCounter cqCounter = null;
         if (oldTable != null) {
@@ -3064,7 +3080,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // Add to list of HTables to delete, unless it's a view or its a shared index
             if (tableType == INDEX && table.getViewIndexId() != null) {
                 sharedTablesToDelete.add(new SharedTableState(table));
-            } else if (tableType != PTableType.VIEW) {
+            } else if (tableType != PTableType.VIEW && tableType != PTableType.CDC) {
                 tableNamesToDelete.add(table.getPhysicalName().getBytes());
             }
             invalidateList.add(cacheKey);

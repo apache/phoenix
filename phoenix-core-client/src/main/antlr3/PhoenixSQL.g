@@ -81,6 +81,11 @@ tokens
     IF='if';
     CONSTRAINT='constraint';
     TABLES='tables';
+    CDC='cdc';
+    PRE='pre';
+    POST='post';
+    CHANGE='change';
+    LATEST='latest';
     ALL='all';
     INDEX='index';
     INCLUDE='include';
@@ -188,6 +193,8 @@ import java.lang.Boolean;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Stack;
 import java.sql.SQLException;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
@@ -202,6 +209,7 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTable.CDCChangeScope;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -425,14 +433,17 @@ oneStatement returns [BindableStatement ret]
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
+    |   s=create_cdc_node
     |   s=cursor_open_node
     |   s=cursor_close_node
     |   s=cursor_fetch_node
     |   s=declare_cursor_node
     |   s=drop_table_node
     |   s=drop_index_node
+    |   s=drop_cdc_node
     |   s=alter_index_node
     |   s=alter_table_node
+    |   s=alter_cdc_node
     |   s=show_node
     |   s=show_create_table_node
     |   s=trace_node
@@ -554,6 +565,31 @@ create_index_node returns [CreateIndexStatement ret]
         }
     ;
 
+create_cdc_node returns [CreateCDCStatement ret]
+    :   CREATE CDC (IF NOT ex=EXISTS)? o=cdc_name ON t=from_table_name
+        (INCLUDE LPAREN v=cdc_change_scopes RPAREN)?
+        (p=fam_properties)?
+        {
+            ret = factory.createCDC(o, t, v, p, ex != null, getBindCount());
+        }
+    ;
+
+cdc_name returns [NamedNode ret]
+    :   name=identifier {$ret = factory.cdcName(name); }
+    ;
+
+cdc_change_scopes returns [Set<CDCChangeScope> ret]
+@init { ret = new HashSet<>(); }
+    :   v=cdc_change_scope { $ret.add(v); } ( COMMA v=cdc_change_scope { $ret.add(v); } )*
+    ;
+
+cdc_change_scope returns [CDCChangeScope ret]
+    :   v=(PRE | POST | CHANGE)
+        {
+            ret = CDCChangeScope.valueOf(v.getText().toUpperCase());
+        }
+    ;
+
 // Parse a create sequence statement.
 create_sequence_node returns [CreateSequenceStatement ret]
     :   CREATE SEQUENCE  (IF NOT ex=EXISTS)? t=from_table_name
@@ -653,12 +689,25 @@ drop_index_node returns [DropIndexStatement ret]
       {ret = factory.dropIndex(i, t, ex!=null); }
     ;
 
+// Parse a drop CDC statement
+drop_cdc_node returns [DropCDCStatement ret]
+   : DROP CDC (IF ex=EXISTS)? o=cdc_name ON t=from_table_name
+     {ret = factory.dropCDC(o, t, ex!=null); }
+   ;
+
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
     : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
       ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)?)
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), isRebuildAll!=null, async!=null, p); }
     ;
+
+// Parse a alter CDC statement
+alter_cdc_node returns [AlterCDCStatement ret]
+   : ALTER CDC (IF ex=EXISTS)? o=cdc_name ON t=from_table_name
+     ((SET?) p=fam_properties)?
+     {ret = factory.alterCDC(factory.namedTable(null, TableName.create(t.getSchemaName(), o.getName())), t.getTableName(), ex!=null, p); }
+   ;
 
 // Parse a trace statement.
 trace_node returns [TraceStatement ret]

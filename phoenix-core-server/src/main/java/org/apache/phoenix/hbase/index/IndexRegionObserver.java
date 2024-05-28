@@ -879,6 +879,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
         }
     }
+    public static Mutation getDeleteIndexMutation(Put dataRowState, IndexMaintainer indexMaintainer,
+            long ts, ImmutableBytesPtr rowKeyPtr) {
+        ValueGetter dataRowVG = new IndexUtil.SimpleValueGetter(dataRowState);
+        byte[] indexRowKey = indexMaintainer.buildRowKey(dataRowVG, rowKeyPtr, null, null, ts);
+        return indexMaintainer.buildRowDeleteMutation(indexRowKey,
+                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+    }
 
     /**
      * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
@@ -940,13 +947,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     }
                 } else if (currentDataRowState != null
                         && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
-                    ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
-                    byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
-                            null, null, ts);
-                    Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-                            IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                     context.indexUpdates.put(hTableInterfaceReference,
-                            new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
+                            new Pair<Mutation, byte[]>(getDeleteIndexMutation(currentDataRowState,
+                                    indexMaintainer, ts, rowKeyPtr), rowKeyPtr.get()));
+                    if (indexMaintainer.isCDCIndex()) {
+                        // CDC Index needs two delete markers one for deleting the index row, and
+                        // the other for referencing the data table delete mutation with the
+                        // right index row key, that is, the index row key starting with ts
+                        Put cdcDataRowState = new Put(currentDataRowState.getRow());
+                        cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
+                                indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
+                                ByteUtil.EMPTY_BYTE_ARRAY);
+                        context.indexUpdates.put(hTableInterfaceReference,
+                                new Pair<Mutation, byte[]>(getDeleteIndexMutation(cdcDataRowState,
+                                        indexMaintainer, ts, rowKeyPtr), rowKeyPtr.get()));
+
+                    }
                 }
             }
         }
