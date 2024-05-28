@@ -407,7 +407,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAgeInMillis = (long) getMaxLookbackAge(c) * 1000;
+        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
         if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             MemoryCompactionPolicy inMemPolicy =
                     store.getColumnFamilyDescriptor().getInMemoryCompaction();

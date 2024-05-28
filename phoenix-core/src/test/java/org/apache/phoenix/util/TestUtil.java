@@ -977,7 +977,6 @@ public class TestUtil {
     public static CellCount getCellCount(Table table, boolean isRaw) throws IOException {
         Scan s = new Scan();
         s.setRaw(isRaw);
-        ;
         s.readAllVersions();
 
         CellCount cellCount = new CellCount();
