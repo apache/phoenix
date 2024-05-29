@@ -133,8 +133,8 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
             properties.setProperty(TENANT_ID_ATTRIB, tenantIDStr);
         }
         try (Connection connection = getConnection(properties)) {
-            // Using PhoenixRuntime#getTableNoCache since se don't want to read cached value.
-            table = PhoenixRuntime.getTableNoCache(connection, fullTableNameStr);
+            // Using PhoenixRuntime#getTableFromServerNoCache to completely bypass CQSI cache.
+            table = PhoenixRuntime.getTableFromServerNoCache(connection, schemaName, tableName);
             // TODO PhoenixRuntime#getTableNoCache can throw TableNotFoundException.
             //  In that case, do we want to throw non retryable exception back to the client?
             // Update cache with the latest DDL timestamp from SYSCAT server.

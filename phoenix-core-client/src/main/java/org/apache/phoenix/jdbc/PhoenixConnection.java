@@ -129,6 +129,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap.Builder;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.JDBCUtil;
@@ -724,6 +725,20 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
     @VisibleForTesting
     public PTable getTableNoCache(String name) throws SQLException {
         return getTableNoCache(getTenantId(), name);
+    }
+
+    /**
+     * Returns the most recent PTable fetched from the server without updating the CQSI cache.
+     */
+    public PTable getTableFromServerNoCache(byte[] schemaName, byte[] tableName)
+                    throws SQLException {
+        MetaDataProtocol.MetaDataMutationResult result =
+                getQueryServices().getTable(getTenantId(), schemaName,
+                        tableName, HConstants.LATEST_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
+        if (result.getMutationCode() != MetaDataProtocol.MutationCode.TABLE_ALREADY_EXISTS) {
+            throw new TableNotFoundException(new String(schemaName), new String(tableName));
+        }
+        return result.getTable();
     }
 
     /**
