@@ -115,6 +115,7 @@ public class SchemaUtil {
     private static final int VAR_KV_LENGTH_ESTIMATE = 50;
     public static final String ESCAPE_CHARACTER = "\"";
     public static final DataBlockEncoding DEFAULT_DATA_BLOCK_ENCODING = DataBlockEncoding.FAST_DIFF;
+
     public static final PDatum VAR_BINARY_DATUM = new PDatum() {
     
         @Override
@@ -239,7 +240,7 @@ public class SchemaUtil {
     }
 
     /**
-     * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
+     * Normalizes the fulltableName . Uses {@linkplain #normalizeIdentifier}
      * @param fullTableName
      * @return
      */
@@ -1202,24 +1203,6 @@ public class SchemaUtil {
             return String.format("%s.%s", schemaName, tableName);
         } else {
             return tableName;
-        }
-    }
-
-    /**
-     * Pads the data in ptr by the required amount for fixed width data types
-     */
-    public static void padData(String tableName, PColumn column, ImmutableBytesWritable ptr) {
-        PDataType type = column.getDataType();
-        byte[] byteValue = ptr.get();
-        boolean isNull = type.isNull(byteValue);
-        Integer maxLength = column.getMaxLength();
-        if (!isNull && type.isFixedWidth() && maxLength != null) {
-            if (ptr.getLength() < maxLength) {
-                type.pad(ptr, maxLength, column.getSortOrder());
-            } else if (ptr.getLength() > maxLength) {
-                throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
-                        column.getScale(), column.getName().getString());
-            }
         }
     }
 

@@ -90,6 +90,8 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_FILTER = "_IndexFilter";
     public static final String INDEX_LIMIT = "_IndexLimit";
     public static final String INDEX_FILTER_STR = "_IndexFilterStr";
+    public static final String JSON_VALUE_FUNCTION = "_JsonValueFunction";
+    public static final String JSON_QUERY_FUNCTION = "_JsonQueryFunction";
 
     /*
      * Attribute to denote that the index maintainer has been serialized using its proto-buf presentation.
@@ -135,6 +137,7 @@ public class BaseScannerRegionObserverConstants {
     public static final String EMPTY_COLUMN_QUALIFIER_NAME = "_EmptyCQName";
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
+    public static final String CDC_DATA_TABLE_DEF = "_CdcDataTableDef";
 
     public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
     /**

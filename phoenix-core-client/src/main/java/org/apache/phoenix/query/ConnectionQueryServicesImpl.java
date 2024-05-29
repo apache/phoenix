@@ -95,6 +95,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -766,7 +767,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey,
-        HRegionLocation prevRegionLocation) throws IOException {
+        HRegionLocation prevRegionLocation) {
         // in order to check the overlap/inconsistencies bad region info, we have to make sure
         // the current endKey always increasing(compare the previous endKey)
 
@@ -791,9 +792,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW);
         if (conditionOne || conditionTwo) {
             GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();
-            String regionNameString =
-                new String(regionLocation.getRegion().getRegionName(), StandardCharsets.UTF_8);
-            LOGGER.error(
+            LOGGER.warn(
                 "HBase region overlap/inconsistencies on {} , current key: {} , region startKey:"
                     + " {} , region endKey: {} , prev region startKey: {} , prev region endKey: {}",
                 regionLocation,
@@ -804,17 +803,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getStartKey()),
                 prevRegionLocation == null ?
                     "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getEndKey()));
-            throw new IOException(
-                String.format("HBase region information overlap/inconsistencies on region %s",
-                    regionNameString));
         }
         return regionLocation.getRegion().getEndKey();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
         return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
-            HConstants.EMPTY_END_ROW);
+                HConstants.EMPTY_END_ROW, queryTimeout);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
+                HConstants.EMPTY_END_ROW, queryTimeout);
     }
 
     /**
@@ -822,7 +833,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+                                                 byte[] endRowKey) throws SQLException{
+        int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+        return getTableRegions(tableName, startRowKey, endRowKey, queryTimeout);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(final byte[] tableName, final byte[] startRowKey,
+                                                 final byte[] endRowKey, final int queryTimeout)
+            throws SQLException {
         /*
          * Use HConnection.getRegionLocation as it uses the cache in HConnection, while getting
          * all region locations from the HTable doesn't.
@@ -832,6 +855,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
         byte[] currentKey = null;
+        final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        final long maxQueryEndTime = startTime + queryTimeout;
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
@@ -852,10 +877,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         && Bytes.compareTo(currentKey, endRowKey) >= 0) {
                         break;
                     }
+                    throwErrorIfQueryTimedOut(startRowKey, endRowKey, maxQueryEndTime,
+                            queryTimeout, table, retryCount, currentKey);
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                throw new TableNotFoundException(table.getNameAsString());
+                TableNotFoundException ex = new TableNotFoundException(table.getNameAsString());
+                e.initCause(ex);
+                throw ex;
             } catch (IOException e) {
                 LOGGER.error("Exception encountered in getAllTableRegions for "
                         + "table: {}, retryCount: {} , currentKey: {} , startRowKey: {} ,"
@@ -873,6 +902,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     SQLExceptionCode.GET_TABLE_REGIONS_FAIL).setRootCause(e).build()
                     .buildException();
             }
+        }
+    }
+
+    /**
+     * Throw Error if the metadata lookup takes longer than query timeout configured.
+     *
+     * @param startRowKey Start RowKey to begin the region metadata lookup from.
+     * @param endRowKey End RowKey to end the region metadata lookup at.
+     * @param maxQueryEndTime Max time to execute the metadata lookup.
+     * @param queryTimeout Query timeout.
+     * @param table Table Name.
+     * @param retryCount Retry Count.
+     * @param currentKey Current Key.
+     * @throws SQLException Throw Error if the metadata lookup takes longer than query timeout.
+     */
+    private static void throwErrorIfQueryTimedOut(byte[] startRowKey, byte[] endRowKey,
+                                                  long maxQueryEndTime,
+                                                  int queryTimeout, TableName table, int retryCount,
+                                                  byte[] currentKey) throws SQLException {
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        if (currentTime >= maxQueryEndTime) {
+            LOGGER.error("getTableRegions has exceeded query timeout {} ms."
+                            + "Table: {}, retryCount: {} , currentKey: {} , "
+                            + "startRowKey: {} , endRowKey: {}",
+                    queryTimeout,
+                    table.getNameAsString(),
+                    retryCount,
+                    Bytes.toStringBinary(currentKey),
+                    Bytes.toStringBinary(startRowKey),
+                    Bytes.toStringBinary(endRowKey)
+            );
+            final String message = "getTableRegions has exceeded query timeout " + queryTimeout
+                    + "ms";
+            IOException e = new IOException(message);
+            throw new SQLTimeoutException(message,
+                    SQLExceptionCode.OPERATION_TIMED_OUT.getSQLState(),
+                    SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e);
         }
     }
 
@@ -2246,8 +2312,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 break;
             }
         }
-        if ((tableType == PTableType.VIEW && physicalTableName != null) ||
-                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))) {
+        if ((tableType != PTableType.CDC) && (
+                (tableType == PTableType.VIEW && physicalTableName != null) ||
+                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))
+        )) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
             ensureTableCreated(physicalTableNameBytes, null, tableType, tableProps, families, splits, true,
@@ -4242,32 +4310,39 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0) {
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 6,
                     PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
                     PhoenixDatabaseMetaData.SCHEMA_VERSION + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
                     PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
                     PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
                     PhoenixDatabaseMetaData.INDEX_WHERE + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
-            metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
-                    PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE + " " + PLong.INSTANCE.getSqlTypeName());
+            metaConnection =
+		addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
+                    PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE + " "
+			+ PLong.INSTANCE.getSqlTypeName());
+            metaConnection =
+		addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+		    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
+                    PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " "
+			+ PVarchar.INSTANCE.getSqlTypeName());
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;

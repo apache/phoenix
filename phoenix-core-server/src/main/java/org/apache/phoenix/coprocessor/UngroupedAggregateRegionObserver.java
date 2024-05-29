@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
+import static org.apache.phoenix.util.ScanUtil.adjustScanFilterForGlobalIndexRegionScanner;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -597,7 +597,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     InternalScanner internalScanner = scanner;
                     if (request.isMajor()) {
                         boolean isDisabled = false;
-                        final String fullTableName = tableName.getNameAsString();
+                        boolean isMultiTenantIndexTable = false;
+                        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                            isMultiTenantIndexTable = true;
+                        }
+                        final String fullTableName = isMultiTenantIndexTable ?
+                                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(),
+                                        MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
+                                tableName.getNameAsString();
                         PTable table = null;
                         try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                 compactionConfig).unwrap(PhoenixConnection.class)) {
@@ -716,7 +723,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             rawScan.setRaw(true);
             rawScan.readAllVersions();
             rawScan.getFamilyMap().clear();
-            adjustScanFilter(rawScan);
+            adjustScanFilterForGlobalIndexRegionScanner(rawScan);
             rawScan.setCacheBlocks(false);
             for (byte[] family : scan.getFamilyMap().keySet()) {
                 rawScan.addFamily(family);
@@ -724,7 +731,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
             scanner = ((DelegateRegionScanner)innerScanner).getNewRegionScanner(rawScan);
             innerScanner.close();
         } else {
-            if (adjustScanFilter(scan)) {
+            if (adjustScanFilterForGlobalIndexRegionScanner(scan)) {
                 scanner = ((DelegateRegionScanner) innerScanner).getNewRegionScanner(scan);
                 innerScanner.close();
             } else {

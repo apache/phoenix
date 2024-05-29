@@ -41,9 +41,6 @@ public class SaltingUtil {
     public static final PColumnImpl SALTING_COLUMN = new PColumnImpl(
             PNameFactory.newName(SALTING_COLUMN_NAME), null, PBinary.INSTANCE, 1, 0, false, 0, SortOrder.getDefault(), 0, null, false, null, false, false, null,
         HConstants.LATEST_TIMESTAMP);
-    public static final RowKeySchema VAR_BINARY_SALTED_SCHEMA = new RowKeySchemaBuilder(2)
-        .addField(SALTING_COLUMN, false, SortOrder.getDefault())
-        .addField(SchemaUtil.VAR_BINARY_DATUM, false, SortOrder.getDefault()).build();
 
     public static List<KeyRange> generateAllSaltingRanges(int bucketNum) {
         List<KeyRange> allRanges = Lists.newArrayListWithExpectedSize(bucketNum);

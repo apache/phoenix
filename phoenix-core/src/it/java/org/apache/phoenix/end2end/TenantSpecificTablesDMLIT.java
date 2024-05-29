@@ -27,13 +27,17 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -47,6 +51,60 @@ public class TenantSpecificTablesDMLIT extends BaseTenantSpecificTablesIT {
         ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + TENANT_TABLE_NAME + " LIMIT 100");
 		while(rs.next()) {}
 	}
+
+    @Test
+    public void testPointLookupOnBaseTable() throws Exception {
+        final String tableName = "T_" + generateUniqueName();
+        final String viewName = "V_" + generateUniqueName();
+        final String tenantId = "tenant1";
+        final String kp = "abc";
+        String ddl = String.format("CREATE TABLE %s (ORG_ID CHAR(15) NOT NULL, KP CHAR(3) NOT NULL, V1 INTEGER, V2 VARCHAR," +
+                "CONSTRAINT PK PRIMARY KEY(ORG_ID, KP)) MULTI_TENANT=true", tableName);
+        int nRows = 16;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            conn.createStatement().execute(ddl);
+            Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+            props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            try (Connection tconn = DriverManager.getConnection(getUrl(), props)) {
+                ddl = String.format("CREATE VIEW %s (PK1 VARCHAR PRIMARY KEY, V3 VARCHAR)" +
+                        " AS SELECT * FROM %s WHERE KP='%s'", viewName, tableName, kp);
+                tconn.createStatement().execute(ddl);
+                tconn.commit();
+                // upsert through the tenant
+                try(PreparedStatement ps = tconn.prepareStatement(
+                        String.format("UPSERT INTO %s(V1,V2,PK1,V3) VALUES (?, ?, ?, ?)", viewName))) {
+                    for (int i = 0; i < nRows; i++) {
+                        ps.setInt(1, i); // V1
+                        ps.setString(2, "v2"); // V2
+                        ps.setString(3, "pk_" + i); // PK1
+                        ps.setString(4, "v3"); // V3
+                        ps.executeUpdate();
+                    }
+                    tconn.commit();
+                }
+            }
+            // Do a point lookup on the base table
+            String dql = String.format("SELECT * FROM %s where org_id='%s' AND kp='%s' LIMIT 1",
+                    tableName, tenantId, kp);
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains("POINT LOOKUP ON 1 KEY"));
+                assertTrue(rs.next());
+                assertEquals(tenantId, rs.getString(1));
+                assertEquals(kp, rs.getString(2));
+            }
+            dql = String.format("SELECT count(*) FROM %s where org_id='%s' AND kp='%s'",
+                    tableName, tenantId, kp);
+            try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
+                PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+                String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+                assertTrue(explainPlan.contains("POINT LOOKUP ON 1 KEY"));
+                assertTrue(rs.next());
+                assertEquals(nRows, rs.getInt(1));
+            }
+        }
+    }
 	
     @Test
     public void testBasicUpsertSelect() throws Exception {

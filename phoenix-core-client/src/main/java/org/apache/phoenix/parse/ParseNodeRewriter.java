@@ -79,7 +79,7 @@ public class ParseNodeRewriter extends TraverseAllParseNodeVisitor<ParseNode> {
      * of the expression.
      * @param statement the select statement
      * @return new select statement
-     * @throws SQLException 
+     * @throws SQLException
      */
     public static SelectStatement rewrite(SelectStatement statement, ParseNodeRewriter rewriter) throws SQLException {
         Map<String,ParseNode> aliasMap = rewriter.getAliasMap();

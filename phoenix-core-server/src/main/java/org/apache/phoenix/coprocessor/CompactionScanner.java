@@ -76,6 +76,8 @@ public class CompactionScanner implements InternalScanner {
     private final byte[] emptyCF;
     private final byte[] emptyCQ;
     private final byte[] storeColumnFamily;
+    private final String tableName;
+    private final String columnFamilyName;
     private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
     private PhoenixLevelRowCompactor phoenixLevelRowCompactor;
     private HBaseLevelRowCompactor hBaseLevelRowCompactor;
@@ -94,19 +96,18 @@ public class CompactionScanner implements InternalScanner {
         this.emptyCQ = emptyCQ;
         this.config = env.getConfiguration();
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
-        this.maxLookbackInMillis = maxLookbackInMillis;
-        String columnFamilyName = store.getColumnFamilyName();
+        columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
-        String tableName = region.getRegionInfo().getTable().getNameAsString();
+        tableName = region.getRegionInfo().getTable().getNameAsString();
         Long overriddenMaxLookback =
                 maxLookbackMap.remove(tableName + SEPARATOR + columnFamilyName);
-        maxLookbackInMillis = overriddenMaxLookback == null ?
+        this.maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackInMillis : Math.max(maxLookbackInMillis, overriddenMaxLookback);
         // The oldest scn is current time - maxLookbackInMillis. Phoenix sets the scan time range
         // for scn queries [0, scn). This means that the maxlookback size should be
         // maxLookbackInMillis + 1 so that the oldest scn does not return empty row
-        this.maxLookbackWindowStart = maxLookbackInMillis == 0 ?
-                compactionTime : compactionTime - (maxLookbackInMillis + 1);
+        this.maxLookbackWindowStart = this.maxLookbackInMillis == 0 ?
+                compactionTime : compactionTime - (this.maxLookbackInMillis + 1);
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
         ttl = cfd.getTimeToLive();
         this.ttlWindowStart = ttl == HConstants.FOREVER ? 1 : compactionTime - ttl * 1000;
@@ -121,6 +122,9 @@ public class CompactionScanner implements InternalScanner {
                         || localIndex;
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor();
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor();
+        LOGGER.info("Starting Phoenix CompactionScanner for table " + tableName + " store "
+                + columnFamilyName + " ttl " + ttl + "ms " + "max lookback "
+                + maxLookbackInMillis + "ms");
     }
 
     /**
@@ -155,6 +159,8 @@ public class CompactionScanner implements InternalScanner {
 
     @Override
     public void close() throws IOException {
+        LOGGER.info("Closing Phoenix CompactionScanner for table " + tableName + " store "
+                + columnFamilyName);
         storeScanner.close();
     }
 

@@ -32,4 +32,12 @@ public abstract class TerminalParseNode extends ParseNode {
     public final List<ParseNode> getChildren() {
         return Collections.emptyList();
     }
+
+    public boolean isWildcardNode() {
+        return false;
+    }
+
+    public TerminalParseNode getRewritten() {
+        return null;
+    }
 }
