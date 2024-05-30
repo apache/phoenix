@@ -37,6 +37,8 @@ import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
@@ -336,6 +338,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private String dataTableName;
   private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
   private boolean isNamespaceEnabled = false;
+  private boolean useBloomFilter = false;
 
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
@@ -383,6 +386,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL);
           this.isNamespaceEnabled = SchemaUtil.isNamespaceMappingEnabled(PTableType.INDEX,
               env.getConfiguration());
+          TableDescriptor tableDescriptor = env.getRegion().getTableDescriptor();
+          BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
+          // when the table descriptor changes, the coproc is reloaded
+          this.useBloomFilter = bloomFilterType == BloomType.ROW;
       } catch (NoSuchMethodError ex) {
           disabled = true;
           LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
@@ -857,11 +864,30 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (keys.isEmpty()) {
             return;
         }
-        Scan scan = new Scan();
-        ScanRanges scanRanges = ScanRanges.createPointLookup(new ArrayList<KeyRange>(keys));
-        scanRanges.initializeScan(scan);
-        SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        scan.setFilter(skipScanFilter);
+
+        if (this.useBloomFilter) {
+            for (KeyRange key : keys) {
+                // Scan.java usage alters scan instances, safer to create scan instance per usage
+                Scan scan = new Scan();
+                // create a scan with same start/stop row key scan#isGetScan()
+                // for bloom filters scan should be a get
+                scan.withStartRow(key.getLowerRange(), true);
+                scan.withStopRow(key.getLowerRange(), true);
+                readDataTableRows(c, context, scan);
+            }
+        }
+        else {
+            Scan scan = new Scan();
+            ScanRanges scanRanges = ScanRanges.createPointLookup(new ArrayList<KeyRange>(keys));
+            scanRanges.initializeScan(scan);
+            SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
+            scan.setFilter(skipScanFilter);
+            readDataTableRows(c, context, scan);
+        }
+    }
+
+    private void readDataTableRows(ObserverContext<RegionCoprocessorEnvironment> c,
+                                   BatchMutateContext context, Scan scan) throws IOException {
         try (RegionScanner scanner = c.getEnvironment().getRegion().getScanner(scan)) {
             boolean more = true;
             while (more) {
