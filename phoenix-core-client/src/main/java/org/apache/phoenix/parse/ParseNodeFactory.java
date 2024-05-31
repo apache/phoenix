@@ -451,14 +451,6 @@ public class ParseNodeFactory {
         return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, false, false);
     }
 
-    public AlterCDCStatement alterCDC(NamedTableNode cdcTableNode, String dataTableName, boolean ifExist) {
-        return new AlterCDCStatement(cdcTableNode, dataTableName, ifExist);
-    }
-
-    public AlterCDCStatement alterCDC(NamedTableNode cdcTableNode, String dataTableName, boolean ifExist, ListMultimap<String,Pair<String,Object>> props) {
-        return new AlterCDCStatement(cdcTableNode, dataTableName, ifExist, props);
-    }
-
     public TraceStatement trace(boolean isTraceOn, double samplingRate) {
         return new TraceStatement(isTraceOn, samplingRate);
     }

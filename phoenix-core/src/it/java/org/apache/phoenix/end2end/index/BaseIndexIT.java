@@ -1514,6 +1514,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
 
             // run the index MR job.
             IndexToolIT.runIndexTool(false, TestUtil.DEFAULT_SCHEMA_NAME, tableName, indexName);
+            TestUtil.waitForIndexState(conn, fullIndexName, PIndexState.ACTIVE);
             long activeIndexLastDDLTimestamp = CreateTableIT.verifyLastDDLTimestamp(
                     fullIndexName, buildingIndexLastDDLTimestamp + 1, conn);
             Thread.sleep(1);

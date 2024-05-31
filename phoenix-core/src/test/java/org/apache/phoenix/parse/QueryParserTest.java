@@ -615,21 +615,6 @@ public class QueryParserTest {
         parseInvalidDropCDC("drop cdc foo on bar(ts)", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
     }
 
-    private AlterCDCStatement parseAlterCDCSimple(String sql, boolean ifNotExists) throws Exception {
-        AlterCDCStatement stmt = parseQuery(sql, AlterCDCStatement.class);
-        assertEquals("FOO", stmt.getTable().getName().getTableName());
-        assertEquals("BAR", stmt.getTableName());
-        assertEquals(ifNotExists, stmt.ifExists());
-        return stmt;
-    }
-    @Test
-    public void testAlterCDCSimple() throws Exception {
-        AlterCDCStatement stmt = null;
-        parseAlterCDCSimple("alter cdc foo on bar SET max_look_back=2", false);
-        parseAlterCDCSimple("alter cdc if exists foo on bar SET max_look_back=2", true);
-        parseAlterCDCSimple("alter cdc if exists foo on s.bar SET max_look_back=2", true);
-    }
-
     private void parseInvalidAlterCDC(String sql, int expRrrorCode) throws IOException {
         try {
             parseQuery(sql);
