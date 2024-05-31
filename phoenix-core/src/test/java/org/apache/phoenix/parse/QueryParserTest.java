@@ -626,13 +626,6 @@ public class QueryParserTest {
     }
 
     @Test
-    public void testInvalidAlterCDC() throws Exception {
-        parseInvalidAlterCDC("alter cdc foo bar SET max_look_back=2", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
-        parseInvalidAlterCDC("alter cdc s.foo on bar SET max_look_back=2", SQLExceptionCode.MISMATCHED_TOKEN.getErrorCode());
-        parseInvalidAlterCDC("alter cdc foo on bar(ts) SET max_look_back=2", SQLExceptionCode.MISSING_TOKEN.getErrorCode());
-    }
-
-    @Test
     public void testNextValueForSelect() throws Exception {
         String sql = ((
                 "select next value for foo.bar \n" + 
