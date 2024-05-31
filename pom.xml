@@ -82,7 +82,7 @@
     <!-- This is used by the release script only -->
     <hbase.profile.list>2.4 2.5.0 2.5</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
-    <hbase-2.4.runtime.version>2.4.17</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.8-hadoop3</hbase-2.5.runtime.version>
 
