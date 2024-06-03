@@ -183,7 +183,6 @@ import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
-import org.apache.phoenix.parse.AlterCDCStatement;
 import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
@@ -1654,19 +1653,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
     }
 
-    private static class ExecutableAlterCDCStatement extends AlterCDCStatement implements CompilableStatement {
-
-        public ExecutableAlterCDCStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, ListMultimap<String,Pair<String,Object>> props) {
-            super(indexTableNode, dataTableName, ifExists, props);
-        }
-
-        @SuppressWarnings("unchecked")
-        @Override
-        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
-            return null;
-        }
-    }
-    
     private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
 
         public ExecutableTraceStatement(boolean isTraceOn, double samplingRate) {
@@ -2037,11 +2023,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         @Override
         public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName, boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async, ListMultimap<String,Pair<String,Object>> props) {
             return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
-        }
-
-        @Override
-        public AlterCDCStatement alterCDC(NamedTableNode cdcTableNode, String dataTableName, boolean ifExist, ListMultimap<String,Pair<String,Object>> props) {
-            return new ExecutableAlterCDCStatement(cdcTableNode, dataTableName, ifExist, props);
         }
 
         @Override

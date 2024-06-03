@@ -1762,8 +1762,9 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
         //Now try the PTable API
         long ddlTimestamp = getLastDDLTimestamp(conn, tableFullName);
-        assertTrue("PTable DDL Timestamp not in the right range!",
-            ddlTimestamp >= startTS && ddlTimestamp <= endTS);
+        assertTrue("PTable DDL Timestamp: " + ddlTimestamp
+                        + " not in the expected range: (" + startTS + ", " + endTS + ")",
+                ddlTimestamp >= startTS && ddlTimestamp <= endTS);
         return ddlTimestamp;
     }
 
