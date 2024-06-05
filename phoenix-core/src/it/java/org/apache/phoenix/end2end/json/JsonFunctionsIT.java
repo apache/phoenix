@@ -123,7 +123,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testSimpleJsonModifyWithAutoCommit() throws Exception {
+    public void testAtomicUpsertJsonModifyWithAutoCommit() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -177,7 +177,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testSimpleJsonModifyWithoutAutoCommit() throws Exception {
+    public void testAtomicUpsertJsonModifyWithoutAutoCommit() throws Exception {
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
