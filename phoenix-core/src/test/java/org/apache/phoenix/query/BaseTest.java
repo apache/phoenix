@@ -999,9 +999,7 @@ public abstract class BaseTest {
             ResultSet rs = dbmd.getTables(null, null, null, tableTypes);
             String lastTenantId = null;
             Connection conn = globalConn;
-            System.out.println("outside");
             while (rs.next()) {
-                System.out.println("inside");
                 String fullTableName = SchemaUtil.getEscapedTableName(
                         rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM),
                         rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
