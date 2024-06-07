@@ -55,7 +55,6 @@ public class LockManager {
      * waiting to acquire lock.
      */
     public RowLock lockRow(ImmutableBytesPtr rowKey, int waitDuration) throws IOException {
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         RowLockImpl rowLock = new RowLockImpl(rowKey);
         while (true) {
             RowLockImpl existingRowLock = lockedRows.putIfAbsent(rowKey, rowLock);
@@ -65,6 +64,7 @@ public class LockManager {
             }
             // The row is already locked by a different thread. Wait for the lock to be released
             // for waitDuration time
+            long startTime = EnvironmentEdgeManager.currentTimeMillis();
             RowLockImpl usableRowLock = existingRowLock.lock(waitDuration);
             if (usableRowLock != null) {
                 return usableRowLock;
