@@ -22,12 +22,10 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -50,9 +48,7 @@ import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -258,8 +254,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             long beforeFirstCompactSCN = EnvironmentEdgeManager.currentTimeMillis();
             injectEdge.incrementValue(1); //new ts for major compaction
             majorCompact(dataTable);
-            majorCompact(indexTable);
             assertRawRowCount(conn, dataTable, rowsPlusDeleteMarker);
+            majorCompact(indexTable);
             assertRawRowCount(conn, indexTable, rowsPlusDeleteMarker);
             //wait for the lookback time. After this compactions should purge the deleted row
             injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
@@ -276,10 +272,14 @@ public class MaxLookbackExtendedIT extends BaseTest {
                 " values ('c', 'cd', 'cde', 'cdef')");
             conn.commit();
             injectEdge.incrementValue(1L);
+            flush(dataTable);
             majorCompact(dataTable);
-            majorCompact(indexTable);
             // Deleted row versions should be removed.
             assertRawRowCount(conn, dataTable, ROWS_POPULATED);
+
+            flush(indexTable);
+            majorCompact(indexTable);
+            // Deleted row versions should be removed.
             assertRawRowCount(conn, indexTable, ROWS_POPULATED);
 
             //deleted row should be gone, but not deleted row should still be there.
@@ -384,7 +384,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             assertExplainPlan(conn, indexSql, dataTableName, indexName);
-            long timeToAdvance = (MAX_LOOKBACK_AGE * 1000) -
+            long timeToAdvance = (MAX_LOOKBACK_AGE * 1000L) -
                 (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
             if (timeToAdvance > 0) {
                 injectEdge.incrementValue(timeToAdvance);
@@ -399,7 +399,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             assertRawRowCount(conn, dataTable, originalRowCount);
             assertRawRowCount(conn, indexTable, originalRowCount);
             //now wait the TTL
-            timeToAdvance = (ttl * 1000) -
+            timeToAdvance = (ttl * 1000L) -
                 (EnvironmentEdgeManager.currentTimeMillis() - afterFirstInsertSCN);
             if (timeToAdvance > 0) {
                 injectEdge.incrementValue(timeToAdvance);
@@ -417,7 +417,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
             Assert.assertEquals(0, rs.getInt(1));
             // Increment the time by max lookback age and make sure that we can compact away
             // the now-expired rows
-            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
+            injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000L);
             majorCompact(dataTable);
             majorCompact(indexTable);
             assertRawRowCount(conn, dataTable, 0);
@@ -525,34 +525,35 @@ public class MaxLookbackExtendedIT extends BaseTest {
                 CompactionScanner.overrideMaxLookback(tableNameTwo, "A", maxLookbackTwo * 1000);
                 CompactionScanner.overrideMaxLookback(tableNameTwo, "B", maxLookbackTwo * 1000);
             }
-            injectEdge.incrementValue(1);
+            injectEdge.incrementValue(1000);
             populateTable(tableNameOne);
             populateTable(tableNameTwo);
-            injectEdge.incrementValue(1);
+            injectEdge.incrementValue(1000);
             populateTable(tableNameOne);
             populateTable(tableNameTwo);
-            injectEdge.incrementValue(1);
+            injectEdge.incrementValue(1000);
             conn.createStatement().executeUpdate("DELETE FROM " + tableNameOne);
             conn.createStatement().executeUpdate("DELETE FROM " + tableNameTwo);
             conn.commit();
-            injectEdge.incrementValue(1);
             // Move the time so that deleted row versions will be outside the maxlookback window
-            // of tableNameOne but the delete markers will be inside
+            // of tableNameOne but the delete markers will be inside (in this case on the lower
+            // edge of the window)
             injectEdge.incrementValue(maxLookbackOne * 1000);
-            // Compact both tables. Deleted row versions will be removed from tableNameOne as they
-            // are now outside its max lookback window.
+            // Compact both tables. Deleted row versions will be retained since the delete marker
+            // is retained. This is necessary to include the preimage of the row in the CDC
+            // stream.
             flush(TableName.valueOf(tableNameOne));
             flush(TableName.valueOf(tableNameTwo));
             majorCompact(TableName.valueOf(tableNameOne));
             majorCompact(TableName.valueOf(tableNameTwo));
             if (multiCF) {
-                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 3);
-                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 3);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 7);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 7);
                 assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 11);
                 assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 11);
             } else {
-                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 1);
-                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 1);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("a"), 5);
+                assertRawCellCount(conn, TableName.valueOf(tableNameOne), Bytes.toBytes("b"), 5);
                 assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("a"), 9);
                 assertRawCellCount(conn, TableName.valueOf(tableNameTwo), Bytes.toBytes("b"), 9);
             }

@@ -151,29 +151,40 @@ public class TableTTLIT extends BaseTest {
     public void testMaskingAndCompaction() throws Exception {
         final int maxDeleteCounter = MAX_LOOKBACK_AGE;
         final int maxCompactionCounter = ttl / 2;
+        final int maxFlushCounter = ttl;
         final int maxMaskingCounter = 2 * ttl;
+        final int maxVerificationCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
+            conn.createStatement().execute("Alter Table " + noCompactTableName
+                    + " set \"phoenix.table.ttl.enabled\" = false");
+            conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.setValue(startTime);
             int deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
             int compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
+            int flushCounter = RAND.nextInt(maxFlushCounter) + 1;
             int maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
-            boolean afterCompaction = false;
+            int verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
             for (int i = 0; i < 500; i++) {
+                if (flushCounter-- == 0) {
+                    injectEdge.incrementValue(1000);
+                    LOG.info("Flush " + i + " current time: " + injectEdge.currentTime());
+                    flush(TableName.valueOf(tableName));
+                    flushCounter = RAND.nextInt(maxFlushCounter) + 1;
+                }
                 if (compactionCounter-- == 0) {
                     injectEdge.incrementValue(1000);
-                    LOG.debug("Compaction " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Compaction " + i + " current time: " + injectEdge.currentTime());
                     flush(TableName.valueOf(tableName));
                     majorCompact(TableName.valueOf(tableName));
                     compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
-                    afterCompaction = true;
                 }
                 if (maskingCounter-- == 0) {
                     updateRow(conn, tableName, noCompactTableName, "a");
@@ -193,20 +204,18 @@ public class TableTTLIT extends BaseTest {
                     maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
                 }
                 if (deleteCounter-- == 0) {
-                    LOG.debug("Delete " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Delete " + i + " current time: " + injectEdge.currentTime());
                     deleteRow(conn, tableName, "a");
                     deleteRow(conn, noCompactTableName, "a");
                     deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
                     injectEdge.incrementValue(1000);
                 }
+                injectEdge.incrementValue(1000);
                 updateRow(conn, tableName, noCompactTableName, "a");
-                if (!afterCompaction) {
-                    injectEdge.incrementValue(1000);
-                    // We are interested in the correctness of compaction and masking. Thus, we
-                    // only need to do the latest version and scn queries to after compaction.
+                if (verificationCounter-- >  0) {
                     continue;
                 }
-                afterCompaction = false;
+                verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
                 long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
                 long scnEnd = injectEdge.currentTime();
@@ -220,7 +229,6 @@ public class TableTTLIT extends BaseTest {
                                 MAX_COLUMN_INDEX);
                     }
                 }
-                injectEdge.incrementValue(1000);
             }
         }
     }
