@@ -50,13 +50,13 @@ public class LockManager {
     /**
      * Lock the row or throw otherwise
      * @param rowKey
-     * @param waitDuration
-     * @return
+     * @param waitDurationMs
+     * @return RowLock used to eventually release the lock
      * @throws TimeoutIOException if the lock could not be acquired within the
      * allowed rowLockWaitDuration and InterruptedException if interrupted while
      * waiting to acquire lock.
      */
-    public RowLock lockRow(ImmutableBytesPtr rowKey, int waitDuration) throws IOException {
+    public RowLock lockRow(ImmutableBytesPtr rowKey, long waitDurationMs) throws IOException {
         RowLockImpl rowLock = new RowLockImpl(rowKey);
         TraceScope traceScope = null;
 
@@ -75,9 +75,9 @@ public class LockManager {
                     return rowLock;
                 }
                 // The row is already locked by a different thread. Wait for the lock to be released
-                // for waitDuration time
+                // for waitDurationMs time
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                RowLockImpl usableRowLock = existingRowLock.lock(waitDuration);
+                RowLockImpl usableRowLock = existingRowLock.lock(waitDurationMs);
                 if (usableRowLock != null) {
                     success = true;
                     return usableRowLock;
@@ -86,10 +86,10 @@ public class LockManager {
                 // thread attempt to lock
                 long now = EnvironmentEdgeManager.currentTimeMillis();
                 long timePassed = now - startTime;
-                if (timePassed > waitDuration) {
+                if (timePassed > waitDurationMs) {
                     throw new TimeoutIOException("Timed out waiting for lock for row: " + rowKey);
                 }
-                waitDuration -= timePassed;
+                waitDurationMs -= timePassed;
             }
         } catch (InterruptedException ie) {
             LOGGER.warn("Thread interrupted waiting for lock on row: " + rowKey);
@@ -107,9 +107,9 @@ public class LockManager {
         }
     }
 
-    public RowLock lockRow(byte[] row, int waitDuration) throws IOException {
+    public RowLock lockRow(byte[] row, long waitDurationMs) throws IOException {
         ImmutableBytesPtr rowKey = new ImmutableBytesPtr(row);
-        return lockRow(rowKey, waitDuration);
+        return lockRow(rowKey, waitDurationMs);
     }
 
     /**
