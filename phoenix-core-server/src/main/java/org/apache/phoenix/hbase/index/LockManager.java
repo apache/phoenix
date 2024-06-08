@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
+import org.apache.htrace.Trace;
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
@@ -56,27 +58,52 @@ public class LockManager {
      */
     public RowLock lockRow(ImmutableBytesPtr rowKey, int waitDuration) throws IOException {
         RowLockImpl rowLock = new RowLockImpl(rowKey);
-        while (true) {
-            RowLockImpl existingRowLock = lockedRows.putIfAbsent(rowKey, rowLock);
-            if (existingRowLock == null) {
-                // The row was not locked
-                return rowLock;
+        TraceScope traceScope = null;
+
+        // If we're tracing start a span to show how long this took.
+        if (Trace.isTracing()) {
+            traceScope = Trace.startSpan("LockManager.lockRow");
+            traceScope.getSpan().addTimelineAnnotation("Getting a row lock");
+        }
+        boolean success = false;
+        try {
+            while (true) {
+                RowLockImpl existingRowLock = lockedRows.putIfAbsent(rowKey, rowLock);
+                if (existingRowLock == null) {
+                    // The row was not locked
+                    success = true;
+                    return rowLock;
+                }
+                // The row is already locked by a different thread. Wait for the lock to be released
+                // for waitDuration time
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                RowLockImpl usableRowLock = existingRowLock.lock(waitDuration);
+                if (usableRowLock != null) {
+                    success = true;
+                    return usableRowLock;
+                }
+                // The existing lock was released and removed from the hash map before the current
+                // thread attempt to lock
+                long now = EnvironmentEdgeManager.currentTimeMillis();
+                long timePassed = now - startTime;
+                if (timePassed > waitDuration) {
+                    throw new TimeoutIOException("Timed out waiting for lock for row: " + rowKey);
+                }
+                waitDuration -= timePassed;
             }
-            // The row is already locked by a different thread. Wait for the lock to be released
-            // for waitDuration time
-            long startTime = EnvironmentEdgeManager.currentTimeMillis();
-            RowLockImpl usableRowLock = existingRowLock.lock(waitDuration);
-            if (usableRowLock != null) {
-                return usableRowLock;
+        } catch (InterruptedException ie) {
+            LOGGER.warn("Thread interrupted waiting for lock on row: " + rowKey);
+            InterruptedIOException iie = new InterruptedIOException();
+            iie.initCause(ie);
+            Thread.currentThread().interrupt();
+            throw iie;
+        } finally {
+            if (traceScope != null) {
+                if (!success) {
+                    traceScope.getSpan().addTimelineAnnotation("Failed to get row lock");
+                }
+                traceScope.close();
             }
-            // The existing lock was released and removed from the hash map before the current
-            // thread attempt to lock
-            long now = EnvironmentEdgeManager.currentTimeMillis();
-            long timePassed = now - startTime;
-            if (timePassed > waitDuration) {
-                throw new TimeoutIOException("Timed out waiting for lock for row: " + rowKey);
-            }
-            waitDuration -= timePassed;
         }
     }
 
@@ -101,7 +128,7 @@ public class LockManager {
             threadName = Thread.currentThread().getName();
         }
 
-        RowLockImpl lock(long waitDuration) throws IOException{
+        RowLockImpl lock(long waitDuration) throws InterruptedException, TimeoutIOException {
             synchronized (this) {
                 if (!usable) {
                     return null;
@@ -115,29 +142,17 @@ public class LockManager {
                     throw new TimeoutIOException("Timed out waiting for lock for row: " + rowKey);
                 }
                 success = true;
-            } catch (InterruptedException ie) {
-                LOGGER.warn("Thread interrupted waiting for lock on row: " + rowKey);
-                InterruptedIOException iie = new InterruptedIOException();
-                iie.initCause(ie);
-                Thread.currentThread().interrupt();
-                throw iie;
             } finally {
                 if (!success) {
-                    synchronized (this) {
-                        count--;
-                    }
+                    cleanUp();
+                    return null;
                 }
             }
-            if (success) {
-                return this;
-            }
-            return null;
+            return this;
         }
 
-        @Override
-        public void release() {
+        private void cleanUp() {
             synchronized (this) {
-                lock.unlock();
                 count--;
                 if (count == 0) {
                     RowLockImpl removed = lockedRows.remove(rowKey);
@@ -147,6 +162,11 @@ public class LockManager {
                     assert count > 0 : "Reference count should never be less than zero";
                 }
             }
+        }
+        @Override
+        public void release() {
+            lock.unlock();
+            cleanUp();
         }
 
         @Override
