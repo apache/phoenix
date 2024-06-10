@@ -56,7 +56,7 @@ import static org.junit.Assert.fail;
 /**
  * This is a separate from @PartialResultDisabledIT because it requires server side configuration
  */
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class PartialResultServerConfigurationIT {
     private static HBaseTestingUtility hbaseTestUtil;
     private static String zkQuorum;

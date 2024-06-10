@@ -39,7 +39,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class PermissionsCacheIT extends BasePermissionsIT {
 
     public PermissionsCacheIT() throws Exception {

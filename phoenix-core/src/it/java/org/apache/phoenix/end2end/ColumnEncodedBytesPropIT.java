@@ -45,7 +45,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ColumnEncodedBytesPropIT extends ParallelStatsDisabledIT {
 	
 	private String generateColsDDL(int numCols) {

@@ -27,7 +27,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for Hexadecimal and Binary literals
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class BinaryStringLiteralIT extends ParallelStatsDisabledIT {
 
     private static String EMPTY = "";

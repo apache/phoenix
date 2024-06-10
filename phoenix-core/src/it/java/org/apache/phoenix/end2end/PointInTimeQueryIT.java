@@ -44,7 +44,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class PointInTimeQueryIT extends BaseQueryIT {
 
     @Parameters(name="PointInTimeQueryIT_{index},columnEncoded={1}")

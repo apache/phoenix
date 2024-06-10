@@ -49,7 +49,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class AggregateQueryIT extends BaseQueryIT {
 
     @Parameters(name="AggregateQueryIT_{index}") // name is used by failsafe as file name in reports

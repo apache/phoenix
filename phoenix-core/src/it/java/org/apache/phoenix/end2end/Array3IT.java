@@ -34,7 +34,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class Array3IT extends ArrayIT {
 
     @Test

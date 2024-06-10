@@ -50,7 +50,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class InQueryIT extends BaseQueryIT {
 
     public InQueryIT(String indexDDL, boolean columnEncoded, boolean keepDeletedCells) {

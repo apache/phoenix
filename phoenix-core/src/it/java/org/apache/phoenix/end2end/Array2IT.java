@@ -41,7 +41,7 @@ import org.apache.phoenix.util.StringUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class Array2IT extends ArrayIT {
 
     private static final String TEST_QUERY = "select ?[2] from \"SYSTEM\".\"CATALOG\" limit 1";

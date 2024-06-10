@@ -45,7 +45,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class PermissionNSEnabledIT extends BasePermissionsIT {
 
     public PermissionNSEnabledIT() throws Exception {

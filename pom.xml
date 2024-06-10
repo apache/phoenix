@@ -418,18 +418,6 @@
               </goals>
             </execution>
             <execution>
-              <id>SuccessfulSignOffTests</id>
-              <configuration>
-                <reuseForks>false</reuseForks>
-                <argLine>@{jacocoArgLine} -enableassertions -Xmx3000m -Djava.security.egd=file:/dev/./urandom "-Djava.library.path=${hadoop.library.path}${path.separator}${java.library.path}" -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./target/ -XX:NewRatio=4 -XX:SurvivorRatio=8 -XX:+UseCompressedOops -XX:+UseConcMarkSweepGC -XX:+DisableExplicitGC -XX:+UseCMSInitiatingOccupancyOnly -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:CMSInitiatingOccupancyFraction=68</argLine>
-                <groups>org.apache.phoenix.end2end.SuccessfulSupportsDistributedClusterTest</groups>
-              </configuration>
-              <goals>
-                <goal>integration-test</goal>
-                <goal>verify</goal>
-              </goals>
-            </execution>
-            <execution>
               <id>FailedSignOffTests</id>
               <configuration>
                 <reuseForks>false</reuseForks>

@@ -60,7 +60,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ColumnProjectionOptimizationIT extends ParallelStatsDisabledIT {
 
     @Test

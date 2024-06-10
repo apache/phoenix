@@ -34,7 +34,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link OctetLengthFunction}
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class OctetLengthFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

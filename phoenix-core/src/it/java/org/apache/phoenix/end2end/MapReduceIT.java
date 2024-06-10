@@ -55,7 +55,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Test that our MapReduce basic tools work as expected
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class MapReduceIT extends ParallelStatsDisabledIT {
 
     private static final String STOCK_NAME = "STOCK_NAME";

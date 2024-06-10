@@ -52,7 +52,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Ordering;
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ProductMetricsIT extends ParallelStatsDisabledIT {
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";
     private static final String PRODUCT_METRICS_SCHEMA_NAME = "";

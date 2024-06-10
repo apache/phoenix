@@ -35,7 +35,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class SpooledTmpFileDeleteIT extends ParallelStatsDisabledIT {
     private static final String PRINCIPAL = "noRenewLease";
     private File spoolDir;

@@ -58,7 +58,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class PhoenixDriverIT extends BaseTest {
     
     private static HBaseTestingUtility hbaseTestUtil;

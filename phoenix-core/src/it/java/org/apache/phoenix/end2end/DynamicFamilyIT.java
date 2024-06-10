@@ -63,7 +63,7 @@ import org.junit.experimental.categories.Category;
         value="RV_RETURN_VALUE_IGNORED", 
         justification="Designed to ignore.")
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class DynamicFamilyIT extends ParallelStatsDisabledIT {
     private static final String WEB_STATS = generateUniqueName();
     private static final String WEB_STATS_SCHEMA_NAME = "";

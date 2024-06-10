@@ -42,7 +42,7 @@ import java.util.Map;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 
-@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
 
     @BeforeClass

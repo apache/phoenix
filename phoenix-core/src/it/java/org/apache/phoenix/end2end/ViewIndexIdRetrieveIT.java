@@ -51,7 +51,7 @@ import org.junit.experimental.categories.Category;
     a coproc that checks the client request version and send it back to the client.
     For more information, please see PHOENIX-3547, PHOENIX-5712
  */
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class ViewIndexIdRetrieveIT extends BaseTest {
     private final String BASE_TABLE_DDL = "CREATE TABLE %s (TENANT_ID CHAR(15) NOT NULL, " +
             "ID CHAR(3) NOT NULL, NUM BIGINT CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))" +

@@ -39,7 +39,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class TruncateFunctionIT extends ParallelStatsDisabledIT {
     private static final String DS1 = "1970-01-10 00:58:01.587";
     private static final String DS2 = "1970-01-20 01:02:45.906";

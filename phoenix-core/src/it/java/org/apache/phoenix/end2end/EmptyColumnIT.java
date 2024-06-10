@@ -74,7 +74,7 @@ import org.slf4j.LoggerFactory;
  * 2. Behavior under different CF's combinations.
  * 3. Behavior under different COLUMN ENCODINGS
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class EmptyColumnIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(EmptyColumnIT.class);

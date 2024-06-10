@@ -49,7 +49,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class SortOrderWithRegionMovesIT extends SortOrderIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SortOrderWithRegionMovesIT.class);

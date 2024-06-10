@@ -46,7 +46,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class MetaDataEndpointImplIT extends ParallelStatsDisabledIT {
     private final TableName catalogTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES);
     private final TableName linkTable = TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES);

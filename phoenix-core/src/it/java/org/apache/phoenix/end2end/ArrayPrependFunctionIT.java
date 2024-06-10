@@ -28,7 +28,7 @@ import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ArrayPrependFunctionIT extends ParallelStatsDisabledIT {
 
     private void initTableWithVarArray(Connection conn, String tableName, String type, Object[] objectArray, String value) throws SQLException {

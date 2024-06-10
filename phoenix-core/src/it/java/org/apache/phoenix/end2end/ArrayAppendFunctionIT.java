@@ -32,7 +32,7 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ArrayAppendFunctionIT extends ParallelStatsDisabledIT {
     private String initTables(Connection conn) throws Exception {
         String tableName = generateUniqueName();

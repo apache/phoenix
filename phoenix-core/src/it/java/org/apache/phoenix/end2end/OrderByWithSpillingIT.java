@@ -26,7 +26,7 @@ import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class OrderByWithSpillingIT extends BaseOrderByIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {

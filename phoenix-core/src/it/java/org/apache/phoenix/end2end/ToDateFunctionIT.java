@@ -31,7 +31,7 @@ import java.util.Properties;
 import static org.junit.Assert.*;
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ToDateFunctionIT extends ParallelStatsDisabledIT {
 
     private static final long ONE_HOUR_IN_MILLIS = 1000L * 60L * 60L;

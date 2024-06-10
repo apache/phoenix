@@ -50,7 +50,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class MappingTableDataTypeIT extends ParallelStatsDisabledIT {
     @Test
     public void testMappingHbaseTableToPhoenixTable() throws Exception {

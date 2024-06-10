@@ -38,7 +38,7 @@ import org.junit.experimental.categories.Category;
 
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class CustomEntityDataIT extends ParallelStatsDisabledIT {
     
     private static void initTableValues(Connection conn, String tenantId, String tableName) throws Exception {

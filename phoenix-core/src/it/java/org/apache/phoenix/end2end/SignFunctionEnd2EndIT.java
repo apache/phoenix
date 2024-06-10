@@ -36,7 +36,7 @@ import org.junit.experimental.categories.Category;
  * End to end tests for {@link SignFunction}
  * @since 4.0.0
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class SignFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

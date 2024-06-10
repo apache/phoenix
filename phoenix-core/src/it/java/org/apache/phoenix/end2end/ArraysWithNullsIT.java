@@ -27,7 +27,7 @@ import org.apache.phoenix.schema.types.PhoenixArray;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class ArraysWithNullsIT extends ParallelStatsDisabledIT {
 
     @Test

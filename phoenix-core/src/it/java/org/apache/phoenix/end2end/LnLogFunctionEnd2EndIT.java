@@ -34,7 +34,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link LnFunction} and {@link LogFunction}
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class LnLogFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

@@ -29,7 +29,7 @@ import java.sql.ResultSet;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertTrue;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class MergeViewIndexIdSequencesToolIT extends ParallelStatsDisabledIT {
     private final String CLEAN_QUERY = "DELETE FROM SYSTEM.\"SEQUENCE\"";
     private final String COUNT_QUERY = "SELECT COUNT(*) FROM SYSTEM.\"SEQUENCE\"";

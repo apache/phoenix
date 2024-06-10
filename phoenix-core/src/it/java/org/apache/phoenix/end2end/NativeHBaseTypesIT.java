@@ -67,7 +67,7 @@ import org.junit.experimental.categories.Category;
  * @since 0.1
  */
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class NativeHBaseTypesIT extends ParallelStatsDisabledIT {
     
     private String initTableValues() throws Exception {

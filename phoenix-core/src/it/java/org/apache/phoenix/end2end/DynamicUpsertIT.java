@@ -47,7 +47,7 @@ import org.junit.experimental.categories.Category;
  */
 
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class DynamicUpsertIT extends ParallelStatsDisabledIT {
     private String tableName;
 

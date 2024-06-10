@@ -75,7 +75,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegionMovesIT {
     private final String allowServerSideMutations;

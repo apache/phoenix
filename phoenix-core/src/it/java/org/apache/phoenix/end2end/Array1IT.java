@@ -43,7 +43,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class Array1IT extends ArrayIT {
     private void assertArrayGetString(ResultSet rs, int arrayIndex, Array expectedArray, String expectedString)
             throws SQLException {

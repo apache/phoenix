@@ -46,7 +46,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class PointInTimeScanQueryIT extends BaseQueryIT {
 
     @Parameters(name="PointInTimeScanQueryIT_{index},columnEncoded={1}")

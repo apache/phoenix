@@ -42,7 +42,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class BaseAggregateWithRegionMoves4IT extends BaseAggregateWithRegionMoves2IT {
 
     private static final Logger LOGGER =

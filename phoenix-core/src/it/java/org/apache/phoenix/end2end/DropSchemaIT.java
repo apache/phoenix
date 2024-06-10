@@ -49,7 +49,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category({NeedsOwnMiniClusterTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class DropSchemaIT extends BaseTest {
     private String schema;

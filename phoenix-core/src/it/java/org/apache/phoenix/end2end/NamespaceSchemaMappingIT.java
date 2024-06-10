@@ -45,7 +45,7 @@ import org.junit.experimental.categories.Category;
 /*
  * since 4.8
  */
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class NamespaceSchemaMappingIT extends ParallelStatsDisabledIT {
     /**
      * Tests that when: There is a table created with older version of phoenix and a table created with newer version

@@ -39,7 +39,7 @@ import org.junit.experimental.categories.Category;
  * {@link org.apache.phoenix.expression.function.TanFunction}
  */
 
-@Category({ParallelStatsDisabledTest.class, SuccessfulSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, SupportsDistributedClusterTest.class})
 public class MathTrigFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";
