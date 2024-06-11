@@ -854,10 +854,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // rows. This will be used to detect concurrent updates
             PendingRow existingPendingRow = pendingRows.putIfAbsent(rowKeyPtr, pendingRow);
             if (existingPendingRow == null) {
-                // This was no pending row for this row key. We need to retrieve this row from disk
+                // There was no pending row for this row key. We need to retrieve this row from disk
                 keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
             } else {
-                // There is a pending row for this row key. We need to retrieve the roe from memory
+                // There is a pending row for this row key. We need to retrieve the row from memory
                 BatchMutateContext lastContext = existingPendingRow.getLastContext();
                 if (existingPendingRow.add(context)) {
                     BatchMutatePhase phase = lastContext.getCurrentPhase();
@@ -877,12 +877,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         }
                     } else {
                         // The last batch for this row key failed. We cannot use the memory state.
-                        // So we can retrieve this row from disk.
+                        // So we need to retrieve this row from disk.
                         keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
                     }
                 } else {
                     // The existing pending row is removed from the map. That means there is no
-                    //  pending row for this row key anymore. We can add the new one to the map
+                    // pending row for this row key anymore. We need to add the new one to the map
                     pendingRows.put(rowKeyPtr, pendingRow);
                     keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
                 }
@@ -1442,7 +1442,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private void removePendingRows(BatchMutateContext context) {
       for (ImmutableBytesPtr rowKey : context.rowsToLock) {
           PendingRow pendingRow = pendingRows.get(rowKey);
-          if(pendingRow != null) {
+          if (pendingRow != null) {
               pendingRow.remove();
           }
       }
