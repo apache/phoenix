@@ -3254,9 +3254,9 @@ public class MetaDataClient {
             }
 
             if (ttl == null || ttl == TTL_NOT_DEFINED) {
-                tableUpsert.setNull(34, Types.INTEGER);
+                tableUpsert.setNull(34, Types.VARCHAR);
             } else {
-                tableUpsert.setInt(34, ttl);
+                tableUpsert.setString(34, String.valueOf(ttl));
             }
 
             if ((rowKeyMatcher == null) ||
@@ -3947,7 +3947,8 @@ public class MetaDataClient {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, USE_STATS_FOR_PARALLELIZATION, useStatsForParallelization);
         }
         if (ttl != null) {
-            mutateIntegerProperty(connection, tenantId, schemaName, tableName, TTL, ttl == TTL_NOT_DEFINED ? null : ttl);
+            mutateStringProperty(connection, tenantId, schemaName, tableName, TTL,
+                    ttl == TTL_NOT_DEFINED ? null : String.valueOf(ttl));
         }
         if (isChangeDetectionEnabled != null) {
             mutateBooleanProperty(connection, tenantId, schemaName, tableName, CHANGE_DETECTION_ENABLED, isChangeDetectionEnabled);

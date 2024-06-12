@@ -344,7 +344,7 @@ public interface QueryConstants {
             SCHEMA_VERSION + " VARCHAR, \n" +
             EXTERNAL_SCHEMA_ID + " VARCHAR, \n" +
             STREAMING_TOPIC_NAME + " VARCHAR, \n" +
-            TTL + " INTEGER, \n" +
+            TTL + " VARCHAR, \n" +
             ROW_KEY_MATCHER + " VARBINARY, \n" +
             INDEX_WHERE + " VARCHAR, \n" +
             // Column metadata (will be null for table row)

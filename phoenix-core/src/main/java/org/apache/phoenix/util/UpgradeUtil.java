@@ -1434,7 +1434,7 @@ public class UpgradeUtil {
                             result = Integer.MAX_VALUE;
                         }
                         put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
-                                PInteger.INSTANCE.toBytes(result));
+                                PVarchar.INSTANCE.toBytes(String.valueOf(result)));
                         puts.add(put);
                     }
 
@@ -1540,7 +1540,7 @@ public class UpgradeUtil {
                                 put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, EMPTY_COLUMN_BYTES, rowTS,
                                         EMPTY_COLUMN_VALUE_BYTES);
                                 put.addColumn(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES, rowTS,
-                                        PInteger.INSTANCE.toBytes(ttl));
+                                        PVarchar.INSTANCE.toBytes(String.valueOf(ttl)));
                                 puts.add(put);
 
                                 //Set TTL to Default at CF level when Phoenix level ttl is enabled
