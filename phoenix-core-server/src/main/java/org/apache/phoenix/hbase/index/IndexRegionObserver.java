@@ -843,7 +843,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         return false;
     }
     /**
-     * Retrieve the last committed data row state.
+     * Retrieve the data row state either from memory or disk. The rows are locked by the caller.
      */
     private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
                                      BatchMutateContext context) throws IOException {
@@ -862,6 +862,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 if (existingPendingRow.add(context)) {
                     BatchMutatePhase phase = lastContext.getCurrentPhase();
                     if (phase == BatchMutatePhase.PRE || phase == BatchMutatePhase.POST) {
+                        assert phase == BatchMutatePhase.PRE
+                                : "the phase of the last batch cannot be POST";
                         if (phase == BatchMutatePhase.PRE) {
                             if (context.lastConcurrentBatchContext == null) {
                                 context.lastConcurrentBatchContext = new HashMap<>();
@@ -877,7 +879,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         }
                     } else {
                         // The last batch for this row key failed. We cannot use the memory state.
-                        // So we need to retrieve this row from disk.
+                        // So we need to retrieve this row from disk
                         keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
                     }
                 } else {
@@ -1310,6 +1312,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 RowLock rowLock = rowLockIterator.next();
                 ImmutableBytesPtr rowKey = rowLock.getRowKey();
                 if (row.equals(rowKey)) {
+                    PendingRow pendingRow = pendingRows.get(rowKey);
+                    if (pendingRow != null) {
+                        pendingRow.remove();
+                    }
                     rowLock.release();
                     rowLockIterator.remove();
                     context.rowsToLock.remove(row);
