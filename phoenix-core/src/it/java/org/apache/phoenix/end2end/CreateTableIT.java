@@ -80,7 +80,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -89,7 +88,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class CreateTableIT extends ParallelStatsDisabledIT {
 
     @Test

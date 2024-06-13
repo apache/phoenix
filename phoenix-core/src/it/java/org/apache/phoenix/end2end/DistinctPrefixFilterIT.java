@@ -36,7 +36,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
     private static final String PREFIX = "SERVER DISTINCT PREFIX";
     private String testTableF;

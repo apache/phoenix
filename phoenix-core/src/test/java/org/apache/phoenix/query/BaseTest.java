@@ -786,7 +786,7 @@ public abstract class BaseTest {
             throw new IllegalStateException("Used up all unique names");
         }
         TABLE_COUNTER.incrementAndGet();
-        if(!isDistributedClusterModeEnabled(config)){
+        if (!isDistributedClusterModeEnabled(config)) {
             phoenixTestTableName.setTableName("N" + Integer.toString(MAX_SUFFIX_VALUE + nextName).substring(1));
             return phoenixTestTableName.getTableName();
         }
@@ -1030,7 +1030,6 @@ public abstract class BaseTest {
             }
         }
     }
-    
     private static void deleteCurrentTestTables(long ts, Connection globalConn, String url) throws Exception {
         DatabaseMetaData dbmd = globalConn.getMetaData();
         // Drop VIEWs first, as we don't allow a TABLE with views to be dropped

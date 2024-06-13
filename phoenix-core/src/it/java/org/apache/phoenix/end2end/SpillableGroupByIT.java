@@ -52,7 +52,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * cluster.
  */
 
-@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
 public class SpillableGroupByIT extends BaseOwnClusterIT {
 
     private static final int NUM_ROWS_INSERTED = 1000;

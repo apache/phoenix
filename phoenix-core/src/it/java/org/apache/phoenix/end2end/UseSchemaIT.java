@@ -43,7 +43,7 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class UseSchemaIT extends ParallelStatsDisabledIT {
 
     @Test

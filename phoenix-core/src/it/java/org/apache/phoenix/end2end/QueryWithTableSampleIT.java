@@ -39,7 +39,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsEnabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
     private String tableName;
     private String joinedTableName;

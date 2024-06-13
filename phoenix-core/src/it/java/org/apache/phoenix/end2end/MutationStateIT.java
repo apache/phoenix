@@ -51,7 +51,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.Repeat;
 import org.apache.phoenix.util.RunUntilFailure;
 import org.apache.phoenix.util.SchemaUtil;
@@ -63,7 +62,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 @RunWith(RunUntilFailure.class)
 public class MutationStateIT extends ParallelStatsDisabledIT {
 

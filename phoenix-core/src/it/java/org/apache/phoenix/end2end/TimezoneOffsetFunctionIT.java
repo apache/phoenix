@@ -35,7 +35,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class TimezoneOffsetFunctionIT extends ParallelStatsDisabledIT {
 
 	@Test

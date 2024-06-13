@@ -26,7 +26,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaWriter;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
@@ -35,14 +34,13 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 
-@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
 public class SchemaRegistryFailureIT extends ParallelStatsDisabledIT{
 
     @BeforeClass

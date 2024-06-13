@@ -54,7 +54,7 @@ import static org.apache.phoenix.util.TestUtil.waitForIndexRebuild;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
-@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
 public class IndexRebuildTaskIT extends BaseTest {
     protected static String TENANT1 = "tenant1";
     private static RegionCoprocessorEnvironment TaskRegionEnvironment;

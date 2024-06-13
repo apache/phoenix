@@ -25,7 +25,6 @@ import org.apache.phoenix.end2end.join.HashJoinGlobalIndexIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexScrutinyTool;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -57,7 +56,7 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 @RunWith(Parameterized.class)
-@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
 public class LogicalTableNameIT extends LogicalTableNameBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(LogicalTableNameIT.class);
 

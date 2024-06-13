@@ -73,7 +73,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class UpsertSelectIT extends ParallelStatsDisabledIT {
     private final String allowServerSideMutations;

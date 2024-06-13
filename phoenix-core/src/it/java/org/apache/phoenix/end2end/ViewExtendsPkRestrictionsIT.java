@@ -41,7 +41,7 @@ import static org.junit.Assert.fail;
 /**
  * Tests for restrictions associated with view extending primary key of its parent.
  */
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class ViewExtendsPkRestrictionsIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ViewExtendsPkRestrictionsIT.class);

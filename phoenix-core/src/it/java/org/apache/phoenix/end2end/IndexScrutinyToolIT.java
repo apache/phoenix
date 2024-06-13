@@ -58,7 +58,6 @@ import org.apache.phoenix.mapreduce.index.SourceTargetColumnNames;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
@@ -77,7 +76,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
-@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
 @RunWith(Parameterized.class)
 public class IndexScrutinyToolIT extends IndexScrutinyToolBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexScrutinyToolIT.class);

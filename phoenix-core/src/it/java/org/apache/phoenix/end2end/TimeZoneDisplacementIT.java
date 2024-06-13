@@ -36,7 +36,7 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsEnabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class TimeZoneDisplacementIT extends ParallelStatsEnabledIT {
 
     @Test

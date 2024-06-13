@@ -37,7 +37,7 @@ import java.sql.SQLException;
 import java.util.Map;
 
 import static org.junit.Assert.*;
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class PreMatureTimelyAbortScanIt extends ParallelStatsDisabledIT {
     private static final Logger LOG = LoggerFactory.getLogger(PreMatureTimelyAbortScanIt.class);
 

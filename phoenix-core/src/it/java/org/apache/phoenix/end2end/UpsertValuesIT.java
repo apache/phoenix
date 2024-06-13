@@ -61,10 +61,9 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.function.ThrowingRunnable;
 
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testGroupByWithLimitOverRowKey() throws Exception {

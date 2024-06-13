@@ -50,7 +50,7 @@ import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 
-@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsEnabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class ParallelIteratorsIT extends ParallelStatsEnabledIT {
 
     protected static final byte[] KMIN  = new byte[] {'!'};

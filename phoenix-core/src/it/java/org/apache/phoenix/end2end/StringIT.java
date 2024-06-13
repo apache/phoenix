@@ -44,7 +44,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * Tests for the LPAD built-in function.
  */
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class StringIT extends ParallelStatsDisabledIT {
     
     /**

@@ -37,7 +37,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -57,7 +56,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * This class has tests for asserting the bytes and rows information exposed in the explain plan
  * when statistics are enabled.
  */
-@Category({ParallelStatsEnabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsEnabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
     private static String tableA;

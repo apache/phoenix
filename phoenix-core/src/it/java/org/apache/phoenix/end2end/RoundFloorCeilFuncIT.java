@@ -32,7 +32,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Properties;
 
@@ -41,7 +40,6 @@ import org.apache.phoenix.expression.function.FloorFunction;
 import org.apache.phoenix.expression.function.RoundFunction;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -54,7 +52,7 @@ import org.apache.phoenix.thirdparty.com.google.common.primitives.Floats;
  * End to end tests for {@link RoundFunction}, {@link FloorFunction}, {@link CeilFunction} 
  *
  */
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class RoundFloorCeilFuncIT extends ParallelStatsDisabledIT {
     private static final long millisPart = 660;
     private static final int nanosPart = 500100;

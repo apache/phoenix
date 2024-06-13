@@ -32,7 +32,7 @@ package org.apache.phoenix.end2end;
  *
  * @since 4.1
  */
-public class FailedSupportsDistributedClusterTest {
+public class DoesNotSupportDistributedClusterTest {
 
 }
 

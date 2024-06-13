@@ -35,7 +35,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link ExpFunction}
  */
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class ExpFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

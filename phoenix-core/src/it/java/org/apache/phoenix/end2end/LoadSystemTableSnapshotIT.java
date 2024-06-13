@@ -65,7 +65,7 @@ import java.io.FileOutputStream;
  * (or even being committed to the ASF branches)
  */
 
-@Category({NeedsOwnMiniClusterTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
 public class LoadSystemTableSnapshotIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(

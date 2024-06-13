@@ -31,7 +31,7 @@ import java.sql.ResultSet;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, FailedSupportsDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
 public class StddevIT extends ParallelStatsDisabledIT {
 
     @Test
