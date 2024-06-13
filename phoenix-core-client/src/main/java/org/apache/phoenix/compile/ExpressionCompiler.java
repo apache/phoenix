@@ -89,6 +89,7 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
+import org.apache.phoenix.parse.JsonModifyParseNode;
 import org.apache.phoenix.parse.JsonQueryParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
@@ -296,7 +297,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     @Override
     public boolean visitEnter(FunctionParseNode node) throws SQLException {
-        if (node instanceof JsonQueryParseNode) {
+        if (node instanceof JsonQueryParseNode || node instanceof JsonModifyParseNode) {
             this.isJsonFragment = true;
         }
         // TODO: Oracle supports nested aggregate function while other DBs don't. Should we?
