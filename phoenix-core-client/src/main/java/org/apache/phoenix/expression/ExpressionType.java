@@ -192,10 +192,7 @@ public enum ExpressionType {
     CosFunction(CosFunction.class),
     TanFunction(TanFunction.class),
     RowKeyBytesStringFunction(RowKeyBytesStringFunction.class),
-    PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class),
-    JsonValueFunction(JsonValueFunction.class),
-    JsonQueryFunction(JsonQueryFunction.class),
-    JsonExistsFunction(JsonExistsFunction.class)
+    PhoenixRowTimestampFunction(PhoenixRowTimestampFunction.class)
     ;
 
     ExpressionType(Class<? extends Expression> clazz) {

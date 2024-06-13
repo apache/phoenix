@@ -17,31 +17,10 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.phoenix.end2end.IndexToolIT;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.exception.PhoenixParserException;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.ColumnNotFoundException;
-import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.Date;
@@ -57,19 +36,26 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
-import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.phoenix.end2end.IndexToolIT;
+import org.apache.phoenix.exception.PhoenixParserException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.*;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
@@ -198,7 +184,7 @@ public class PartialIndexIT extends BaseTest {
                             + "S UNSIGNED_DATE, T UNSIGNED_TIMESTAMP, U CHAR(10), V BINARY(1024), "
                             + "W VARBINARY, Y INTEGER ARRAY, Z VARCHAR ARRAY[10], AA DATE ARRAY, "
                             + "AB TIMESTAMP ARRAY, AC UNSIGNED_TIME ARRAY, AD UNSIGNED_DATE ARRAY, "
-                            + "AE UNSIGNED_TIMESTAMP ARRAY, AF JSON "
+                            + "AE UNSIGNED_TIMESTAMP ARRAY "
                             + "CONSTRAINT pk PRIMARY KEY (id,kp)) "
                             + "MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0" );
             String indexTableName = generateUniqueName();
@@ -834,177 +820,6 @@ public class PartialIndexIT extends BaseTest {
             rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
             assertTrue(rs.next());
             assertTrue(rs.getString(1).contains(fullIndexTableName));
-        }
-    }
-
-    @Test
-    public void testPartialIndexWithJson() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
-            String dataTableName = generateUniqueName();
-            conn.createStatement().execute("create table " + dataTableName +
-                    " (id varchar not null primary key, " +
-                    "A integer, B integer, C double, D varchar, jsoncol json)");
-            String indexTableName = generateUniqueName();
-            String json = "{\"info\":{\"age\": %s }}";
-            // Add rows to the data table before creating a partial index to test that the index
-            // will be built correctly by IndexTool
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id1', 25, 2, 3.14, 'a','" +
-                            String.format(json, 25) + "')");
-
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " (id, A, D, jsoncol)" +
-                            " values ('id2', 100, 'b','" + String.format(json, 100) + "')");
-            conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
-                    (local ? "LOCAL " : " ") + "INDEX " + indexTableName +
-                    " on " + dataTableName + " (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) " +
-                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 50 ASYNC");
-
-            IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
-
-            String selectSql =
-                    "SELECT  D from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 60";
-            ResultSet rs = conn.createStatement().executeQuery(selectSql);
-            // Verify that the index table is used
-            assertPlan((PhoenixResultSet) rs, "", indexTableName);
-            assertTrue(rs.next());
-            assertEquals("b", rs.getString(1));
-            assertFalse(rs.next());
-
-            selectSql =
-                    "SELECT  D from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 50";
-            rs = conn.createStatement().executeQuery(selectSql);
-            // Verify that the index table is not used
-            assertPlan((PhoenixResultSet) rs, "", dataTableName);
-
-            // Add more rows to test the index write path
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id3', 50, 2, 9.5, 'c','" + String.format(
-                            json, 50) + "')");
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id4', 75, 2, 9.5, 'd','" + String.format(
-                            json, 75) + "')");
-
-            // Verify that index table includes only the rows with A > 50
-            selectSql = "SELECT * from " + indexTableName;
-            rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals(75, rs.getInt(1));
-            assertTrue(rs.next());
-            assertEquals(100, rs.getInt(1));
-            assertFalse(rs.next());
-
-            // Overwrite an existing row that satisfies the index WHERE clause
-            // such that the new version of the row does not satisfy the index where clause
-            // anymore. This should result in deleting the index row.
-            String dml =
-                    "UPSERT INTO " + dataTableName + " values ('id2', 0, 2, 9.5, 'd','" + String.format(
-                            json, 0) + "')";
-            conn.createStatement().execute(dml);
-            rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals(75, rs.getInt(1));
-            assertFalse(rs.next());
-
-            // Retrieve the updated row from the data table and verify that the index table is not used
-            selectSql =
-                    "SELECT  ID from " + dataTableName + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 0";
-            rs = conn.createStatement().executeQuery(selectSql);
-            assertPlan((PhoenixResultSet) rs, "", dataTableName);
-            assertTrue(rs.next());
-            assertEquals("id2", rs.getString(1));
-
-            // Test index verification and repair by IndexTool
-            verifyIndex(dataTableName, indexTableName);
-
-            try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
-                assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere())
-                        .equals("CAST(TO_NUMBER(JSON_VALUE(JSONCOL,'$.info.age'))ASINTEGER)>50"));
-            }
-        }
-    }
-
-    @Test
-    public void testPartialIndexWithJsonExists() throws Exception {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            conn.setAutoCommit(true);
-            String dataTableName = generateUniqueName();
-            conn.createStatement().execute("create table " + dataTableName +
-                    " (id varchar not null primary key, " +
-                    "A integer, B integer, C double, D varchar, jsoncol json)" +
-                    (salted ? " SALT_BUCKETS=4" : ""));
-            String indexTableName = generateUniqueName();
-            String jsonWithPathExists = "{\"info\":{\"address\":{\"exists\":true}}}";
-            String jsonWithoutPathExists = "{\"info\":{\"age\": 25 }}";
-            // Add rows to the data table before creating a partial index to test that the index
-            // will be built correctly by IndexTool
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id1', 70, 2, 3.14, 'a','" + jsonWithPathExists + "')");
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " (id, A, D, jsoncol) values ('id2', 100, 'b','" + jsonWithoutPathExists + "')");
-            conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") +
-                    (local ? "LOCAL " : " ") + "INDEX " + indexTableName + " on " + dataTableName + " (A) " +
-                    (uncovered ? "" : "INCLUDE (B, C, D)") + " WHERE JSON_EXISTS(JSONCOL, '$.info.address.exists') ASYNC");
-            IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
-
-            String selectSql =
-                    "SELECT " + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ") +
-                            " A, D from " + dataTableName + " WHERE A > 60 AND JSON_EXISTS(jsoncol, '$.info.address.exists')";
-            ResultSet rs = conn.createStatement().executeQuery(selectSql);
-            // Verify that the index table is used
-            assertPlan((PhoenixResultSet) rs, "", indexTableName);
-            assertTrue(rs.next());
-            assertEquals(70, rs.getInt(1));
-            assertEquals("a", rs.getString(2));
-            assertFalse(rs.next());
-
-            // Add more rows to test the index write path
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id3', 20, 2, 3.14, 'a','" + jsonWithPathExists + "')");
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " values ('id4', 90, 2, 3.14, 'a','" + jsonWithPathExists + "')");
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " (id, A, D, jsoncol) values ('id5', 150, 'b','" + jsonWithoutPathExists + "')");
-
-            // Verify that index table includes only the rows where jsonPath Exists
-            rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals(70, rs.getInt(1));
-            assertEquals("a", rs.getString(2));
-            assertTrue(rs.next());
-            assertEquals(90, rs.getInt(1));
-            assertEquals("a", rs.getString(2));
-            assertFalse(rs.next());
-
-            rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
-            // Verify that the index table is not used
-            assertPlan((PhoenixResultSet) rs, "", dataTableName);
-            assertTrue(rs.next());
-            assertEquals(5, rs.getInt(1));
-
-            // Overwrite an existing row that satisfies the index WHERE clause such that
-            // the new version of the row does not satisfy the index where clause anymore. This
-            // should result in deleting the index row.
-            conn.createStatement().execute(
-                    "upsert into " + dataTableName + " (ID, B, jsoncol) values ('id4', null, '" + jsonWithoutPathExists + "')");
-            rs = conn.createStatement().executeQuery(selectSql);
-            assertTrue(rs.next());
-            assertEquals(70, rs.getInt(1));
-            assertEquals("a", rs.getString(2));
-            assertFalse(rs.next());
-
-            // Test index verification and repair by IndexTool
-            verifyIndex(dataTableName, indexTableName);
-
-            try (Connection newConn = DriverManager.getConnection(getUrl())) {
-                PTable indexTable = PhoenixRuntime.getTableNoCache(newConn, indexTableName);
-                assertTrue(StringUtils.deleteWhitespace(indexTable.getIndexWhere())
-                        .equals("JSON_EXISTS(JSONCOL,'$.info.address.exists')"));
-            }
         }
     }
 

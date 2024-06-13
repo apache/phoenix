@@ -60,14 +60,13 @@ public class Query {
         while (m.find()) {
             String dynamicField = m.group(0).replace("[", "").replace("]", "");
             Column dynamicColumn = ruleApplier.getRule(dynamicField, scenario);
-            // For Json we can have queries like info[5].name and it should not match
-            if (dynamicColumn != null && dynamicColumn.getType() != null) {
-                needQuotes = (dynamicColumn.getType() == DataTypeMapping.CHAR
-                        || dynamicColumn.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
-                ret = ret.replace("[" + dynamicField + "]",
-                                needQuotes + ruleApplier.getDataValue(dynamicColumn)
-                                        .getValue() + needQuotes);
-            }
+            needQuotes =
+                    (dynamicColumn.getType() == DataTypeMapping.CHAR
+                            || dynamicColumn.getType() == DataTypeMapping.VARCHAR) ? "'" : "";
+            ret =
+                    ret.replace("[" + dynamicField + "]",
+                            needQuotes + ruleApplier.getDataValue(dynamicColumn).getValue()
+                                    + needQuotes);
         }
         return ret;
     }

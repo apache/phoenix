@@ -47,7 +47,6 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDateArray;
-import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PNumericType;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimeArray;
@@ -111,8 +110,6 @@ public class CreateIndexCompiler {
             return "ARRAY[" + getValue(PDate.INSTANCE) + "]";
         } else if (type instanceof PArrayDataType) {
             return "ARRAY" + type.getSampleValue().toString();
-        } else if (type instanceof PJson) {
-            return "'{a:1}'";
         } else {
             return "0123";
         }

@@ -33,10 +33,6 @@ public class PVarbinary extends PBinaryBase {
         super("VARBINARY", Types.VARBINARY, byte[].class, null, 22);
     }
 
-    PVarbinary(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec, int ordinal) {
-        super(sqlTypeName, sqlType, clazz, codec, ordinal);
-    }
-
     @Override
     public byte[] toBytes(Object object) {
         if (object == null) {

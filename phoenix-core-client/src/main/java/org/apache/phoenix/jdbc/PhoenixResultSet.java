@@ -137,7 +137,6 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixResultSet.class);
 
     private final static String STRING_FALSE = "0";
-    private final static String LITERAL_STRING_FALSE = "false";
     private final static BigDecimal BIG_DECIMAL_FALSE = BigDecimal.valueOf(0);
     private final static Integer INTEGER_FALSE = Integer.valueOf(0);
     private final static Tuple BEFORE_FIRST = ResultTuple.EMPTY_TUPLE;
@@ -371,7 +370,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
         if (type == PBoolean.INSTANCE) {
           return Boolean.TRUE.equals(value);
         } else if (type == PVarchar.INSTANCE) {
-          return !STRING_FALSE.equals(value) && !LITERAL_STRING_FALSE.equals(value);
+          return !STRING_FALSE.equals(value);
         } else if (type == PInteger.INSTANCE) {
           return !INTEGER_FALSE.equals(value);
         } else if (type == PDecimal.INSTANCE) {

@@ -44,7 +44,6 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
-import org.bson.RawBsonDocument;
 
 /**
  * The data types of PColumns
@@ -93,21 +92,6 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     public boolean isBytesComparableWith(PDataType otherType) {
         return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE);
-    }
-
-    /**
-     * @return true if {@link PDataType} can be declared as primary key otherwise false.
-     */
-    public boolean canBePrimaryKey() {
-        return true;
-    }
-
-    /**
-     * @return true if {@link PDataType} supports equality operators (=,!=,<,>,<=,>=) otherwise
-     *         false.
-     */
-    public boolean isComparisonSupported() {
-        return true;
     }
 
     public int estimateByteSize(Object o) {
@@ -531,7 +515,6 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     public final static Integer DOUBLE_PRECISION = 15;
 
     public static final int ARRAY_TYPE_BASE = 3000;
-    public static final int JSON_TYPE = 5000;
     public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
 
     protected static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>() {
@@ -1192,18 +1175,6 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
         }
         for (PDataType type : PDataType.values()) {
             if (type.isArrayType()) {
-                if(type.getJavaClass().isInstance(value)){
-                    if (type.isArrayType()) {
-                        PhoenixArray arr = (PhoenixArray) value;
-                        if ((type.getSqlType() == arr.baseType.sqlType
-                                + PDataType.ARRAY_TYPE_BASE)) {
-                            return type;
-                        }
-                    } else {
-                        return type;
-                    }
-                }
-
                 if (value instanceof PhoenixArray) {
                     PhoenixArray arr = (PhoenixArray)value;
                     if ((type.getSqlType() == arr.baseType.sqlType + PDataType.ARRAY_TYPE_BASE)
@@ -1218,10 +1189,6 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                             return type;
                         }
                     } catch (SQLException e) { /* Passthrough to fail */ }
-                }
-            } else if (value instanceof RawBsonDocument) {
-                if (type == PJson.INSTANCE) {
-                    return type;
                 }
             } else {
                 if (type.getJavaClass().isInstance(value)) {

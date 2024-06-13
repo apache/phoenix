@@ -311,10 +311,6 @@ public abstract class ExplainTable {
                 explainPlanAttributesBuilder.setServerArrayElementProjection(true);
             }
         }
-        if (scan.getAttribute(BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION) != null
-                || scan.getAttribute(BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION) != null) {
-            planSteps.add("    SERVER JSON FUNCTION PROJECTION");
-        }
     }
 
     /**

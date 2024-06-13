@@ -19,7 +19,6 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.StatementContext;
@@ -146,13 +145,6 @@ public class ColumnDef {
                     }
                 }
             }
-            if (dataType != null && !dataType.canBePrimaryKey() && isPK) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_PRIMARY_KEY_CONSTRAINT)
-                        .setColumnName(columnDefName.getColumnName())
-                        .setMessage(
-                                "," + dataType.toString() + " is not supported as primary key,")
-                        .build().buildException();
-            }
             this.maxLength = maxLength;
             this.scale = scale;
             this.isPK = isPK;
@@ -230,14 +222,7 @@ public class ColumnDef {
     public void setIsPK(boolean isPK) {
         this.isPK = isPK;
     }
-
-    public String toFullString() {
-        if (!Strings.isNullOrEmpty(columnDefName.getFamilyName())) {
-            return columnDefName.getFamilyName() + "." + toString();
-        }
-        return toString();
-    }
-
+    
     @Override
     public String toString() {
         StringBuilder buf = new StringBuilder(columnDefName.getColumnNode().toString());

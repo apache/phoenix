@@ -138,10 +138,6 @@ public class IndexUtilTest {
     private void verifyIndexColumnDataTypes(boolean isNullable, String expected) {
         Map<String, String> indexColumnDataTypes = Maps.newTreeMap();
         for (PDataType dataType : PDataTypeFactory.getInstance().getTypes()) {
-            if (!dataType.isComparisonSupported()) {
-                // JSON Datatype can't be an IndexColumn
-                continue;
-            }
             String indexColumnDataType = "unsupported";
             try {
                 indexColumnDataType = IndexUtil.getIndexColumnDataType(isNullable, dataType).toString();
