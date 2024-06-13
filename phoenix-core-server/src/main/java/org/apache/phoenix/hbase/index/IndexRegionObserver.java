@@ -41,6 +41,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -150,52 +151,51 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private static final OperationStatus NOWRITE = new OperationStatus(OperationStatusCode.SUCCESS);
     public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
     public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
+    /**
+     * Class to represent pending data table rows
+     * */
+    private class PendingRow {
+        private int count;
+        private boolean usable;
+        private ImmutableBytesPtr rowKey;
+        private BatchMutateContext lastContext;
 
-  /**
-   * Class to represent pending data table rows
-   */
-  private class PendingRow {
-      private int count;
-      private boolean usable;
-      private ImmutableBytesPtr rowKey;
-      private BatchMutateContext lastContext;
+        PendingRow(ImmutableBytesPtr rowKey, BatchMutateContext context) {
+            count = 1;
+            usable = true;
+            lastContext = context;
+            this.rowKey = rowKey;
+        }
 
-      PendingRow(ImmutableBytesPtr rowKey, BatchMutateContext context) {
-          count = 1;
-          usable = true;
-          lastContext = context;
-          this.rowKey = rowKey;
-      }
+        public boolean add(BatchMutateContext context) {
+            synchronized (this) {
+                if (usable) {
+                    count++;
+                    lastContext = context;
+                    return true;
+                }
+            }
+            return false;
+        }
 
-      public boolean add(BatchMutateContext context) {
-          synchronized (this) {
-              if (usable) {
-                  count++;
-                  lastContext = context;
-                  return true;
-              }
-          }
-          return false;
-      }
+        public void remove() {
+            synchronized (this) {
+                count--;
+                if (count == 0) {
+                    pendingRows.remove(rowKey);
+                    usable = false;
+                }
+            }
+        }
 
-      public void remove() {
-          synchronized (this) {
-              count--;
-              if (count == 0) {
-                  pendingRows.remove(rowKey);
-                  usable = false;
-              }
-          }
-      }
-
-      public int getCount() {
+        public int getCount() {
           return count;
       }
 
-      public BatchMutateContext getLastContext() {
+        public BatchMutateContext getLastContext() {
           return lastContext;
       }
-  }
+    }
 
   private static boolean ignoreIndexRebuildForTesting  = false;
   private static boolean failPreIndexUpdatesForTesting = false;
@@ -861,17 +861,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 BatchMutateContext lastContext = existingPendingRow.getLastContext();
                 if (existingPendingRow.add(context)) {
                     BatchMutatePhase phase = lastContext.getCurrentPhase();
-                    if (phase == BatchMutatePhase.PRE || phase == BatchMutatePhase.POST) {
-                        assert phase == BatchMutatePhase.PRE
-                                : "the phase of the last batch cannot be POST";
-                        if (phase == BatchMutatePhase.PRE) {
-                            if (context.lastConcurrentBatchContext == null) {
-                                context.lastConcurrentBatchContext = new HashMap<>();
-                            }
-                            context.lastConcurrentBatchContext.put(rowKeyPtr, lastContext);
-                            if (context.maxPendingRowCount < existingPendingRow.getCount()) {
-                                context.maxPendingRowCount = existingPendingRow.getCount();
-                            }
+                    Preconditions.checkArgument(phase != BatchMutatePhase.POST,
+                            "the phase of the last batch cannot be POST");
+                    if (phase == BatchMutatePhase.PRE) {
+                        if (context.lastConcurrentBatchContext == null) {
+                            context.lastConcurrentBatchContext = new HashMap<>();
+                        }
+                        context.lastConcurrentBatchContext.put(rowKeyPtr, lastContext);
+                        if (context.maxPendingRowCount < existingPendingRow.getCount()) {
+                            context.maxPendingRowCount = existingPendingRow.getCount();
                         }
                         Put put = lastContext.getNextDataRowState(rowKeyPtr);
                         if (put != null) {
@@ -1148,20 +1146,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
     }
 
+    /**
+     * Wait for the previous batches to complete. If any of the previous batch fails then this
+     * batch will fail too and needs to be retried. The rows are locked by the caller.
+     * @param table
+     * @param context
+     * @throws Throwable
+     */
     private void waitForPreviousConcurrentBatch(TableName table, BatchMutateContext context)
             throws Throwable {
-        boolean done = true;
         for (BatchMutateContext lastContext : context.lastConcurrentBatchContext.values()) {
             BatchMutatePhase phase = lastContext.getCurrentPhase();
             if (phase == BatchMutatePhase.FAILED) {
-                done = false;
+                context.currentPhase = BatchMutatePhase.FAILED;
                 break;
             } else if (phase == BatchMutatePhase.PRE) {
                 CountDownLatch countDownLatch = lastContext.getCountDownLatch();
                 if (countDownLatch == null) {
                     // phase changed from PRE to either FAILED or POST
                     if (phase == BatchMutatePhase.FAILED) {
-                        done = false;
+                        context.currentPhase = BatchMutatePhase.FAILED;
                         break;
                     }
                     continue;
@@ -1172,12 +1176,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 // lastContext.getMaxPendingRowCount() is the depth of the subtree rooted at the batch pointed by lastContext
                 if (!countDownLatch.await((lastContext.getMaxPendingRowCount() + 1) * concurrentMutationWaitDuration,
                         TimeUnit.MILLISECONDS)) {
+                    context.currentPhase = BatchMutatePhase.FAILED;
                     LOG.debug(String.format("latch timeout context %s last %s", context, lastContext));
-                    done = false;
                     break;
                 }
                 if (lastContext.getCurrentPhase() == BatchMutatePhase.FAILED) {
-                    done = false;
+                    context.currentPhase = BatchMutatePhase.FAILED;
                     break;
                 }
                 // Acquire the locks again before letting the region proceed with data table updates
@@ -1186,7 +1190,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         lastContext.getCurrentPhase()));
             }
         }
-        if (!done) {
+        if (context.currentPhase == BatchMutatePhase.FAILED) {
             // This batch needs to be retried since one of the previous concurrent batches has not completed yet.
             // Throwing an IOException will result in retries of this batch. Removal of reference counts and
             // locks for the rows of this batch will be done in postBatchMutateIndispensably()
