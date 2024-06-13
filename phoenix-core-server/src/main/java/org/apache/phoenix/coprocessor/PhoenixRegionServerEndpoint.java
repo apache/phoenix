@@ -71,8 +71,6 @@ public class PhoenixRegionServerEndpoint
             String tenantIDStr = Bytes.toString(tenantID);
             String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
             try {
-                LOGGER.debug("Verifying last ddl timestamp for tenantID: {}, tableName: {}",
-                        tenantIDStr, fullTableName);
                 VerifyLastDDLTimestamp.verifyLastDDLTimestamp(cache, tenantID, schemaName,
                         tableName, clientLastDDLTimestamp);
             } catch (Throwable t) {

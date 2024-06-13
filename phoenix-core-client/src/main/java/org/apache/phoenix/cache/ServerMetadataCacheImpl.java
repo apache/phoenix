@@ -49,12 +49,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
     // key is the combination of <tenantID, schema name, table name>, value is the lastDDLTimestamp
     protected final Cache<ImmutableBytesPtr, Long> lastDDLTimestampMap;
     private static final Logger LOGGER = LoggerFactory.getLogger(ServerMetadataCacheImpl.class);
-    private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS =
-            "phoenix.coprocessor.regionserver.cache.ttl.ms";
-    // Keeping default cache expiry for 30 mins since we won't have stale entry
-    // for more than 30 mins.
-    private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS
-            = 30 * 60 * 1000L; // 30 mins
     private static final String PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE
             = "phoenix.coprocessor.regionserver.cache.size";
     private static final long DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE = 10000L;
@@ -84,8 +78,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
         this.conf = HBaseConfiguration.create(conf);
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
-        long maxTTL = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS,
-                DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_TTL_MS);
         long maxSize = conf.getLong(PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE,
                 DEFAULT_PHOENIX_COPROC_REGIONSERVER_CACHE_SIZE);
         lastDDLTimestampMap = CacheBuilder.newBuilder()
@@ -96,7 +88,6 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
                 })
                 // maximum number of entries this cache can handle.
                 .maximumSize(maxSize)
-                .expireAfterAccess(maxTTL, TimeUnit.MILLISECONDS)
                 .build();
     }
 
@@ -111,15 +102,14 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      */
     public long getLastDDLTimestampForTable(byte[] tenantID, byte[] schemaName, byte[] tableName)
             throws SQLException {
-        String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
         ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
         // Lookup in cache if present.
         Long lastDDLTimestamp = lastDDLTimestampMap.getIfPresent(tableKeyPtr);
         if (lastDDLTimestamp != null) {
             metricsSource.incrementRegionServerMetadataCacheHitCount();
-            LOGGER.trace("Retrieving last ddl timestamp value from cache for tableName: {}",
-                    fullTableNameStr);
+            LOGGER.trace("Retrieving last ddl timestamp value from cache for " + "schema: {}, " +
+                    "table: {}", Bytes.toString(schemaName), Bytes.toString(tableName));
             return lastDDLTimestamp;
         }
         metricsSource.incrementRegionServerMetadataCacheMissCount();
@@ -151,9 +141,8 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
      * @param tableName tableName
      */
     public void invalidate(byte[] tenantID, byte[] schemaName, byte[] tableName) {
-        String fullTableNameStr = SchemaUtil.getTableName(schemaName, tableName);
-        LOGGER.debug("Invalidating server metadata cache for tenantID: {}, full table: {}",
-                Bytes.toString(tenantID), fullTableNameStr);
+        LOGGER.info("Invalidating server metadata cache for tenantID: {}, schema: {},  table: {}",
+                Bytes.toString(tenantID), Bytes.toString(schemaName), Bytes.toString(tableName));
         byte[] tableKey = SchemaUtil.getTableKey(tenantID, schemaName, tableName);
         ImmutableBytesPtr tableKeyPtr = new ImmutableBytesPtr(tableKey);
         lastDDLTimestampMap.invalidate(tableKeyPtr);

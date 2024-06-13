@@ -110,9 +110,6 @@ public class ValidateLastDDLTimestampUtil {
             ServerName regionServer
                     = regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
 
-            LOGGER.debug("Sending DDL timestamp validation request for {} to regionserver {}",
-                    infoString, regionServer);
-
             // RPC
             RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
                     service = RegionServerEndpointProtos.RegionServerEndpointService
