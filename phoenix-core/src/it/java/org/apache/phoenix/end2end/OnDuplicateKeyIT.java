@@ -53,6 +53,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Ignore;
@@ -68,35 +69,31 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     private final String indexDDL;
+    private final String tableDDLOptions;
+
+    private static final String[] INDEX_DDLS =
+            new String[] {
+                    "",
+                    "create local index %s_IDX on %s(counter1) include (counter2)",
+                    "create local index %s_IDX on %s(counter1, counter2)",
+                    "create index %s_IDX on %s(counter1) include (counter2)",
+                    "create index %s_IDX on %s(counter1, counter2)",
+                    "create uncovered index %s_IDX on %s(counter1)",
+                    "create uncovered index %s_IDX on %s(counter1, counter2)"};
     
-    public OnDuplicateKeyIT(String indexDDL) {
+    public OnDuplicateKeyIT(String indexDDL, boolean columnEncoded) {
         this.indexDDL = indexDDL;
+        this.tableDDLOptions = columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0";
     }
     
-    @Parameters
+    @Parameters(name="OnDuplicateKeyIT_{index},columnEncoded={1}")
     public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
-        testCases.add(new String[] {
-                "",
-        });
-        testCases.add(new String[] {
-                "create local index %s_IDX on %s(counter1) include (counter2)",
-        });
-        testCases.add(new String[] {
-                "create local index %s_IDX on %s(counter1, counter2)",
-        });
-        testCases.add(new String[] {
-                "create index %s_IDX on %s(counter1) include (counter2)",
-        });
-        testCases.add(new String[] {
-                "create index %s_IDX on %s(counter1, counter2)",
-        });
-        testCases.add(new String[] {
-                "create uncovered index %s_IDX on %s(counter1)",
-        });
-        testCases.add(new String[] {
-                "create uncovered index %s_IDX on %s(counter1, counter2)",
-        });
+        for (String indexDDL : INDEX_DDLS) {
+            for (boolean columnEncoded : new boolean[]{ false, true }) {
+                testCases.add(new Object[] { indexDDL, columnEncoded });
+            }
+        }
         return testCases;
     }
     
@@ -756,7 +753,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
 
             String ddl = "create table " + tableName + "(pk varchar primary key, " +
                     "counter1 integer, counter2 integer, counter3 smallint, counter4 bigint, " +
-                    "counter5 varchar)";
+                    "counter5 varchar)" + tableDDLOptions;
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
             String dml = String.format("UPSERT INTO %s VALUES('abc', 0, 10, 100, 1000, 'NONE')",
@@ -815,7 +812,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             conn.setAutoCommit(true);
 
             String ddl = "create table " + tableName +
-                    "(pk varchar primary key, counter1 bigint, counter2 bigint)";
+                    "(pk varchar primary key, counter1 bigint, counter2 bigint)" + tableDDLOptions;
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
@@ -908,7 +905,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             conn.setAutoCommit(true);
 
             String ddl = "create table " + tableName +
-                    "(pk varchar primary key, counter1 integer, counter2 integer)";
+                    "(pk varchar primary key, counter1 integer, counter2 integer)" + tableDDLOptions;
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
@@ -970,7 +967,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             conn.setAutoCommit(true);
             String ddl = "create table " + tableName +
                     "(pk varchar primary key, counter1 integer, counter2 integer, approval " +
-                    "varchar)";
+                    "varchar)" + tableDDLOptions;
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
@@ -1053,7 +1050,7 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             conn.setAutoCommit(true);
 
             String ddl = "create table " + tableName +
-                    "(pk varchar primary key, counter1 bigint, counter2 bigint)";
+                    "(pk varchar primary key, counter1 bigint, counter2 bigint)" + tableDDLOptions;
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
@@ -1189,10 +1186,9 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             stmt.addBatch(dml);
 
             int[] actualReturnValues = stmt.executeBatch();
-            int[] expectedReturnValues = new int[]{0, 1, 1, 1, 1, 0};
+            int[] expectedReturnValues = new int[]{1, 1, 1, 1, 1, 1};
             if (!autocommit) {
                 conn.commit();
-                expectedReturnValues = new int[]{1, 1, 1, 1, 1, 1};
             }
             assertArrayEquals(expectedReturnValues, actualReturnValues);
 
@@ -1357,14 +1353,16 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     private long getEmptyKVLatestCellTimestamp(String tableName) throws Exception {
-        byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(true).getFirst();
-        return getColumnLatestCellTimestamp(tableName, emptyKVQualifier);
+        Connection conn = DriverManager.getConnection(getUrl());
+        PTable pTable = PhoenixRuntime.getTable(conn, tableName);
+        byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
+        return getColumnLatestCellTimestamp(tableName, emptyCQ);
     }
 
     private long getColumnLatestCellTimestamp(String tableName, byte[] cq) throws Exception {
         Scan scan = new Scan();
         try (org.apache.hadoop.hbase.client.Connection hconn =
-                 ConnectionFactory.createConnection(config)) {
+                     ConnectionFactory.createConnection(config)) {
             Table table = hconn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = table.getScanner(scan);
             Result result = resultScanner.next();
