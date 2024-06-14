@@ -48,11 +48,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Properties;
+import java.util.TimeZone;
 
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
@@ -500,12 +503,18 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
                     hTable = conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(tableName.getBytes());
             Scan scan = new Scan();
             scan.setRaw(true);
+            scan.readAllVersions();
             LOGGER.info("***** Table Name : " + tableName);
             ResultScanner scanner = hTable.getScanner(scan);
+            // This is the default format of to_char(timestamp)
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+            sdf.setTimeZone(TimeZone.getTimeZone("GMT"));
             for (Result result = scanner.next(); result != null; result = scanner.next()) {
                 for (Cell cell : result.rawCells()) {
                     String cellString = cell.toString();
-                    LOGGER.info(cellString + " ****** value : " + Bytes.toStringBinary(CellUtil.cloneValue(cell)));
+                    LOGGER.info(cellString + " ****** timestamp : " +
+                            sdf.format(new Date(cell.getTimestamp())) + " ****** value : " +
+                            Bytes.toStringBinary(CellUtil.cloneValue(cell)));
                 }
             }
         }

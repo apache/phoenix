@@ -17,27 +17,38 @@
  */
 package org.apache.phoenix.parse;
 
-import java.util.Collections;
-import java.util.List;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 
-/**
- * 
- * Abstract node for expressions that have no children
- *
- * 
- * @since 0.1
- */
-public abstract class TerminalParseNode extends ParseNode {
+public class DropCDCStatement extends MutableStatement {
+    private final TableName tableName;
+    private final NamedNode cdcObjName;
+    private final boolean ifExists;
+
+    public DropCDCStatement(NamedNode cdcObjName, TableName tableName, boolean ifExists) {
+        this.cdcObjName = cdcObjName;
+        this.tableName = tableName;
+        this.ifExists = ifExists;
+    }
+
+    public TableName getTableName() {
+        return tableName;
+    }
+
+    public NamedNode getCdcObjName() {
+        return cdcObjName;
+    }
+
     @Override
-    public final List<ParseNode> getChildren() {
-        return Collections.emptyList();
+    public int getBindCount() {
+        return 0;
     }
 
-    public boolean isWildcardNode() {
-        return false;
+    public boolean ifExists() {
+        return ifExists;
     }
 
-    public TerminalParseNode getRewritten() {
-        return null;
+    @Override
+    public PhoenixStatement.Operation getOperation() {
+        return PhoenixStatement.Operation.DELETE;
     }
 }

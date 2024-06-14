@@ -364,6 +364,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         options.setMaxVersions(Integer.MAX_VALUE);
         options.setMinVersions(Integer.MAX_VALUE);
     }
+
     @Override
     public void preCompactScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
             ScanType scanType, ScanOptions options, CompactionLifeCycleTracker tracker,
@@ -373,10 +374,10 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAge = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
+        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
+        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    scanType, maxLookbackAge);
+                    scanType, maxLookbackAgeInMillis);
         }
     }
 
@@ -384,14 +385,16 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     public void preFlushScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
             ScanOptions options, FlushLifeCycleTracker tracker) throws IOException {
         Configuration conf = c.getEnvironment().getConfiguration();
+
         if (isPhoenixTableTTLEnabled(conf)) {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAge = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
+
+        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
+        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    ScanType.COMPACT_RETAIN_DELETES, maxLookbackAge);
+                    ScanType.COMPACT_RETAIN_DELETES, maxLookbackAgeInMillis);
         }
     }
 
@@ -404,8 +407,8 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             setScanOptionsForFlushesAndCompactions(options);
             return;
         }
-        long maxLookbackAge = getMaxLookbackAge(c);
-        if (isMaxLookbackTimeEnabled(maxLookbackAge)) {
+        long maxLookbackAgeInMillis = getMaxLookbackAge(c);
+        if (isMaxLookbackTimeEnabled(maxLookbackAgeInMillis)) {
             MemoryCompactionPolicy inMemPolicy =
                     store.getColumnFamilyDescriptor().getInMemoryCompaction();
             ScanType scanType;
@@ -418,7 +421,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 scanType = ScanType.COMPACT_RETAIN_DELETES;
             }
             setScanOptionsForFlushesAndCompactionsWhenPhoenixTTLIsDisabled(conf, options, store,
-                    scanType, maxLookbackAge);
+                    scanType, maxLookbackAgeInMillis);
         }
     }
 

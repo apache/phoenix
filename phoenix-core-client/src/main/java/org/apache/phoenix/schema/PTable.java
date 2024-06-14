@@ -870,11 +870,12 @@ public interface PTable extends PMetaDataEntity {
     PName getPhysicalName(boolean returnColValueFromSyscat);
 
     boolean isImmutableRows();
-
     boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection)
             throws SQLException;
     IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection)
             throws SQLException;
+    IndexMaintainer getIndexMaintainer(PTable dataTable, PTable cdcTable,
+                                       PhoenixConnection connection) throws SQLException;
     TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection);
     PName getDefaultFamilyName();
 
@@ -976,6 +977,11 @@ public interface PTable extends PMetaDataEntity {
     String getStreamingTopicName();
 
     /**
+     * @return Optional string that represents the default include scopes to be used for CDC queries.
+     */
+    Set<CDCChangeScope> getCDCIncludeScopes();
+
+    /**
      *
      * @return the optional where clause in string used for partial indexes
      */
@@ -1002,6 +1008,7 @@ public interface PTable extends PMetaDataEntity {
      * Returns: Table level max lookback age if configured else null.
      */
     Long getMaxLookbackAge();
+
     /**
      * Class to help track encoded column qualifier counters per column family.
      */
@@ -1088,4 +1095,20 @@ public interface PTable extends PMetaDataEntity {
         
     }
 
+    enum CDCChangeScope {
+        /**
+         * Include only the actual change in image.
+         */
+        CHANGE,
+
+        /**
+         * Include only the pre image (state prior to the change) of the row.
+         */
+        PRE,
+
+        /**
+         * Include only the post image (state past the change) of the row.
+         */
+        POST,
+    }
 }

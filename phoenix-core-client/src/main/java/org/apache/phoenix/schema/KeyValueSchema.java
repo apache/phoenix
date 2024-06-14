@@ -21,11 +21,13 @@ import java.util.List;
 
 import net.jcip.annotations.Immutable;
 
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
@@ -141,6 +143,30 @@ public class KeyValueSchema extends ValueSchema {
             System.arraycopy(b, 0, bExact, 0, offset);
             return bExact;
         }
+    }
+
+    /**
+     * Extract value out of a cell encoded with {@link
+     * org.apache.phoenix.schema.PTable.ImmutableStorageScheme#SINGLE_CELL_ARRAY_WITH_OFFSETS}
+     *
+     * @param cell The cell, exepected to have an encoded value.
+     * @param expression The expression
+     * @param ptr The pointer in which the extracted value can be found, if successful.
+     * @return {@code true} on success.
+     */
+    public boolean extractValue(Cell cell, SingleCellColumnExpression expression,
+                                ImmutableBytesWritable ptr) {
+        ptr.set(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+        List<Field> fields = getFields();
+        for (int i = 0; i < fields.size(); i++) {
+            Field field = fields.get(i);
+            for (int j = 0; j < field.getCount(); j++) {
+                if (expression.evaluate(ptr) && ptr.getLength() > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private int getVarLengthBytes(int length) {
