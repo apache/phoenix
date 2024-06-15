@@ -1,0 +1,92 @@
+{
+  "gpu_name": "understanding",
+  "answer": -1207198585.4193487,
+  "natural": -299491449,
+  "rather": [
+    false,
+    -1057842580.2713003,
+    "sets",
+    {
+      "chapter": 1714682536.0572476,
+      "outline": {
+        "clock": "personal",
+        "halfway": {
+          "camp": false,
+          "combination": false,
+          "win": false,
+          "so": [
+            "spell",
+            false,
+            [
+              -1387905155,
+              "solar",
+              "hand",
+              887113883,
+              387828706,
+              -1067580636.7789006,
+              "sky",
+              false
+            ],
+            true,
+            false,
+            true,
+            false,
+            1860501299
+          ],
+          "flow": "till",
+          "cat": false,
+          "damage": 384456425,
+          "clock": true
+        },
+        "thrown": false,
+        "saved": "completely",
+        "son": false,
+        "arrow": "studying",
+        "done": false,
+        "large": "together"
+      },
+      "themselves": 1155861188.1535501,
+      "personal": false,
+      "careful": "pool",
+      "manufacturing": "stuck",
+      "force": -8668311.262439728,
+      "plenty": false
+    },
+    false,
+    -2054306404.6564512,
+    "morning",
+    -1619008410
+  ],
+  "read": -802322222,
+  "top": false,
+  "living": "yourself",
+  "below": "who",
+  "new_samples": {
+    "$set": [
+      {
+        "$binary": {
+          "base64": "U2FtcGxlMDE=",
+          "subType": "00"
+        }
+      },
+      {
+        "$binary": {
+          "base64": "U2FtcGxlMDI=",
+          "subType": "00"
+        }
+      },
+      {
+        "$binary": {
+          "base64": "U2FtcGxlMDM=",
+          "subType": "00"
+        }
+      },
+      {
+        "$binary": {
+          "base64": "U2FtcGxlMDQ=",
+          "subType": "00"
+        }
+      }
+    ]
+  }
+}

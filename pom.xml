@@ -155,6 +155,7 @@
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
     <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
+    <mvel2.version>2.5.2.Final</mvel2.version>
 
     <!-- Plugin options -->
     <skipParallelStatsEnabledTests>false</skipParallelStatsEnabledTests>
@@ -1528,6 +1529,18 @@
           <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <dependency>
+        <groupId>org.mvel</groupId>
+        <artifactId>mvel2</artifactId>
+        <version>${mvel2.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.thoughtworks.xstream</groupId>
+            <artifactId>xstream</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
