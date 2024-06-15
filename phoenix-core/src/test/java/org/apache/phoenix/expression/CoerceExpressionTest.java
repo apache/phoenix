@@ -27,6 +27,7 @@ import java.util.HashMap;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
@@ -102,8 +103,8 @@ public class CoerceExpressionTest {
 
 	@Test
 	public void testCoerceExpressionSupportsCoercingAllPDataTypesToVarBinary() throws Exception {
-		for (PDataType p : PDataType.values()) {
-			if (!p.isArrayType() && !p.equals(PJson.INSTANCE)) {
+		for (PDataType<?> p : PDataType.values()) {
+			if (!p.isArrayType() && !p.equals(PJson.INSTANCE) && !p.equals(PBson.INSTANCE)) {
 				LiteralExpression v = LiteralExpression.newConstant(map.get(p.getJavaClass()), p);
 				CoerceExpression e = new CoerceExpression(v, PVarbinary.INSTANCE);
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
@@ -117,8 +118,8 @@ public class CoerceExpressionTest {
 
 	@Test
 	public void testCoerceExpressionSupportsCoercingAllPDataTypesToBinary() throws Exception {
-		for (PDataType p : PDataType.values()) {
-			if (!p.isArrayType() && !p.equals(PJson.INSTANCE)) {
+		for (PDataType<?> p : PDataType.values()) {
+			if (!p.isArrayType() && !p.equals(PJson.INSTANCE) && !p.equals(PBson.INSTANCE)) {
 				LiteralExpression v = LiteralExpression.newConstant(map.get(p.getJavaClass()), p);
 				CoerceExpression e = new CoerceExpression(v, PBinary.INSTANCE);
 				ImmutableBytesWritable ptr = new ImmutableBytesWritable();
