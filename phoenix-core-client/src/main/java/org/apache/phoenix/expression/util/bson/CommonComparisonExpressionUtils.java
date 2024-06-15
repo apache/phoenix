@@ -38,6 +38,17 @@ public class CommonComparisonExpressionUtils {
   private static final Logger LOGGER =
       LoggerFactory.getLogger(CommonComparisonExpressionUtils.class);
 
+  /**
+   * Retrieve the value associated with the document field key. The field key can represent
+   * any top level or nested fields within the document. The caller should use "." notation for
+   * accessing nested document elements and "[n]" notation for accessing nested array elements. Top
+   * level fields do not require any additional character.
+   *
+   * @param documentFieldKey The document field key for which the value is returned.
+   * @param rawBsonDocument The document from which to find the value.
+   * @return If the field key exists in the document, return the corresponding value. Else
+   * return null.
+   */
   public static BsonValue getFieldFromDocument(final String documentFieldKey,
                                                final BsonDocument rawBsonDocument) {
     if (documentFieldKey.contains(".") || documentFieldKey.contains("[")) {
@@ -65,6 +76,16 @@ public class CommonComparisonExpressionUtils {
     return null;
   }
 
+  /**
+   * Retrieve the value associated with the nested field key within the document.
+   *
+   * @param value Value of the parent data structure (document or array) which is used to search
+   * nested elements from.
+   * @param idx Index used to track which part of the field key has been covered so far.
+   * @param documentFieldKey The document field key for which the value is returned.
+   * @return If the field key exists in the document, return the corresponding value. Else
+   * return null.
+   */
   public static BsonValue getNestedFieldVal(BsonValue value, int idx,
                                             final String documentFieldKey) {
     if (idx == documentFieldKey.length()) {
@@ -122,6 +143,14 @@ public class CommonComparisonExpressionUtils {
     return null;
   }
 
+  /**
+   * Compares two values: value and compareValue. If both have same data type and the value of
+   * actual value is less than the compareValue, then returns true. Otherwise, returns false.
+   *
+   * @param value The actual value to compare against compareValue.
+   * @param compareValue The value against which the actual value is compared.
+   * @return True if both have same data type and the value is less than compareValue.
+   */
   public static boolean lessThan(BsonValue value, BsonValue compareValue) {
     if (value.isString() && compareValue.isString()) {
       return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) < 0;
@@ -144,6 +173,16 @@ public class CommonComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Compares two values: value and compareValue. If both have same data type and the value of
+   * actual value is less than or equals to the compareValue, then returns true. Otherwise, returns
+   * false.
+   *
+   * @param value The actual value to compare against compareValue.
+   * @param compareValue The value against which the actual value is compared.
+   * @return True if both have same data type and the value is less than or equals to the
+   * compareValue.
+   */
   public static boolean lessThanOrEquals(BsonValue value, BsonValue compareValue) {
     if (value.isString() && compareValue.isString()) {
       return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) <= 0;
@@ -166,6 +205,15 @@ public class CommonComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Compares two values: value and compareValue. If both have same data type and the value of
+   * actual value is greater than the compareValue, then returns true. Otherwise, returns
+   * false.
+   *
+   * @param value The actual value to compare against compareValue.
+   * @param compareValue The value against which the actual value is compared.
+   * @return True if both have same data type and the value is greater than the compareValue.
+   */
   public static boolean greaterThan(BsonValue value, BsonValue compareValue) {
     if (value.isString() && compareValue.isString()) {
       return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) > 0;
@@ -188,6 +236,16 @@ public class CommonComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Compares two values: value and compareValue. If both have same data type and the value of
+   * actual value is greater than or equals to the compareValue, then returns true. Otherwise,
+   * returns false.
+   *
+   * @param value The actual value to compare against compareValue.
+   * @param compareValue The value against which the actual value is compared.
+   * @return True if both have same data type and the value is greater than or equals to the
+   * compareValue.
+   */
   public static boolean greaterThanOrEquals(BsonValue value, BsonValue compareValue) {
     if (value.isString() && compareValue.isString()) {
       return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) >= 0;
