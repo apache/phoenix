@@ -24,6 +24,7 @@ import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
 import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -80,7 +81,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 // End to end tests for metadata caching re-design.
-@Category(ParallelStatsDisabledIT.class)
+@Category(ParallelStatsDisabledTest.class)
 public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
 
     private final Random RANDOM = new Random(42);
