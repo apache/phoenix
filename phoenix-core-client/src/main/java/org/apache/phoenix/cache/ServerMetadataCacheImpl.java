@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
 import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.cache.Cache;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
@@ -123,9 +124,10 @@ public class ServerMetadataCacheImpl implements ServerMetadataCache {
             properties.setProperty(TENANT_ID_ATTRIB, tenantIDStr);
         }
         try (Connection connection = getConnection(properties)) {
-            // Using PhoenixRuntime#getTableFromServerNoCache to completely bypass CQSI cache.
-            table = PhoenixRuntime.getTableFromServerNoCache(connection, schemaName, tableName);
-            // TODO PhoenixRuntime#getTableNoCache can throw TableNotFoundException.
+            // Using PhoenixConnection#getTableFromServerNoCache to completely bypass CQSI cache.
+            table = connection.unwrap(PhoenixConnection.class)
+                    .getTableFromServerNoCache(schemaName, tableName);
+            // TODO PhoenixConnection#getTableFromServerNoCache can throw TableNotFoundException.
             //  In that case, do we want to throw non retryable exception back to the client?
             // Update cache with the latest DDL timestamp from SYSCAT server.
             lastDDLTimestampMap.put(tableKeyPtr, table.getLastDDLTimestamp());

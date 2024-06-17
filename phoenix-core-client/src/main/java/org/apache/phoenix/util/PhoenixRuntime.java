@@ -542,18 +542,6 @@ public class PhoenixRuntime {
     }
 
     /**
-     * Returns the most recent PTable fetched from the server without updating the CQSI cache.
-     */
-    public static PTable getTableFromServerNoCache(Connection conn, byte[] schemaName,
-                                                   byte[] tableName) throws SQLException {
-        if (schemaName == null) {
-            schemaName = ByteUtil.EMPTY_BYTE_ARRAY;
-        }
-        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        return pconn.getTableFromServerNoCache(schemaName, tableName);
-    }
-
-    /**
      * Get list of ColumnInfos that contain Column Name and its associated PDataType for an import.
      * The supplied list of columns can be null -- if it is non-null, it represents a user-supplied
      * list of columns to be imported.

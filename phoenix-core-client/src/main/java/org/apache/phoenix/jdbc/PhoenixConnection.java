@@ -732,6 +732,9 @@ public class PhoenixConnection implements MetaDataMutated, SQLCloseable, Phoenix
      */
     public PTable getTableFromServerNoCache(byte[] schemaName, byte[] tableName)
                     throws SQLException {
+        if (schemaName == null) {
+            schemaName = ByteUtil.EMPTY_BYTE_ARRAY;
+        }
         MetaDataProtocol.MetaDataMutationResult result =
                 getQueryServices().getTable(getTenantId(), schemaName,
                         tableName, HConstants.LATEST_TIMESTAMP, HConstants.LATEST_TIMESTAMP);
