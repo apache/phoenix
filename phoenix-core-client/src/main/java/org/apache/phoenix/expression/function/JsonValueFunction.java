@@ -22,6 +22,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.JsonValueParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -41,7 +42,8 @@ import java.util.List;
  */
 @FunctionParseNode.BuiltInFunction(name = JsonValueFunction.NAME,
         nodeClass = JsonValueParseNode.class,
-        args = { @FunctionParseNode.Argument(allowedTypes = { PJson.class, PVarbinary.class }),
+        args = { @FunctionParseNode.Argument(allowedTypes = { PJson.class, PBson.class,
+                PVarbinary.class }),
                 @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
 public class JsonValueFunction extends ScalarFunction {
 
