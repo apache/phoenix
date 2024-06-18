@@ -31,7 +31,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -44,6 +43,7 @@ import org.apache.phoenix.hbase.index.covered.Batch;
 import org.apache.phoenix.hbase.index.covered.data.LazyValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.scanner.ScannerBuilder.CoveredDeleteScanner;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -215,8 +215,7 @@ public class IndexManagementUtil {
     }
 
     /**
-     * Batch all the {@link KeyValue}s in a collection of kvs by timestamp. Updates any {@link KeyValue} with a
-     * timestamp == {@link HConstants#LATEST_TIMESTAMP} to the timestamp at the time the method is called.
+     * Batch all the {@link KeyValue}s in a collection of kvs by timestamp.
      * 
      * @param kvs {@link KeyValue}s to break into batches
      * @param batches to update with the given kvs
@@ -235,16 +234,16 @@ public class IndexManagementUtil {
     }
 
     /**
-     * Batch all the {@link KeyValue}s in a {@link Mutation} by timestamp. Updates any {@link KeyValue} with a timestamp
-     * == {@link HConstants#LATEST_TIMESTAMP} to the timestamp at the time the method is called.
-     * 
+     * Batch all the {@link KeyValue}s in a {@link Mutation} by timestamp.
+     *
      * @param m {@link Mutation} from which to extract the {@link KeyValue}s
      * @return the mutation, broken into batches and sorted in ascending order (smallest first)
      */
     public static Collection<Batch> createTimestampBatchesFromMutation(Mutation m) {
         Map<Long, Batch> batches = new HashMap<Long, Batch>();
         for (List<Cell> family : m.getFamilyCellMap().values()) {
-            List<KeyValue> familyKVs = KeyValueUtil.ensureKeyValues(family);
+            // TODO do we really need this to be on-heap ?
+            List<KeyValue> familyKVs = PhoenixKeyValueUtil.ensureKeyValues(family);
             createTimestampBatchesFromKeyValues(familyKVs, batches);
         }
         // sort the batches
