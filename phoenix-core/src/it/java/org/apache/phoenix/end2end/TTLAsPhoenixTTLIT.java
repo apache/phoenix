@@ -230,8 +230,8 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
     @Test
     public void testSettingTTLForViewsOnTableWithTTL() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tenantID = generateUniqueName();
-            String tenantID1 = generateUniqueName();
+            String tenantID = generateUniqueName().substring(1);
+            String tenantID1 = generateUniqueName().substring(1);
 
             Properties props = new Properties();
             props.setProperty(TENANT_ID_ATTRIB, tenantID);
@@ -303,7 +303,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
     @Test
     public void testAlteringTTLToNONEAndThenSettingAtAnotherLevel() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tenantID = generateUniqueName();
+            String tenantID = generateUniqueName().substring(1);
 
             Properties props = new Properties();
             props.setProperty(TENANT_ID_ATTRIB, tenantID);
@@ -370,8 +370,8 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
     @Test
     public void testAlteringTTLAtOneLevelAndCheckingAtAnotherLevel() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tenantID = generateUniqueName();
-            String tenantID1 = generateUniqueName();
+            String tenantID = generateUniqueName().substring(1);
+            String tenantID1 = generateUniqueName().substring(1);
 
             Properties props = new Properties();
             props.setProperty(TENANT_ID_ATTRIB, tenantID);

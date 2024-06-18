@@ -26,6 +26,8 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.BinaryComparator;
+import org.apache.hadoop.hbase.filter.BinaryComponentComparator;
 import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.filter.PrefixFilter;
 import org.apache.hadoop.hbase.filter.RowFilter;
@@ -64,11 +66,13 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
+import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
@@ -223,7 +227,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     }
 
     // Helper method to create a base table
-    private void createBaseTable(String tableName, boolean isMultiTenant) throws SQLException {
+    private void createBaseTable(String tableName, boolean isMultiTenant, PDataType tenantDataType)
+            throws SQLException {
         String baseTableName = String.format(BASE_TABLE_NAME_FMT, tableName);
 
         try (Connection globalConnection = DriverManager.getConnection(getUrl())) {
@@ -231,11 +236,12 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                 String
                         CO_BASE_TBL_TEMPLATE =
                         "CREATE TABLE IF NOT EXISTS %s(" +
-                                "OID CHAR(15) NOT NULL,KP CHAR(3) NOT NULL, " +
+                                "OID %s NOT NULL,KP CHAR(3) NOT NULL, " +
                                 "COL1 VARCHAR,CREATED_DATE DATE,CREATED_BY CHAR(15)," +
                                 "LAST_UPDATE DATE,LAST_UPDATE_BY CHAR(15),SYSTEM_MODSTAMP DATE " +
                                 "CONSTRAINT pk PRIMARY KEY (OID,KP)) COLUMN_ENCODED_BYTES=0 %s";
                 cstmt.execute(String.format(CO_BASE_TBL_TEMPLATE, baseTableName,
+                        getType(tenantDataType),
                         isMultiTenant ? ", MULTI_TENANT=true" : ""));
             }
         }
@@ -287,13 +293,19 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     // Helper method to create a tenant view
     // Return a pair [view-key, row-key-matcher for the view]
 
-    private Pair<String, byte[]> createTenantView(boolean extendPK, int partition, int tenant,
+    private Pair<String, byte[]> createTenantView(boolean extendPK, int partition,
+            PDataType tenantIdType, int tenant,
             int tenantViewNum, String[] pkNames, PDataType[] pkTypes) throws SQLException {
 
         String partitionName = String.format(PARTITION_FMT, partition);
         String globalViewName = String.format(GLOBAL_VIEW_NAME_FMT, partitionName);
 
-        String tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
+        String tenantId = "";
+        if (tenantIdType.getSqlType() == Types.VARCHAR || tenantIdType.getSqlType() == Types.CHAR) {
+            tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
+        } else {
+            tenantId = String.format("%015d", tenant);
+        }
         String
                 tenantConnectionUrl =
                 String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
@@ -323,7 +335,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
 
     // Helper method to create rows for a given tenant view
     private void upsertTenantViewRows(boolean isMultiTenant, boolean extendPK, int partition,
-            int tenant, int tenantViewNum, int rowIndex, String[] pkNames, PDataType[] pkTypes)
+            PDataType tenantIdType, int tenant, int tenantViewNum, int rowIndex,
+            String[] pkNames, PDataType[] pkTypes)
             throws SQLException {
 
         String rid = String.format(ROW_ID_FMT, rowIndex);
@@ -337,7 +350,12 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
 
         String partitionName = String.format(PARTITION_FMT, partition);
 
-        String tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
+        String tenantId = "";
+        if (tenantIdType.getSqlType() == Types.VARCHAR || tenantIdType.getSqlType() == Types.CHAR) {
+            tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
+        } else {
+            tenantId = String.format("%015d", tenant);
+        }
         String
                 tenantConnectionUrl =
                 String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);
@@ -638,9 +656,6 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
             Scan allRows = new Scan();
             // Add tenant as the prefix filter
             FilterList andFilter = new FilterList();
-            if (tenantId != null) {
-                andFilter.addFilter(new PrefixFilter(tenantId.getBytes()));
-            }
             andFilter.addFilter(new RowFilter(CompareOperator.EQUAL, new SubstringComparator(rid)));
             allRows.setFilter(andFilter);
             ResultScanner scanner = tbl.getScanner(allRows);
@@ -668,13 +683,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
 
         try (Table tbl = connection.getQueryServices().getTable(hbaseIndexTableName)) {
 
-            PName tenantId = connection.getTenantId();
             Scan allRows = new Scan();
             FilterList andFilter = new FilterList();
-            if (tenantId != null) {
-                andFilter.addFilter(new RowFilter(CompareOperator.EQUAL,
-                        new SubstringComparator(tenantId.getString())));
-            }
             andFilter.addFilter(new RowFilter(CompareOperator.EQUAL, new SubstringComparator(rid)));
             allRows.setFilter(andFilter);
             ResultScanner scanner = tbl.getScanner(allRows);
@@ -775,6 +785,55 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testViewsWithVariousTenantIdTypes() {
+        try {
+            List<PDataType[]> testCases = new ArrayList<>();
+            // Test Case 1: PK1 = Integer, PK2 = Integer, PK3 = Integer
+            testCases.add(new PDataType[] { PInteger.INSTANCE, PInteger.INSTANCE, PInteger.INSTANCE });
+            SortOrder[][]
+                    sortOrders =
+                    new SortOrder[][] { { SortOrder.ASC, SortOrder.ASC, SortOrder.ASC } };
+
+            String tableName = "";
+            tableName = createViewHierarchy( PInteger.INSTANCE,
+                    testCases, sortOrders, 700, 7000, 3,
+                    true, true, false);
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+
+            tableName = createViewHierarchy( PLong.INSTANCE,
+                    testCases, sortOrders, 710, 7100, 3,
+                    true, true, false);
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+
+            tableName = createViewHierarchy( PSmallint.INSTANCE,
+                    testCases, sortOrders, 720, 7200, 3,
+                    true, true, false);
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+
+            tableName = createViewHierarchy( PTinyint.INSTANCE,
+                    testCases, sortOrders, 730, 7300, 3,
+                    true, true, false);
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+            assertRowKeyMatchersForTable(getUrl(), SchemaUtil.getSchemaNameFromFullName(tableName),
+                    SchemaUtil.getTableNameFromFullName(tableName));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOGGER.error(e.getMessage());
+        }
+    }
+
+    @Test
     public void testViewsWithoutExtendedPK() {
         try {
             List<PDataType[]> testCases = getTestCases();
@@ -862,8 +921,15 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         }
 
     }
-
     private String createViewHierarchy(List<PDataType[]> testCases, SortOrder[][] sortOrders,
+            int startPartition, int startRowId, int numTenants, boolean isMultiTenant,
+            boolean extendPK, boolean hasGlobalViewIndexes) throws Exception {
+        return createViewHierarchy(PChar.INSTANCE, testCases, sortOrders, startPartition,
+                startRowId, numTenants,isMultiTenant, extendPK,hasGlobalViewIndexes);
+    }
+
+
+    private String createViewHierarchy(PDataType tenantIdType, List<PDataType[]> testCases, SortOrder[][] sortOrders,
             int startPartition, int startRowId, int numTenants, boolean isMultiTenant,
             boolean extendPK, boolean hasGlobalViewIndexes) throws Exception {
 
@@ -871,7 +937,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
         String tableName = BaseTest.generateUniqueName();
 
         // Create a base table
-        createBaseTable(tableName, isMultiTenant);
+        createBaseTable(tableName, isMultiTenant, tenantIdType);
         String baseTableName = String.format(BASE_TABLE_NAME_FMT, tableName);
         String indexTableName = String.format(INDEX_TABLE_NAME_FMT, tableName);
 
@@ -902,7 +968,7 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     Pair<String, byte[]>
                             tvRowKeyInfo =
                             createTenantView(
-                                    extendPK, partition, tenant, 1, globalViewPKNames,
+                                    extendPK, partition, tenantIdType, tenant, 1, globalViewPKNames,
                                     testCases.get(testCase));
                     actualViewToRowKeyMap.put(tvRowKeyInfo.getFirst(), tvRowKeyInfo.getSecond());
                     LOGGER.debug(String.format("Created tenant view %s [partition = %d]",
@@ -920,8 +986,8 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     rowId++;
                     try {
                         upsertTenantViewRows(
-                                isMultiTenant, extendPK, partition, tenant, 1, rowId,
-                                globalViewPKNames, testCases.get(testCase));
+                                isMultiTenant, extendPK, partition, tenantIdType, tenant,
+                                1, rowId, globalViewPKNames, testCases.get(testCase));
                     } catch (Exception ex) {
                         String
                                 testInfo =
@@ -959,7 +1025,12 @@ public abstract class BaseRowKeyMatcherTestIT extends ParallelStatsDisabledIT {
                     rowId++;
                     String partitionName = String.format(PARTITION_FMT, partition);
 
-                    String tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
+                    String tenantId = "";
+                    if (tenantIdType.getSqlType() == Types.VARCHAR || tenantIdType.getSqlType() == Types.CHAR) {
+                        tenantId = String.format(ORG_ID_FMT, ORG_ID_PREFIX, tenant);
+                    } else {
+                        tenantId = String.format("%015d", tenant);
+                    }
                     String
                             tenantConnectionUrl =
                             String.format(TENANT_URL_FMT, getUrl(), TENANT_ID_ATTRIB, tenantId);

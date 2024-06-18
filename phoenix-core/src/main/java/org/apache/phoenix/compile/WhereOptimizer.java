@@ -487,12 +487,17 @@ public class WhereOptimizer {
             final TableName tableNameNode,
             final PTable parentTable,
             final Expression viewWhereExpression
-    ) {
+    ) throws SQLException {
         RowKeySchema schema = parentTable.getRowKeySchema();
         List<List<KeyRange>> rowKeySlotRangesList = new ArrayList<>();
+        Integer nBuckets = parentTable.getBucketNum();
+        boolean isSalted = nBuckets != null;
         PName tenantId = context.getConnection().getTenantId();
+        boolean isMultiTenant = tenantId != null && parentTable.isMultiTenant();
+
         byte[] tenantIdBytes = tenantId == null
-                ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+                ? ByteUtil.EMPTY_BYTE_ARRAY :
+                ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isMultiTenant, false);
         if (tenantIdBytes.length != 0) {
             rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
         }
@@ -542,10 +547,16 @@ public class WhereOptimizer {
     ) throws SQLException {
 
         RowKeySchema schema = parentTable.getRowKeySchema();
+        Integer nBuckets = parentTable.getBucketNum();
+        boolean isSalted = nBuckets != null;
+
         List<List<KeyRange>> rowKeySlotRangesList = new ArrayList<>();
         PName tenantId = connection.getTenantId();
+        boolean isMultiTenant = tenantId != null && parentTable.isMultiTenant();
         byte[] tenantIdBytes = tenantId == null
-                ? ByteUtil.EMPTY_BYTE_ARRAY : tenantId.getString().getBytes(StandardCharsets.UTF_8);
+                ? ByteUtil.EMPTY_BYTE_ARRAY :
+                ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isMultiTenant, false);
+
         if (tenantIdBytes.length != 0) {
             rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
         }
