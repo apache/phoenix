@@ -38,6 +38,20 @@ public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
         }
     }
 
+    public int getActiveRpcHandlerCount() {
+        return delegate.getActiveRpcHandlerCount();
+    }
+
+    @Override
+    public int getActiveBulkLoadRpcHandlerCount() {
+        return delegate.getActiveBulkLoadRpcHandlerCount();
+    }
+
+    @Override
+    public int getBulkLoadQueueLength() {
+        return delegate.getBulkLoadQueueLength();
+    }
+
     public abstract boolean compatDispatch(CallRunner task)
             throws IOException, InterruptedException;
 }

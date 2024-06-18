@@ -31,12 +31,13 @@ import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatLocalIndexStoreFileScanner;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 
 import static org.apache.hadoop.hbase.KeyValue.ROW_LENGTH_SIZE;
 
-public class LocalIndexStoreFileScanner extends StoreFileScanner{
+public class LocalIndexStoreFileScanner extends CompatLocalIndexStoreFileScanner {
 
     private IndexHalfStoreFileReader reader;
     private boolean changeBottomKeys;
@@ -45,13 +46,13 @@ public class LocalIndexStoreFileScanner extends StoreFileScanner{
     public LocalIndexStoreFileScanner(IndexHalfStoreFileReader reader, boolean cacheBlocks, boolean pread,
             boolean isCompaction, long readPt, long scannerOrder,
             boolean canOptimizeForNonNullColumn) {
-        super(reader, reader.getScanner(cacheBlocks, pread, isCompaction), !isCompaction, reader
-                .getHFileReader().hasMVCCInfo(), readPt, scannerOrder, canOptimizeForNonNullColumn);
+        super(reader, cacheBlocks, pread, isCompaction, readPt, scannerOrder,
+            canOptimizeForNonNullColumn);
         this.reader = reader;
         this.changeBottomKeys =
                 this.reader.getRegionInfo().getStartKey().length == 0
                         && this.reader.getSplitRow().length != this.reader.getOffset();
-        this.comparator = (CellComparatorImpl)getComparator();
+        this.comparator = (CellComparatorImpl) reader.getComparator();
     }
 
     @Override

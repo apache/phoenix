@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.io.hfile.HFileInfo;
 import org.apache.hadoop.hbase.io.hfile.ReaderContext;
 import org.apache.hadoop.hbase.io.hfile.ReaderContext.ReaderType;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatIndexHalfStoreFileReader;
 import org.apache.phoenix.index.IndexMaintainer;
 
 /**
@@ -56,7 +57,7 @@ import org.apache.phoenix.index.IndexMaintainer;
  * This file is not splitable. Calls to #midkey() return null.
  */
 
-public class IndexHalfStoreFileReader extends StoreFileReader {
+public class IndexHalfStoreFileReader extends CompatIndexHalfStoreFileReader {
     private final boolean top;
     // This is the key we split around. Its the first possible entry on a row:
     // i.e. empty column and a timestamp of LATEST_TIMESTAMP.
@@ -92,11 +93,11 @@ public class IndexHalfStoreFileReader extends StoreFileReader {
             final byte[][] viewConstants, final RegionInfo regionInfo,
             byte[] regionStartKeyInHFile, byte[] splitKey, boolean primaryReplicaStoreFile,
             AtomicInteger refCount, RegionInfo currentRegion) throws IOException {
-        super(new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
+        super(fs, cacheConf, conf, new ReaderContext(p, in, size, new HFileSystem(fs),
+            primaryReplicaStoreFile,
             ReaderType.STREAM),
             new HFileInfo(new ReaderContext(p, in, size, new HFileSystem(fs),
-                    primaryReplicaStoreFile, ReaderType.STREAM), conf),
-            cacheConf, refCount, conf);
+                    primaryReplicaStoreFile, ReaderType.STREAM), conf), p);
         getHFileReader().getHFileInfo().initMetaAndIndex(getHFileReader());
         this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
         // Is it top or bottom half?
