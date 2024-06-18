@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.util;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -36,6 +37,8 @@ import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hbase.thirdparty.com.google.common.base.Function;
+import org.apache.hbase.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
@@ -210,6 +213,46 @@ public class PhoenixKeyValueUtil {
         return size;
     }
 
+    /**
+     * If c is not a KeyValue, cast it to KeyValue and return it.
+     * If c is a KeyValue, just return it
+     *
+     * @param c cell
+     * @return either c case to ExtendedCell, or its copy as a KeyValue
+     */
+    public static KeyValue ensureKeyValue(Cell c) {
+        // Same as KeyValueUtil, but HBase has deprecated this method. Avoid depending on something
+        // that will likely be removed at some point in time.
+        if (c == null) return null;
+        // TODO Do we really want to return only KeyValues, or would it be enough to
+        // copy ByteBufferExtendedCells to heap ?
+        // i.e can we avoid copying on-heap cells like BufferedDataBlockEncoder.OnheapDecodedCell ?
+        if (c instanceof KeyValue) {
+            return (KeyValue) c;
+        } else {
+            return KeyValueUtil.copyToNewKeyValue(c);
+        }
+    }
+
+    /**
+     * Replace non-KeyValue cells with their KeyValue copies
+     *
+     * This ensures that all Cells are copied on-heap, but will do
+     * extra work for any non-KeyValue on-heap cells
+     *
+     * @param cells modified, its elements are replaced
+     * @return the modified input cells object, for convenience
+     */
+    public static List<KeyValue> ensureKeyValues(List<Cell> cells) {
+        List<KeyValue> lazyList = Lists.transform(cells, new Function<Cell, KeyValue>() {
+            @Override
+            public KeyValue apply(Cell arg0) {
+                return ensureKeyValue(arg0);
+            }
+        });
+        return new ArrayList<>(lazyList);
+    }
+
     public static KeyValue maybeCopyCell(Cell c) {
         // Same as KeyValueUtil, but HBase has deprecated this method. Avoid depending on something
         // that will likely be removed at some point in time.
@@ -234,6 +277,7 @@ public class PhoenixKeyValueUtil {
         ListIterator<Cell> cellsIt = cells.listIterator();
         while (cellsIt.hasNext()) {
             Cell c = cellsIt.next();
+            //FIXME this does not catch all off-heap cells
             if (c instanceof ByteBufferExtendedCell) {
                 cellsIt.set(KeyValueUtil.copyToNewKeyValue(c));
             }
@@ -259,7 +303,8 @@ public class PhoenixKeyValueUtil {
     public static void setTimestamp(Mutation m, long timestamp) {
         byte[] tsBytes = Bytes.toBytes(timestamp);
         for (List<Cell> family : m.getFamilyCellMap().values()) {
-            List<KeyValue> familyKVs = org.apache.hadoop.hbase.KeyValueUtil.ensureKeyValues(family);
+            // TODO Do we really need to copy everything to the HEAP here ?
+            List<KeyValue> familyKVs = ensureKeyValues(family);
             for (KeyValue kv : familyKVs) {
                 int tsOffset = kv.getTimestampOffset();
                 System.arraycopy(tsBytes, 0, kv.getBuffer(), tsOffset, Bytes.SIZEOF_LONG);
