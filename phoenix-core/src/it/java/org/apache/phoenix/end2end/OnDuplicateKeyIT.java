@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
@@ -56,7 +57,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
-import org.junit.Ignore;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -310,8 +311,10 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
     public void testIgnoreReturnValue() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                        "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         Connection conn = DriverManager.getConnection(getUrl(), props);
         conn.setAutoCommit(true);
@@ -803,8 +806,10 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
     public void testColumnsTimestampUpdateWithOneConditionalUpdate() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
 
@@ -897,8 +902,10 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
     public void testColumnsTimestampUpdateWithOneConditionalValuesUpdate() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -959,8 +966,10 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
     public void testColumnsTimestampUpdateWithMultipleConditionalUpdate() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -1141,13 +1150,11 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
     public void testBatchedUpsertOnDupKeyAutoCommit() throws Exception {
         testBatchedUpsertOnDupKey(true);
     }
 
     @Test
-    @Ignore("Until Phoenix upgrades HBase dependency to 2.6.0 to include HBASE-28424")
     public void testBatchedUpsertOnDupKeyNoAutoCommit() throws Exception {
         testBatchedUpsertOnDupKey(false);
     }
@@ -1384,5 +1391,30 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
             timestampList.add(getColumnLatestCellTimestamp(tableName, cq));
         }
         return timestampList;
+    }
+
+    private boolean isSetCorrectResultEnabledOnHBase() {
+        // true for HBase 2.4.18+, 2.5.9+, and 2.6.0+ versions, false otherwise
+        String hbaseVersion = VersionInfo.getVersion();
+        String[] versionArr = hbaseVersion.split("\\.");
+        int majorVersion = Integer.parseInt(versionArr[0]);
+        int minorVersion = Integer.parseInt(versionArr[1]);
+        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
+        if (majorVersion > 2) {
+            return true;
+        }
+        if (majorVersion < 2) {
+            return false;
+        }
+        if (minorVersion >= 6) {
+            return true;
+        }
+        if (minorVersion < 4) {
+            return false;
+        }
+        if (minorVersion == 4) {
+            return patchVersion >= 18;
+        }
+        return patchVersion >= 9;
     }
 }
