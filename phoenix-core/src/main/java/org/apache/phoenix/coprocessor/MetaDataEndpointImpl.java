@@ -1417,11 +1417,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Cell ttlKv = tableKeyValues[TTL_INDEX];
         int ttl = TTL_NOT_DEFINED;
         if (ttlKv != null) {
-            String ttlStr = (String)PVarchar.INSTANCE.toObject(
+            String ttlStr = (String) PVarchar.INSTANCE.toObject(
                     ttlKv.getValueArray(),
                     ttlKv.getValueOffset(),
                     ttlKv.getValueLength());
-            ttl = Integer.valueOf(ttlStr);
+            ttl = Integer.parseInt(ttlStr);
         }
         ttl = ttlKv != null ? ttl : oldTable != null
                 ? oldTable.getTTL() : TTL_NOT_DEFINED;
@@ -1657,9 +1657,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             getVarChars(result.getRow(), 5, rowKeyMetaData);
             //Check if TTL is defined at the current given level
             if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
-                String ttlStr = (String)PVarchar.INSTANCE.toObject(
+                String ttlStr = (String) PVarchar.INSTANCE.toObject(
                         result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-                return Integer.valueOf(ttlStr);
+                return Integer.parseInt(ttlStr);
             } else if (linkTypeBytes != null ) {
                 String parentSchema =SchemaUtil.getSchemaNameFromFullName(
                         rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
@@ -1720,9 +1720,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 return TTL_NOT_DEFINED;
             }
             if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
-                String ttlStr = (String)PVarchar.INSTANCE.toObject(
+                String ttlStr = (String) PVarchar.INSTANCE.toObject(
                         result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-                return Integer.valueOf(ttlStr);
+                return Integer.parseInt(ttlStr);
             }
             result = scanner.next();
         } while (result != null);
@@ -3611,7 +3611,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     Cell cell = cells.get(0);
                     String newTTLStr = (String) PVarchar.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    int newTTL = Integer.valueOf(newTTLStr);
+                    int newTTL = Integer.parseInt(newTTLStr);
                     return newTTL != TTL_NOT_DEFINED;
                 }
             }
