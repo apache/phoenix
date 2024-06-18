@@ -600,6 +600,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean blockWriteRebuildIndex;
     private int maxIndexesPerTable;
     private boolean isTablesMappingEnabled;
+    private boolean invalidateServerCacheEnabled;
 
     // this flag denotes that we will continue to write parent table column metadata while creating
     // a child view and also block metadata changes that were previously propagated to children
@@ -643,6 +644,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
+        this.invalidateServerCacheEnabled
+                = config.getBoolean(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED);
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -3568,6 +3572,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
             throws Throwable {
+        if (!this.invalidateServerCacheEnabled) {
+            LOGGER.info("Skip invalidating server metadata cache since conf property"
+                    + " phoenix.metadata.invalidate.cache.enabled is set to false");
+            return;
+        }
         Properties properties = new Properties();
         // Skip checking of system table existence since the system tables should have created
         // by now.
