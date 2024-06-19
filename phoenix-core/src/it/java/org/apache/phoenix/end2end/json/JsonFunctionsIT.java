@@ -756,37 +756,65 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         String tableName = generateUniqueName();
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
-            String ddl = "create table " + tableName + " (pk integer primary key, col integer, jsoncol json)";
+            String ddl = "create table " + tableName +
+                    " (pk integer primary key, " +
+                    "col integer, " +
+                    "strcol varchar, " +
+                    "strcol1 varchar, " +
+                    "strcol2 varchar, " +
+                    "strcol3 varchar, " +
+                    "strcol4 varchar, " +
+                    "strcol5 varchar, " +
+                    "jsoncol json)";
             conn.createStatement().execute(ddl);
-            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?,?,?)");
+            PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (pk,col,strcol,jsoncol) VALUES (?,?,?,?)");
             stmt.setInt(1, 1);
             stmt.setInt(2, 2);
-            stmt.setString(3, basicJson);
+            stmt.setString(3, "");
+            stmt.setString(4, basicJson);
             stmt.execute();
-            String upsert = "UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
+            String upsert = "UPSERT INTO " + tableName + "(pk, col, strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town'),JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
             conn.createStatement().execute(upsert);
-            //TODO: add a query to update a row that doesn't exist
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + " VALUES(1,2, JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
+                    "UPSERT INTO " + tableName + "(pk, col, strcol1,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.tags[1]'),JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + " VALUES(1,3, JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
+                    "UPSERT INTO " + tableName + "(pk, col, strcol2,jsoncol) VALUES(1,3,JSON_VALUE(jsoncol, '$.type'),JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + " SELECT pk, col, JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from " + tableName);
-
+                    "UPSERT INTO " + tableName + "(pk, col, strcol3,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
+                            + tableName + " WHERE pk = 1");
+            conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + "(pk, col, strcol4, strcol5 ,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal2\"') from "
+                            + tableName + " WHERE pk = 1");
+            conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + "(pk, col, strcol1,jsoncol) VALUES(2,1,'Hello',JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ");
             String
                     queryTemplate =
                     "SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
                             "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), " +
-                            "JSON_QUERY(jsoncol, '$.info'), " + "JSON_VALUE(jsoncol, '$.info.tags[2]'), col " +
-                            " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = '%s'";
+                            "JSON_QUERY(jsoncol, '$.info'), " + "JSON_VALUE(jsoncol, '$.info.tags[2]'), col, " +
+                            "strcol, strcol1, strcol2,strcol3, strcol4, strcol5 " +
+                            " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = '%s' AND pk = 1";
             String query = String.format(queryTemplate, "AndersenFamily");
             ResultSet rs = conn.createStatement().executeQuery(query);
             assertTrue(rs.next());
             assertEquals("Basic", rs.getString(1));
             assertEquals("Manchester", rs.getString(2));
             assertEquals("alto1", rs.getString(3));
+            assertEquals("UpsertSelectVal2", rs.getString(6));
             assertEquals(3, rs.getInt(7));
-            assertEquals("UpsertSelectVal", rs.getString(6));
+            assertEquals("Bristol", rs.getString(8));
+            assertEquals("Water polo", rs.getString(9));
+            assertEquals("Basic", rs.getString(10));
+            assertEquals("Books", rs.getString(11));
+            assertEquals("UpsertSelectVal", rs.getString(12));
+            assertEquals("UpsertSelectVal", rs.getString(13));
+
+            query = "SELECT pk, col, strcol1, jsoncol FROM " + tableName + " WHERE pk = 2";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(2));
+            assertEquals("Hello", rs.getString(3));
+            assertEquals(null, rs.getString(4));
         }
     }
 
@@ -803,6 +831,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                     "strcol2 varchar, " +
                     "strcol3 varchar, " +
                     "strcol4 varchar, " +
+                    "strcol5 varchar, " +
                     "jsoncol json)";
             conn.createStatement().execute(ddl);
             PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " (pk,col,strcol,jsoncol) VALUES (?,?,?,?)");
@@ -820,7 +849,11 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                     "UPSERT INTO " + tableName + "(pk, col, strcol2,jsoncol) VALUES(1,3,JSON_VALUE(jsoncol, '$.type'),JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
             conn.commit();
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol4,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
+                    "UPSERT INTO " + tableName + "(pk, col, strcol3,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
+                            + tableName + " WHERE pk = 1");
+            conn.commit();
+            conn.createStatement().execute(
+                    "UPSERT INTO " + tableName + "(pk, col, strcol4, strcol5 ,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal2\"') from "
                             + tableName + " WHERE pk = 1");
             conn.commit();
             conn.createStatement().execute(
@@ -831,7 +864,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
                     "SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
                             "JSON_VALUE(jsoncol, '$.info.tags[1]'), JSON_QUERY(jsoncol, '$.info.tags'), " +
                             "JSON_QUERY(jsoncol, '$.info'), " + "JSON_VALUE(jsoncol, '$.info.tags[2]'), col, " +
-                            "strcol, strcol1, strcol2 " +
+                            "strcol, strcol1, strcol2,strcol3, strcol4, strcol5 " +
                             " FROM " + tableName + " WHERE JSON_VALUE(jsoncol, '$.name') = '%s' AND pk = 1";
             String query = String.format(queryTemplate, "AndersenFamily");
             ResultSet rs = conn.createStatement().executeQuery(query);
@@ -839,11 +872,14 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals("Basic", rs.getString(1));
             assertEquals("Manchester", rs.getString(2));
             assertEquals("alto1", rs.getString(3));
-            assertEquals("UpsertSelectVal", rs.getString(6));
+            assertEquals("UpsertSelectVal2", rs.getString(6));
             assertEquals(3, rs.getInt(7));
             assertEquals("Bristol", rs.getString(8));
             assertEquals("Water polo", rs.getString(9));
             assertEquals("Basic", rs.getString(10));
+            assertEquals("Books", rs.getString(11));
+            assertEquals("UpsertSelectVal", rs.getString(12));
+            assertEquals("UpsertSelectVal", rs.getString(13));
 
             query = "SELECT pk, col, strcol1, jsoncol FROM " + tableName + " WHERE pk = 2";
             rs = conn.createStatement().executeQuery(query);
