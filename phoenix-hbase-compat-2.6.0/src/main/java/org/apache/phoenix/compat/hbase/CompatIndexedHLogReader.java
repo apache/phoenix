@@ -16,28 +16,8 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
+import org.apache.hadoop.hbase.regionserver.wal.ProtobufWALStreamReader;
 
-import org.apache.hadoop.hbase.ipc.CallRunner;
-import org.apache.hadoop.hbase.ipc.RpcScheduler;
+public abstract class CompatIndexedHLogReader extends ProtobufWALStreamReader {
 
-/**
- * {@link RpcScheduler} that first checks to see if this is an index or metadata update before
- * passing off the call to the delegate {@link RpcScheduler}.
- */
-public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
-    protected RpcScheduler delegate;
-
-    @Override
-    public boolean dispatch(CallRunner task) {
-        try {
-            return compatDispatch(task);
-        } catch (Exception e) {
-            //This never happens with Hbase 2.5
-            throw new RuntimeException(e);
-        }
-    }
-
-    public abstract boolean compatDispatch(CallRunner task)
-            throws IOException, InterruptedException;
 }
