@@ -404,18 +404,21 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
 
             String sql3 = "SELECT TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName + "'";
             ResultSet rs3 = conn.createStatement().executeQuery(sql3);
-            rs3.next();
-            assertEquals("Should have return one value for PHOENIX_TTL column",Integer.MAX_VALUE, rs3.getInt(1));
+            assertTrue(rs3.next());
+            int ttl = Integer.valueOf(rs3.getString(1));
+            assertEquals("Should have return one value for PHOENIX_TTL column",Integer.MAX_VALUE, ttl);
 
             String sql4 = "SELECT TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName1 + "'";
             ResultSet rs4 = conn.createStatement().executeQuery(sql4);
-            rs4.next();
-            assertEquals("Should have return one value for PHOENIX_TTL column",randomIntValue, rs4.getInt(1));
+            assertTrue(rs4.next());
+            ttl = Integer.valueOf(rs4.getString(1));
+            assertEquals("Should have return one value for PHOENIX_TTL column",randomIntValue, ttl);
 
             String sql5 = "SELECT TTL FROM SYSTEM.CATALOG WHERE TABLE_NAME = '" + tableName2 + "'";
             ResultSet rs5 = conn.createStatement().executeQuery(sql5);
-            rs5.next();
-            assertEquals("Should have return one value for PHOENIX_TTL column",Integer.MAX_VALUE, rs5.getInt(1));
+            assertTrue(rs5.next());
+            ttl = Integer.valueOf(rs5.getString(1));
+            assertEquals("Should have return one value for PHOENIX_TTL column",Integer.MAX_VALUE, ttl);
         }
     }
 

@@ -205,7 +205,8 @@ public class ViewTTLIT extends ParallelStatsDisabledIT {
                     .format(TTL_HEADER_SQL, tenantClause, schemaName, tableName, tableType);
             stmt.execute(sql);
             ResultSet rs = stmt.getResultSet();
-            long actualTTLValueReturned = rs.next() ? rs.getLong(1) : 0;
+            String ttlStr = rs.next() ? rs.getString(1) : null;
+            long actualTTLValueReturned = ttlStr != null ? Integer.valueOf(ttlStr): 0;
 
             assertEquals(String.format("Expected rows do not match for schema = %s, table = %s",
                     schemaName, tableName), ttlValueExpected, actualTTLValueReturned);
