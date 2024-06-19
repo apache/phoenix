@@ -17,24 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
-
-import java.sql.ParameterMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
-import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -42,12 +24,11 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.UngroupedAggregateRegionObserverHelper;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -62,6 +43,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -74,6 +56,9 @@ import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.JsonModifyParseNode;
+import org.apache.phoenix.parse.JsonQueryParseNode;
+import org.apache.phoenix.parse.JsonValueParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.ParseNode;
@@ -88,6 +73,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.DelegateColumn;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -111,15 +97,30 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import java.sql.ParameterMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
 
 public class UpsertCompiler {
 
@@ -143,6 +144,9 @@ public class UpsertCompiler {
         for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
             byte[] value = values[j];
             PColumn column = table.getColumns().get(columnIndexes[i]);
+            if (value == null) {
+                continue;
+            }
             if (value.length >= maxHBaseClientKeyValueSize &&
                     table.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
                 String rowkeyAndColumnInfo = getExceedMaxHBaseClientKeyValueAllowanceRowkeyAndColumnInfo(
@@ -830,8 +834,10 @@ public class UpsertCompiler {
         final List<Expression> constantExpressions = Lists.newArrayListWithExpectedSize(valueNodes.size());
         // First build all the expressions, as with sequences we want to collect them all first
         // and initialize them in one batch
+        List<Pair<ColumnName,ParseNode>> onDupKeyPairs = null;
+        List<Pair<ColumnName,ParseNode>> nonPKColumns = Lists.newArrayList();
         for (ParseNode valueNode : valueNodes) {
-            if (!valueNode.isStateless()) {
+            if (!isJsonNode(valueNode) && !valueNode.isStateless()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
             }
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
@@ -842,11 +848,35 @@ public class UpsertCompiler {
                         expression.getDataType(), column.getDataType(), "expression: "
                                 + expression.toString() + " in column " + column);
             }
-            constantExpressions.add(expression);
+            if (!SchemaUtil.isPKColumn(column) && !isJsonNode(valueNode)) {
+                nonPKColumns.add(new Pair<ColumnName, ParseNode>(
+                        ColumnName.caseSensitiveColumnName(column.getName().getString()),
+                        valueNode));
+            }
+            if (isJsonNode(valueNode)) {
+                if (onDupKeyPairs == null) {
+                    onDupKeyPairs = Lists.newArrayList();
+                }
+                onDupKeyPairs.add(new Pair<ColumnName, ParseNode>(
+                        ColumnName.caseSensitiveColumnName(column.getName().getString()),
+                        valueNode));
+                for (Pair<ColumnName, ParseNode> nonPkColumn : nonPKColumns) {
+                    onDupKeyPairs.add(
+                            new Pair<ColumnName, ParseNode>(nonPkColumn.getFirst(), nonPkColumn.getSecond()));
+                }
+                nonPKColumns=Lists.newArrayList();
+            } else {
+                constantExpressions.add(expression);
+            }
             nodeIndex++;
         }
         byte[] onDupKeyBytesToBe = null;
-        List<Pair<ColumnName,ParseNode>> onDupKeyPairs = upsert.getOnDupKeyPairs();
+        if (upsert.getOnDupKeyPairs() != null) {
+            if (onDupKeyPairs == null) {
+                onDupKeyPairs = Lists.newArrayList();
+            }
+            onDupKeyPairs.addAll(upsert.getOnDupKeyPairs());
+        }
         if (onDupKeyPairs != null) {
             if (table.isImmutableRows()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_IMMUTABLE)
@@ -929,6 +959,10 @@ public class UpsertCompiler {
         return new UpsertValuesMutationPlan(context, tableRef, nodeIndexOffset, constantExpressions,
                 allColumns, columnIndexes, overlapViewColumns, values, addViewColumns,
                 connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, maxSize, maxSizeBytes);
+    }
+
+    private static boolean isJsonNode(ParseNode node) {
+        return (node instanceof JsonValueParseNode) || (node instanceof JsonQueryParseNode) || (node instanceof JsonModifyParseNode);
     }
 
     private static boolean isRowTimestampSet(int[] pkSlotIndexes, PTable table) {
