@@ -125,7 +125,7 @@
     <sqlline.version>1.9.0</sqlline.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
-    <snappy.version>0.3</snappy.version>
+    <snappy.version>0.5</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
