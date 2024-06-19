@@ -144,6 +144,21 @@ public class DocumentComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the field provided in the condition expression has value greater than
+   * or equals to the value provided in the condition expression.
+   * Condition Expression format:
+   * {
+   *   <field>: {
+   *     "$gte": <value>
+   *   }
+   * }
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @return True if the field provided in the condition expression has value greater than
+   * or equals to the value provided in the condition expression.
+   */
   private static boolean greaterThanOrEquals(final BsonDocument document,
       final BsonDocument conditionExpression) {
     Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
@@ -165,6 +180,21 @@ public class DocumentComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the field provided in the condition expression has value greater than
+   * the value provided in the condition expression.
+   * Condition Expression format:
+   * {
+   *   <field>: {
+   *     "$gt": <value>
+   *   }
+   * }
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @return True if the field provided in the condition expression has value greater than
+   * the value provided in the condition expression.
+   */
   private static boolean greaterThan(final BsonDocument document,
       final BsonDocument conditionExpression) {
     Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
@@ -186,6 +216,21 @@ public class DocumentComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the field provided in the condition expression has value less than
+   * or equals to the value provided in the condition expression.
+   * Condition Expression format:
+   * {
+   *   <field>: {
+   *     "$lte": <value>
+   *   }
+   * }
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @return True if the field provided in the condition expression has value less than
+   * or equals to the value provided in the condition expression.
+   */
   private static boolean lessThanOrEquals(final BsonDocument document,
       final BsonDocument conditionExpression) {
     Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
@@ -207,6 +252,21 @@ public class DocumentComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the field provided in the condition expression has value less than
+   * the value provided in the condition expression.
+   * Condition Expression format:
+   * {
+   *   <field>: {
+   *     "$lt": <value>
+   *   }
+   * }
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @return True if the field provided in the condition expression has value less than
+   * the value provided in the condition expression.
+   */
   private static boolean lessThan(final BsonDocument document,
       final BsonDocument conditionExpression) {
     Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
@@ -228,6 +288,21 @@ public class DocumentComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the field provided in the condition expression has value equal to the value
+   * provided in the condition expression.
+   * Condition Expression format:
+   * {
+   *   <field>: {
+   *     "$eq": <value>
+   *   }
+   * }
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @return if the field provided in the condition expression has value equal to the value
+   * provided in the condition expression.
+   */
   private static boolean equals(final BsonDocument document,
       final BsonDocument conditionExpression) {
     Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
@@ -248,6 +323,21 @@ public class DocumentComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the field provided in the condition expression has value not equal to the
+   * value provided in the condition expression.
+   * Condition Expression format:
+   * {
+   *   <field>: {
+   *     "$ne": <value>
+   *   }
+   * }
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @return if the field provided in the condition expression has value not equal to the value
+   * provided in the condition expression.
+   */
   private static boolean notEquals(final BsonDocument document,
       final BsonDocument conditionExpression) {
     Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();

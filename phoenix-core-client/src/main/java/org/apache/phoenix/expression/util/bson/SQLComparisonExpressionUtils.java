@@ -116,6 +116,12 @@ public class SQLComparisonExpressionUtils {
     return result.toString();
   }
 
+  /**
+   * Returns true if the given field exists in the document.
+   *
+   * @param documentField The document field.
+   * @return True if the given field exists in the document.
+   */
   public boolean exists(final String documentField) {
     BsonValue topLevelValue = rawBsonDocument.get(documentField);
     if (topLevelValue != null) {
@@ -125,6 +131,14 @@ public class SQLComparisonExpressionUtils {
         != null;
   }
 
+  /**
+   * Returns true if the value of the field is less than the value represented by {@code
+   * expectedFieldValue}. The comparison can happen only if the data type of both values match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param expectedFieldValue The literal value to compare against the field value.
+   * @return True if the value of the field is less than expectedFieldValue.
+   */
   public boolean lessThan(final String fieldKey, final String expectedFieldValue) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
     BsonValue value = topLevelValue != null ? topLevelValue
@@ -136,6 +150,15 @@ public class SQLComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the value of the field is less than or equal to the value represented by
+   * {@code expectedFieldValue}. The comparison can happen only if the data type of both values
+   * match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param expectedFieldValue The literal value to compare against the field value.
+   * @return True if the value of the field is less than or equal to expectedFieldValue.
+   */
   public boolean lessThanOrEquals(final String fieldKey, final String expectedFieldValue) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
     BsonValue value = topLevelValue != null ? topLevelValue
@@ -147,6 +170,14 @@ public class SQLComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the value of the field is greater than the value represented by {@code
+   * expectedFieldValue}. The comparison can happen only if the data type of both values match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param expectedFieldValue The literal value to compare against the field value.
+   * @return True if the value of the field is greater than expectedFieldValue.
+   */
   public boolean greaterThan(final String fieldKey, final String expectedFieldValue) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
     BsonValue value = topLevelValue != null ? topLevelValue
@@ -158,6 +189,15 @@ public class SQLComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the value of the field is greater than or equal to the value represented by
+   * {@code expectedFieldValue}. The comparison can happen only if the data type of both values
+   * match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param expectedFieldValue The literal value to compare against the field value.
+   * @return True if the value of the field is greater than or equal to expectedFieldValue.
+   */
   public boolean greaterThanOrEquals(final String fieldKey,
       final String expectedFieldValue) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
@@ -170,12 +210,35 @@ public class SQLComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the value of the field is greater than or equal to the value represented by
+   * {@code expectedFieldValue1} and less than or equal to the value represented by
+   * {@code expectedFieldValue2}. The comparison can happen only if the data type of both values
+   * match.
+   *
+   * @param fieldKey The field key for which value is compared against two values.
+   * @param expectedFieldValue1 The first literal value to compare against the field value.
+   * @param expectedFieldValue2 The second literal value to compare against the field value.
+   * @return True if the value of the field is greater than or equal to the value represented by
+   * expectedFieldValue1 and less than or equal to the value represented by expectedFieldValue2.
+   */
   public boolean between(final String fieldKey, final String expectedFieldValue1,
       final String expectedFieldValue2) {
     return greaterThanOrEquals(fieldKey, expectedFieldValue1) && lessThanOrEquals(
         fieldKey, expectedFieldValue2);
   }
 
+  /**
+   * Returns true if the value of the field equals to any of the comma separated values
+   * represented by {@code expectedInValues}. The equality check is successful only if the value
+   * and the data type both match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedInValues.
+   * @param expectedInValues The array of values for comparison, separated by comma.
+   * @return True if the value of the field equals to any of the comma separated values
+   * represented by expectedInValues. The equality check is successful only if the value
+   * and the data type both match.
+   */
   public boolean in(final String fieldKey, final String expectedInValues) {
     String[] expectedInVals = expectedInValues.split("\\s*,\\s*");
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
@@ -192,6 +255,15 @@ public class SQLComparisonExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if the value of the field is equal to the value represented by {@code
+   * expectedFieldValue}. The equality check is successful only if the value
+   * and the data type both match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param expectedFieldValue The literal value to compare against the field value.
+   * @return True if the value of the field is equal to expectedFieldValue.
+   */
   public boolean isEquals(final String fieldKey, final String expectedFieldValue) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
     BsonValue value = topLevelValue != null ? topLevelValue

@@ -42,12 +42,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * BSON Update Expression Utility to perform the Document updates.
+ * BSON Update Expression Utility to perform the Document updates. All update expressions
+ * provided by this utility supports operations on nested document fields. The field key can
+ * represent any top level or nested fields within the document. The caller should use "."
+ * notation for accessing nested document elements and "[n]" notation for accessing nested array
+ * elements. Top level fields do not require any additional character.
  */
 public class UpdateExpressionUtils {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(UpdateExpressionUtils.class);
 
+  /**
+   * Updates the given document based on the update expression.
+   *
+   * @param updateExpression Update Expression as a document.
+   * @param bsonDocument Document contents to be updated.
+   */
   public static void updateExpression(final BsonDocument updateExpression,
       final BsonDocument bsonDocument) {
 
@@ -70,6 +80,16 @@ public class UpdateExpressionUtils {
     }
   }
 
+  /**
+   * Update the given document by performing DELETE operation. This operation is applicable
+   * only on Set data structure. The document is updated by removing the given set of elements from
+   * the given set of elements.
+   *
+   * @param deleteExpr Delete Expression Document with key-value pairs. Key represents field in the
+   * given document, on which operation is to be performed. Value represents set of elements to be
+   * removed from the existing set.
+   * @param bsonDocument Document contents to be updated.
+   */
   private static void executeDeleteExpression(final BsonDocument deleteExpr,
       final BsonDocument bsonDocument) {
     for (Map.Entry<String, BsonValue> deleteEntry : deleteExpr.entrySet()) {
@@ -80,7 +100,7 @@ public class UpdateExpressionUtils {
         throw new RuntimeException("Type of new value to be removed should be sets only");
       }
       if (topLevelValue != null) {
-        BsonValue value = modifyfieldValueByDelete(topLevelValue, newVal);
+        BsonValue value = modifyFieldValueByDelete(topLevelValue, newVal);
         if (value == null) {
           bsonDocument.remove(fieldKey);
         } else {
@@ -89,13 +109,14 @@ public class UpdateExpressionUtils {
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         LOGGER.info("Nothing to be removed as field with key {} does not exist", fieldKey);
       } else {
-        updateNestedfieldEntryByDelete(fieldKey, bsonDocument, newVal);
+        updateNestedFieldEntryByDelete(fieldKey, bsonDocument, newVal);
       }
     }
   }
 
-  private static void updateNestedfieldEntryByDelete(final String fieldKey,
-      final BsonDocument bsonDocument, final BsonValue newVal) {
+  private static void updateNestedFieldEntryByDelete(final String fieldKey,
+                                                     final BsonDocument bsonDocument,
+                                                     final BsonValue newVal) {
     if (fieldKey.contains(".") || fieldKey.contains("[")) {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < fieldKey.length(); i++) {
@@ -149,7 +170,7 @@ public class UpdateExpressionUtils {
       }
       BsonValue currentValue = nestedMap.get(sb.toString());
       if (currentValue != null) {
-        BsonValue modifiedVal = modifyfieldValueByDelete(currentValue, newVal);
+        BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
         if (modifiedVal == null) {
           nestedMap.remove(sb.toString());
         } else {
@@ -177,7 +198,7 @@ public class UpdateExpressionUtils {
         if (arrayIdx < nestedList.size()) {
           BsonValue currentValue = nestedList.get(arrayIdx);
           if (currentValue != null) {
-            BsonValue modifiedVal = modifyfieldValueByDelete(currentValue, newVal);
+            BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
             if (modifiedVal == null) {
               nestedList.remove(arrayIdx);
             } else {
@@ -202,7 +223,7 @@ public class UpdateExpressionUtils {
         + "top level fields");
   }
 
-  private static BsonValue modifyfieldValueByDelete(BsonValue currentValue, BsonValue newVal) {
+  private static BsonValue modifyFieldValueByDelete(BsonValue currentValue, BsonValue newVal) {
     if (areBsonSetOfSameType(currentValue, newVal)) {
       Set<BsonValue> set1 =
           new HashSet<>(((BsonArray) ((BsonDocument) currentValue).get("$set")).getValues());
@@ -221,6 +242,16 @@ public class UpdateExpressionUtils {
             + newVal);
   }
 
+  /**
+   * Update the given document by performing ADD operation. This operation is applicable
+   * only on either Set data structure or Numerical value represented by Int32, Int64, Double or
+   * Decimal. If the field is of type set, the document is updated by adding the given set of
+   * elements to the given set of elements. If the field is of type number, the document is updated
+   * by adding the numerical value to the given number field value.
+   *
+   * @param addExpr Add Expression Document
+   * @param bsonDocument Document contents to be updated.
+   */
   private static void executeAddExpression(final BsonDocument addExpr,
       final BsonDocument bsonDocument) {
     for (Map.Entry<String, BsonValue> addEntry : addExpr.entrySet()) {
@@ -232,17 +263,18 @@ public class UpdateExpressionUtils {
             "Type of new value to be updated should be either number or sets only");
       }
       if (topLevelValue != null) {
-        bsonDocument.put(fieldKey, modifyfieldValueByAdd(topLevelValue, newVal));
+        bsonDocument.put(fieldKey, modifyFieldValueByAdd(topLevelValue, newVal));
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         bsonDocument.put(fieldKey, newVal);
       } else {
-        updateNestedfieldEntryByAdd(fieldKey, bsonDocument, newVal);
+        updateNestedFieldEntryByAdd(fieldKey, bsonDocument, newVal);
       }
     }
   }
 
-  private static void updateNestedfieldEntryByAdd(final String fieldKey,
-      final BsonDocument bsonDocument, final BsonValue newVal) {
+  private static void updateNestedFieldEntryByAdd(final String fieldKey,
+                                                  final BsonDocument bsonDocument,
+                                                  final BsonValue newVal) {
     if (fieldKey.contains(".") || fieldKey.contains("[")) {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < fieldKey.length(); i++) {
@@ -252,7 +284,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
             throw new RuntimeException("Document does not contain key: " + sb);
           }
-          updateNestedfieldByAdd(value, i, fieldKey, newVal);
+          updateNestedFieldByAdd(value, i, fieldKey, newVal);
           return;
         } else if (fieldKey.charAt(i) == '[') {
           BsonValue value = bsonDocument.get(sb.toString());
@@ -260,7 +292,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
             throw new RuntimeException("Document does not contain key: " + sb);
           }
-          updateNestedfieldByAdd(value, i, fieldKey, newVal);
+          updateNestedFieldByAdd(value, i, fieldKey, newVal);
           return;
         } else {
           sb.append(fieldKey.charAt(i));
@@ -269,8 +301,8 @@ public class UpdateExpressionUtils {
     }
   }
 
-  private static void updateNestedfieldByAdd(BsonValue value, final int idx, final String fieldKey,
-      final BsonValue newVal) {
+  private static void updateNestedFieldByAdd(BsonValue value, final int idx, final String fieldKey,
+                                             final BsonValue newVal) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
       if (value == null || !value.isDocument()) {
@@ -288,7 +320,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Should have found nested map for {}", sb);
             return;
           }
-          updateNestedfieldByAdd(nestedValue, curIdx, fieldKey, newVal);
+          updateNestedFieldByAdd(nestedValue, curIdx, fieldKey, newVal);
           return;
         } else {
           sb.append(fieldKey.charAt(curIdx));
@@ -296,7 +328,7 @@ public class UpdateExpressionUtils {
       }
       BsonValue currentValue = nestedMap.get(sb.toString());
       if (currentValue != null) {
-        nestedMap.put(sb.toString(), modifyfieldValueByAdd(currentValue, newVal));
+        nestedMap.put(sb.toString(), modifyFieldValueByAdd(currentValue, newVal));
       } else {
         nestedMap.put(sb.toString(), newVal);
       }
@@ -319,7 +351,7 @@ public class UpdateExpressionUtils {
         if (arrayIdx < nestedList.size()) {
           BsonValue currentValue = nestedList.get(arrayIdx);
           if (currentValue != null) {
-            nestedList.set(arrayIdx, modifyfieldValueByAdd(currentValue, newVal));
+            nestedList.set(arrayIdx, modifyFieldValueByAdd(currentValue, newVal));
           } else {
             nestedList.set(arrayIdx, newVal);
           }
@@ -333,14 +365,14 @@ public class UpdateExpressionUtils {
         LOGGER.error("Should have found nested list for index {}", arrayIdx);
         return;
       }
-      updateNestedfieldByAdd(nestedValue, curIdx, fieldKey, newVal);
+      updateNestedFieldByAdd(nestedValue, curIdx, fieldKey, newVal);
       return;
     }
     LOGGER.error("This is erroneous case. updateNestedfieldByAdd should not be used for "
         + "top level fields");
   }
 
-  private static BsonValue modifyfieldValueByAdd(BsonValue currentValue, BsonValue newVal) {
+  private static BsonValue modifyFieldValueByAdd(BsonValue currentValue, BsonValue newVal) {
     if ((currentValue.isNumber() || currentValue.isDecimal128()) && (newVal.isNumber()
         || newVal.isDecimal128())) {
       Number num1 = getNumberFromBsonNumber((BsonNumber) currentValue);
@@ -362,6 +394,13 @@ public class UpdateExpressionUtils {
             + newVal);
   }
 
+  /**
+   * Update the given document by performing REMOVE operation on a given field. This operation is
+   * applicable to any field of the document. If the field exists, it will be deleted.
+   *
+   * @param removeExpr Remove Expression Document.
+   * @param bsonDocument Document contents to be updated.
+   */
   private static void executeRemoveExpression(final BsonDocument removeExpr,
       final BsonDocument bsonDocument) {
     for (Map.Entry<String, BsonValue> removefield : removeExpr.entrySet()) {
@@ -370,12 +409,12 @@ public class UpdateExpressionUtils {
       if (topLevelValue != null || (!fieldKey.contains(".") && !fieldKey.contains("["))) {
         bsonDocument.remove(fieldKey);
       } else {
-        removeNestedfieldEntry(fieldKey, bsonDocument);
+        removeNestedFieldEntry(fieldKey, bsonDocument);
       }
     }
   }
 
-  private static void removeNestedfieldEntry(String fieldKey, BsonDocument bsonDocument) {
+  private static void removeNestedFieldEntry(String fieldKey, BsonDocument bsonDocument) {
     if (fieldKey.contains(".") || fieldKey.contains("[")) {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < fieldKey.length(); i++) {
@@ -385,7 +424,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
             throw new RuntimeException("Map does not contain key: " + sb);
           }
-          removeNestedfield(value, i, fieldKey);
+          removeNestedField(value, i, fieldKey);
           return;
         } else if (fieldKey.charAt(i) == '[') {
           BsonValue value = bsonDocument.get(sb.toString());
@@ -393,7 +432,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
             throw new RuntimeException("Map does not contain key: " + sb);
           }
-          removeNestedfield(value, i, fieldKey);
+          removeNestedField(value, i, fieldKey);
           return;
         } else {
           sb.append(fieldKey.charAt(i));
@@ -402,7 +441,7 @@ public class UpdateExpressionUtils {
     }
   }
 
-  private static void removeNestedfield(BsonValue value, int idx, String fieldKey) {
+  private static void removeNestedField(BsonValue value, int idx, String fieldKey) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
       if (value == null || !value.isDocument()) {
@@ -420,7 +459,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Should have found nested document for {}", sb);
             return;
           }
-          removeNestedfield(nestedValue, curIdx, fieldKey);
+          removeNestedField(nestedValue, curIdx, fieldKey);
           return;
         } else {
           sb.append(fieldKey.charAt(curIdx));
@@ -451,30 +490,39 @@ public class UpdateExpressionUtils {
         LOGGER.error("Should have found nested list for index {}", arrayIdx);
         return;
       }
-      removeNestedfield(nestedValue, curIdx, fieldKey);
+      removeNestedField(nestedValue, curIdx, fieldKey);
       return;
     }
     LOGGER.error(
         "This is erroneous case. updateNestedfield should not be used for " + "top level fields");
   }
 
+  /**
+   * Update the given document by performing SET operation on a given field. This operation is
+   * applicable to any field of the document. The SET operation represents either adding a new
+   * field with the given value of updating the existing field with new value provided by the
+   * SET Expression Document.
+   *
+   * @param setExpression SET Expression Document.
+   * @param bsonDocument Document contents to be updated.
+   */
   private static void executeSetExpression(final BsonDocument setExpression,
       final BsonDocument bsonDocument) {
     for (Map.Entry<String, BsonValue> setEntry : setExpression.entrySet()) {
       String fieldKey = setEntry.getKey();
       BsonValue fieldVal = setEntry.getValue();
       BsonValue topLevelValue = bsonDocument.get(fieldKey);
-      BsonValue newVal = getNewfieldValue(fieldVal, bsonDocument);
+      BsonValue newVal = getNewFieldValue(fieldVal, bsonDocument);
       if (topLevelValue != null || (!fieldKey.contains(".") && !fieldKey.contains("["))) {
         bsonDocument.put(fieldKey, newVal);
       } else {
-        updateNestedfieldEntry(fieldKey, bsonDocument, newVal);
+        updateNestedFieldEntry(fieldKey, bsonDocument, newVal);
       }
     }
   }
 
-  private static void updateNestedfieldEntry(final String fieldKey, final BsonDocument bsonDocument,
-      final BsonValue newVal) {
+  private static void updateNestedFieldEntry(final String fieldKey, final BsonDocument bsonDocument,
+                                             final BsonValue newVal) {
     if (fieldKey.contains(".") || fieldKey.contains("[")) {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < fieldKey.length(); i++) {
@@ -484,7 +532,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
             throw new RuntimeException("Document does not contain key: " + sb);
           }
-          updateNestedfield(value, i, fieldKey, newVal);
+          updateNestedField(value, i, fieldKey, newVal);
           return;
         } else if (fieldKey.charAt(i) == '[') {
           BsonValue value = bsonDocument.get(sb.toString());
@@ -492,7 +540,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
             throw new RuntimeException("Document does not contain key: " + sb);
           }
-          updateNestedfield(value, i, fieldKey, newVal);
+          updateNestedField(value, i, fieldKey, newVal);
           return;
         } else {
           sb.append(fieldKey.charAt(i));
@@ -501,8 +549,8 @@ public class UpdateExpressionUtils {
     }
   }
 
-  private static void updateNestedfield(final BsonValue value, final int idx, final String fieldKey,
-      final BsonValue newVal) {
+  private static void updateNestedField(final BsonValue value, final int idx,
+                                        final String fieldKey, final BsonValue newVal) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
       if (value == null || !value.isDocument()) {
@@ -520,7 +568,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Should have found nested map for {}", sb);
             return;
           }
-          updateNestedfield(nestedValue, curIdx, fieldKey, newVal);
+          updateNestedField(nestedValue, curIdx, fieldKey, newVal);
           return;
         } else {
           sb.append(fieldKey.charAt(curIdx));
@@ -555,15 +603,15 @@ public class UpdateExpressionUtils {
         LOGGER.error("Should have found nested list for index {}", arrayIdx);
         return;
       }
-      updateNestedfield(nestedValue, curIdx, fieldKey, newVal);
+      updateNestedField(nestedValue, curIdx, fieldKey, newVal);
       return;
     }
     LOGGER.error(
         "This is erroneous case. updateNestedfield should not be used for " + "top level fields");
   }
 
-  private static BsonValue getNewfieldValue(final BsonValue curValue,
-      final BsonDocument bsonDocument) {
+  private static BsonValue getNewFieldValue(final BsonValue curValue,
+                                            final BsonDocument bsonDocument) {
     if (curValue != null && curValue.isString() && (
         ((BsonString) curValue).getValue().contains(" + ") || ((BsonString) curValue).getValue()
             .contains(" - "))) {
@@ -702,6 +750,12 @@ public class UpdateExpressionUtils {
     }
   }
 
+  /**
+   * Returns true if the given BsonValue represents Set data structure.
+   *
+   * @param bsonValue The value.
+   * @return True if the given BsonValue represents Set data structure.
+   */
   private static boolean isBsonSet(final BsonValue bsonValue) {
     if (!bsonValue.isDocument()) {
       return false;
@@ -714,6 +768,15 @@ public class UpdateExpressionUtils {
     return false;
   }
 
+  /**
+   * Returns true if both values represent Set data structure and the contents of the Set are
+   * of same type.
+   *
+   * @param bsonValue1 First value.
+   * @param bsonValue2 Second value.
+   * @return True if both values represent Set data structure and the contents of the Set are
+   * of same type.
+   */
   private static boolean areBsonSetOfSameType(final BsonValue bsonValue1,
       final BsonValue bsonValue2) {
     if (!isBsonSet(bsonValue1) || !isBsonSet(bsonValue2)) {
