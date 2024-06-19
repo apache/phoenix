@@ -79,7 +79,7 @@ public class MoveTTLDuringUpgradeIT extends ParallelStatsDisabledIT {
                 int ttl = tableTTLMap.get(table);
                 //Check if TTL is moved to SYSCAT.
                 if (ttl != HConstants.FOREVER) {
-                    assertEquals(ttl, rs.getInt(2));
+                    assertEquals(ttl, Integer.valueOf(rs.getString(2)).intValue());
                 } else {
                     assertEquals(ttl, TTL_NOT_DEFINED);
                 }

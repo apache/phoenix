@@ -387,7 +387,7 @@ public interface QueryConstants {
             INDEX_WHERE + " VARCHAR, \n" +
             MAX_LOOKBACK_AGE + " BIGINT, \n" +
             CDC_INCLUDE_TABLE + " VARCHAR, \n" +
-            TTL + " INTEGER, \n" +
+            TTL + " VARCHAR, \n" +
             ROW_KEY_MATCHER + " VARBINARY, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
