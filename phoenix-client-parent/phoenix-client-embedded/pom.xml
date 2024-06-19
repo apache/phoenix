@@ -22,7 +22,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix-client-parent</artifactId>
-    <version>5.2.0</version>
+    <version>5.2.1-SNAPSHOT</version>
   </parent>
 
   <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
