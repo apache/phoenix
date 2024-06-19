@@ -2127,7 +2127,8 @@ public class PTableImpl implements PTable {
 
         Integer ttl = TTL_NOT_DEFINED;
         if (table.hasTtl()) {
-            ttl = table.getTtl();
+            String ttlStr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
+            ttl = Integer.parseInt(ttlStr);
         }
 
         byte[] rowKeyMatcher = null;
@@ -2342,7 +2343,7 @@ public class PTableImpl implements PTable {
                 table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
                 : Collections.EMPTY_SET));
 
-        builder.setTtl(table.getTTL());
+        builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(String.valueOf(table.getTTL()))));
 
         if (table.getRowKeyMatcher() != null) {
             builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
