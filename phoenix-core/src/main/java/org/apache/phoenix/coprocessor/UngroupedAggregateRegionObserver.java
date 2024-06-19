@@ -18,8 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -609,7 +607,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             table = PhoenixRuntime.getTableNoCache(conn, fullTableName);
                         } catch (Exception e) {
                             if (e instanceof TableNotFoundException) {
-                                LOGGER.info("Ignoring HBase table that is not a Phoenix table: "
+                                LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
                                         + fullTableName);
                                 // non-Phoenix HBase tables won't be found, do nothing
                             } else {
@@ -644,8 +642,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             }
                         }
                         if (table != null && !isDisabled && isPhoenixTableTTLEnabled) {
-                            LOGGER.info("Modifying major compaction scanner to use phoenix-compactions: "
-                                    + fullTableName);
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
                                             getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),

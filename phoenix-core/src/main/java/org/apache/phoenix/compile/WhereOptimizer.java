@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -44,12 +43,9 @@ import org.apache.phoenix.expression.function.ScalarFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.KeyRange;
@@ -66,8 +62,6 @@ import org.apache.phoenix.schema.ValueSchema;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -77,8 +71,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
@@ -86,8 +78,6 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
 
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -100,7 +90,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Properties;
 import java.util.Set;
 
 /**
@@ -529,7 +518,6 @@ public class WhereOptimizer {
         ScanRanges scanRange = ScanRanges.createSingleSpan(
                 schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyMatcher = scanRange.getScanRange().getLowerRange();
-        // TODO : make it a TRACE log before submission
         if (LOGGER.isTraceEnabled()) {
             String rowKeyMatcherStr = Bytes.toStringBinary(rowKeyMatcher);
             String rowKeyMatcherHex = Bytes.toHex(rowKeyMatcher);
@@ -587,7 +575,6 @@ public class WhereOptimizer {
                         fieldSortOrder,
                         CompareOperator.EQUAL,
                         field.getDataType());
-                // TODO : make it a TRACE log before submission
                 if (LOGGER.isTraceEnabled()) {
                     LOGGER.trace(String.format("Field: pos = %d, name = %s, schema = %s, "
                                             + "referenced-column %d, %s ",
@@ -604,7 +591,6 @@ public class WhereOptimizer {
                 schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyMatcher = scanRange.getScanRange().getLowerRange();
 
-        // TODO : make it a TRACE log before submission
         if (LOGGER.isTraceEnabled()) {
             String rowKeyMatcherStr = Bytes.toStringBinary(rowKeyMatcher);
             String rowKeyMatcherHex = Bytes.toHex(rowKeyMatcher);

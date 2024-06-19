@@ -485,9 +485,7 @@ public class CompactionScanner implements InternalScanner {
 
                         // map the match pattern to the tableId using matcher index.
                         matcher.put(m.getMatchPattern(), tableId);
-                        if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug("Matcher updated (init) {} : {}", type.toString(), m);
-                        }
+                        LOGGER.debug("Matcher updated (init) {} : {}", type.toString(), m);
                     }
                 });
             }
@@ -562,23 +560,25 @@ public class CompactionScanner implements InternalScanner {
                             this.tenantViewMatcher.put(m.getMatchPattern(), tableId);
                             break;
                         }
-                        if (LOGGER.isDebugEnabled()) {
-                            LOGGER.debug("Refreshed matcher for type (updated) {}, {} : {}",
+                        if (LOGGER.isTraceEnabled()) {
+                            LOGGER.trace("Refreshed matcher for type (updated) {}, {} : {}",
                                     regionName, type.toString(), m);
                         }
 
                     }
                 });
-                LOGGER.debug("Refreshed matcher for type  r={}, t={}:- " +
-                                "rs={}, re={}, s={}, e={}, c={}, l={}",
-                        regionName,
-                        type,
-                        Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
-                        Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
-                        startTenantId,
-                        endTenantId,
-                        currentTenantId,
-                        lastTenantId);
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace("Refreshed matcher for type  r={}, t={}:- " +
+                                    "rs={}, re={}, s={}, e={}, c={}, l={}",
+                            regionName,
+                            type,
+                            Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
+                            Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
+                            startTenantId,
+                            endTenantId,
+                            currentTenantId,
+                            lastTenantId);
+                }
             }
         }
 
@@ -631,15 +631,17 @@ public class CompactionScanner implements InternalScanner {
             TableTTLInfo tableTTLInfo = tableTTLInfoCache != null ?
                     tableTTLInfoCache.getTableById(tableId) : null;
 
-            LOGGER.debug(String.format("Matched matcher for type r=%s, t=%s, r=%s:- " +
-                            "s=%s, e=%s, c=%s, l=%s",
-                    region.getRegionInfo().getEncodedName(),
-                    matcherType,
-                    Bytes.toStringBinary(rowkey),
-                    startTenantId,
-                    endTenantId,
-                    currentTenantId,
-                    lastTenantId));
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace(String.format("Matched matcher for type r=%s, t=%s, r=%s:- " +
+                                "s=%s, e=%s, c=%s, l=%s",
+                        region.getRegionInfo().getEncodedName(),
+                        matcherType,
+                        Bytes.toStringBinary(rowkey),
+                        startTenantId,
+                        endTenantId,
+                        currentTenantId,
+                        lastTenantId));
+            }
 
             return tableTTLInfo;
 
@@ -720,7 +722,10 @@ public class CompactionScanner implements InternalScanner {
                                 "AND COLUMN_FAMILY = '%s' " +
                                 "AND TENANT_ID IS NULL";
                 String globalViewSQL = String.format(globalViewsSQLFormat, physicalTableName);
-                LOGGER.debug("globalViewSQL: {}", globalViewSQL);
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace("globalViewSQL: {}", globalViewSQL);
+                }
+
                 try (PhoenixPreparedStatement globalViewStmt = serverConnection.prepareStatement(
                         globalViewSQL).unwrap(PhoenixPreparedStatement.class)) {
                     try (ResultSet globalViewRS = globalViewStmt.executeQuery()) {
@@ -796,15 +801,17 @@ public class CompactionScanner implements InternalScanner {
                                 }
 
                 String tenantViewSQL = String.format(tenantViewsSQLFormat, physicalTableName);
-                LOGGER.debug(String.format("tenantViewSQL " +
-                                "region-name = %s, " +
-                                "start-tenant-id = %s, " +
-                                "batch = %d, " +
-                                "sql = %s ",
-                        regionName,
-                        fromTenantId,
-                        batchSize,
-                        tenantViewSQL));
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace(String.format("tenantViewSQL " +
+                                    "region-name = %s, " +
+                                    "start-tenant-id = %s, " +
+                                    "batch = %d, " +
+                                    "sql = %s ",
+                            regionName,
+                            fromTenantId,
+                            batchSize,
+                            tenantViewSQL));
+                }
 
                 try (PhoenixPreparedStatement tenantViewStmt = serverConnection.prepareStatement(
                         tenantViewSQL).unwrap(PhoenixPreparedStatement.class)) {
@@ -866,8 +873,10 @@ public class CompactionScanner implements InternalScanner {
                             "WHERE TABLE_TYPE = 'v' AND " +
                             "(TENANT_ID, TABLE_SCHEM, TABLE_NAME) IN " +
                             "(" + viewsClause.toString() + ")";
-            LOGGER.debug(
-                    String.format("ViewsWithTTLSQL : %s", viewsWithTTLSQL));
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace(
+                        String.format("ViewsWithTTLSQL : %s", viewsWithTTLSQL));
+            }
 
             try (Connection serverConnection = QueryUtil.getConnectionOnServer(new Properties(),
                     configuration)) {
@@ -1279,8 +1288,8 @@ public class CompactionScanner implements InternalScanner {
                 LOGGER.error(String.format("Exception when visiting table: " + e.getMessage()));
                 throw new IOException(e);
             } finally {
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug(String.format("visiting row-key = %s, region = %s, " +
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace(String.format("visiting row-key = %s, region = %s, " +
                                     "table-ttl-info=%s, " +
                                     "matched = %s, matched-type = %s, match-pattern = %s, " +
                                     "ttl = %d, matched-offset = %d, " +
@@ -1545,7 +1554,9 @@ public class CompactionScanner implements InternalScanner {
                         .build().buildException();
             }
             finally {
-                LOGGER.debug("TenantId in getTenantIdFromRowKey: {}, {}", CompactionScanner.this.store.getRegionInfo().getEncodedName(), tenantId);
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.trace("TenantId in getTenantIdFromRowKey: {}, {}", CompactionScanner.this.store.getRegionInfo().getEncodedName(), tenantId);
+                }
             }
             return tenantId;
         }
@@ -1571,8 +1582,10 @@ public class CompactionScanner implements InternalScanner {
             this.ttl = ttlInSecs*1000;
             this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl ;
             this.maxLookbackWindowStartForRow = Math.max(ttlWindowStart, maxLookbackWindowStart);
-            LOGGER.info(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
-                    ttlWindowStart, maxLookbackWindowStart));
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.trace(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
+                        ttlWindowStart, maxLookbackWindowStart));
+            }
 
         }
         public long getTTL() {

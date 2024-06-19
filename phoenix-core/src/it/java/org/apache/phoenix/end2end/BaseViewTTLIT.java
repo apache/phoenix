@@ -1,6 +1,23 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -20,12 +37,9 @@ import org.apache.hadoop.hbase.filter.SubstringComparator;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataReader;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataReader;
@@ -60,7 +74,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -142,7 +155,6 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
     }
 
-    // TODO remove
     public void testResetServerCache() {
         try {
             clearCache(true, true, Arrays.asList(new String[] {"00DNA0000000MXY"}));
@@ -689,8 +701,14 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
-
-
+    /**
+     * Test case:
+     * TTL set at the view level
+     * Salted
+     * MultiTenant and NonMultiTenanted Tables and Views
+     * Global and Tenant Indexes
+     * @throws Exception
+     */
     protected void testMajorCompactWithSaltedIndexedTenantView() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -856,6 +874,12 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
+    /**
+     * Test case:
+     * TTL set at the Tenant view level
+     * MultiTenant Views
+     * @throws Exception
+     */
     protected void testMajorCompactWithOnlyTenantView() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -935,6 +959,14 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         );
     }
 
+    /**
+     * Test case:
+     * TTL set at the Global View level
+     * MultiTenant Tables and Views
+     * Global and Local Indexes
+     * @throws Exception
+     */
+
     protected void testMajorCompactFromMultipleGlobalIndexes() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -956,7 +988,6 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         tenantViewOptions.setTenantViewColumns(Lists.newArrayList(TENANT_VIEW_COLUMNS));
         tenantViewOptions.setTenantViewColumnTypes(Lists.newArrayList(COLUMN_TYPES));
 
-        // TODO handle Local Index cases
         // Test cases :
         // Local vs Global indexes, various column family options.
         for (boolean isIndex1Local : Lists.newArrayList(true, false)) {
@@ -1099,6 +1130,13 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test case:
+     * TTL set at the Tenant View level
+     * MultiTenant Tables and Views
+     * Tenant and Local Indexes
+     * @throws Exception
+     */
     protected void testMajorCompactFromMultipleTenantIndexes() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -1273,6 +1311,15 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
             }
         }
     }
+
+    /**
+     * Test case:
+     * TTL set at the table level
+     * MultiTenant and Non-MultiTenant Tables and
+     * Single level views.
+     * @throws Exception
+     */
+
     protected void testMajorCompactWithSimpleIndexedBaseTables() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -1451,6 +1498,14 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
+    /**
+     * Test case:
+     * TTL set at the table level
+     * Salted
+     * MultiTenant and NonMultiTenanted Tables and Views
+     * No Global and Tenant Indexes
+     * @throws Exception
+     */
     protected void testMajorCompactWithSaltedIndexedBaseTables() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -1632,6 +1687,14 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
+    /**
+     * Test case:
+     * TTL set at the global view level
+     * MultiTenant Tables and Views
+     * Global and Local Indexes
+     * Various Column Family options
+     * @throws Exception
+     */
     protected void testMajorCompactWithVariousViewsAndOptions() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -1657,7 +1720,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
         TenantViewIndexOptions
                 tenantViewIndexOptions = TenantViewIndexOptions.withDefaults();
-        // TODO handle Local Index cases
+        // TODO handle case when both global and tenant are Local Index cases
         // Test cases :
         // Local vs Global indexes, Tenant vs Global views, various column family options.
         for (boolean isGlobalViewLocal : Lists.newArrayList( true, false)) {
@@ -1771,6 +1834,12 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test case:
+     * TTL set at the tenant view level only for some tenants.
+     * MultiTenant Tables and Views
+     * @throws Exception
+     */
     protected void testMajorCompactWhenTTLSetForSomeTenants() throws Exception {
 
         // View TTL is set in seconds (for e.g 10 secs)
@@ -1891,8 +1960,6 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
             List<String> columns =
                     Lists.newArrayList("ID", "ZID", "COL4", "COL5", "COL6", "COL7", "COL8", "COL9");
             List<String> rowKeyColumns = Lists.newArrayList("ID", "ZID");
-//            String tenantConnectUrl =
-//                    getUrl() + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
             try (Connection writeConnection = DriverManager.getConnection(tenantConnectUrl)) {
                 writeConnection.setAutoCommit(true);
                 dataWriter.setConnection(writeConnection);
@@ -1963,6 +2030,14 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         );
 
     }
+
+    /**
+     * Test case:
+     * TTL set at different (global vs tenant) view levels
+     * MultiTenant Tables and Views with various TenantId datatypes
+     * Table split into multiple regions.
+     * @throws Exception
+     */
 
     protected void testMajorCompactWithVariousTenantIdTypesAndRegions(PDataType tenantType) throws Exception {
 
@@ -2297,6 +2372,13 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
+    /**
+     * Test special case:
+     * When there are overlapping row key prefixes.
+     * This can occur when the TENANT_ID and global view PARTITION_KEY overlap.
+     * @throws Exception
+     */
+
     protected void testTenantViewsWIthOverlappingRowPrefixes() throws Exception {
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
@@ -2431,6 +2513,13 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
     }
 
+    /**
+     * Test case:
+     * TTL set at different (global vs tenant) view levels
+     * MultiTenant Tables and Views
+     * Multiple Global and Tenant Indexes
+     * @throws Exception
+     */
     protected void testMajorCompactWithGlobalAndTenantViewHierarchy() throws Exception {
         // View TTL is set in seconds (for e.g 10 secs)
         int viewTTL = VIEW_TTL_10_SECS;
