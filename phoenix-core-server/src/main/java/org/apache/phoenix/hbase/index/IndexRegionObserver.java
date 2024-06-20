@@ -1704,11 +1704,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               if (checkCellNeedUpdate(cell, currColumnCellExprMap)) {
                   put.add(cell);
               }
-
-              if (checkCellNeedUpdate(cell, currColumnCellExprMap)) {
-
-              }
-
           } else {
               if (delete == null) {
                   delete = new Delete(rowKey);
