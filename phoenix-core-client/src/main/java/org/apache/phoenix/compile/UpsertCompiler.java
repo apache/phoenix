@@ -41,6 +41,9 @@ import org.apache.phoenix.execute.MutationState.RowTimestampColInfo;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.function.JsonModifyFunction;
+import org.apache.phoenix.expression.function.JsonQueryFunction;
+import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
@@ -857,15 +860,15 @@ public class UpsertCompiler {
                 jsonExpressions.add(
                         new Pair<>(ColumnName.caseSensitiveColumnName(column.getName().getString()),
                                 valueNode));
-                for (Pair<ColumnName, ParseNode> nonPkColumn : nonPKColumns) {
-                    jsonExpressions.add(
-                            new Pair<>(nonPkColumn.getFirst(), nonPkColumn.getSecond()));
-                }
+                jsonExpressions.addAll(nonPKColumns);
                 nonPKColumns = Lists.newArrayList();
-            } else {
-                constantExpressions.add(expression);
             }
+            constantExpressions.add(expression);
             nodeIndex++;
+        }
+        if (nonPKColumns.size() > 0 && jsonExpressions.size() > 0) {
+            jsonExpressions.addAll(nonPKColumns);
+            nonPKColumns.clear();
         }
         byte[] onDupKeyBytesToBe = null;
         List<Pair<ColumnName, ParseNode>> onDupKeyPairs = upsert.getOnDupKeyPairs();
@@ -944,7 +947,6 @@ public class UpsertCompiler {
                         .setTableName(table.getTableName().getString())
                         .setColumnName(updateColumn.getName().getString()).build().buildException();
             }
-            ;
             ParseNode updateNode = columnPair.getSecond();
             compiler.setColumn(updateColumn);
             Expression updateExpression = updateNode.accept(compiler);
@@ -953,7 +955,7 @@ public class UpsertCompiler {
                     .isCastableTo(updateColumn.getDataType())) {
                 throw TypeMismatchException.newException(updateExpression.getDataType(),
                         updateColumn.getDataType(),
-                        "expression: " + updateExpression.toString() + " for column " + updateColumn);
+                        "expression: " + updateExpression + " for column " + updateColumn);
             }
             if (compiler.isAggregate()) {
                 throw new SQLExceptionInfo.Builder(
@@ -971,9 +973,9 @@ public class UpsertCompiler {
     }
 
     private static boolean isJsonNode(ParseNode node) {
-        return (node instanceof JsonValueParseNode)
-                || (node instanceof JsonQueryParseNode)
-                || (node instanceof JsonModifyParseNode);
+        return node instanceof JsonValueParseNode
+                || node instanceof JsonQueryParseNode
+                || node instanceof JsonModifyParseNode;
     }
 
     private static boolean isRowTimestampSet(int[] pkSlotIndexes, PTable table) {
@@ -1291,6 +1293,10 @@ public class UpsertCompiler {
             Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
                 sequenceManager.newSequenceTuple(null);
             for (Expression constantExpression : constantExpressions) {
+                if (isJsonFunction(constantExpression)) {
+                    nodeIndex++;
+                    continue;
+                }
                 PColumn column = allColumns.get(columnIndexes[nodeIndex]);
                 constantExpression.evaluate(tuple, ptr);
                 Object value = null;
@@ -1375,6 +1381,13 @@ public class UpsertCompiler {
         @Override
         public Long getEstimateInfoTimestamp() throws SQLException {
             return 0l;
+        }
+
+        private boolean isJsonFunction(Expression expression)
+        {
+            return expression instanceof JsonValueFunction
+                    || expression instanceof JsonQueryFunction
+                    || expression instanceof JsonModifyFunction;
         }
     }
 

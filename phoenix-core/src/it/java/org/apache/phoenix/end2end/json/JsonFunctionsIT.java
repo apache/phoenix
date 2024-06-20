@@ -169,10 +169,16 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals("[\"Sport\", \"alto1\", \"Books\"]", rs.getString(4));
             assertEquals("{\"type\": 1, \"address\": {\"town\": \"Manchester\", \"county\": \"Avon\", \"country\": \"England\", \"exists\": true}, \"tags\": [\"Sport\", \"alto1\", \"Books\"]}", rs.getString(5));
 
-            // Now check for empty match
-            query = String.format(queryTemplate, "Windsors");
+            upsert ="UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES(2,1, JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')" +
+                    ") ON DUPLICATE KEY IGNORE";
+            conn.createStatement().execute(upsert);
+
+            query = "SELECT pk, col, jsoncol FROM " + tableName + " WHERE pk = 2";
             rs = conn.createStatement().executeQuery(query);
-            assertFalse(rs.next());
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals(1, rs.getInt(2));
+            assertEquals(null, rs.getString(3));
         }
     }
 
@@ -225,10 +231,16 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals("[\"Sport\", \"alto1\", \"Books\"]", rs.getString(4));
             assertEquals("{\"type\": 1, \"address\": {\"town\": \"Manchester\", \"county\": \"Avon\", \"country\": \"England\", \"exists\": true}, \"tags\": [\"Sport\", \"alto1\", \"Books\"]}", rs.getString(5));
 
-            // Now check for empty match
-            query = String.format(queryTemplate, "Windsors");
+            upsert ="UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES(2,1, JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')" +
+                    ") ON DUPLICATE KEY IGNORE";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            query = "SELECT pk, col, jsoncol FROM " + tableName + " WHERE pk = 2";
             rs = conn.createStatement().executeQuery(query);
-            assertFalse(rs.next());
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+            assertEquals(1, rs.getInt(2));
+            assertEquals(null, rs.getString(3));
         }
     }
 
@@ -773,20 +785,20 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             stmt.setString(3, "");
             stmt.setString(4, basicJson);
             stmt.execute();
-            String upsert = "UPSERT INTO " + tableName + "(pk, col, strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town'),JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
+            String upsert = "UPSERT INTO " + tableName + "(pk,col,strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town'),JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
             conn.createStatement().execute(upsert);
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol1,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.tags[1]'),JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
+                    "UPSERT INTO " + tableName + "(pk,col,strcol1,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.tags[1]'),JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol2,jsoncol) VALUES(1,3,JSON_VALUE(jsoncol, '$.type'),JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
+                    "UPSERT INTO " + tableName + "(pk,strcol2,jsoncol,col) VALUES(1,JSON_VALUE(jsoncol, '$.type'),JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]'),3) ");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol3,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
+                    "UPSERT INTO " + tableName + "(pk,col,strcol3,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
                             + tableName + " WHERE pk = 1");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol4, strcol5 ,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal2\"') from "
+                    "UPSERT INTO " + tableName + "(pk,col,strcol4,strcol5,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal2\"') from "
                             + tableName + " WHERE pk = 1");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol1,jsoncol) VALUES(2,1,'Hello',JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ");
+                    "UPSERT INTO " + tableName + "(pk,col,strcol1,jsoncol) VALUES(2,1,'Hello',JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ");
             String
                     queryTemplate =
                     "SELECT JSON_VALUE(jsoncol, '$.type'), JSON_VALUE(jsoncol, '$.info.address.town'), " +
@@ -861,23 +873,23 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             stmt.setString(4, basicJson);
             stmt.execute();
             conn.commit();
-            String upsert = "UPSERT INTO " + tableName + "(pk, col, strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town'),JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
+            String upsert = "UPSERT INTO " + tableName + "(pk,col,strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town'),JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
             conn.createStatement().execute(upsert);
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol1,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.tags[1]'),JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
+                    "UPSERT INTO " + tableName + "(pk,col,strcol1,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.tags[1]'),JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol2,jsoncol) VALUES(1,3,JSON_VALUE(jsoncol, '$.type'),JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]')) ");
+                    "UPSERT INTO " + tableName + "(pk,strcol2,jsoncol,col) VALUES(1,JSON_VALUE(jsoncol, '$.type'),JSON_MODIFY(jsoncol, '$.info.tags', '[\"Sport\", \"alto1\", \"Books\"]'),3) ");
             conn.commit();
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol3,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
+                    "UPSERT INTO " + tableName + "(pk,col,strcol3,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]') ,JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal\"') from "
                             + tableName + " WHERE pk = 1");
             conn.commit();
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol4, strcol5 ,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal2\"') from "
+                    "UPSERT INTO " + tableName + "(pk,col,strcol4,strcol5,jsoncol) SELECT pk, col, JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_VALUE(jsoncol, '$.info.tags[2]'),JSON_MODIFY(jsoncol, '$.info.tags[2]', '\"UpsertSelectVal2\"') from "
                             + tableName + " WHERE pk = 1");
             conn.commit();
             conn.createStatement().execute(
-                    "UPSERT INTO " + tableName + "(pk, col, strcol1,jsoncol) VALUES(2,1,'Hello',JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ");
+                    "UPSERT INTO " + tableName + "(pk,col,strcol1,jsoncol) VALUES(2,1,'Hello',JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ");
             conn.commit();
             String
                     queryTemplate =
