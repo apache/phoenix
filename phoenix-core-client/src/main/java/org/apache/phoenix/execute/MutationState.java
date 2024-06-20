@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
@@ -1508,7 +1510,8 @@ public class MutationState implements SQLCloseable {
                         if (resultObjects != null) {
                             Result result = (Result) resultObjects[0];
                             if (result != null && !result.isEmpty()) {
-                                Cell cell = result.rawCells()[0];
+                                Cell cell = result.getColumnLatestCell(
+                                        Bytes.toBytes(UPSERT_CF), Bytes.toBytes(UPSERT_STATUS_CQ));
                                 numUpdatedRowsForAutoCommit = PInteger.INSTANCE.getCodec()
                                         .decodeInt(cell.getValueArray(), cell.getValueOffset(),
                                                 SortOrder.getDefault());

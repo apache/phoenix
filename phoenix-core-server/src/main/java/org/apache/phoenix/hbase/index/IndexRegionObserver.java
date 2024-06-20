@@ -1402,9 +1402,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   if (miniBatchOp.getOperationStatus(0).getResult() == null) {
                       byte[] retVal = PInteger.INSTANCE.toBytes(1);
                       Cell cell = PhoenixKeyValueUtil.newKeyValue(
-                              miniBatchOp.getOperation(0).getRow(),
-                              EMPTY_BYTE_ARRAY, EMPTY_BYTE_ARRAY, 0, retVal, 0,
-                              retVal.length);
+                              miniBatchOp.getOperation(0).getRow(), Bytes.toBytes(UPSERT_CF),
+                              Bytes.toBytes(UPSERT_STATUS_CQ), 0, retVal, 0, retVal.length);
                       Result result = Result.create(new ArrayList<>(Arrays.asList(cell)));
                       miniBatchOp.setOperationStatus(0,
                               new OperationStatus(OperationStatusCode.SUCCESS, result));
