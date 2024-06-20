@@ -815,6 +815,26 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals(1, rs.getInt(2));
             assertEquals("Hello", rs.getString(3));
             assertEquals(null, rs.getString(4));
+
+            upsert =
+                    "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES(1,4, JSON_MODIFY(jsoncol, '$.info.address.town', '\"ShouldBeIgnore\"')" + ") ON DUPLICATE KEY UPDATE jsoncol = JSON_MODIFY(jsoncol, '$.info.address.town', '\"ShouldUpdate\"')";
+            conn.createStatement().execute(upsert);
+            query =
+                    "SELECT pk, col, JSON_VALUE(jsoncol, '$.info.address.town') FROM " + tableName + " WHERE pk = 1";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(2));
+            assertEquals("ShouldUpdate", rs.getString(3));
+
+            upsert =
+                    "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES(1,4, JSON_MODIFY(jsoncol, '$.info.address.town', '\"ShouldBeIgnore\"')" + ") ON DUPLICATE KEY IGNORE";
+            conn.createStatement().execute(upsert);
+            query =
+                    "SELECT pk, col, JSON_VALUE(jsoncol, '$.info.address.town') FROM " + tableName + " WHERE pk = 1";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(2));
+            assertEquals("ShouldUpdate", rs.getString(3));
         }
     }
 
@@ -887,6 +907,28 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals(1, rs.getInt(2));
             assertEquals("Hello", rs.getString(3));
             assertEquals(null, rs.getString(4));
+
+            upsert =
+                    "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES(1,4, JSON_MODIFY(jsoncol, '$.info.address.town', '\"ShouldBeIgnore\"')" + ") ON DUPLICATE KEY UPDATE jsoncol = JSON_MODIFY(jsoncol, '$.info.address.town', '\"ShouldUpdate\"')";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            query =
+                    "SELECT pk, col, JSON_VALUE(jsoncol, '$.info.address.town') FROM " + tableName + " WHERE pk = 1";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(2));
+            assertEquals("ShouldUpdate", rs.getString(3));
+
+            upsert =
+                    "UPSERT INTO " + tableName + " (pk, col, jsoncol) VALUES(1,4, JSON_MODIFY(jsoncol, '$.info.address.town', '\"ShouldBeIgnore\"')" + ") ON DUPLICATE KEY IGNORE";
+            conn.createStatement().execute(upsert);
+            conn.commit();
+            query =
+                    "SELECT pk, col, JSON_VALUE(jsoncol, '$.info.address.town') FROM " + tableName + " WHERE pk = 1";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(2));
+            assertEquals("ShouldUpdate", rs.getString(3));
         }
     }
 }
