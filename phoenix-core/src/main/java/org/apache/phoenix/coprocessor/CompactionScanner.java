@@ -892,7 +892,9 @@ public class CompactionScanner implements InternalScanner {
                             String tid = viewTTLRS.getString("TENANT_ID");
                             String schem = viewTTLRS.getString("TABLE_SCHEM");
                             String tName = viewTTLRS.getString("TABLE_NAME");
-                            int viewTTL = viewTTLRS.getInt("TTL");
+                            String viewTTLStr = viewTTLRS.getString("TTL");
+                            int viewTTL = viewTTLStr == null || viewTTLStr.isEmpty() ?
+                                    TTL_NOT_DEFINED : Integer.valueOf(viewTTLStr);
                             byte[] rowKeyMatcher = viewTTLRS.getBytes("ROW_KEY_MATCHER");
                             byte[]
                                     tenantIdBytes =
