@@ -509,10 +509,7 @@ public class ByteUtil {
     }
 
     public static boolean isEmptyOrNull(byte[] b, int offset, int length) {
-        if (b == null) {
-            return true;
-        }
-        if (Bytes.compareTo(b, HConstants.EMPTY_BYTE_ARRAY) == 0 ) {
+        if ((b == null)  || (Bytes.compareTo(b, HConstants.EMPTY_BYTE_ARRAY) == 0 )) {
             return true;
         }
         if (b.length < offset + length) {

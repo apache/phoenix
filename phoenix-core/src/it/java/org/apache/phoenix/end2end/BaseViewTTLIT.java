@@ -82,6 +82,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -2560,6 +2561,10 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         int nonCompactedTableRows = nonCompactedTenantSet * DEFAULT_NUM_ROWS;
         int nonCompactedTenantIndexRows = nonCompactedTenantSet * DEFAULT_NUM_ROWS * numTenantIndex ;
         int nonCompactedGlobalIndexRows = nonCompactedGlobalSet * DEFAULT_NUM_ROWS * numGlobalIndex * tenantSet.size();
+        Map<Integer, String> tenantIds = new HashMap<>();
+        for (int tenant : tenantSet) {
+            tenantIds.put(tenant, dataOptions.getNextTenantId());
+        }
 
         String baseGlobalViewName = dataOptions.getGlobalViewName();
         long earliestTimestamp = EnvironmentEdgeManager.currentTimeMillis();
@@ -2584,6 +2589,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 if (schemaBuilder.getDataOptions() != null) {
                     schemaBuilder.getDataOptions().setTenantId(null);
                 }
+                dataOptions.setTenantId(tenantIds.get(tenant));
                 schemaBuilder
                         .withTableOptions(tableOptions)
                         .withGlobalViewOptions(globalViewOptions)
