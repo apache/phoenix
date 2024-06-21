@@ -1696,12 +1696,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       for (int i = 0; i < tuple.size(); i++) {
           Cell cell = tuple.getValue(i);
           if (cell.getType() == Cell.Type.Put) {
-              if (put == null) {
-                  put = new Put(rowKey);
-                  transferAttributes(atomicPut, put);
-                  mutations.add(put);
-              }
               if (checkCellNeedUpdate(cell, currColumnCellExprMap)) {
+                  if (put == null) {
+                      put = new Put(rowKey);
+                      transferAttributes(atomicPut, put);
+                      mutations.add(put);
+                  }
                   put.add(cell);
               }
           } else {
@@ -1714,21 +1714,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           }
       }
 
-      if (put != null) {
-          // if put is empty and delete is null, remove the empty put from mutations,
-          // otherwise we should also add empty cell timestamp for update
-          if (put.isEmpty() && delete == null) {
-              mutations.remove(put);
-          } else {
-              PTable table = operations.get(0).getFirst();
-              addEmptyKVCell(put, tuple, table);
+      if (put != null || delete != null) {
+          if (put == null) {
+              put = new Put(rowKey);
+              transferAttributes(atomicPut, put);
+              mutations.add(put);
           }
+          PTable table = operations.get(0).getFirst();
+          addEmptyKVCellToPut(put, tuple, table);
       }
 
       return mutations;
   }
 
-    private void addEmptyKVCell(Put put, MultiKeyValueTuple tuple, PTable table) throws IOException {
+    private void addEmptyKVCellToPut(Put put, MultiKeyValueTuple tuple, PTable table) throws IOException {
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(table).getFirst();
         Cell emptyKVCell = tuple.getValue(emptyCF, emptyCQ);
