@@ -840,7 +840,7 @@ public class UpsertCompiler {
         List<Pair<ColumnName, ParseNode>> jsonExpressions = Lists.newArrayList();
         List<Pair<ColumnName, ParseNode>> nonPKColumns = Lists.newArrayList();
         for (ParseNode valueNode : valueNodes) {
-            if (!isJsonNode(valueNode) && !valueNode.isStateless()) {
+            if (!valueNode.hasJsonExpression() && !valueNode.isStateless()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
             }
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
@@ -851,11 +851,11 @@ public class UpsertCompiler {
                         expression.getDataType(), column.getDataType(), "expression: "
                                 + expression.toString() + " in column " + column);
             }
-            if (!SchemaUtil.isPKColumn(column) && !isJsonNode(valueNode)) {
+            if (!SchemaUtil.isPKColumn(column) && !valueNode.hasJsonExpression()) {
                 nonPKColumns.add(new Pair<>(
                         ColumnName.caseSensitiveColumnName(column.getFamilyName().getString(),
                                 column.getName().getString()), valueNode));
-            } else if (isJsonNode(valueNode)) {
+            } else if (valueNode.hasJsonExpression()) {
                 jsonExpressions.add(new Pair<>(
                         ColumnName.caseSensitiveColumnName(column.getFamilyName().getString(),
                                 column.getName().getString()), valueNode));
@@ -967,12 +967,6 @@ public class UpsertCompiler {
         onDupKeyBytesToBe =
                 PhoenixIndexBuilderHelper.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
         return onDupKeyBytesToBe;
-    }
-
-    private static boolean isJsonNode(ParseNode node) {
-        return node instanceof JsonValueParseNode
-                || node instanceof JsonQueryParseNode
-                || node instanceof JsonModifyParseNode;
     }
 
     private static boolean isRowTimestampSet(int[] pkSlotIndexes, PTable table) {
@@ -1290,7 +1284,7 @@ public class UpsertCompiler {
             Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
                 sequenceManager.newSequenceTuple(null);
             for (Expression constantExpression : constantExpressions) {
-                if (isJsonFunction(constantExpression)) {
+                if (!constantExpression.isStateless()) {
                     nodeIndex++;
                     continue;
                 }
@@ -1378,13 +1372,6 @@ public class UpsertCompiler {
         @Override
         public Long getEstimateInfoTimestamp() throws SQLException {
             return 0l;
-        }
-
-        private boolean isJsonFunction(Expression expression)
-        {
-            return expression instanceof JsonValueFunction
-                    || expression instanceof JsonQueryFunction
-                    || expression instanceof JsonModifyFunction;
         }
     }
 

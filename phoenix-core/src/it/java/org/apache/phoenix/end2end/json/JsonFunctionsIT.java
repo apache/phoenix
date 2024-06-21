@@ -967,7 +967,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             stmt.setString(4, basicJson);
             stmt.execute();
             conn.commit();
-            String upsert = "UPSERT INTO " + tableName + "(pk,col,a.strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town'),JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
+            String upsert = "UPSERT INTO " + tableName + "(pk,col,a.strcol,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.address.town') || 'City',JSON_MODIFY(jsoncol, '$.info.address.town', '\"Manchester\"')) ";
             conn.createStatement().execute(upsert);
             conn.createStatement().execute(
                     "UPSERT INTO " + tableName + "(pk,col,a.strcol1,jsoncol) VALUES(1,2,JSON_VALUE(jsoncol, '$.info.tags[1]'),JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')) ");
@@ -1000,7 +1000,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertEquals("alto1", rs.getString(3));
             assertEquals("UpsertSelectVal2", rs.getString(6));
             assertEquals(3, rs.getInt(7));
-            assertEquals("Bristol", rs.getString(8));
+            assertEquals("BristolCity", rs.getString(8));
             assertEquals("Water polo", rs.getString(9));
             assertEquals("Basic", rs.getString(10));
             assertEquals("Books", rs.getString(11));
