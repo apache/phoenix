@@ -607,6 +607,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    protected boolean getMetadataReadLockEnabled;
+
     private MetricsMetadataSource metricsSource;
 
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
@@ -647,6 +649,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         this.invalidateServerCacheEnabled
                 = config.getBoolean(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
                         QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED);
+        this.getMetadataReadLockEnabled
+                = config.getBoolean(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED,
+                            QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
+
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
@@ -3028,8 +3034,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
-    private RowLock acquireLock(Region region, byte[] lockKey, List<RowLock> locks, boolean readLock) throws IOException {
-        RowLock rowLock = region.getRowLock(lockKey, readLock);
+    protected RowLock acquireLock(Region region, byte[] lockKey, List<RowLock> locks, boolean readLock) throws IOException {
+        RowLock rowLock = region.getRowLock(lockKey, this.getMetadataReadLockEnabled && readLock);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(lockKey));
         }
