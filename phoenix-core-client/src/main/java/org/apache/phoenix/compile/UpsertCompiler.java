@@ -146,10 +146,10 @@ public class UpsertCompiler {
         RowTimestampColInfo rowTsColInfo = new RowTimestampColInfo(useServerTimestamp, rowTimestamp);
         for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
             byte[] value = values[j];
-            PColumn column = table.getColumns().get(columnIndexes[i]);
             if (value == null) {
                 continue;
             }
+            PColumn column = table.getColumns().get(columnIndexes[i]);
             if (value.length >= maxHBaseClientKeyValueSize &&
                     table.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
                 String rowkeyAndColumnInfo = getExceedMaxHBaseClientKeyValueAllowanceRowkeyAndColumnInfo(
@@ -852,16 +852,13 @@ public class UpsertCompiler {
                                 + expression.toString() + " in column " + column);
             }
             if (!SchemaUtil.isPKColumn(column) && !isJsonNode(valueNode)) {
-                nonPKColumns.add(
-                        new Pair<>(ColumnName.caseSensitiveColumnName(column.getName().getString()),
-                                valueNode));
-            }
-            if (isJsonNode(valueNode)) {
-                jsonExpressions.add(
-                        new Pair<>(ColumnName.caseSensitiveColumnName(column.getName().getString()),
-                                valueNode));
-                jsonExpressions.addAll(nonPKColumns);
-                nonPKColumns = Lists.newArrayList();
+                nonPKColumns.add(new Pair<>(
+                        ColumnName.caseSensitiveColumnName(column.getFamilyName().getString(),
+                                column.getName().getString()), valueNode));
+            } else if (isJsonNode(valueNode)) {
+                jsonExpressions.add(new Pair<>(
+                        ColumnName.caseSensitiveColumnName(column.getFamilyName().getString(),
+                                column.getName().getString()), valueNode));
             }
             constantExpressions.add(expression);
             nodeIndex++;
@@ -894,10 +891,10 @@ public class UpsertCompiler {
             if (onDupKeyPairs.isEmpty()) { // ON DUPLICATE KEY IGNORE
                 onDupKeyBytesToBe = PhoenixIndexBuilderHelper.serializeOnDupKeyIgnore();
             } else {                       // ON DUPLICATE KEY UPDATE;
-                onDupKeyBytesToBe = getBytes(table, context, onDupKeyPairs, resolver);
+                onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, onDupKeyPairs, resolver);
             }
         } else if (!jsonExpressions.isEmpty()) {
-            onDupKeyBytesToBe = getBytes(table, context, jsonExpressions, resolver);
+            onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, jsonExpressions, resolver);
         }
         final byte[] onDupKeyBytes = onDupKeyBytesToBe;
         
@@ -906,7 +903,7 @@ public class UpsertCompiler {
                 connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, maxSize, maxSizeBytes);
     }
 
-    private static byte[] getBytes(PTable table, StatementContext context,
+    private static byte[] getOnDuplicateKeyBytes(PTable table, StatementContext context,
             List<Pair<ColumnName, ParseNode>> onDupKeyPairs, ColumnResolver resolver)
             throws SQLException {
         byte[] onDupKeyBytesToBe;
