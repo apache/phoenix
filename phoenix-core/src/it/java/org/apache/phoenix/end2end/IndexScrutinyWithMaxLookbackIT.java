@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.hadoop.hbase.procedure2.RemoteProcedureDispatcher;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -102,7 +101,7 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
             Integer.toString(MAX_LOOKBACK));
-        props.put(RemoteProcedureDispatcher.DISPATCH_DELAY_CONF_KEY, "0");
+        props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
