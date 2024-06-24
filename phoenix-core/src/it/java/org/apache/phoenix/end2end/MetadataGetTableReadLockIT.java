@@ -24,7 +24,7 @@ import java.util.concurrent.CountDownLatch;
 /**
  * Class which tests whether non-exclusive locking on metadata read path (getTable) works as expected.
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class MetadataGetTableReadLockIT extends BaseTest {
 
     @BeforeClass
