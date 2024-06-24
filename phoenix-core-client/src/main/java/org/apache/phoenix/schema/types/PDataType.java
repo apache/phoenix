@@ -534,7 +534,7 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     public static final int ARRAY_TYPE_BASE = 3000;
     public static final int JSON_TYPE = 5000;
-    public static final int MAP_TYPE = 7000;
+    public static final int BSON_TYPE = 7000;
     public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
 
     protected static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>() {

@@ -37,7 +37,7 @@ public class PBson extends PVarbinary {
     public static final PBson INSTANCE = new PBson();
 
     private PBson() {
-        super("BSON", PDataType.MAP_TYPE, byte[].class, null, 49);
+        super("BSON", PDataType.BSON_TYPE, byte[].class, null, 49);
     }
 
     @Override
