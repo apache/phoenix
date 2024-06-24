@@ -71,6 +71,16 @@ public abstract class ParseNode {
         return finder.hasSubquery;
     }
 
+    public boolean hasJsonExpression() {
+        JsonFunctionFinder finder = new JsonFunctionFinder();
+        try {
+            this.accept(finder);
+        } catch (SQLException e) {
+            // Not possible.
+        }
+        return finder.hasJsonFunction;
+    }
+
     public abstract void toSQL(ColumnResolver resolver, StringBuilder buf);
 
     private static class SubqueryFinder extends StatelessTraverseAllParseNodeVisitor {
@@ -80,6 +90,19 @@ public abstract class ParseNode {
         public Void visit(SubqueryParseNode node) throws SQLException {
             hasSubquery = true;
             return null;
+        }
+    }
+
+    private static class JsonFunctionFinder extends StatelessTraverseAllParseNodeVisitor {
+        private boolean hasJsonFunction = false;
+        @Override
+        public boolean visitEnter(FunctionParseNode node) throws SQLException {
+            if (node instanceof JsonValueParseNode
+                    || node instanceof JsonQueryParseNode
+                    || node instanceof JsonModifyParseNode) {
+                hasJsonFunction = true;
+            }
+            return true;
         }
     }
 }

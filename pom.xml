@@ -102,7 +102,7 @@
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
-    <netty-bom.version>4.1.104.Final</netty-bom.version>
+    <netty-bom.version>4.1.108.Final</netty-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
@@ -120,7 +120,7 @@
     <sqlline.version>1.9.0</sqlline.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
-    <snappy.version>0.3</snappy.version>
+    <snappy.version>0.5</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
@@ -135,6 +135,8 @@
     <jcodings.version>1.0.55</jcodings.version>
     <jetty.version>9.4.53.v20231009</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
+    <json-path.version>2.9.0</json-path.version>
+    <bson.version>4.4.0</bson.version>
     <!-- Test Dependencies -->
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
@@ -1724,6 +1726,17 @@
         <groupId>org.hdrhistogram</groupId>
         <artifactId>HdrHistogram</artifactId>
         <version>${hdrhistogram.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.jayway.jsonpath</groupId>
+        <artifactId>json-path</artifactId>
+        <version>${json-path.version}</version>
+      </dependency>
+      <!-- https://mvnrepository.com/artifact/org.mongodb/bson -->
+      <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>bson</artifactId>
+        <version>${bson.version}</version>
       </dependency>
 
       <!-- Other test dependencies -->
