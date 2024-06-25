@@ -1693,35 +1693,31 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           repeat = 1;
       }
 
+      put = new Put(rowKey);
+      delete = new Delete(rowKey);
+      transferAttributes(atomicPut, put);
+      transferAttributes(atomicPut, delete);
       for (int i = 0; i < tuple.size(); i++) {
           Cell cell = tuple.getValue(i);
           if (cell.getType() == Cell.Type.Put) {
               if (checkCellNeedUpdate(cell, currColumnCellExprMap)) {
-                  if (put == null) {
-                      put = new Put(rowKey);
-                      transferAttributes(atomicPut, put);
-                      mutations.add(put);
-                  }
                   put.add(cell);
               }
           } else {
-              if (delete == null) {
-                  delete = new Delete(rowKey);
-                  transferAttributes(atomicPut, delete);
-                  mutations.add(delete);
-              }
               delete.add(cell);
           }
       }
 
-      if (put != null || delete != null) {
-          if (put == null) {
-              put = new Put(rowKey);
-              transferAttributes(atomicPut, put);
-              mutations.add(put);
-          }
+      if (!put.isEmpty() || !delete.isEmpty()) {
           PTable table = operations.get(0).getFirst();
           addEmptyKVCellToPut(put, tuple, table);
+      }
+
+      if (!put.isEmpty()) {
+          mutations.add(put);
+      }
+      if (!delete.isEmpty()) {
+          mutations.add(delete);
       }
 
       return mutations;
@@ -1774,7 +1770,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (isInCaseExpressionElseClause == null) {
             return false;
         }
-        if (isInCaseExpressionElseClause == false) {
+        if (!isInCaseExpressionElseClause) {
             return true;
         }
         Cell oldCell = valuePair.getFirst();
