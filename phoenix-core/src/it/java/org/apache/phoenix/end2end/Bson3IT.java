@@ -105,15 +105,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               "press = $press AND track[0].shot[2][0].city.standard[50] = $softly";
 
       //{
-      //  "EXPR": "press = $press AND track[0].shot[2][0].city.standard[50] = $softly",
-      //  "VAL": {
+      //  "$EXPR": "press = $press AND track[0].shot[2][0].city.standard[50] = $softly",
+      //  "$VAL": {
       //    "$press": "beat",
       //    "$softly": "softly"
       //  }
       //}
       BsonDocument conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument()
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
               .append("$press", new BsonString("beat"))
               .append("$softly", new BsonString("softly")));
 
@@ -134,15 +134,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               "press = $press AND track[0].shot[2][0].city.standard[5] = $softly";
 
       //{
-      //  "EXPR": "press = $press AND track[0].shot[2][0].city.standard[5] = $softly",
-      //  "VAL": {
+      //  "$EXPR": "press = $press AND track[0].shot[2][0].city.standard[5] = $softly",
+      //  "$VAL": {
       //    "$press": "beat",
       //    "$softly": "softly"
       //  }
       //}
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument()
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
               .append("$press", new BsonString("beat"))
               .append("$softly", new BsonString("softly")));
 
@@ -338,12 +338,12 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][2])";
 
       //{
-      //  "EXPR": "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][2])",
-      //  "VAL": {}
+      //  "$EXPR": "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][2])",
+      //  "$VAL": {}
       //}
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument());
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument());
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
@@ -373,15 +373,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
                       " AND field_exists(result[4].emails[1]))";
 
       //{
-      //  "EXPR": "result[2].location.coordinates.latitude > $latitude OR (field_exists(result[1].location) AND result[1].location.state != $state AND field_exists(result[4].emails[1]))",
-      //  "VAL": {
+      //  "$EXPR": "result[2].location.coordinates.latitude > $latitude OR (field_exists(result[1].location) AND result[1].location.state != $state AND field_exists(result[4].emails[1]))",
+      //  "$VAL": {
       //    "$latitude": 0,
       //    "$state": "AK"
       //  }
       //}
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument()
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
               .append("$latitude", new BsonDouble(0))
               .append("$state", new BsonString("AK")));
 
@@ -895,15 +895,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               "press = $press AND track[0].shot[2][0].city.standard[50] = $softly";
 
       //{
-      //  "EXPR": "press = $press AND track[0].shot[2][0].city.standard[50] = $softly",
-      //  "VAL": {
+      //  "$EXPR": "press = $press AND track[0].shot[2][0].city.standard[50] = $softly",
+      //  "$VAL": {
       //    "$press": "beat",
       //    "$softly": "softly"
       //  }
       //}
       BsonDocument conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument()
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
               .append("$press", new BsonString("beat"))
               .append("$softly", new BsonString("softly")));
 
@@ -924,15 +924,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               "press = $press AND track[0].shot[2][0].city.standard[5] <> $softly";
 
       //{
-      //  "EXPR": "press = $press AND track[0].shot[2][0].city.standard[5] <> $softly",
-      //  "VAL": {
+      //  "$EXPR": "press = $press AND track[0].shot[2][0].city.standard[5] <> $softly",
+      //  "$VAL": {
       //    "$press": "beat",
       //    "$softly": "softly"
       //  }
       //}
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument()
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
               .append("$press", new BsonString("beat"))
               .append("$softly", new BsonString("softly")));
 
@@ -1115,12 +1115,12 @@ public class Bson3IT extends ParallelStatsDisabledIT {
               "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][20])";
 
       //{
-      //  "EXPR": "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][20])",
-      //  "VAL": {}
+      //  "$EXPR": "field_not_exists(newrecord) AND field_exists(rather[3].outline.halfway.so[2][20])",
+      //  "$VAL": {}
       //}
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument());
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument());
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
               + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
@@ -1150,15 +1150,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
                       " AND field_not_exists(result[4].emails[1]))";
 
       //{
-      //  "EXPR": "result[2].location.coordinates.latitude > $latitude OR (field_exists(result[1].location) AND result[1].location.state != $state AND field_exists(result[4].emails[1]))",
-      //  "VAL": {
+      //  "$EXPR": "result[2].location.coordinates.latitude > $latitude OR (field_exists(result[1].location) AND result[1].location.state != $state AND field_exists(result[4].emails[1]))",
+      //  "$VAL": {
       //    "$latitude": 0,
       //    "$state": "AK"
       //  }
       //}
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", new BsonDocument()
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", new BsonDocument()
               .append("$latitude", new BsonDouble(0))
               .append("$state", new BsonString("AK")));
 

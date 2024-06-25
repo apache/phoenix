@@ -125,8 +125,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
           "(field_exists(Id) OR field_exists(attr_3)) AND field_exists(attr_6) AND field_exists(attr_6.n_attr_1)";
 
       BsonDocument conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", compareValuesDocument);
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
 
       String query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
           + conditionDoc.toJson() + "')";
@@ -150,8 +150,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
           "(field_exists(Id) OR field_exists(attr_3)) AND field_exists(attr_6) AND field_exists(attr_6.n_attr_10)";
 
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", compareValuesDocument);
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
 
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
           + conditionDoc.toJson() + "')";
@@ -162,8 +162,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       conditionExpression = "(field_exists(ISBN))";
 
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", compareValuesDocument);
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
 
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
           + conditionDoc.toJson() + "')";
@@ -182,8 +182,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
           "(field_exists(Id) OR field_exists(attr_3)) ANDERROR";
 
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", compareValuesDocument);
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
 
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
           + conditionDoc.toJson() + "')";
@@ -201,8 +201,8 @@ public class Bson1IT extends ParallelStatsDisabledIT {
                   + "AND NestedList1[2][1].Id < :Id1 AND IdS < :Ids1 AND Id2 > :Id2";
 
       conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", compareValuesDocument);
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
 
       query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
           + conditionDoc.toJson() + "')";

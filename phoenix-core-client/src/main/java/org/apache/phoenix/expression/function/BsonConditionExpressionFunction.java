@@ -100,8 +100,8 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
             }
         }
 
-        BsonValue conditionExp = conditionExpressionBsonDoc.get("EXPR");
-        BsonValue exprValues = conditionExpressionBsonDoc.get("VAL");
+        BsonValue conditionExp = conditionExpressionBsonDoc.get("$EXPR");
+        BsonValue exprValues = conditionExpressionBsonDoc.get("$VAL");
         if (conditionExp != null && exprValues != null) {
             if (conditionExp.isString() && exprValues.isDocument()) {
                 SQLComparisonExpressionUtils sqlComparisonExpressionUtils =

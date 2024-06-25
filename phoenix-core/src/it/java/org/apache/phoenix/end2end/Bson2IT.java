@@ -321,8 +321,8 @@ public class Bson2IT extends ParallelStatsDisabledIT {
           "PictureBinarySet = :PictureBinarySet AND NestedMap1.NestedMap2.NList[1] < :NList001";
 
       BsonDocument conditionDoc = new BsonDocument();
-      conditionDoc.put("EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("VAL", compareValuesDocument);
+      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
+      conditionDoc.put("$VAL", compareValuesDocument);
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
           + " VALUES (?,?) ON DUPLICATE KEY UPDATE COL = CASE WHEN BSON_CONDITION_EXPRESSION(COL, '"

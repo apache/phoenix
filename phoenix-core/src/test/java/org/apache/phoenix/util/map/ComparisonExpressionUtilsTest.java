@@ -56,6 +56,36 @@ public class ComparisonExpressionUtilsTest {
     TestFieldsMap compareValMap1 = getCompareValMap1();
 
     RawBsonDocument rawBsonDocument = TestUtil.getRawBsonDocument(testFieldsMap1);
+    //{
+    //  "$Id20": 101.011,
+    //  "$Id2": 12,
+    //  "#NestedList1_10": "1234abce",
+    //  "$Id1": 120,
+    //  "$Id10": 101,
+    //  "$Ids1": "12",
+    //  ":ISBN": "111-1111111111",
+    //  "#NestedList1_xyz0123": "xyz0123",
+    //  "$NestedList1_485": -485.33,
+    //  "$NestedMap1_NList1_30": {
+    //    "$binary": {
+    //      "base64": "V2hpdGVl",
+    //      "subType": "00"
+    //    }
+    //  },
+    //  "InPublication": false,
+    //  "$Ids10": "100",
+    //  "#NestedMap1_NList1_3": {
+    //    "$binary": {
+    //      "base64": "V2hpdA==",
+    //      "subType": "00"
+    //    }
+    //  },
+    //  "#NestedList1_1": "1234abcc",
+    //  "#NMap1_NList1": "NListVal01",
+    //  "$NestedList1_4850": -485.35,
+    //  "$Id": 101.01,
+    //  "#Title": "Book 101 Title"
+    //}
     RawBsonDocument compareValues = TestUtil.getRawBsonDocument(compareValMap1);
 
     SQLComparisonExpressionUtils SQLComparisonExpressionUtils =
