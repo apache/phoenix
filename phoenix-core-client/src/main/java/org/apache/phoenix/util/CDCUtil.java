@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.StringTokenizer;
 
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -35,6 +36,7 @@ import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
+import org.bson.RawBsonDocument;
 
 public class CDCUtil {
     public static final String CDC_INDEX_PREFIX = "__CDC__";
@@ -121,7 +123,10 @@ public class CDCUtil {
     public static Object getColumnEncodedValue(Object value, PDataType dataType) {
         if (value != null) {
             // TODO: Need suport for DECIMAL, NUMERIC and array types.
-            if (dataType.getSqlType() == Types.BINARY || dataType.getSqlType() == Types.VARBINARY
+            if (dataType.getSqlType() == PDataType.BSON_TYPE) {
+                value = Bytes.toBytes(((RawBsonDocument) value).getByteBuffer().asNIO());
+            } else if (dataType.getSqlType() == Types.BINARY ||
+                    dataType.getSqlType() == Types.VARBINARY
                     || dataType.getSqlType() == Types.LONGVARBINARY) {
                 // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
                 // avoid copying bytes.

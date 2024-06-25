@@ -18,10 +18,14 @@
 
 package org.apache.phoenix.end2end;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -31,6 +35,7 @@ import org.bson.BsonDouble;
 import org.bson.BsonNull;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -42,7 +47,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Base64;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -55,6 +64,8 @@ import static org.junit.Assert.assertTrue;
  */
 @Category(ParallelStatsDisabledTest.class)
 public class Bson3IT extends ParallelStatsDisabledIT {
+
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private static String getJsonString(String jsonFilePath) throws IOException {
     URL fileUrl = Bson3IT.class.getClassLoader().getResource(jsonFilePath);
@@ -69,11 +80,18 @@ public class Bson3IT extends ParallelStatsDisabledIT {
   public void testBsonOpsWithSqlConditionsUpdateSuccess() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
+    String cdcName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
           + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
           + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
+      conn.createStatement().execute(cdcDdl);
+      IndexToolIT.runIndexTool(false, "", tableName,
+              "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+      Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(10);
 
       String sample1 = getJsonString("json/sample_01.json");
       String sample2 = getJsonString("json/sample_02.json");
@@ -100,6 +118,13 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+      Thread.sleep(10);
+      Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(10);
 
       String conditionExpression =
               "press = $press AND track[0].shot[2][0].city.standard[50] = $softly";
@@ -394,6 +419,10 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+      Thread.sleep(10);
+      ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCPostUpdate(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
 
       query = "SELECT * FROM " + tableName;
       rs = conn.createStatement().executeQuery(query);
@@ -426,6 +455,129 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     }
   }
 
+  private static void testCDCAfterFirstUpsert(Connection conn, String cdcName, Timestamp ts1,
+                                              Timestamp ts2,
+                                              BsonDocument bsonDocument1,
+                                              BsonDocument bsonDocument2,
+                                              BsonDocument bsonDocument3)
+          throws SQLException, JsonProcessingException {
+    try (PreparedStatement pst = conn.prepareStatement(
+            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
+      pst.setTimestamp(1, ts1);
+      pst.setTimestamp(2, ts2);
+
+      ResultSet rs = pst.executeQuery();
+      Assert.assertTrue(rs.next());
+
+      String cdcVal = rs.getString(3);
+      Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      Map<String, Object> preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      Assert.assertNull(preImage.get("COL"));
+      Map<String, Object> postImage =
+              (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      String encodedBytes = (String) postImage.get("COL");
+      byte[] bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument r1 = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument1, r1);
+
+      Assert.assertTrue(rs.next());
+
+      cdcVal = rs.getString(3);
+      map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      Assert.assertNull(preImage.get("COL"));
+      postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      encodedBytes = (String) postImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument r2 = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument2, r2);
+
+      Assert.assertTrue(rs.next());
+
+      cdcVal = rs.getString(3);
+      map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      Assert.assertNull(preImage.get("COL"));
+      postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      encodedBytes = (String) postImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument r3 = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument3, r3);
+
+      Assert.assertFalse(rs.next());
+    }
+  }
+
+  private static void testCDCPostUpdate(Connection conn, String cdcName, Timestamp ts1,
+                                        Timestamp ts2, BsonDocument bsonDocument1,
+                                        BsonDocument bsonDocument2,
+                                        BsonDocument bsonDocument3)
+          throws SQLException, IOException {
+    ResultSet rs;
+    try (PreparedStatement pst = conn.prepareStatement(
+            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
+      pst.setTimestamp(1, ts1);
+      pst.setTimestamp(2, ts2);
+
+      rs = pst.executeQuery();
+      Assert.assertTrue(rs.next());
+
+      String cdcVal = rs.getString(3);
+      Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      Map<String, Object> preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      String encodedBytes = (String) preImage.get("COL");
+      byte[] bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument preDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument1, preDoc);
+
+      Map<String, Object> postImage =
+              (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      encodedBytes = (String) postImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument postDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(RawBsonDocument.parse(getJsonString("json/sample_updated_01.json")),
+              postDoc);
+
+      Assert.assertTrue(rs.next());
+
+      cdcVal = rs.getString(3);
+      map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      encodedBytes = (String) preImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      preDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument2, preDoc);
+
+      postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      encodedBytes = (String) postImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      postDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(RawBsonDocument.parse(getJsonString("json/sample_updated_02.json")),
+              postDoc);
+
+      Assert.assertTrue(rs.next());
+
+      cdcVal = rs.getString(3);
+      map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      encodedBytes = (String) preImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      preDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument3, preDoc);
+
+      postImage = (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      encodedBytes = (String) postImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      postDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(RawBsonDocument.parse(getJsonString("json/sample_updated_03.json")),
+              postDoc);
+
+      Assert.assertFalse(rs.next());
+    }
+  }
+
   /**
    * Conditional Upserts for BSON pass where the Condition Expression is of Document style.
    */
@@ -433,11 +585,18 @@ public class Bson3IT extends ParallelStatsDisabledIT {
   public void testBsonOpsWithDocumentConditionsUpdateSuccess() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
+    String cdcName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
               + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
               + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
+      conn.createStatement().execute(cdcDdl);
+      IndexToolIT.runIndexTool(false, "", tableName,
+              "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+      Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(10);
 
       String sample1 = getJsonString("json/sample_01.json");
       String sample2 = getJsonString("json/sample_02.json");
@@ -464,6 +623,14 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+
+      Thread.sleep(10);
+      Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(10);
 
       //{
       //  "$and": [
@@ -819,6 +986,11 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+
+      Thread.sleep(10);
+      ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCPostUpdate(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
 
       query = "SELECT * FROM " + tableName;
       rs = conn.createStatement().executeQuery(query);
