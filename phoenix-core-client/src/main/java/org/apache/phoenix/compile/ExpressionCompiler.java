@@ -89,6 +89,8 @@ import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.InListParseNode;
 import org.apache.phoenix.parse.IsNullParseNode;
+import org.apache.phoenix.parse.JsonModifyParseNode;
+import org.apache.phoenix.parse.JsonQueryParseNode;
 import org.apache.phoenix.parse.LikeParseNode;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.parse.LiteralParseNode;
@@ -116,7 +118,6 @@ import org.apache.phoenix.schema.IndexUncoveredDataColumnRef;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
@@ -142,6 +143,7 @@ import org.apache.phoenix.util.StringUtil;
 
 public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expression> {
     private boolean isAggregate;
+    private boolean isJsonFragment;
     protected ParseNode aggregateFunction;
     protected final StatementContext context;
     protected final GroupBy groupBy;
@@ -172,6 +174,10 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         return isAggregate;
     }
 
+    public boolean isJsonFragment() {
+        return isJsonFragment;
+    }
+
     public boolean isTopLevel() {
         return nodeCount == 0;
     }
@@ -180,6 +186,7 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         this.isAggregate = false;
         this.nodeCount = 0;
         this.totalNodeCount = 0;
+        this.isJsonFragment = false;
     }
 
     @Override
@@ -202,6 +209,18 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhsExpr = children.get(0);
         Expression rhsExpr = children.get(1);
+
+        PDataType dataTypeOfLHSExpr = lhsExpr.getDataType();
+        if (dataTypeOfLHSExpr != null && !dataTypeOfLHSExpr.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + dataTypeOfLHSExpr).build().buildException();
+        }
+        PDataType dataTypeOfRHSExpr = rhsExpr.getDataType();
+        if (dataTypeOfRHSExpr != null && !dataTypeOfRHSExpr.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + dataTypeOfRHSExpr).build().buildException();
+        }
+
         CompareOperator op = node.getFilterOp();
 
         if (lhsNode instanceof RowValueConstructorParseNode && rhsNode instanceof RowValueConstructorParseNode) {
@@ -278,10 +297,14 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
 
     @Override
     public boolean visitEnter(FunctionParseNode node) throws SQLException {
+        if (node instanceof JsonQueryParseNode || node instanceof JsonModifyParseNode) {
+            this.isJsonFragment = true;
+        }
         // TODO: Oracle supports nested aggregate function while other DBs don't. Should we?
         if (node.isAggregate()) {
             if (aggregateFunction != null) {
-                throw new SQLFeatureNotSupportedException("Nested aggregate functions are not supported");
+                throw new SQLFeatureNotSupportedException(
+                        "Nested aggregate functions are not supported");
             }
             this.aggregateFunction = node;
             this.isAggregate = true;
@@ -484,7 +507,15 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ParseNode rhsNode = node.getChildren().get(1);
         Expression lhs = children.get(0);
         Expression rhs = children.get(1);
-        if ( rhs.getDataType() != null && lhs.getDataType() != null && 
+        if (lhs.getDataType() != null && !lhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED).setMessage(
+                    " for type " + lhs.getDataType()).build().buildException();
+        }
+        if (rhs.getDataType() != null && !rhs.getDataType().isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED).setMessage(
+                    " for type " + rhs.getDataType()).build().buildException();
+        }
+        if ( rhs.getDataType() != null && lhs.getDataType() != null &&
                 !lhs.getDataType().isCoercibleTo(rhs.getDataType())  && 
                 !rhs.getDataType().isCoercibleTo(lhs.getDataType())) {
             throw TypeMismatchException.newException(lhs.getDataType(), rhs.getDataType(), node.toString());
@@ -639,7 +670,12 @@ public class ExpressionCompiler extends UnsupportedAllParseNodeVisitor<Expressio
         ImmutableBytesWritable ptr = context.getTempPtr();
         PDataType firstChildType = firstChild.getDataType();
         ParseNode firstChildNode = node.getChildren().get(0);
-        
+
+        if (firstChildType != null && !firstChildType.isComparisonSupported()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.COMPARISON_UNSUPPORTED)
+                    .setMessage(" for type " + firstChildType).build().buildException();
+        }
+
         if (firstChildNode instanceof BindParseNode) {
             PDatum datum = firstChild;
             if (firstChildType == null) {

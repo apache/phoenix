@@ -112,7 +112,10 @@ public class ParallelIteratorsSplitTest extends BaseConnectionlessQueryTest {
         
         PTable table = pconn.getTable(new PTableKey(pconn.getTenantId(), TABLE_NAME));
         TableRef tableRef = new TableRef(table);
-        List<HRegionLocation> regions = pconn.getQueryServices().getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes());
+        List<HRegionLocation> regions =
+                pconn.getQueryServices()
+                        .getAllTableRegions(tableRef.getTable().getPhysicalName().getBytes(),
+                                60000);
         List<KeyRange> ranges = getSplits(tableRef, scan, regions, scanRanges);
         assertEquals("Unexpected number of splits: " + ranges.size(), expectedSplits.size(), ranges.size());
         for (int i=0; i<expectedSplits.size(); i++) {

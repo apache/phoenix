@@ -57,6 +57,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT_BYTES
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
@@ -83,7 +84,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
+import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
+import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
+import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
@@ -109,6 +115,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.Objects;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -130,6 +137,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorException;
@@ -248,6 +256,7 @@ import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -363,8 +372,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_FAMILY_BYTES, EXTERNAL_SCHEMA_ID_BYTES);
     private static final Cell STREAMING_TOPIC_NAME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, STREAMING_TOPIC_NAME_BYTES);
+    private static final Cell CDC_INCLUDE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, CDC_INCLUDE_BYTES);
     private static final Cell INDEX_WHERE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
             TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
+
+    private static final Cell MAX_LOOKBACK_AGE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -405,7 +418,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             SCHEMA_VERSION_KV,
             EXTERNAL_SCHEMA_ID_KV,
             STREAMING_TOPIC_NAME_KV,
-            INDEX_WHERE_KV
+            INDEX_WHERE_KV,
+            MAX_LOOKBACK_AGE_KV,
+            CDC_INCLUDE_KV
     );
 
     static {
@@ -453,8 +468,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         TABLE_KV_COLUMNS.indexOf(EXTERNAL_SCHEMA_ID_KV);
     private static final int STREAMING_TOPIC_NAME_INDEX =
         TABLE_KV_COLUMNS.indexOf(STREAMING_TOPIC_NAME_KV);
+    private static final int CDC_INCLUDE_INDEX = TABLE_KV_COLUMNS.indexOf(CDC_INCLUDE_KV);
     private static final int INDEX_WHERE_INDEX =
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
+
+    private static final int MAX_LOOKBACK_AGE_INDEX = TABLE_KV_COLUMNS.indexOf(MAX_LOOKBACK_AGE_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -1423,6 +1441,15 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setStreamingTopicName(streamingTopicName != null ? streamingTopicName :
             oldTable != null ? oldTable.getStreamingTopicName() : null);
 
+        Cell includeSpecKv = tableKeyValues[CDC_INCLUDE_INDEX];
+        String includeSpec = includeSpecKv != null ?
+                (String) PVarchar.INSTANCE.toObject(includeSpecKv.getValueArray(),
+                        includeSpecKv.getValueOffset(), includeSpecKv.getValueLength())
+                : null;
+        builder.setCDCIncludeScopes(includeSpec != null ?
+                CDCUtil.makeChangeScopeEnumsFromString(includeSpec) :
+                oldTable != null ? oldTable.getCDCIncludeScopes() : null);
+
         Cell indexWhereKv = tableKeyValues[INDEX_WHERE_INDEX];
         String indexWhere = indexWhereKv != null
                 ? (String) PVarchar.INSTANCE.toObject(indexWhereKv.getValueArray(),
@@ -1430,6 +1457,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 : null;
         builder.setIndexWhere(indexWhere != null ? indexWhere
                 : oldTable != null ? oldTable.getIndexWhere() : null);
+
+        Cell maxLookbackAgeKv = tableKeyValues[MAX_LOOKBACK_AGE_INDEX];
+        Long maxLookbackAge = maxLookbackAgeKv == null ? null :
+                PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeKv.getValueArray(),
+                        maxLookbackAgeKv.getValueOffset(), SortOrder.getDefault());
+        if (tableType == PTableType.VIEW) {
+            byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                    schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
+            maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
+        }
+
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
                 HConstants.EMPTY_BYTE_ARRAY :
@@ -1443,8 +1481,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         List<PColumn> columns = Lists.newArrayListWithExpectedSize(columnCount);
         List<PTable> indexes = Lists.newArrayList();
         List<PName> physicalTables = Lists.newArrayList();
-        PName parentTableName = tableType == INDEX ? dataTableName : null;
-        PName parentSchemaName = tableType == INDEX ? schemaName : null;
+        PName parentTableName = tableType == INDEX || tableType == CDC ? dataTableName : null;
+        PName parentSchemaName = tableType == INDEX || tableType == CDC ? schemaName : null;
         PName parentLogicalName = null;
         EncodedCQCounter cqCounter = null;
         if (oldTable != null) {
@@ -1463,6 +1501,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
         PTable transformingNewTable = null;
         boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
+        boolean isViewIndex = false;
         for (List<Cell> columnCellList : allColumnCellList) {
 
             Cell colKv = columnCellList.get(LINK_TYPE_INDEX);
@@ -1546,6 +1585,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         }
                     }
                 }
+                else if (linkType == VIEW_INDEX_PARENT_TABLE) {
+                    isViewIndex = true;
+                    byte[] indexKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                            schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
+                    maxLookbackAge = scanMaxLookbackAgeFromParent(indexKey, clientTimeStamp);
+                }
             } else {
                 long columnTimestamp =
                     columnCellList.get(0).getTimestamp() != HConstants.LATEST_TIMESTAMP ?
@@ -1557,6 +1602,13 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
+        if (tableType == INDEX && ! isViewIndex) {
+            byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                    parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
+            maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
+        }
+        builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
+                (oldTable != null ? oldTable.getMaxLookbackAge() : null));
         builder.setEncodedCQCounter(cqCounter);
 
         builder.setIndexes(indexes != null ? indexes : oldTable != null
@@ -1585,6 +1637,57 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Avoid querying the stats table because we're holding the rowLock here. Issuing an RPC to a remote
         // server while holding this lock is a bad idea and likely to cause contention.
         return builder.build();
+    }
+
+    private Long scanMaxLookbackAgeFromParent(byte[] key, long clientTimeStamp) throws IOException {
+        Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        try(Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
+            ResultScanner scanner = sysCat.getScanner(scan)) {
+            Result result = scanner.next();
+            boolean startCheckingForLink = false;
+            byte[] parentTableKey = null;
+            do {
+                if (result == null) {
+                    return null;
+                }
+                else if (startCheckingForLink) {
+                    byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+                    if (linkTypeBytes != null) {
+                        LinkType linkType = LinkType.fromSerializedValue(linkTypeBytes[0]);
+                        int rowKeyColMetadataLength = 5;
+                        byte[][] rowKeyMetaData = new byte[rowKeyColMetadataLength][];
+                        getVarChars(result.getRow(), rowKeyColMetadataLength, rowKeyMetaData);
+                        if (linkType == VIEW_INDEX_PARENT_TABLE) {
+                            parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+                            return scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+                        }
+                        else if (linkType == PHYSICAL_TABLE) {
+                            parentTableKey = getParentTableKeyFromChildRowKeyMetaData(rowKeyMetaData);
+                        }
+                    }
+                }
+                else {
+                    byte[] maxLookbackAgeInBytes = result.getValue(TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
+                    if (maxLookbackAgeInBytes != null) {
+                        return PLong.INSTANCE.getCodec().decodeLong(maxLookbackAgeInBytes, 0, SortOrder.getDefault());
+                    }
+                }
+                result = scanner.next();
+                startCheckingForLink = true;
+            } while (result != null);
+            return parentTableKey == null ? null : scanMaxLookbackAgeFromParent(parentTableKey, clientTimeStamp);
+        }
+    }
+
+    private byte[] getParentTableKeyFromChildRowKeyMetaData(byte[][] rowKeyMetaData) {
+        byte[] parentTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
+        String parentSchema = SchemaUtil.getSchemaNameFromFullName(
+                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+        byte[] parentSchemaName = parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
+        byte[] parentTableName = SchemaUtil.getTableNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes(StandardCharsets.UTF_8);
+        return SchemaUtil.getTableKey(parentTenantId, parentSchemaName, parentTableName);
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
@@ -2977,7 +3080,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             // Add to list of HTables to delete, unless it's a view or its a shared index
             if (tableType == INDEX && table.getViewIndexId() != null) {
                 sharedTablesToDelete.add(new SharedTableState(table));
-            } else if (tableType != PTableType.VIEW) {
+            } else if (tableType != PTableType.VIEW && tableType != PTableType.CDC) {
                 tableNamesToDelete.add(table.getPhysicalName().getBytes());
             }
             invalidateList.add(cacheKey);
@@ -3389,8 +3492,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         && result.getMutationCode() != MutationCode.TABLE_ALREADY_EXISTS) {
                     return result;
                 } else {
+                    PTable oldTable = table;
                     table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP,
                             clientVersion);
+                    if (table != null && hasInheritableTablePropertyChanged(table, oldTable)) {
+                        invalidateAllChildTablesAndIndexes(table, childViews);
+                    }
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
                         try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
                                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
@@ -3419,6 +3526,32 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         } catch (Throwable t) {
             ClientUtil.throwIOException(fullTableName, t);
             return null; // impossible
+        }
+    }
+
+    private boolean hasInheritableTablePropertyChanged(PTable newTable, PTable oldTable) {
+        return ! Objects.equals(newTable.getMaxLookbackAge(), oldTable.getMaxLookbackAge());
+    }
+
+    private void invalidateAllChildTablesAndIndexes(PTable table, List<PTable> childViews) {
+        List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
+        if (table.getIndexes() != null) {
+            for(PTable index: table.getIndexes()) {
+                invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(index)));
+            }
+        }
+        for(PTable childView: childViews) {
+            invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(childView)));
+            if (childView.getIndexes() != null) {
+                for(PTable viewIndex: childView.getIndexes()) {
+                    invalidateList.add(new ImmutableBytesPtr(SchemaUtil.getTableKey(viewIndex)));
+                }
+            }
+        }
+        Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
+                GlobalCache.getInstance(this.env).getMetaDataCache();
+        for(ImmutableBytesPtr invalidateKey: invalidateList) {
+            metaDataCache.invalidate(invalidateKey);
         }
     }
 

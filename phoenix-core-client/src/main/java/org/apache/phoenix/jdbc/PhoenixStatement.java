@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_DROP_CDC_INDEX;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQL_COUNTER;
@@ -132,6 +133,7 @@ import org.apache.phoenix.parse.ChangePermsStatement;
 import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateSchemaStatement;
@@ -181,6 +183,7 @@ import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
+import org.apache.phoenix.parse.DropCDCStatement;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -195,6 +198,7 @@ import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
@@ -210,6 +214,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.CursorUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -530,7 +535,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 	    GLOBAL_MUTATION_SQL_COUNTER.increment();
         try {
             return CallRunner
-                    .run(
+                   .run(
                         new CallRunner.CallableThrowable<Integer, SQLException>() {
                         @Override
                             public Integer call() throws SQLException {
@@ -1072,6 +1077,35 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
     }
 
+    private static class ExecutableCreateCDCStatement extends CreateCDCStatement
+            implements CompilableStatement {
+        public ExecutableCreateCDCStatement(NamedNode cdcObjName, TableName dataTable,
+                                            Set<PTable.CDCChangeScope> includeScopes,
+                                            ListMultimap<String, Pair<String, Object>> props,
+                                            boolean ifNotExists, int bindCount) {
+            super(cdcObjName, dataTable, includeScopes, props, ifNotExists, bindCount);
+        }
+
+        @Override
+        public MutationPlan compilePlan(PhoenixStatement stmt,
+                                        Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("CREATE CDC"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.createCDC(ExecutableCreateCDCStatement.this);
+                }
+            };
+        }
+    }
+
     private static class ExecutableCreateSchemaStatement extends CreateSchemaStatement implements CompilableStatement {
         ExecutableCreateSchemaStatement(String schemaName, boolean ifNotExists) {
             super(schemaName, ifNotExists);
@@ -1555,8 +1589,40 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
                 @Override
                 public MutationState execute() throws SQLException {
+                    String indexName = ExecutableDropIndexStatement.this.getIndexName().getName();
+                    if (CDCUtil.isCDCIndex(indexName)) {
+                        throw new SQLExceptionInfo.Builder(CANNOT_DROP_CDC_INDEX)
+                                .setTableName(indexName)
+                                .build().buildException();
+                    }
                     MetaDataClient client = new MetaDataClient(getContext().getConnection());
                     return client.dropIndex(ExecutableDropIndexStatement.this);
+                }
+            };
+        }
+    }
+
+    private static class ExecutableDropCDCStatement extends DropCDCStatement implements CompilableStatement {
+
+        public ExecutableDropCDCStatement(NamedNode cdcObjName, TableName tableName, boolean ifExists) {
+            super(cdcObjName, tableName, ifExists);
+        }
+
+        @SuppressWarnings("unchecked")
+        @Override
+        public MutationPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+            final StatementContext context = new StatementContext(stmt);
+            return new BaseMutationPlan(context, this.getOperation()) {
+
+                @Override
+                public ExplainPlan getExplainPlan() throws SQLException {
+                    return new ExplainPlan(Collections.singletonList("DROP CDC"));
+                }
+
+                @Override
+                public MutationState execute() throws SQLException {
+                    MetaDataClient client = new MetaDataClient(getContext().getConnection());
+                    return client.dropCDC(ExecutableDropCDCStatement.this);
                 }
             };
         }
@@ -1586,7 +1652,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             };
         }
     }
-    
+
     private static class ExecutableTraceStatement extends TraceStatement implements CompilableStatement {
 
         public ExecutableTraceStatement(boolean isTraceOn, double samplingRate) {
@@ -1856,6 +1922,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
 
         @Override
+        public CreateCDCStatement createCDC(NamedNode cdcObj, TableName dataTable,
+                                            Set<PTable.CDCChangeScope> includeScopes,
+                                            ListMultimap<String, Pair<String, Object>> props,
+                                            boolean ifNotExists, int bindCount) {
+            return new ExecutableCreateCDCStatement(cdcObj, dataTable,
+                    includeScopes, props, ifNotExists, bindCount);
+        }
+
+        @Override
         public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
             return new ExecutableCreateSchemaStatement(schemaName, ifNotExists);
         }
@@ -1938,6 +2013,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         @Override
         public DropIndexStatement dropIndex(NamedNode indexName, TableName tableName, boolean ifExists) {
             return new ExecutableDropIndexStatement(indexName, tableName, ifExists);
+        }
+
+        @Override
+        public DropCDCStatement dropCDC(NamedNode cdcObjName, TableName tableName, boolean ifExists) {
+            return new ExecutableDropCDCStatement(cdcObjName, tableName, ifExists);
         }
 
         @Override

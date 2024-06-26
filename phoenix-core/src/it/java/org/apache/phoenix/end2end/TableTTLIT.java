@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -52,6 +53,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import static org.junit.Assert.assertTrue;
+
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TableTTLIT extends BaseTest {
@@ -68,20 +71,23 @@ public class TableTTLIT extends BaseTest {
     private final boolean multiCF;
     private final boolean columnEncoded;
     private final KeepDeletedCells keepDeletedCells;
+    private final Integer tableLevelMaxLooback;
 
     public TableTTLIT(boolean multiCF, boolean columnEncoded,
-            KeepDeletedCells keepDeletedCells, int versions, int ttl) {
+            KeepDeletedCells keepDeletedCells, int versions, int ttl, Integer tableLevelMaxLooback) {
         this.multiCF = multiCF;
         this.columnEncoded = columnEncoded;
         this.keepDeletedCells = keepDeletedCells;
         this.versions = versions;
         this.ttl = ttl;
+        this.tableLevelMaxLooback = tableLevelMaxLooback;
     }
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -103,6 +109,9 @@ public class TableTTLIT extends BaseTest {
         } else {
             optionBuilder.append(", COLUMN_ENCODED_BYTES=0");
         }
+        if (tableLevelMaxLooback != null) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=").append(tableLevelMaxLooback * 1000);
+        }
         this.tableDDLOptions = optionBuilder.toString();
         injectEdge = new ManualEnvironmentEdge();
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
@@ -117,15 +126,18 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Parameterized.Parameters(name = "TableTTLIT_multiCF={0}, columnEncoded={1}, "
-            + "keepDeletedCells={2}, versions={3}, ttl={4}")
+            + "keepDeletedCells={2}, versions={3}, ttl={4}, tableLevelMaxLookback={5}")
     public static synchronized Collection<Object[]> data() {
             return Arrays.asList(new Object[][] {
-                    { false, false, KeepDeletedCells.FALSE, 1, 100},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50},
-                    { false, false, KeepDeletedCells.TTL, 1, 25},
-                    { true, false, KeepDeletedCells.FALSE, 5, 50},
-                    { true, false, KeepDeletedCells.TRUE, 1, 25},
-                    { true, false, KeepDeletedCells.TTL, 5, 100} });
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, null},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, null},
+                    { false, false, KeepDeletedCells.TTL, 1, 25, null},
+                    { true, false, KeepDeletedCells.FALSE, 5, 50, null},
+                    { true, false, KeepDeletedCells.TRUE, 1, 25, null},
+                    { true, false, KeepDeletedCells.TTL, 5, 100, null},
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, 0},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, 0},
+                    { false, false, KeepDeletedCells.TTL, 1, 25, 15}});
     }
 
     /**
@@ -146,36 +158,49 @@ public class TableTTLIT extends BaseTest {
 
     @Test
     public void testMaskingAndCompaction() throws Exception {
-        final int maxDeleteCounter = MAX_LOOKBACK_AGE;
+        final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
+        final int maxDeleteCounter = maxLookbackAge == 0 ? 1 : maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
+        final int maxFlushCounter = ttl;
         final int maxMaskingCounter = 2 * ttl;
+        final int maxVerificationCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+            conn.commit();
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
+            conn.createStatement().execute("Alter Table " + noCompactTableName + " set \"phoenix.table.ttl.enabled\" = false");
+            conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.setValue(startTime);
             int deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
             int compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
+            int flushCounter = RAND.nextInt(maxFlushCounter) + 1;
             int maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
-            boolean afterCompaction = false;
+            int verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
             for (int i = 0; i < 500; i++) {
+                if (flushCounter-- == 0) {
+                    injectEdge.incrementValue(1000);
+                    LOG.info("Flush " + i + " current time: " + injectEdge.currentTime());
+                    flush(TableName.valueOf(tableName));
+                    flushCounter = RAND.nextInt(maxFlushCounter) + 1;
+                }
                 if (compactionCounter-- == 0) {
                     injectEdge.incrementValue(1000);
-                    LOG.debug("Compaction " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Compaction " + i + " current time: " + injectEdge.currentTime());
                     flush(TableName.valueOf(tableName));
                     majorCompact(TableName.valueOf(tableName));
                     compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
-                    afterCompaction = true;
                 }
                 if (maskingCounter-- == 0) {
                     updateRow(conn, tableName, noCompactTableName, "a");
-                    injectEdge.incrementValue((ttl + MAX_LOOKBACK_AGE + 1) * 1000);
-                    LOG.debug("Masking " + i + " current time: " + injectEdge.currentTime());
+                    injectEdge.incrementValue((ttl + maxLookbackAge + 1) * 1000);
+                    LOG.info("Masking " + i + " current time: " + injectEdge.currentTime());
                     ResultSet rs = conn.createStatement().executeQuery(
                             "SELECT count(*) FROM " + tableName);
                     Assert.assertTrue(rs.next());
@@ -190,22 +215,20 @@ public class TableTTLIT extends BaseTest {
                     maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
                 }
                 if (deleteCounter-- == 0) {
-                    LOG.debug("Delete " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Delete " + i + " current time: " + injectEdge.currentTime());
                     deleteRow(conn, tableName, "a");
                     deleteRow(conn, noCompactTableName, "a");
                     deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
                     injectEdge.incrementValue(1000);
                 }
+                injectEdge.incrementValue(1000);
                 updateRow(conn, tableName, noCompactTableName, "a");
-                if (!afterCompaction) {
-                    injectEdge.incrementValue(1000);
-                    // We are interested in the correctness of compaction and masking. Thus, we
-                    // only need to do the latest version and scn queries to after compaction.
+                if (verificationCounter-- >  0) {
                     continue;
                 }
-                afterCompaction = false;
+                verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
-                long scn = injectEdge.currentTime() - MAX_LOOKBACK_AGE * 1000;
+                long scn = injectEdge.currentTime() - maxLookbackAge * 1000;
                 long scnEnd = injectEdge.currentTime();
                 long scnStart = Math.max(scn, startTime);
                 for (scn = scnEnd; scn >= scnStart; scn -= 1000) {
@@ -217,7 +240,50 @@ public class TableTTLIT extends BaseTest {
                                 MAX_COLUMN_INDEX);
                     }
                 }
-                injectEdge.incrementValue(1000);
+            }
+        }
+    }
+
+    @Test
+    public void testFlushesAndMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
+            throws Exception {
+        final int maxLookbackAge = tableLevelMaxLooback != null
+                ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
+        if (maxLookbackAge > 0) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = 0");
+            conn.commit();
+            final int flushCount = 10;
+            byte[] row = Bytes.toBytes("a");
+            for (int i = 0; i < flushCount; i++) {
+                // Generate more row versions than the maximum cell versions for the table
+                int updateCount = RAND.nextInt(10) + versions;
+                for (int j = 0; j < updateCount; j++) {
+                    updateRow(conn, tableName, "a");
+                }
+                flush(TableName.valueOf(tableName));
+                // At every flush, extra cell versions should be removed.
+                // MAX_COLUMN_INDEX table columns and one empty column will be retained for
+                // each row version.
+                assertTrue(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row)
+                        <= (i + 1) * (MAX_COLUMN_INDEX + 1) * versions);
+            }
+            // Run one minor compaction (in case no minor compaction has happened yet)
+            Admin admin = utility.getAdmin();
+            admin.compact(TableName.valueOf(tableName));
+            int waitCount = 0;
+            while (TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
+                    Bytes.toBytes("a")) >= flushCount * (MAX_COLUMN_INDEX + 1) * versions) {
+                // Wait for minor compactions to happen
+                Thread.sleep(1000);
+                waitCount++;
+                if (waitCount > 30) {
+                    Assert.fail();
+                }
             }
         }
     }
@@ -287,6 +353,16 @@ public class TableTTLIT extends BaseTest {
             }
             updateColumn(conn, tableName1, id, columnIndex, value);
             updateColumn(conn, tableName2, id, columnIndex, value);
+        }
+        conn.commit();
+    }
+
+    private void updateRow(Connection conn, String tableName, String id)
+            throws SQLException {
+
+        for (int i = 1; i <= MAX_COLUMN_INDEX; i++) {
+            String value = Integer.toString(RAND.nextInt(1000));
+            updateColumn(conn, tableName, id, i, value);
         }
         conn.commit();
     }

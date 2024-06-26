@@ -23,6 +23,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_ACTUAL_START_ROW;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
@@ -49,6 +50,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
@@ -67,15 +69,18 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.BaseQueryPlan;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.ColumnProjectionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -108,6 +113,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * 
@@ -555,7 +561,38 @@ public class ScanUtil {
         }
         return offset - byteOffset;
     }
-    
+
+    public static boolean adjustScanFilterForGlobalIndexRegionScanner(Scan scan) {
+        // For rebuilds we use count (*) as query for regular tables which ends up setting the FirstKeyOnlyFilter on scan
+        // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
+        // For rebuilds we need all columns and all versions
+
+        Filter filter = scan.getFilter();
+        if (filter instanceof PagingFilter) {
+            PagingFilter pageFilter = (PagingFilter) filter;
+            Filter delegateFilter = pageFilter.getDelegateFilter();
+            if (delegateFilter instanceof EmptyColumnOnlyFilter) {
+                pageFilter.setDelegateFilter(null);
+            } else if (delegateFilter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
+            } else if (delegateFilter != null) {
+                // Override the filter so that we get all versions
+                pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
+            }
+        } else if (filter instanceof EmptyColumnOnlyFilter) {
+            scan.setFilter(null);
+            return true;
+        } else if (filter instanceof FirstKeyOnlyFilter) {
+                scan.setFilter(null);
+                return true;
+        } else if (filter != null) {
+            // Override the filter so that we get all versions
+            scan.setFilter(new AllVersionsIndexRebuildFilter(filter));
+        }
+        return false;
+    }
+
     public static interface BytesComparator {
         public int compare(byte[] b1, int s1, int l1, byte[] b2, int s2, int l2);
     };
@@ -793,7 +830,7 @@ public class ScanUtil {
      * that the slot at index 2 has a slot index of 2 but a row key index of 3.
      * To calculate the "adjusted position" index, we simply add up the number of extra slots spanned and offset
      * the slotPosition by that much.
-     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#slotSpan}
+     * @param slotSpan  the extra span per skip scan slot. corresponds to {@link ScanRanges#getSlotSpans()}
      * @param slotPosition  the index of a slot in the SkipScan slots list.
      * @return  the equivalent row key position in the RowKeySchema
      */
@@ -1171,7 +1208,7 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForIndexReadRepair(Scan scan, PTable table,
-            PhoenixConnection phoenixConnection) throws SQLException {
+                                                           PhoenixConnection phoenixConnection, StatementContext context) throws SQLException {
         boolean isTransforming = (table.getTransformingNewTable() != null);
         PTable indexTable = table;
         // Transforming index table can be repaired in regular path via globalindexchecker coproc on it.
@@ -1221,7 +1258,9 @@ public class ScanUtil {
             if (table.isTransactional() && table.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
                 return;
             }
-            PTable dataTable = ScanUtil.getDataTable(indexTable, phoenixConnection);
+            PTable dataTable = context.getCDCDataTableRef() != null ?
+                    context.getCDCDataTableRef().getTable() :
+                    ScanUtil.getDataTable(indexTable, phoenixConnection);
             if (dataTable == null) {
                 // This index table must be being deleted. No need to set the scan attributes
                 return;
@@ -1328,8 +1367,9 @@ public class ScanUtil {
     }
 
     public static void setScanAttributesForClient(Scan scan, PTable table,
-                                                  PhoenixConnection phoenixConnection) throws SQLException {
-        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
+                                                  StatementContext context) throws SQLException {
+        PhoenixConnection phoenixConnection = context.getConnection();
+        setScanAttributesForIndexReadRepair(scan, table, phoenixConnection, context);
         setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
         byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
         byte[] emptyCQ = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
@@ -1348,6 +1388,12 @@ public class ScanUtil {
         setScanAttributeForPaging(scan, phoenixConnection);
         scan.setAttribute(BaseScannerRegionObserverConstants.SCAN_SERVER_RETURN_VALID_ROW_KEY,
                 Bytes.toBytes(true));
+
+        if (context.getCDCTableRef() != null) {
+            scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(context).toByteArray());
+            CDCUtil.setupScanForCDC(scan);
+            adjustScanFilterForGlobalIndexRegionScanner(scan);
+        }
     }
 
     public static void setScanAttributeForPaging(Scan scan, PhoenixConnection phoenixConnection) {
@@ -1614,20 +1660,41 @@ public class ScanUtil {
     public static PageFilter removePageFilter(Scan scan) {
         Filter filter = scan.getFilter();
         if (filter != null) {
+            PagingFilter pagingFilter = null;
             if (filter instanceof PagingFilter) {
-                filter = ((PagingFilter) filter).getDelegateFilter();
+                pagingFilter = (PagingFilter) filter;
+                filter = pagingFilter.getDelegateFilter();
                 if (filter == null) {
                     return null;
                 }
             }
             if (filter instanceof PageFilter) {
-                scan.setFilter(null);
+                if (pagingFilter != null) {
+                    pagingFilter.setDelegateFilter(null);
+                    scan.setFilter(pagingFilter);
+                } else {
+                    scan.setFilter(null);
+                }
                 return (PageFilter) filter;
             } else if (filter instanceof FilterList) {
                 return removePageFilterFromFilterList((FilterList) filter);
             }
         }
         return null;
+    }
+
+    public static void setScanAttributeForMaxLookbackAge(Scan scan, Long maxLookbackAge) {
+        Preconditions.checkNotNull(scan);
+        if (maxLookbackAge != null) {
+            scan.setAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE,
+                    Bytes.toBytes(maxLookbackAge));
+        }
+    }
+
+    public static Long getMaxLookbackAgeFromScanAttribute(Scan scan) {
+        Preconditions.checkNotNull(scan);
+        byte[] maxLookbackAge = scan.getAttribute(BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE);
+        return maxLookbackAge != null ? Bytes.toLong(maxLookbackAge) : null;
     }
 
     /**

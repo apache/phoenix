@@ -27,6 +27,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -51,6 +52,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -175,7 +177,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             String timeZoneID = Calendar.getInstance().getTimeZone().getID();
             // Write a query to get the val2 = 'bc' with a time range query
             String query = "SELECT"+ (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
-                    + "val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName
+                    + "val1, val2, PHOENIX_ROW_TIMESTAMP(), val3 from " + dataTableName
                     + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
                     + before.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '"
                     + timeZoneID + "') AND " + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after
@@ -188,6 +190,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertEquals("bcd", rs.getString(2));
             assertTrue(rs.getTimestamp(3).after(before));
             assertTrue(rs.getTimestamp(3).before(after));
+            assertEquals("bcde", rs.getString(4));
             assertFalse(rs.next());
             // Count the number of index rows
             rs = conn.createStatement().executeQuery("SELECT COUNT(*) from " + indexTableName);
@@ -206,10 +209,11 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertEquals("bcd", rs.getString(2));
             assertTrue(rs.getTimestamp(3).after(before));
             assertTrue(rs.getTimestamp(3).before(after));
+            assertEquals("bcde", rs.getString(4));
             assertFalse(rs.next());
             // Write a time range query to get the last row with val2 ='bc'
             query = "SELECT"+ (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
-                    +"val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName +
+                    +"val1, val2, PHOENIX_ROW_TIMESTAMP(), val3 from " + dataTableName +
                     " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
                     + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
             // Verify that we will read from the index table
@@ -219,6 +223,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             assertEquals("bc", rs.getString(1));
             assertEquals("ccc", rs.getString(2));
             assertTrue(rs.getTimestamp(3).after(after));
+            assertEquals("cccc", rs.getString(4));
             assertFalse(rs.next());
             // Verify that we can execute the same query without using the index
             String noIndexQuery = "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE val1 = 'bc' AND " +
@@ -824,6 +829,47 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
             IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
         }
     }
+
+    @Test
+    public void testPointLookup() throws Exception {
+        if (uncovered || salted) {
+            return;
+        }
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullDataTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        populateTable(fullDataTableName);
+        String indexName = generateUniqueName();
+        String fullIndexName = SchemaUtil.getTableName(schemaName, indexName);
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            stmt.execute("create index " + indexName + " on " + fullDataTableName + " (val2) include (val1)");
+            // Index hint is incorrect as full index name with schema is used
+            String sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + fullIndexName + ")*/ val2, val3 from "
+                    + fullDataTableName + " WHERE id = 'a'";
+            ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
+            String actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+            // No explicit index hint and being point lookup no index will be used
+            sql = "SELECT val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
+            rs = stmt.executeQuery("EXPLAIN " + sql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+            // Index hint with point lookup over data table, still index should be used
+            sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + indexName + ")*/ val2, val3 from "
+                    + fullDataTableName + " WHERE id = 'a'";
+            rs = stmt.executeQuery("EXPLAIN " + sql);
+            actualQueryPlan = QueryUtil.getExplainPlan(rs);
+            assertTrue(actualQueryPlan.contains("FULL SCAN OVER " + fullIndexName));
+            rs = stmt.executeQuery(sql);
+            assertTrue(rs.next());
+        }
+    }
+
     public static class ScanFilterRegionObserver extends SimpleRegionObserver {
         public static final AtomicInteger count = new AtomicInteger(0);
         public static void resetCount() {

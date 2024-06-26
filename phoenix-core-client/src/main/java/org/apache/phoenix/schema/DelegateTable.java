@@ -212,6 +212,12 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public IndexMaintainer getIndexMaintainer(PTable dataTable, PTable cdcTable,
+                                              PhoenixConnection connection) throws SQLException {
+        return delegate.getIndexMaintainer(dataTable, cdcTable, connection);
+    }
+
+    @Override
     public TransformMaintainer getTransformMaintainer(PTable oldTable, PhoenixConnection connection) {
         return delegate.getTransformMaintainer(oldTable, connection);
     }
@@ -409,6 +415,10 @@ public class DelegateTable implements PTable {
     public String getStreamingTopicName() { return delegate.getStreamingTopicName(); }
 
     @Override
+    public Set<CDCChangeScope> getCDCIncludeScopes() {
+        return delegate.getCDCIncludeScopes();
+    }
+
     public String getIndexWhere() {
         return delegate.getIndexWhere();
     }
@@ -424,6 +434,12 @@ public class DelegateTable implements PTable {
             throws SQLException {
         return delegate.getIndexWhereColumns(connection);
     }
+
+    @Override
+    public Long getMaxLookbackAge() {
+        return delegate.getMaxLookbackAge();
+    }
+
     @Override public Map<String, String> getPropertyValues() { return delegate.getPropertyValues(); }
 
     @Override public Map<String, String> getDefaultPropertyValues() { return delegate.getDefaultPropertyValues(); }

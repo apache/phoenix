@@ -75,6 +75,7 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -432,6 +433,12 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String SYSTEM_TRANSFORM_TABLE = "TRANSFORM";
     public static final String SYSTEM_TRANSFORM_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TRANSFORM_TABLE);
+    public static final String MAX_LOOKBACK_AGE = BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE;
+    public static final byte[] MAX_LOOKBACK_AGE_BYTES = Bytes.toBytes(MAX_LOOKBACK_AGE);
+
+    public static final String CDC_INCLUDE_NAME = "INCLUDE";
+    public static final String CDC_INCLUDE_TABLE = "CDC_INCLUDE";
+    public static final byte[] CDC_INCLUDE_BYTES = Bytes.toBytes(CDC_INCLUDE_TABLE);
 
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";

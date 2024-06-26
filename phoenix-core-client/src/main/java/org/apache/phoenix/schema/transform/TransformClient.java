@@ -272,6 +272,7 @@ public class TransformClient {
                 .setSchemaVersion(table.getSchemaVersion())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setStreamingTopicName(table.getStreamingTopicName())
+                .setMaxLookbackAge(table.getMaxLookbackAge())
                 // Transformables
                 .setImmutableStorageScheme(
                         (changedProps.getImmutableStorageSchemeProp() != null? changedProps.getImmutableStorageSchemeProp():table.getImmutableStorageScheme()))

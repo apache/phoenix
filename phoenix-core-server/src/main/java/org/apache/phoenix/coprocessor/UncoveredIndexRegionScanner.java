@@ -54,7 +54,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -71,6 +73,7 @@ import static org.apache.phoenix.util.ScanUtil.isDummy;
 public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     private static final Logger LOGGER =
             LoggerFactory.getLogger(UncoveredIndexRegionScanner.class);
+
     /**
      * The states of the processing a page of index rows
      */
@@ -183,6 +186,11 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     protected abstract void scanDataTableRows(long startTime) throws IOException;
 
     protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
+        return prepareDataTableScan(dataRowKeys, false);
+    }
+
+    protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys,
+                                            boolean includeMultipleVersions) throws IOException {
         List<KeyRange> keys = new ArrayList<>(dataRowKeys.size());
         for (byte[] dataRowKey : dataRowKeys) {
             // If the data table scan was interrupted because of paging we retry the scan
@@ -198,7 +206,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
             scanRanges.initializeScan(dataScan);
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            dataScan.setFilter(new SkipScanFilter(skipScanFilter, false));
+            dataScan.setFilter(new SkipScanFilter(skipScanFilter, includeMultipleVersions));
             dataScan.setAttribute(SERVER_PAGE_SIZE_MS,
                     Bytes.toBytes(Long.valueOf(pageSizeMs)));
             return dataScan;
@@ -256,10 +264,9 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                     return true;
                 }
                 Cell firstCell = row.get(0);
-                byte[] indexRowKey = firstCell.getRowArray();
-                ptr.set(indexRowKey, firstCell.getRowOffset() + offset,
+                lastIndexRowKey = ImmutableBytesPtr.copyBytesIfNecessary(firstCell.getRowArray(),
+                        firstCell.getRowOffset() + offset,
                         firstCell.getRowLength() - offset);
-                lastIndexRowKey = ptr.copyBytes();
                 indexToDataRowKeyMap.put(offset == 0 ? lastIndexRowKey :
                                 CellUtil.cloneRow(firstCell), indexMaintainer.buildDataRowKey(
                                         new ImmutableBytesWritable(lastIndexRowKey),
@@ -314,7 +321,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         return false;
     }
 
-    private boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
+    protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
             result.addAll(indexRow);
@@ -322,6 +329,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 byte[] indexRowKey = CellUtil.cloneRow(indexRow.get(0));
                 Result dataRow = dataRows.get(new ImmutableBytesPtr(
                         indexToDataRowKeyMap.get(indexRowKey)));
+
                 if (dataRow != null) {
                     long ts = indexRow.get(0).getTimestamp();
                     if (!indexMaintainer.isUncovered()

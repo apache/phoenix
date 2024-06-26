@@ -28,7 +28,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
@@ -62,6 +61,7 @@ import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -164,8 +164,11 @@ public class ConnectionQueryServicesImplTest {
     @Test
     public void testGetNextRegionStartKey() {
         RegionInfo mockHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
+        RegionInfo mockPrevHRegionInfo = org.mockito.Mockito.mock(RegionInfo.class);
         HRegionLocation mockRegionLocation = org.mockito.Mockito.mock(HRegionLocation.class);
-        ConnectionQueryServicesImpl mockCqsi = org.mockito.Mockito.mock(ConnectionQueryServicesImpl.class,
+        HRegionLocation mockPrevRegionLocation = org.mockito.Mockito.mock(HRegionLocation.class);
+        ConnectionQueryServicesImpl mockCqsi =
+            org.mockito.Mockito.mock(ConnectionQueryServicesImpl.class,
                 org.mockito.Mockito.CALLS_REAL_METHODS);
         byte[] corruptedStartAndEndKey = "0x3000".getBytes();
         byte[] corruptedDecreasingKey = "0x2999".getBytes();
@@ -176,77 +179,85 @@ public class ConnectionQueryServicesImplTest {
         byte[] mockTableName = "dummyTable".getBytes();
         when(mockRegionLocation.getRegion()).thenReturn(mockHRegionInfo);
         when(mockHRegionInfo.getRegionName()).thenReturn(mockTableName);
+        when(mockPrevRegionLocation.getRegion()).thenReturn(mockPrevHRegionInfo);
+        when(mockPrevHRegionInfo.getRegionName()).thenReturn(mockTableName);
 
         // comparing the current regionInfo endKey is equal to the previous endKey
         // [0x3000, Ox3000) vs 0x3000
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo endKey is less than previous endKey
         // [0x3000,0x2999) vs 0x3000
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedDecreasingKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo endKey is greater than the previous endKey
-        // [0x2999,0x3001) vs 0x3000
+        // [0x2999,0x3001) vs 0x3000.
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo startKey is greater than the previous endKey leading to a hole
         // [0x3000,0x3001) vs 0x2999
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedDecreasingKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedDecreasingKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedDecreasingKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo startKey is less than the previous endKey leading to an overlap
-        // [0x2999,0x3001) vs 0x3000
+        // [0x2999,0x3001) vs 0x3000.
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedDecreasingKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(corruptedNewEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(corruptedStartAndEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, corruptedStartAndEndKey, true,
+            mockPrevRegionLocation);
 
         // comparing the current regionInfo startKey is equal to the previous endKey
         // [0x3000,0x3001) vs 0x3000
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(corruptedStartAndEndKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedNewKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false);
+        when(mockPrevHRegionInfo.getEndKey()).thenReturn(notCorruptedEndKey);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedEndKey, false,
+            mockPrevRegionLocation);
 
         // test EMPTY_START_ROW
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(HConstants.EMPTY_START_ROW);
         when(mockHRegionInfo.getEndKey()).thenReturn(notCorruptedEndKey);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, HConstants.EMPTY_START_ROW, false);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, HConstants.EMPTY_START_ROW, false,
+            null);
 
         //test EMPTY_END_ROW
         GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().reset();
         when(mockHRegionInfo.getStartKey()).thenReturn(notCorruptedStartKey);
         when(mockHRegionInfo.getEndKey()).thenReturn(HConstants.EMPTY_END_ROW);
-        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedStartKey, false);
+        testGetNextRegionStartKey(mockCqsi, mockRegionLocation, notCorruptedStartKey, false, null);
     }
 
     private void testGetNextRegionStartKey(ConnectionQueryServicesImpl mockCqsi,
-                                           HRegionLocation mockRegionLocation, byte[] key, boolean isCorrupted) {
-        try {
-            mockCqsi.getNextRegionStartKey(mockRegionLocation, key);
-            if (isCorrupted) {
-                fail();
-            }
-        } catch (IOException e) {
-            if (!isCorrupted) {
-                fail();
-            }
-        }
+        HRegionLocation mockRegionLocation, byte[] key, boolean isCorrupted,
+        HRegionLocation mockPrevRegionLocation) {
+        mockCqsi.getNextRegionStartKey(mockRegionLocation, key, mockPrevRegionLocation);
 
         assertEquals(isCorrupted ? 1 : 0,
-                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().getValue());
+                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric()
+                        .getValue());
     }
 
     @Test

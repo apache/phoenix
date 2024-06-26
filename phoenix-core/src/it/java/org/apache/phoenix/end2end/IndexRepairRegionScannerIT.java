@@ -22,8 +22,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -48,7 +46,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
@@ -69,7 +66,6 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -77,14 +73,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
-import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.*;
 import static org.apache.phoenix.query.QueryConstants.VERIFIED_BYTES;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
@@ -99,14 +88,14 @@ import static org.junit.Assert.fail;
 public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexRepairRegionScannerIT.class);
-    private final String tableDDLOptions;
+    private String tableDDLOptions;
     private final String indexDDLOptions;
     private boolean mutable;
+    StringBuilder optionBuilder = new StringBuilder();
     @Rule
     public ExpectedException exceptionRule = ExpectedException.none();
 
     public IndexRepairRegionScannerIT(boolean mutable, boolean singleCellIndex) {
-        StringBuilder optionBuilder = new StringBuilder();
         StringBuilder indexOptionBuilder = new StringBuilder();
         this.mutable = mutable;
         if (!mutable) {
@@ -141,6 +130,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         // to force multiple verification tasks to be spawned so that we can exercise the page splitting logic
         props.put(GlobalIndexRegionScanner.INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY, Long.toString(2));
+        props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -294,12 +284,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         if (expectedPITRows > 0) {
             assertArrayEquals(expectedPhase, rows.get(0).getPhaseValue());
         }
-    }
-
-    static private void resetIndexRegionObserverFailPoints() {
-        IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);
-        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
-        IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
     }
 
     static private void commitWithException(Connection conn) {
@@ -843,29 +827,73 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         }
     }
 
-    public void deleteAllRows(Connection conn, TableName tableName) throws SQLException,
-            IOException, InterruptedException {
-        Scan scan = new Scan();
-        Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().
-                getAdmin();
-        org.apache.hadoop.hbase.client.Connection hbaseConn = admin.getConnection();
-        Table table = hbaseConn.getTable(tableName);
-        boolean deletedRows = false;
-        try (ResultScanner scanner = table.getScanner(scan)) {
-            for (Result r : scanner) {
-                Delete del = new Delete(r.getRow());
-                table.delete(del);
-                deletedRows = true;
-            }
-        } catch (Exception e) {
-            //if the table doesn't exist, we have no rows to delete. Easier to catch
-            //than to pre-check for existence
+    @Test
+    public void testInvalidIndexRowWithTableLevelMaxLookback() throws Exception {
+        if (!mutable) {
+            return;
         }
-        //don't flush/compact if we didn't write anything, because we'll hang forever
-        if (deletedRows) {
-            getUtility().getAdmin().flush(tableName);
-            TestUtil.majorCompact(getUtility(), tableName);
+        final int NROWS = 4;
+        final int maxLookbackAge = 12000;
+        if ((optionBuilder.length() > 0 && optionBuilder.toString().trim().startsWith("SPLIT ON"))
+                || optionBuilder.length() == 0) {
+            optionBuilder.insert(0, "MAX_LOOKBACK_AGE=" + maxLookbackAge + " ");
+        }
+
+        else {
+            optionBuilder.insert(0, "MAX_LOOKBACK_AGE=" + maxLookbackAge + ", ");
+        }
+        tableDDLOptions = optionBuilder.toString();
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.createStatement().execute("CREATE TABLE " + dataTableFullName
+                    + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) " + tableDDLOptions);
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName, dataTableFullName));
+
+            PreparedStatement dataPreparedStatement =
+                    conn.prepareStatement("UPSERT INTO " + dataTableFullName + " VALUES(?,?,?)");
+            for (int i = 1; i <= NROWS; i++) {
+                dataPreparedStatement.setInt(1, i);
+                dataPreparedStatement.setInt(2, i + 1);
+                dataPreparedStatement.setInt(3, i * 2);
+                dataPreparedStatement.execute();
+            }
+            conn.commit();
+
+            ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
+            customEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(customEdge);
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("UPSERT INTO " + dataTableFullName + " VALUES(3, 100, 200)");
+            conn.commit();
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            customEdge.incrementValue(5);
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
+                    indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
+            CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+            assertEquals(2,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(0,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+            conn.createStatement().execute("UPSERT INTO " + dataTableFullName + " VALUES(2, 102, 202)");
+            conn.commit();
+            IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+            customEdge.incrementValue(maxLookbackAge + 1);
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, dataTableName,
+                    indexTableName, null, 0, IndexVerifyType.BEFORE, "-fi");
+            mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+            assertEquals(0,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2,
+                    mrJobCounters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT.name()).getValue());
+            assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
         }
     }
-
 }

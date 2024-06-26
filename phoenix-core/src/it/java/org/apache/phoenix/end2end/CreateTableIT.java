@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.exception.SQLExceptionCode.MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -26,6 +27,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertThrows;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -1280,6 +1282,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
                 .getColumnQualifierBytes()));
         assertEquals(14, encodingScheme.decode(table.getColumnForColumnName("INT3")
                 .getColumnQualifierBytes()));
+        assertNull(table.getMaxLookbackAge());
     }
 
     @Test
@@ -1699,12 +1702,69 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testCreateTableWithTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        Long maxLookbackAge = 259200L;
+        createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
+        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+        schemaName = generateUniqueName();
+        dataTableName = generateUniqueName();
+        fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        maxLookbackAge = 25920000000L;
+        createTableWithTableLevelMaxLookbackAge(fullTableName, maxLookbackAge.toString());
+        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(fullTableName));
+        String indexTableName = generateUniqueName();
+        createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName);
+        assertEquals(maxLookbackAge, queryTableLevelMaxLookbackAge(SchemaUtil.getTableName(schemaName, indexTableName)));
+    }
+
+    @Test
+    public void testCreateTableWithTableLevelMaxLookbackAgeAsNull() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        createTableWithTableLevelMaxLookbackAge(fullTableName, "NULL");
+        assertNull(queryTableLevelMaxLookbackAge(fullTableName));
+        String indexTableName = generateUniqueName();
+        createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName);
+        assertNull(queryTableLevelMaxLookbackAge(SchemaUtil.getTableName(schemaName, indexTableName)));
+    }
+
+    @Test
+    public void testCreateTableWithInvalidTableLevelMaxLookbackAge() {
+        String errMsg = "Table level MAX_LOOKBACK_AGE should be a BIGINT value in milli-seconds";
+        IllegalArgumentException err = assertThrows(IllegalArgumentException.class,
+                () -> createTableWithTableLevelMaxLookbackAge(
+                        SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "2.3"));
+        assertEquals(errMsg, err.getMessage());
+        err = assertThrows(IllegalArgumentException.class, () -> createTableWithTableLevelMaxLookbackAge(
+                SchemaUtil.getTableName(generateUniqueName(), generateUniqueName()), "three"));
+        assertEquals(errMsg, err.getMessage());
+    }
+
+    @Test
+    public void testCreateIndexWithTableLevelMaxLookbackAge() throws Exception {
+        String schemaName = generateUniqueName();
+        String dataTableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getTableName(schemaName, dataTableName);
+        String indexTableName = generateUniqueName();
+        createTableWithTableLevelMaxLookbackAge(fullTableName, "NULL");
+        String indexOptions = "MAX_LOOKBACK_AGE=300";
+        SQLException err = assertThrows(SQLException.class,
+                () -> createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName, indexOptions));
+        assertEquals(MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY.getErrorCode(), err.getErrorCode());
+    }
+
     public static long verifyLastDDLTimestamp(String tableFullName, long startTS, Connection conn) throws SQLException {
         long endTS = EnvironmentEdgeManager.currentTimeMillis();
         //Now try the PTable API
         long ddlTimestamp = getLastDDLTimestamp(conn, tableFullName);
-        assertTrue("PTable DDL Timestamp not in the right range!",
-            ddlTimestamp >= startTS && ddlTimestamp <= endTS);
+        assertTrue("PTable DDL Timestamp: " + ddlTimestamp
+                        + " not in the expected range: (" + startTS + ", " + endTS + ")",
+                ddlTimestamp >= startTS && ddlTimestamp <= endTS);
         return ddlTimestamp;
     }
 
@@ -1727,4 +1787,23 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         }
     }
 
+    private void createTableWithTableLevelMaxLookbackAge(String fullTableName, String maxLookbackAge) throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String createDdl = "CREATE TABLE " + fullTableName +
+                    " (id char(1) NOT NULL PRIMARY KEY,  col1 integer) MAX_LOOKBACK_AGE="+maxLookbackAge;
+            conn.createStatement().execute(createDdl);
+        }
+    }
+
+    private void createIndexOnTableWithMaxLookbackAge(String indexTableName, String fullTableName, String indexOptions) throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl())) {
+            String createIndexDdl = "CREATE INDEX " + indexTableName + " ON " + fullTableName + " (COL1) " +
+                    (indexOptions == null ? "" : indexOptions);
+            conn.createStatement().execute(createIndexDdl);
+        }
+    }
+
+    private void createIndexOnTableWithMaxLookbackAge(String indexTableName, String fullTableName) throws Exception {
+        createIndexOnTableWithMaxLookbackAge(indexTableName, fullTableName, null);
+    }
 }

@@ -43,6 +43,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BIND_PARAMETERS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BUFFER_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
@@ -175,6 +176,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 
 /**
  *
@@ -332,6 +334,15 @@ public interface QueryConstants {
 
     // custom TagType
     byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
+
+    String CDC_JSON_COL_NAME = "CDC JSON";
+    String CDC_EVENT_TYPE = "event_type";
+    String CDC_PRE_IMAGE = "pre_image";
+    String CDC_POST_IMAGE = "post_image";
+    String CDC_CHANGE_IMAGE = "change_image";
+    String CDC_UPSERT_EVENT_TYPE = "upsert";
+    String CDC_DELETE_EVENT_TYPE = "delete";
+
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
      * {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
@@ -372,6 +383,8 @@ public interface QueryConstants {
             EXTERNAL_SCHEMA_ID + " VARCHAR, \n" +
             STREAMING_TOPIC_NAME + " VARCHAR, \n" +
             INDEX_WHERE + " VARCHAR, \n" +
+            MAX_LOOKBACK_AGE + " BIGINT, \n" +
+            CDC_INCLUDE_TABLE + " VARCHAR, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

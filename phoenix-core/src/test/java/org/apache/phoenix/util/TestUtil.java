@@ -830,8 +830,8 @@ public class TestUtil {
             // In HBase 2.5 getLastMajorCompactionTimestamp doesn't seem to get updated when the
             // clock is stopped, so check for the state going to NONE instead
             if (state.equals(CompactionState.NONE) && (previousState != null
-                    && previousState.equals(CompactionState.MAJOR_AND_MINOR)
-                    || previousState.equals(CompactionState.MAJOR))) {
+                    && (previousState.equals(CompactionState.MAJOR_AND_MINOR)
+                    || previousState.equals(CompactionState.MAJOR)))) {
                 break;
             }
             previousState = state;
@@ -977,7 +977,6 @@ public class TestUtil {
     public static CellCount getCellCount(Table table, boolean isRaw) throws IOException {
         Scan s = new Scan();
         s.setRaw(isRaw);
-        ;
         s.readAllVersions();
 
         CellCount cellCount = new CellCount();
@@ -1364,13 +1363,17 @@ public class TestUtil {
         assertEquals(expectedRowCount, count);
     }
 
-    public static void assertRawCellCount(Connection conn, TableName tableName,
-                                          byte[] row, int expectedCellCount)
-        throws SQLException, IOException {
+    public static int getRawCellCount(Connection conn, TableName tableName, byte[] row)
+            throws SQLException, IOException {
         ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
         Table table = cqs.getTable(tableName.getName());
         CellCount cellCount = getCellCount(table, true);
-        int count = cellCount.getCellCount(Bytes.toString(row));
+        return cellCount.getCellCount(Bytes.toString(row));
+    }
+    public static void assertRawCellCount(Connection conn, TableName tableName,
+                                          byte[] row, int expectedCellCount)
+        throws SQLException, IOException {
+        int count = getRawCellCount(conn, tableName, row);
         assertEquals(expectedCellCount, count);
     }
 

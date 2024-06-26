@@ -30,6 +30,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
@@ -108,6 +109,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarchar;
+
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -122,6 +124,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -218,6 +221,8 @@ public class PTableImpl implements PTable {
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
+    private Long maxLookbackAge;
+    private Set<CDCChangeScope> cdcIncludeScopes;
 
     public static class Builder {
         private PTableKey key;
@@ -283,7 +288,9 @@ public class PTableImpl implements PTable {
         private String schemaVersion;
         private String externalSchemaId;
         private String streamingTopicName;
+        private Set<CDCChangeScope> cdcIncludeScopes;
         private String indexWhere;
+        private Long maxLookbackAge;
 
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
@@ -711,6 +718,21 @@ public class PTableImpl implements PTable {
             return this;
         }
 
+        public Builder setMaxLookbackAge(Long maxLookbackAge) {
+            if (maxLookbackAge != null) {
+                propertyValues.put(MAX_LOOKBACK_AGE, String.valueOf(maxLookbackAge));
+            }
+            this.maxLookbackAge = maxLookbackAge;
+            return this;
+        }
+
+        public Builder setCDCIncludeScopes(Set<CDCChangeScope> cdcIncludeScopes) {
+            if (cdcIncludeScopes != null) {
+                this.cdcIncludeScopes = cdcIncludeScopes;
+            }
+            return this;
+        }
+
         /**
          * Populate derivable attributes of the PTable
          * @return PTableImpl.Builder object
@@ -1001,7 +1023,9 @@ public class PTableImpl implements PTable {
         this.schemaVersion = builder.schemaVersion;
         this.externalSchemaId = builder.externalSchemaId;
         this.streamingTopicName = builder.streamingTopicName;
+        this.cdcIncludeScopes = builder.cdcIncludeScopes;
         this.indexWhere = builder.indexWhere;
+        this.maxLookbackAge = builder.maxLookbackAge;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1082,7 +1106,8 @@ public class PTableImpl implements PTable {
                 .setSchemaVersion(table.getSchemaVersion())
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
-                .setIndexWhere(table.getIndexWhere());
+                .setIndexWhere(table.getIndexWhere())
+                .setMaxLookbackAge(table.getMaxLookbackAge());
     }
 
     @Override
@@ -1749,9 +1774,16 @@ public class PTableImpl implements PTable {
 
     @Override
     public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable,
+                                                           PhoenixConnection connection)
+            throws SQLException {
+        return getIndexMaintainer(dataTable, null, connection);
+    }
+
+    @Override
+    public synchronized IndexMaintainer getIndexMaintainer(PTable dataTable, PTable cdcTable,
             PhoenixConnection connection) throws SQLException {
         if (indexMaintainer == null) {
-            indexMaintainer = IndexMaintainer.create(dataTable, this, connection);
+            indexMaintainer = IndexMaintainer.create(dataTable, cdcTable, this, connection);
         }
         return indexMaintainer;
     }
@@ -2028,6 +2060,14 @@ public class PTableImpl implements PTable {
             indexWhere =
                     (String) PVarchar.INSTANCE.toObject(table.getIndexWhere().toByteArray());
         }
+        Long maxLookbackAge = null;
+        if (table.hasMaxLookbackAge()) {
+            maxLookbackAge = table.getMaxLookbackAge();
+        }
+        String cdcIncludeScopesStr = null;
+        if (table.hasCDCIncludeScopes()) {
+            cdcIncludeScopesStr = table.getCDCIncludeScopes();
+        }
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2085,7 +2125,10 @@ public class PTableImpl implements PTable {
                     .setSchemaVersion(schemaVersion)
                     .setExternalSchemaId(externalSchemaId)
                     .setStreamingTopicName(streamingTopicName)
+                    .setCDCIncludeScopes(
+                            CDCUtil.makeChangeScopeEnumsFromString(cdcIncludeScopesStr))
                     .setIndexWhere(indexWhere)
+                    .setMaxLookbackAge(maxLookbackAge)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2228,6 +2271,9 @@ public class PTableImpl implements PTable {
         if (table.getIndexWhere() != null) {
             builder.setIndexWhere(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
                     table.getIndexWhere())));
+        }
+        if (table.getMaxLookbackAge() != null) {
+            builder.setMaxLookbackAge(table.getMaxLookbackAge());
         }
         return builder.build();
     }
@@ -2372,8 +2418,18 @@ public class PTableImpl implements PTable {
     }
 
     @Override
+    public Set<CDCChangeScope> getCDCIncludeScopes() {
+        return cdcIncludeScopes;
+    }
+
+    @Override
     public String getIndexWhere() {
         return indexWhere;
+    }
+
+    @Override
+    public Long getMaxLookbackAge() {
+        return maxLookbackAge;
     }
 
     private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {
@@ -2407,6 +2463,7 @@ public class PTableImpl implements PTable {
         }
         return indexWhereColumns;
     }
+
     private static final class KVColumnFamilyQualifier {
         @Nonnull
         private final String colFamilyName;

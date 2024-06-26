@@ -79,5 +79,14 @@ public class FamilyWildcardParseNode extends NamedParseNode {
         toSQL(buf);
         buf.append(".*");
     }
-}
 
+	@Override
+	public boolean isWildcardNode() {
+		return true;
+	}
+
+	@Override
+	public FamilyWildcardParseNode getRewritten() {
+		return new FamilyWildcardParseNode(getName(), true);
+	}
+}
