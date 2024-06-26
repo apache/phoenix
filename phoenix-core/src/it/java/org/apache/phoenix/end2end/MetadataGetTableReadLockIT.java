@@ -24,7 +24,7 @@ import java.util.concurrent.CountDownLatch;
 /**
  * Class which tests whether non-exclusive locking on metadata read path (getTable) works as expected.
  */
-@Category(NeedsOwnMiniClusterTest.class)
+@Category(ParallelStatsDisabledTest.class)
 public class MetadataGetTableReadLockIT extends BaseTest {
 
     @BeforeClass
@@ -32,7 +32,6 @@ public class MetadataGetTableReadLockIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         // Disable system task handling
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        props.put(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED, Boolean.toString(true));
         setUpTestDriver(new ReadOnlyProps(props));
     }
 
