@@ -110,6 +110,7 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
@@ -299,6 +300,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+
 
 public class ConnectionQueryServicesImpl extends DelegateQueryServices implements ConnectionQueryServices {
     private static final Logger LOGGER =
@@ -3621,7 +3623,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         try {
                             GLOBAL_QUERY_SERVICES_COUNTER.increment();
                             LOGGER.info("An instance of ConnectionQueryServices was created.");
-                            openConnection();
+                            CompletableFuture<Void> supplyFuture = CompletableFuture.runAsync(() -> {
+                                try {
+                                    openConnection();
+                                } catch (SQLException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            });
+                            try {
+                                supplyFuture.get(120000, MILLISECONDS);
+                            } catch (TimeoutException e) {
+                                LOGGER.error("openConnection did not return any value");
+                            }
                             hConnectionEstablished = true;
                             tableStatsCache =
                                     (new GuidePostsCacheProvider()).getGuidePostsCache(
