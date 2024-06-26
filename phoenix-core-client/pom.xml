@@ -438,5 +438,9 @@
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
     </dependency>
+      <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-core-server</artifactId>
+      </dependency>
   </dependencies>
 </project>

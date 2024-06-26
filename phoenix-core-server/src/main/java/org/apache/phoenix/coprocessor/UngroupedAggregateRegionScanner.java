@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.GlobalCache;
@@ -566,6 +567,13 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Configuration conf = env.getConfiguration();
         final TenantCache tenantCache = GlobalCache.getTenantCache(env, ScanUtil.getTenantId(scan));
+        final ScannerContext groupScannerContext;
+        if (scan.isScanMetricsEnabled()) {
+            groupScannerContext = ScannerContext.newBuilder()
+                    .setTrackMetrics(scan.isScanMetricsEnabled()).build();
+        } else {
+            groupScannerContext = null;
+        }
         try (MemoryManager.MemoryChunk em = tenantCache.getMemoryManager().allocate(0)) {
             Aggregators aggregators = ServerAggregators.deserialize(
                     scan.getAttribute(BaseScannerRegionObserverConstants.AGGREGATORS), conf, em);
@@ -589,7 +597,11 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         // Results are potentially returned even when the return value of s.next is false
                         // since this is an indication of whether or not there are more values after the
                         // ones returned
-                        hasMore = innerScanner.nextRaw(results);
+                        if (groupScannerContext == null) {
+                            hasMore = innerScanner.nextRaw(results);
+                        } else {
+                            hasMore = innerScanner.nextRaw(results, groupScannerContext);
+                        }
                         if (isDummy(results)) {
                             if (!hasAny) {
                                 resultsToReturn.addAll(results);

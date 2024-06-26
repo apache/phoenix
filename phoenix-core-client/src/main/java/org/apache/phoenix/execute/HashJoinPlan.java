@@ -153,6 +153,9 @@ public class HashJoinPlan extends DelegateQueryPlan {
                 QueryServices.MAX_SERVER_CACHE_TIME_TO_LIVE_MS_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_TIME_TO_LIVE_MS);
         this.serverCacheLimit = services.getProps().getLongBytes(
                 QueryServices.MAX_SERVER_CACHE_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MAX_SERVER_CACHE_SIZE);
+        for (SubPlan subPlan: subPlans) {
+            this.getContext().addSubStatementContext(subPlan.getInnerPlan().getContext());
+        }
     }
     
     @Override

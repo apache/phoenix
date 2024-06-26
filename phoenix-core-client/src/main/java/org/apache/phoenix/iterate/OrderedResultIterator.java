@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -168,6 +169,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
     private boolean serverSideIterator = false;
     private boolean firstScan = true;
     private boolean skipValidRowsSent = false;
+    private final boolean hasRegionScannerContext;
 
     protected ResultIterator getDelegate() {
         return delegate;
@@ -243,6 +245,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
         // Both BufferedSortedQueue and SizeBoundQueue won't allocate more than thresholdBytes.
         this.estimatedByteSize = limit == null ? 0 : Math.min((limit + this.offset) * estimatedEntrySize, thresholdBytes);
         this.pageSizeMs = pageSizeMs;
+        // only called in #NonAggregateRegionScannerFactory.deserializeFromScan
+        this.hasRegionScannerContext = delegate instanceof RegionScannerResultIterator;
     }
 
     public Integer getLimit() {
@@ -480,6 +484,13 @@ public class OrderedResultIterator implements PeekingResultIterator {
         } else {
             dummyTuple = ScanUtil.getDummyTuple(scanStartRowKey);
         }
+    }
+
+    public ScannerContext getRegionScannerContext() {
+        if (hasRegionScannerContext) {
+            return ((RegionScannerResultIterator)delegate).getRegionScannerContext();
+        }
+        return null;
     }
 
     @Override

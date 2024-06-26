@@ -20,6 +20,7 @@ package org.apache.hadoop.hbase.regionserver;
 
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -35,5 +36,21 @@ public class ScannerContextUtil {
             sc.incrementSizeProgress(PrivateCellUtil.estimatedSerializedSizeOf(cell),
                     cell.heapSize());
         }
+    }
+
+    public static void updateMetrics(ScannerContext src, ScannerContext dst) {
+        if (src != null && dst != null && src.isTrackingMetrics() && dst.isTrackingMetrics()) {
+            for (Map.Entry<String, Long> entry : src.getMetrics().getMetricsMap().entrySet()) {
+                dst.metrics.addToCounter(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    public static ScannerContext copyNoLimitScanner(ScannerContext sc) {
+        return new ScannerContext(sc.keepProgress, null, sc.isTrackingMetrics());
+    }
+
+    public static void updateTimeProgress(ScannerContext sc) {
+        sc.updateTimeProgress();
     }
 }
