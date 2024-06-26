@@ -243,7 +243,7 @@ public class CompactionScanner implements InternalScanner {
                     SYSTEM_CHILD_LINK_NAMESPACE_BYTES :
                     SYSTEM_CHILD_LINK_NAME_BYTES;
             Table childLinkHTable = serverConnection.getQueryServices().getTable(childLinkTableNameBytes);
-            // If there is atleast one child view for this table then it is a partitioned table.
+            // If there is at least one child view for this table then it is a partitioned table.
             boolean isPartitioned = ViewUtil.hasChildViews(
                     childLinkHTable,
                     EMPTY_BYTE_ARRAY,
@@ -1207,7 +1207,7 @@ public class CompactionScanner implements InternalScanner {
                 startingPKPosition = 1;
             } else if (!this.isMultiTenant && this.isSalted && !this.isSharedIndex) {
                 // case non-multi-tenanted, salted, not a shared-index =>
-                // start at the view-index-id position after skipping the salt byte
+                // start at the global pk position after skipping the salt byte
                 // startingPKPosition = 1 skip salt-byte
                 startingPKPosition = 1;
             } else if (!this.isMultiTenant && !this.isSalted && this.isSharedIndex) {
