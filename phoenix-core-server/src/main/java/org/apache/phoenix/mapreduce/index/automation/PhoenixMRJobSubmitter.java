@@ -210,20 +210,21 @@ public class PhoenixMRJobSubmitter {
     public Map<String, PhoenixAsyncIndex> getCandidateJobs(Connection con) throws SQLException {
         Properties props = new Properties();
         UpgradeUtil.doNotUpgradeOnFirstConnection(props);
-        Statement s = con.createStatement();
-        ResultSet rs = s.executeQuery(CANDIDATE_INDEX_INFO_QUERY);
-        Map<String, PhoenixAsyncIndex> candidateIndexes = new HashMap<String, PhoenixAsyncIndex>();
-        while (rs.next()) {
-            PhoenixAsyncIndex indexInfo = new PhoenixAsyncIndex();
-            indexInfo.setIndexType(IndexType.fromSerializedValue(rs
-                    .getByte(PhoenixDatabaseMetaData.INDEX_TYPE)));
-            indexInfo.setDataTableName(rs.getString(PhoenixDatabaseMetaData.DATA_TABLE_NAME));
-            indexInfo.setTableSchem(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM));
-            indexInfo.setTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
-            candidateIndexes.put(String.format(IndexTool.INDEX_JOB_NAME_TEMPLATE,
-                indexInfo.getTableSchem(), indexInfo.getDataTableName(), indexInfo.getTableName()), indexInfo);
+        Map<String, PhoenixAsyncIndex> candidateIndexes = new HashMap<>();
+        try (Statement s = con.createStatement();
+             ResultSet rs = s.executeQuery(CANDIDATE_INDEX_INFO_QUERY)) {
+            while (rs.next()) {
+                PhoenixAsyncIndex indexInfo = new PhoenixAsyncIndex();
+                indexInfo.setIndexType(IndexType.fromSerializedValue(rs
+                        .getByte(PhoenixDatabaseMetaData.INDEX_TYPE)));
+                indexInfo.setDataTableName(rs.getString(PhoenixDatabaseMetaData.DATA_TABLE_NAME));
+                indexInfo.setTableSchem(rs.getString(PhoenixDatabaseMetaData.TABLE_SCHEM));
+                indexInfo.setTableName(rs.getString(PhoenixDatabaseMetaData.TABLE_NAME));
+                candidateIndexes.put(String.format(IndexTool.INDEX_JOB_NAME_TEMPLATE,
+                        indexInfo.getTableSchem(), indexInfo.getDataTableName(),
+                        indexInfo.getTableName()), indexInfo);
+            }
         }
-
         return candidateIndexes;
     }
 
