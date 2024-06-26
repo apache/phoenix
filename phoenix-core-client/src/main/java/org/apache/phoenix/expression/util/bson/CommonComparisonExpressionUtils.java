@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.expression.util.bson;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
 import org.bson.BsonDateTime;
@@ -37,6 +38,13 @@ public class CommonComparisonExpressionUtils {
 
   private static final Logger LOGGER =
       LoggerFactory.getLogger(CommonComparisonExpressionUtils.class);
+
+  public enum CompareOp {
+    LESS,
+    LESS_OR_EQUAL,
+    GREATER_OR_EQUAL,
+    GREATER
+  }
 
   /**
    * Retrieve the value associated with the document field key. The field key can represent
@@ -143,129 +151,64 @@ public class CommonComparisonExpressionUtils {
     return null;
   }
 
-  /**
-   * Compares two values: value and compareValue. If both have same data type and the value of
-   * actual value is less than the compareValue, then returns true. Otherwise, returns false.
-   *
-   * @param value The actual value to compare against compareValue.
-   * @param compareValue The value against which the actual value is compared.
-   * @return True if both have same data type and the value is less than compareValue.
-   */
-  public static boolean lessThan(BsonValue value, BsonValue compareValue) {
+  public static boolean compareValues(BsonValue value, BsonValue compareValue, CompareOp op) {
+    Preconditions.checkArgument(op != null, "Comparison operator should not be null");
     if (value.isString() && compareValue.isString()) {
-      return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) < 0;
+      int compare =
+              ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue());
+      switch (op) {
+        case LESS:
+          return compare < 0;
+        case LESS_OR_EQUAL:
+          return compare <= 0;
+        case GREATER:
+          return compare > 0;
+        case GREATER_OR_EQUAL:
+          return compare >= 0;
+      }
     }
     if ((value.isNumber() || value.isDecimal128()) && (compareValue.isNumber()
-        || compareValue.isDecimal128())) {
-      return ((BsonNumber) value).doubleValue() < ((BsonNumber) compareValue).doubleValue();
+            || compareValue.isDecimal128())) {
+      switch (op) {
+        case LESS:
+          return ((BsonNumber) value).doubleValue() < ((BsonNumber) compareValue).doubleValue();
+        case LESS_OR_EQUAL:
+          return ((BsonNumber) value).doubleValue() <= ((BsonNumber) compareValue).doubleValue();
+        case GREATER:
+          return ((BsonNumber) value).doubleValue() > ((BsonNumber) compareValue).doubleValue();
+        case GREATER_OR_EQUAL:
+          return ((BsonNumber) value).doubleValue() >= ((BsonNumber) compareValue).doubleValue();
+      }
     }
     if (value.isBinary() && compareValue.isBinary()
-        && ((BsonBinary) value).getType() == ((BsonBinary) compareValue).getType()) {
+            && ((BsonBinary) value).getType() == ((BsonBinary) compareValue).getType()) {
       byte[] b1 = ((BsonBinary) value).getData();
       byte[] b2 = ((BsonBinary) compareValue).getData();
-      return Bytes.compareTo(b1, b2) < 0;
+      switch (op) {
+        case LESS:
+          return Bytes.compareTo(b1, b2) < 0;
+        case LESS_OR_EQUAL:
+          return Bytes.compareTo(b1, b2) <= 0;
+        case GREATER:
+          return Bytes.compareTo(b1, b2) > 0;
+        case GREATER_OR_EQUAL:
+          return Bytes.compareTo(b1, b2) >= 0;
+      }
     }
     if (value.isDateTime() && compareValue.isDateTime()) {
-      return ((BsonDateTime) value).getValue() < ((BsonDateTime) compareValue).getValue();
+      switch (op) {
+        case LESS:
+          return ((BsonDateTime) value).getValue() < ((BsonDateTime) compareValue).getValue();
+        case LESS_OR_EQUAL:
+          return ((BsonDateTime) value).getValue() <= ((BsonDateTime) compareValue).getValue();
+        case GREATER:
+          return ((BsonDateTime) value).getValue() > ((BsonDateTime) compareValue).getValue();
+        case GREATER_OR_EQUAL:
+          return ((BsonDateTime) value).getValue() >= ((BsonDateTime) compareValue).getValue();
+      }
     }
-    LOGGER.error("Expected value comparison for lessThan is not of type String, Number, Binary"
-        + " or DateTime. Actual value: {} , Expected value: {}", value, compareValue);
-    return false;
-  }
-
-  /**
-   * Compares two values: value and compareValue. If both have same data type and the value of
-   * actual value is less than or equals to the compareValue, then returns true. Otherwise, returns
-   * false.
-   *
-   * @param value The actual value to compare against compareValue.
-   * @param compareValue The value against which the actual value is compared.
-   * @return True if both have same data type and the value is less than or equals to the
-   * compareValue.
-   */
-  public static boolean lessThanOrEquals(BsonValue value, BsonValue compareValue) {
-    if (value.isString() && compareValue.isString()) {
-      return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) <= 0;
-    }
-    if ((value.isNumber() || value.isDecimal128()) && (compareValue.isNumber()
-        || compareValue.isDecimal128())) {
-      return ((BsonNumber) value).doubleValue() <= ((BsonNumber) compareValue).doubleValue();
-    }
-    if (value.isBinary() && compareValue.isBinary()
-        && ((BsonBinary) value).getType() == ((BsonBinary) compareValue).getType()) {
-      byte[] b1 = ((BsonBinary) value).getData();
-      byte[] b2 = ((BsonBinary) compareValue).getData();
-      return Bytes.compareTo(b1, b2) <= 0;
-    }
-    if (value.isDateTime() && compareValue.isDateTime()) {
-      return ((BsonDateTime) value).getValue() <= ((BsonDateTime) compareValue).getValue();
-    }
-    LOGGER.error("Expected value comparison for lessThanOrEquals is not of type String, Number,"
-        + " Binary or DateTime. Actual value: {} , Expected value: {}", value, compareValue);
-    return false;
-  }
-
-  /**
-   * Compares two values: value and compareValue. If both have same data type and the value of
-   * actual value is greater than the compareValue, then returns true. Otherwise, returns
-   * false.
-   *
-   * @param value The actual value to compare against compareValue.
-   * @param compareValue The value against which the actual value is compared.
-   * @return True if both have same data type and the value is greater than the compareValue.
-   */
-  public static boolean greaterThan(BsonValue value, BsonValue compareValue) {
-    if (value.isString() && compareValue.isString()) {
-      return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) > 0;
-    }
-    if ((value.isNumber() || value.isDecimal128()) && (compareValue.isNumber()
-        || compareValue.isDecimal128())) {
-      return ((BsonNumber) value).doubleValue() > ((BsonNumber) compareValue).doubleValue();
-    }
-    if (value.isBinary() && compareValue.isBinary()
-        && ((BsonBinary) value).getType() == ((BsonBinary) compareValue).getType()) {
-      byte[] b1 = ((BsonBinary) value).getData();
-      byte[] b2 = ((BsonBinary) compareValue).getData();
-      return Bytes.compareTo(b1, b2) > 0;
-    }
-    if (value.isDateTime() && compareValue.isDateTime()) {
-      return ((BsonDateTime) value).getValue() > ((BsonDateTime) compareValue).getValue();
-    }
-    LOGGER.error("Expected value comparison for greaterThan is not of type String, Number, Binary"
-        + " or DateTime. Actual value: {} , Expected value: {}", value, compareValue);
-    return false;
-  }
-
-  /**
-   * Compares two values: value and compareValue. If both have same data type and the value of
-   * actual value is greater than or equals to the compareValue, then returns true. Otherwise,
-   * returns false.
-   *
-   * @param value The actual value to compare against compareValue.
-   * @param compareValue The value against which the actual value is compared.
-   * @return True if both have same data type and the value is greater than or equals to the
-   * compareValue.
-   */
-  public static boolean greaterThanOrEquals(BsonValue value, BsonValue compareValue) {
-    if (value.isString() && compareValue.isString()) {
-      return ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue()) >= 0;
-    }
-    if ((value.isNumber() || value.isDecimal128()) && (compareValue.isNumber()
-        || compareValue.isDecimal128())) {
-      return ((BsonNumber) value).doubleValue() >= ((BsonNumber) compareValue).doubleValue();
-    }
-    if (value.isBinary() && compareValue.isBinary()
-        && ((BsonBinary) value).getType() == ((BsonBinary) compareValue).getType()) {
-      byte[] b1 = ((BsonBinary) value).getData();
-      byte[] b2 = ((BsonBinary) compareValue).getData();
-      return Bytes.compareTo(b1, b2) >= 0;
-    }
-    if (value.isDateTime() && compareValue.isDateTime()) {
-      return ((BsonDateTime) value).getValue() >= ((BsonDateTime) compareValue).getValue();
-    }
-    LOGGER.error("Expected value comparison for greaterThanOrEquals is not of type String,"
-            + " Number, Binary or DateTime. Actual value: {} , Expected value: {}", value,
-        compareValue);
+    LOGGER.error("Expected value comparison for {} is not of type String, Number, Binary"
+            + " or DateTime. Actual value: {} , Expected value: {}", op, value, compareValue);
     return false;
   }
 }

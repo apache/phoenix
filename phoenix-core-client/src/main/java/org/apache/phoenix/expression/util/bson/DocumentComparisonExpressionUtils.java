@@ -174,8 +174,8 @@ public class DocumentComparisonExpressionUtils {
       BsonValue topLevelValue = document.get(fieldKey);
       BsonValue actualValue = topLevelValue != null ? topLevelValue
           : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.greaterThanOrEquals(actualValue,
-          compareValue);
+      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
+          compareValue, CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
     }
     return false;
   }
@@ -210,8 +210,8 @@ public class DocumentComparisonExpressionUtils {
       BsonValue topLevelValue = document.get(fieldKey);
       BsonValue actualValue = topLevelValue != null ? topLevelValue
           : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.greaterThan(actualValue,
-          compareValue);
+      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
+          compareValue, CommonComparisonExpressionUtils.CompareOp.GREATER);
     }
     return false;
   }
@@ -246,8 +246,8 @@ public class DocumentComparisonExpressionUtils {
       BsonValue topLevelValue = document.get(fieldKey);
       BsonValue actualValue = topLevelValue != null ? topLevelValue
           : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.lessThanOrEquals(actualValue,
-          compareValue);
+      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
+          compareValue, CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
     }
     return false;
   }
@@ -282,8 +282,8 @@ public class DocumentComparisonExpressionUtils {
       BsonValue topLevelValue = document.get(fieldKey);
       BsonValue actualValue = topLevelValue != null ? topLevelValue
           : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.lessThan(actualValue,
-          compareValue);
+      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
+          compareValue, CommonComparisonExpressionUtils.CompareOp.LESS);
     }
     return false;
   }

@@ -18,9 +18,6 @@
 
 package org.apache.phoenix.expression.util.bson;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import org.bson.BsonDocument;
 import org.bson.BsonValue;
 import org.bson.RawBsonDocument;
@@ -34,6 +31,37 @@ import org.slf4j.LoggerFactory;
 public class SQLComparisonExpressionUtils {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SQLComparisonExpressionUtils.class);
+
+  private static final String FIELD_NOT_EXISTS = "field_not_exists\\(([^)]+)\\)";
+  private static final String FIELD_EXISTS = "field_exists\\(([^)]+)\\)";
+  private static final String EQUALS1 = "\\b([\\w.\\[\\]]+)\\s*=\\s*([#:$]*\\w+)";
+  private static final String EQUALS2 = "\\b([\\w.\\[\\]]+)\\s*==\\s*([#:$]*\\w+)";
+  private static final String NOT_EQUALS1 = "\\b([\\w.\\[\\]]+)\\s*!=\\s*([#:$]*\\w+)";
+  private static final String NOT_EQUALS2 = "\\b([\\w.\\[\\]]+)\\s*<>\\s*([#:$]*\\w+)";
+  private static final String LESS_THAN = "\\b([\\w.\\[\\]]+)\\s*<\\s*([#:$]*\\w+)";
+  private static final String LESS_THAN_OR_EQUALS = "\\b([\\w.\\[\\]]+)\\s*<=\\s*([#:$]*\\w+)";
+  private static final String GREATER_THAN = "\\b([\\w.\\[\\]]+)\\s*>\\s*([#:$]*\\w+)";
+  private static final String GREATER_THAN_OR_EQUALS = "\\b([\\w.\\[\\]]+)\\s*>=\\s*([#:$]*\\w+)";
+  private static final String BETWEEN =
+          "\\b([\\w.\\[\\]]+)\\s+BETWEEN\\s+([#:$]*\\w+)\\s+AND\\s+([#:$]*\\w+)";
+  private static final String IN = "\\b([\\w.\\[\\]]+)\\s+IN\\s+\\(([^)]+)\\)";
+  private static final String AND = "\\bAND\\b";
+  private static final String OR = "\\bOR\\b";
+  private static final String NOT = "\\bNOT\\b\\s*";
+
+  private static final String FUNC_FIELD_NOT_EXISTS = "!exists('$1')";
+  private static final String FUNC_FIELD_EXISTS = "exists('$1')";
+  private static final String FUNC_EQUALS = "isEquals('$1', '$2')";
+  private static final String FUNC_NOT_EQUALS = "!isEquals('$1', '$2')";
+  private static final String FUNC_LESS_THAN = "lessThan('$1', '$2')";
+  private static final String FUNC_LESS_THAN_OR_EQUALS = "lessThanOrEquals('$1', '$2')";
+  private static final String FUNC_GREATER_THAN = "greaterThan('$1', '$2')";
+  private static final String FUNC_GREATER_THAN_OR_EQUALS = "greaterThanOrEquals('$1', '$2')";
+  private static final String FUNC_BETWEEN = "between('$1', '$2', '$3')";
+  private static final String FUNC_IN = "in('$1', '$2')";
+  private static final String OP_AND = "&&";
+  private static final String OP_OR = "||";
+  private static final String OP_NOT = "!";
 
   private final RawBsonDocument rawBsonDocument;
   private final BsonDocument comparisonValuesDocument;
@@ -57,63 +85,22 @@ public class SQLComparisonExpressionUtils {
   }
 
   public String convertExpression(String expression) {
-    expression =
-        expression.replaceAll("field_not_exists\\(([^)]+)\\)", "!exists('$1')");
-    expression = expression.replaceAll("field_exists\\(([^)]+)\\)", "exists('$1')");
-    //    expression = expression.replaceAll("\\b([\\w.\\[\\]]+)\\b\\s*=\\s*(:\\w+)", "isEquals('$1', '$2')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*=\\s*([#:$]*\\w+)", "isEquals('$1', '$2')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*==\\s*([#:$]*\\w+)", "isEquals('$1', '$2')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*!=\\s*([#:$]*\\w+)", "!isEquals('$1', '$2')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*<>\\s*([#:$]*\\w+)", "!isEquals('$1', '$2')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*<\\s*([#:$]*\\w+)", "lessThan('$1', '$2')");
-    expression = expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*<=\\s*([#:$]*\\w+)",
-        "lessThanOrEquals('$1', '$2')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*>\\s*([#:$]*\\w+)", "greaterThan('$1', '$2')");
-    expression = expression.replaceAll("\\b([\\w.\\[\\]]+)\\s*>=\\s*([#:$]*\\w+)",
-        "greaterThanOrEquals('$1', '$2')");
-    expression = expression.replaceAll(
-        "\\b([\\w.\\[\\]]+)\\s+BETWEEN\\s+([#:$]*\\w+)\\s+AND\\s+([#:$]*\\w+)",
-        "between('$1', '$2', '$3')");
-    expression =
-        expression.replaceAll("\\b([\\w.\\[\\]]+)\\s+IN\\s+\\(([^)]+)\\)", "in('$1', '$2')");
-
-    expression = expression.replaceAll("\\bAND\\b", "&&");
-    expression = expression.replaceAll("\\bOR\\b", "||");
-    expression = expression.replaceAll("\\bNOT\\b\\s*", "!");
+    expression = expression.replaceAll(FIELD_NOT_EXISTS, FUNC_FIELD_NOT_EXISTS);
+    expression = expression.replaceAll(FIELD_EXISTS, FUNC_FIELD_EXISTS);
+    expression = expression.replaceAll(EQUALS1, FUNC_EQUALS);
+    expression = expression.replaceAll(EQUALS2, FUNC_EQUALS);
+    expression = expression.replaceAll(NOT_EQUALS1, FUNC_NOT_EQUALS);
+    expression = expression.replaceAll(NOT_EQUALS2, FUNC_NOT_EQUALS);
+    expression = expression.replaceAll(LESS_THAN, FUNC_LESS_THAN);
+    expression = expression.replaceAll(LESS_THAN_OR_EQUALS, FUNC_LESS_THAN_OR_EQUALS);
+    expression = expression.replaceAll(GREATER_THAN, FUNC_GREATER_THAN);
+    expression = expression.replaceAll(GREATER_THAN_OR_EQUALS, FUNC_GREATER_THAN_OR_EQUALS);
+    expression = expression.replaceAll(BETWEEN, FUNC_BETWEEN);
+    expression = expression.replaceAll(IN, FUNC_IN);
+    expression = expression.replaceAll(AND, OP_AND);
+    expression = expression.replaceAll(OR, OP_OR);
+    expression = expression.replaceAll(NOT, OP_NOT);
     return expression;
-  }
-
-  private static String convertInExpression(String expression) {
-    String regex = "\\b([\\w.\\[\\]]+)\\s+IN\\s+\\(([^)]+)\\)";
-
-    Pattern pattern = Pattern.compile(regex);
-    Matcher matcher = pattern.matcher(expression);
-
-    StringBuffer result = new StringBuffer();
-    while (matcher.find()) {
-      String field = matcher.group(1);
-      String values = matcher.group(2);
-
-      String[] tokens = values.split("\\s*,\\s*");
-      StringBuilder sb = new StringBuilder();
-      for (String token : tokens) {
-        if (sb.length() > 0) {
-          sb.append(", ");
-        }
-        sb.append("'").append(token.trim()).append("'");
-      }
-      String replacement = "in('" + field + "', " + sb + ")";
-      matcher.appendReplacement(result, replacement);
-    }
-    matcher.appendTail(result);
-
-    return result.toString();
   }
 
   /**
@@ -145,7 +132,8 @@ public class SQLComparisonExpressionUtils {
         : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.lessThan(value, compareValue);
+      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
+              CommonComparisonExpressionUtils.CompareOp.LESS);
     }
     return false;
   }
@@ -165,7 +153,8 @@ public class SQLComparisonExpressionUtils {
         : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.lessThanOrEquals(value, compareValue);
+      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
+              CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
     }
     return false;
   }
@@ -184,7 +173,8 @@ public class SQLComparisonExpressionUtils {
         : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.greaterThan(value, compareValue);
+      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
+              CommonComparisonExpressionUtils.CompareOp.GREATER);
     }
     return false;
   }
@@ -205,7 +195,8 @@ public class SQLComparisonExpressionUtils {
         : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.greaterThanOrEquals(value, compareValue);
+      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
+              CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
     }
     return false;
   }

@@ -56,7 +56,7 @@ public class BsonUpdateExpressionFunction extends ScalarFunction {
 
     public BsonUpdateExpressionFunction(List<Expression> children) {
         super(children);
-        Preconditions.checkNotNull(getUpdateExpression());
+        Preconditions.checkNotNull(getChildren().get(1));
     }
 
     @Override
@@ -66,15 +66,15 @@ public class BsonUpdateExpressionFunction extends ScalarFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!getColValExpr().evaluate(tuple, ptr)) {
+        // Evaluate the BSON cell value
+        if (!getChildren().get(0).evaluate(tuple, ptr)) {
             return false;
         }
         if (ptr == null || ptr.getLength() == 0) {
             return false;
         }
 
-        RawBsonDocument rawBsonDocument =
-            (RawBsonDocument) PBson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
+        RawBsonDocument rawBsonDocument = (RawBsonDocument) PBson.INSTANCE.toObject(ptr);
         BsonDocument bsonDocument;
         try (BsonBinaryReader bsonReader = new BsonBinaryReader(
             new ByteBufferBsonInput(rawBsonDocument.getByteBuffer()))) {
@@ -82,7 +82,8 @@ public class BsonUpdateExpressionFunction extends ScalarFunction {
                 new BsonDocumentCodec().decode(bsonReader, DecoderContext.builder().build());
         }
 
-        if (!getUpdateExpression().evaluate(tuple, ptr)) {
+        // Evaluate update expression
+        if (!getChildren().get(1).evaluate(tuple, ptr)) {
             return false;
         }
         if (ptr.getLength() == 0) {
@@ -90,18 +91,15 @@ public class BsonUpdateExpressionFunction extends ScalarFunction {
         }
 
         final RawBsonDocument updateExpressionBsonDoc;
-        if (getUpdateExpression().getDataType() == PVarchar.INSTANCE) {
+        if (getChildren().get(1).getDataType() == PVarchar.INSTANCE) {
             String updateExpression =
-                    (String) PVarchar.INSTANCE.toObject(ptr,
-                            getUpdateExpression().getSortOrder());
+                    (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
             if (updateExpression == null || updateExpression.isEmpty()) {
                 return true;
             }
             updateExpressionBsonDoc = RawBsonDocument.parse(updateExpression);
         } else {
-            updateExpressionBsonDoc =
-                    (RawBsonDocument) PBson.INSTANCE.toObject(ptr,
-                            getUpdateExpression().getSortOrder());
+            updateExpressionBsonDoc = (RawBsonDocument) PBson.INSTANCE.toObject(ptr);
             if (updateExpressionBsonDoc == null || updateExpressionBsonDoc.isEmpty()) {
                 return true;
             }
@@ -116,14 +114,6 @@ public class BsonUpdateExpressionFunction extends ScalarFunction {
 
         ptr.set(buffer.array(), buffer.arrayOffset(), buffer.limit());
         return true;
-    }
-
-    private Expression getColValExpr() {
-        return getChildren().get(0);
-    }
-
-    private Expression getUpdateExpression() {
-        return getChildren().get(1);
     }
 
     @Override

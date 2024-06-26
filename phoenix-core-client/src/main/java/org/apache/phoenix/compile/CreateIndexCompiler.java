@@ -112,9 +112,7 @@ public class CreateIndexCompiler {
             return "ARRAY[" + getValue(PDate.INSTANCE) + "]";
         } else if (type instanceof PArrayDataType) {
             return "ARRAY" + type.getSampleValue().toString();
-        } else if (type instanceof PJson) {
-            return "'{a:1}'";
-        } else if (type instanceof PBson) {
+        } else if (type instanceof PJson || type instanceof PBson) {
             return "'{\"a\":\"b\"}'";
         } else {
             return "0123";

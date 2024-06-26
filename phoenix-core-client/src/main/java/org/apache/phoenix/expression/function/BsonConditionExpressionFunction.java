@@ -55,7 +55,7 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
 
     public BsonConditionExpressionFunction(List<Expression> children) {
         super(children);
-        Preconditions.checkNotNull(getConditionExpression());
+        Preconditions.checkNotNull(getChildren().get(1));
     }
 
     @Override
@@ -65,17 +65,18 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!getColValExpr().evaluate(tuple, ptr)) {
+        // Evaluate the BSON cell value
+        if (!getChildren().get(0).evaluate(tuple, ptr)) {
             return false;
         }
         if (ptr == null || ptr.getLength() == 0) {
             return false;
         }
 
-        RawBsonDocument rawBsonDocument =
-            (RawBsonDocument) PBson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
+        RawBsonDocument rawBsonDocument = (RawBsonDocument) PBson.INSTANCE.toObject(ptr);
 
-        if (!getConditionExpression().evaluate(tuple, ptr)) {
+        // Evaluate condition expression
+        if (!getChildren().get(1).evaluate(tuple, ptr)) {
             return false;
         }
         if (ptr.getLength() == 0) {
@@ -83,18 +84,15 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
         }
 
         final RawBsonDocument conditionExpressionBsonDoc;
-        if (getConditionExpression().getDataType() == PVarchar.INSTANCE) {
+        if (getChildren().get(1).getDataType() == PVarchar.INSTANCE) {
             String conditionExpression =
-                    (String) PVarchar.INSTANCE.toObject(ptr,
-                            getConditionExpression().getSortOrder());
+                    (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
             if (conditionExpression == null || conditionExpression.isEmpty()) {
                 return true;
             }
             conditionExpressionBsonDoc = RawBsonDocument.parse(conditionExpression);
         } else {
-            conditionExpressionBsonDoc =
-                    (RawBsonDocument) PBson.INSTANCE.toObject(ptr,
-                            getConditionExpression().getSortOrder());
+            conditionExpressionBsonDoc = (RawBsonDocument) PBson.INSTANCE.toObject(ptr);
             if (conditionExpressionBsonDoc == null || conditionExpressionBsonDoc.isEmpty()) {
                 return true;
             }
@@ -120,14 +118,6 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
             ptr.set(PBoolean.INSTANCE.toBytes(result));
             return true;
         }
-    }
-
-    private Expression getColValExpr() {
-        return getChildren().get(0);
-    }
-
-    private Expression getConditionExpression() {
-        return getChildren().get(1);
     }
 
     @Override
