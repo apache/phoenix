@@ -587,7 +587,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                     LOGGER.error(String.format("INCOMPLETE .............................%d, %d, %d, %s",
                             lastCompactionTimestamp, compactionRequestedSCN, numChecks,
                             Bytes.toString(regionInfo.getRegionName())));
-                    //throw new IOException("Could not complete compaction checks");
+                    throw new IOException("Could not complete compaction checks");
                 }
 
             }
@@ -2055,6 +2055,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         int viewTTL = VIEW_TTL_10_SECS;
         String tenantTypeName = tenantType.getSqlTypeName();
         TableOptions tableOptions = TableOptions.withDefaults();
+        tableOptions.setTableProps("");
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true,DEFAULT_COLUMN_FAMILY='0'");
         tableOptions.setTablePKColumns(Arrays.asList("OID", "KP"));
         tableOptions.setTablePKColumnTypes(Arrays.asList(tenantTypeName, "CHAR(3)"));
 
@@ -2075,6 +2077,7 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
                 .setGlobalViewCFs(Lists.newArrayList((String) null, null, null));
         testCaseWhenAllCFMatchAndAllDefault
                 .setTenantViewCFs(Lists.newArrayList((String) null, null, null, null));
+
 
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
         schemaBuilder
@@ -2132,8 +2135,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
         Set<Integer> globalSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4}));
         Set<Integer> hasGlobalTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3 }));
-        Set<Integer> tenantSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4, 5, 6, 7 }));
-        Set<Integer> hasTenantTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3, 7 }));
+        Set<Integer> tenantSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 4, 6, 8}));
+        Set<Integer> hasTenantTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 6 }));
 
         int numGlobalIndex = 2;
         int numTenantIndex = 2;
@@ -2396,7 +2399,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
 
         TableOptions
                 tableOptions = TableOptions.withDefaults();
-        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
+        tableOptions.setTableProps("");
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true,DEFAULT_COLUMN_FAMILY='0'");
         tableOptions.setTablePKColumns(Arrays.asList("OID", "OOID"));
         tableOptions.setTablePKColumnTypes(Arrays.asList("CHAR(15)", "CHAR(15)"));
 
@@ -2538,7 +2542,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         final SchemaBuilder schemaBuilder = new SchemaBuilder(getUrl());
 
         TableOptions tableOptions = TableOptions.withDefaults();
-        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true");
+        tableOptions.setTableProps("");
+        tableOptions.setTableProps("COLUMN_ENCODED_BYTES=0,MULTI_TENANT=true,DEFAULT_COLUMN_FAMILY='0'");
         tableOptions.setTablePKColumns(Arrays.asList("OID", "KP"));
         tableOptions.setTablePKColumnTypes(Arrays.asList("CHAR(15)", "CHAR(3)"));
 
@@ -2552,8 +2557,8 @@ public abstract class BaseViewTTLIT extends ParallelStatsDisabledIT {
         OtherOptions otherOptions = OtherOptions.withDefaults();
         otherOptions.setTenantViewCFs(asList(null, null, null, null));
 
-        Set<Integer> hasGlobalTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3, 7 }));
-        Set<Integer> globalSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4, 5, 6, 7 }));
+        Set<Integer> hasGlobalTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3 }));
+        Set<Integer> globalSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3}));
         Set<Integer> tenantSet = new HashSet<>(Arrays.asList(new Integer[] { 1, 2, 3, 4}));
         Set<Integer> hasTenantTTLSet = new HashSet<>(Arrays.asList(new Integer[] { 2, 3 }));
 
