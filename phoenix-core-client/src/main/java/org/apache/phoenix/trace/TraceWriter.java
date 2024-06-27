@@ -220,7 +220,8 @@ public class TraceWriter {
                 LOGGER.trace("Logging metrics to phoenix table via: " + stmt);
                 LOGGER.trace("With tags: " + variableValues);
             }
-            try (PreparedStatement ps = conn.prepareStatement(stmt)) {
+            try {
+                PreparedStatement ps = conn.prepareStatement(stmt);
                 // add everything that wouldn't/may not parse
                 int index = 1;
                 for (String tag : variableValues) {

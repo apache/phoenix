@@ -484,8 +484,7 @@ public class ViewUtil {
                             .setTableName(modifiedIndexName)
                             .setViewStatement(viewStatement)
                             .setUpdateCacheFrequency(view.getUpdateCacheFrequency())
-                            //retain the tenantId from the index being inherited
-                            .setTenantId(index.getTenantId())
+                            .setTenantId(view.getTenantId())
                             .setPhysicalNames(Collections.singletonList(index.getPhysicalName()))
                             .build());
                 }

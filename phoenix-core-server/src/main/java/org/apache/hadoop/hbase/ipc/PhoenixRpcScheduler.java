@@ -27,13 +27,12 @@ import org.apache.phoenix.query.QueryServicesOptions;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT;
-
 /**
  * {@link RpcScheduler} that first checks to see if this is an index or metadata update before passing off the
  * call to the delegate {@link RpcScheduler}.
  */
 public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
+
     // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
     private static final String CALL_QUEUE_HANDLER_FACTOR_CONF_KEY = "ipc.server.callqueue.handler.factor";
     private static final String CALLQUEUE_LENGTH_CONF_KEY = "ipc.server.max.callqueue.length";
@@ -42,44 +41,28 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     private int indexPriority;
     private int metadataPriority;
     private int serverSidePriority;
-    private int invalidateMetadataCachePriority;
     private RpcExecutor indexCallExecutor;
     private RpcExecutor metadataCallExecutor;
     private RpcExecutor serverSideCallExecutor;
-    // Executor for invalidating server side metadata cache RPCs.
-    private RpcExecutor invalidateMetadataCacheCallExecutor;
     private int port;
     
 
-    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority,
-                               int metadataPriority, int serversidePriority,
-                               int invalidateMetadataCachePriority,
-                               PriorityFunction priorityFunction, Abortable abortable) {
+    public PhoenixRpcScheduler(Configuration conf, RpcScheduler delegate, int indexPriority, int metadataPriority, int serversidePriority, PriorityFunction priorityFunction, Abortable abortable) {
         // copied from org.apache.hadoop.hbase.ipc.SimpleRpcScheduler in HBase 0.98.4
     	int indexHandlerCount = conf.getInt(QueryServices.INDEX_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_INDEX_HANDLER_COUNT);
         int metadataHandlerCount = conf.getInt(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_METADATA_HANDLER_COUNT);
         int serverSideHandlerCount = conf.getInt(QueryServices.SERVER_SIDE_HANDLER_COUNT_ATTRIB, QueryServicesOptions.DEFAULT_SERVERSIDE_HANDLER_COUNT);
-        int invalidateMetadataCacheHandlerCount = conf.getInt(
-                QueryServices.INVALIDATE_CACHE_HANDLER_COUNT_ATTRIB,
-                DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT);
         int maxIndexQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, indexHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
         int maxMetadataQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, metadataHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
         int maxServerSideQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY, serverSideHandlerCount*DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-        int maxInvalidateMetadataCacheQueueLength =  conf.getInt(CALLQUEUE_LENGTH_CONF_KEY,
-                invalidateMetadataCacheHandlerCount * DEFAULT_MAX_CALLQUEUE_LENGTH_PER_HANDLER);
-
 
         this.indexPriority = indexPriority;
         this.metadataPriority = metadataPriority;
         this.serverSidePriority = serversidePriority;
-        this.invalidateMetadataCachePriority = invalidateMetadataCachePriority;
         this.delegate = delegate;
         this.indexCallExecutor = new BalancedQueueRpcExecutor("Index", indexHandlerCount, maxIndexQueueLength, priorityFunction,conf,abortable);
         this.metadataCallExecutor = new BalancedQueueRpcExecutor("Metadata", metadataHandlerCount, maxMetadataQueueLength, priorityFunction,conf,abortable);
         this.serverSideCallExecutor = new BalancedQueueRpcExecutor("ServerSide", serverSideHandlerCount, maxServerSideQueueLength, priorityFunction,conf,abortable);
-        this.invalidateMetadataCacheCallExecutor = new BalancedQueueRpcExecutor(
-                "InvalidateMetadataCache", invalidateMetadataCacheHandlerCount,
-                maxInvalidateMetadataCacheQueueLength, priorityFunction, conf, abortable);
     }
 
     @Override
@@ -94,7 +77,6 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
         indexCallExecutor.start(port);
         metadataCallExecutor.start(port);
         serverSideCallExecutor.start(port);
-        invalidateMetadataCacheCallExecutor.start(port);
     }
 
     @Override
@@ -103,7 +85,6 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
         indexCallExecutor.stop();
         metadataCallExecutor.stop();
         serverSideCallExecutor.stop();
-        invalidateMetadataCacheCallExecutor.stop();
     }
 
     @Override
@@ -116,8 +97,6 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
             return metadataCallExecutor.dispatch(callTask);
         } else if (serverSidePriority == priority) {
             return serverSideCallExecutor.dispatch(callTask);
-        } else if (invalidateMetadataCachePriority == priority) {
-            return invalidateMetadataCacheCallExecutor.dispatch(callTask);
         } else {
             return delegate.dispatch(callTask);
         }
@@ -135,8 +114,7 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
         return this.delegate.getGeneralQueueLength()
                 + this.indexCallExecutor.getQueueLength()
                 + this.metadataCallExecutor.getQueueLength()
-                + this.serverSideCallExecutor.getQueueLength()
-                + this.invalidateMetadataCacheCallExecutor.getQueueLength();
+                + this.serverSideCallExecutor.getQueueLength();
     }
 
     @Override
@@ -154,8 +132,7 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
         return this.delegate.getActiveRpcHandlerCount()
                 + this.indexCallExecutor.getActiveHandlerCount()
                 + this.metadataCallExecutor.getActiveHandlerCount()
-                + this.serverSideCallExecutor.getActiveHandlerCount()
-                + this.invalidateMetadataCacheCallExecutor.getActiveHandlerCount();
+                + this.serverSideCallExecutor.getActiveHandlerCount();
     }
 
     @Override
@@ -176,11 +153,6 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     @VisibleForTesting
     public void setMetadataExecutorForTesting(RpcExecutor executor) {
         this.metadataCallExecutor = executor;
-    }
-
-    @VisibleForTesting
-    public void setInvalidateMetadataCacheExecutorForTesting(RpcExecutor executor) {
-        this.invalidateMetadataCacheCallExecutor = executor;
     }
 
     @VisibleForTesting
@@ -257,4 +229,5 @@ public class PhoenixRpcScheduler extends CompatPhoenixRpcScheduler {
     public int getActiveReplicationRpcHandlerCount() {
         return this.delegate.getActiveReplicationRpcHandlerCount();
     }
+
 }

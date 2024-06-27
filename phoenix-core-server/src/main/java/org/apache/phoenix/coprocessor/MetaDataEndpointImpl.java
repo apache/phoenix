@@ -84,7 +84,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_TYPE_BYTES;
-import static org.apache.phoenix.query.QueryServices.SKIP_SYSTEM_TABLES_EXISTENCE_CHECK;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_BYTES;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
@@ -180,7 +179,6 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRequest
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
-import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.TableInfo;
@@ -600,7 +598,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private boolean blockWriteRebuildIndex;
     private int maxIndexesPerTable;
     private boolean isTablesMappingEnabled;
-    private boolean invalidateServerCacheEnabled;
 
     // this flag denotes that we will continue to write parent table column metadata while creating
     // a child view and also block metadata changes that were previously propagated to children
@@ -646,12 +643,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
-        this.invalidateServerCacheEnabled
-                = config.getBoolean(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
-                        QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED);
         this.getMetadataReadLockEnabled
                 = config.getBoolean(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED,
-                QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
+                            QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
@@ -1540,7 +1534,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (indexType != IndexType.LOCAL) {
                         parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
                                 SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
-                        if (parentTable == null || isTableDeleted(parentTable)) {
+                        if (parentTable == null) {
                             // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
                             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                                 parentTable = connection.getTableNoCache(famName.getString());
@@ -1550,7 +1544,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         }
                     }
 
-                    if (parentTable == null || isTableDeleted(parentTable)) {
+                    if (parentTable == null) {
                         if (indexType == IndexType.LOCAL) {
                             PName tablePhysicalName = getPhysicalTableName(
                                 env.getRegion(),null,
@@ -2520,18 +2514,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // table/index/views.
                 tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(tableKey,
                     clientTimeStamp, EnvironmentEdgeManager.currentTimeMillis()));
-                if (tableType == INDEX) {
-                    // Invalidate the cache on each regionserver for parent table/view.
-                    List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
-                    requests.add(new InvalidateServerMetadataCacheRequest(tenantIdBytes,
-                            parentSchemaName, parentTableName));
-                    invalidateServerMetadataCache(requests);
-                    long currentTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-                    // If table type is index, then update the last ddl timestamp of the parent
-                    // table or immediate parent view.
-                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(parentTableKey,
-                            currentTimestamp, currentTimestamp));
-                }
 
                 //and if we're doing change detection on this table or view, notify the
                 //external schema registry and get its schema id
@@ -2618,12 +2600,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 builder.setMutationTime(currentTimeStamp);
                 //send the newly built table back because we generated the DDL timestamp server
                 // side and the client doesn't have it.
-                if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
-                    // if a client uses a connection with currentSCN=t to create the table,
-                    // the table is created with timestamp 't' but the timestamp range in the scan
-                    // used by buildTable does not include 't' due to how SCN is implemented.
-                    clientTimeStamp += 1;
-                }
                 PTable newTable = buildTable(tableKey, cacheKey, region,
                     clientTimeStamp, clientVersion);
                 if (newTable != null) {
@@ -2670,7 +2646,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PTable parentTable = null;
         //if this is a view, we need to get the columns from its parent table / view
         if (newTable != null && newTable.getType().equals(PTableType.VIEW)) {
-            // TODO why creating generic connection and not getConnectionOnServer?
             try (PhoenixConnection conn = (PhoenixConnection)
                 ConnectionUtil.getInputConnection(env.getConfiguration())) {
                 newTable = ViewUtil.addDerivedColumnsAndIndexesFromAncestors(conn, newTable);
@@ -2892,20 +2867,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (parentLockKey != null) {
                     acquireLock(region, parentLockKey, locks, false);
                 }
-                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
-                requests.add(new InvalidateServerMetadataCacheRequest(tenantIdBytes, schemaName,
-                        tableOrViewName));
-                if (pTableType == INDEX) {
-                    requests.add(new InvalidateServerMetadataCacheRequest(tenantIdBytes, schemaName,
-                            parentTableName));
-                    long currentTimestamp = EnvironmentEdgeManager.currentTimeMillis();
-                    // If table type is index, then update the last ddl timestamp of the parent
-                    // table or immediate parent view.
-                    tableMetadata.add(MetaDataUtil.getLastDDLTimestampUpdate(parentLockKey,
-                            currentTimestamp, currentTimestamp));
-                }
-                invalidateServerMetadataCache(requests);
-                List<ImmutableBytesPtr> invalidateList = new ArrayList<>();
+
+                List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 result = doDropTable(lockKey, tenantIdBytes, schemaName, tableOrViewName,
                         parentTableName, PTableType.fromSerializedValue(tableType), tableMetadata,
                         childLinkMutations, invalidateList, tableNamesToDelete,
@@ -3316,20 +3279,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (mutationResult.isPresent()) {
                     return mutationResult.get();
                 }
-<<<<<<< HEAD
 
                 acquireLock(region, key, locks, false);
-=======
-                // We take a write row lock for tenantId, schemaName, tableOrViewName
-                acquireLock(region, key, locks);
-                // Invalidate the cache from all the regionservers.
-                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
-                requests.add(new InvalidateServerMetadataCacheRequest(tenantId, schemaName,
-                        tableOrViewName));
-                invalidateServerMetadataCache(requests);
->>>>>>> master
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
-                List<ImmutableBytesPtr> invalidateList = new ArrayList<>();
+                List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
                 PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
                 if (failConcurrentMutateAddColumnOneTimeForTesting) {
@@ -3581,24 +3534,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
-    private void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
-            throws Throwable {
-        if (!this.invalidateServerCacheEnabled) {
-            LOGGER.info("Skip invalidating server metadata cache since conf property"
-                    + " phoenix.metadata.invalidate.cache.enabled is set to false");
-            return;
-        }
-        Properties properties = new Properties();
-        // Skip checking of system table existence since the system tables should have created
-        // by now.
-        properties.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
-        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
-                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
-            ConnectionQueryServices queryServices = connection.getQueryServices();
-            queryServices.invalidateServerMetadataCache(requests);
-        }
-    }
-
     private boolean hasInheritableTablePropertyChanged(PTable newTable, PTable oldTable) {
         return ! Objects.equals(newTable.getMaxLookbackAge(), oldTable.getMaxLookbackAge());
     }
@@ -3806,9 +3741,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
             return table;
         } finally {
-            if (!wasLocked && rowLock != null) {
-                rowLock.release();
-            }
+            if (!wasLocked && rowLock != null) rowLock.release();
         }
     }
 
@@ -3868,6 +3801,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     public void dropColumn(RpcController controller, final DropColumnRequest request,
                            RpcCallback<MetaDataResponse> done) {
         List<Mutation> tableMetaData = null;
+        final List<byte[]> tableNamesToDelete = Lists.newArrayList();
+        final List<SharedTableState> sharedTablesToDelete = Lists.newArrayList();
         try {
             tableMetaData = ProtobufUtil.getMutations(request);
             PTable parentTable = request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
@@ -3893,7 +3828,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<ImmutableBytesPtr> invalidateList, List<RowLock> locks, long clientTimeStamp,
             List<Mutation> tableMetaData, PColumn columnToDelete, List<byte[]> tableNamesToDelete,
             List<SharedTableState> sharedTablesToDelete, int clientVersion)
-            throws Throwable {
+            throws IOException, SQLException {
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
@@ -3939,18 +3874,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // Since we're dropping the index, lock it to ensure
                 // that a change in index state doesn't
                 // occur while we're dropping it.
-<<<<<<< HEAD
                 acquireLock(region, indexKey, locks, false);
-=======
-                acquireLock(region, indexKey, locks);
-                // invalidate server metadata cache when dropping index
-                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
-                requests.add(new InvalidateServerMetadataCacheRequest(tenantId,
-                        index.getSchemaName().getBytes(),
-                        index.getTableName().getBytes()));
-
-                invalidateServerMetadataCache(requests);
->>>>>>> master
                 List<Mutation> childLinksMutations = Lists.newArrayList();
                 MetaDataMutationResult result = doDropTable(indexKey, tenantId,
                         index.getSchemaName().getBytes(), index.getTableName().getBytes(),
@@ -4198,10 +4122,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     done.run(builder.build());
                     return;
                 }
-                List<InvalidateServerMetadataCacheRequest> requests = new ArrayList<>();
-                requests.add(new InvalidateServerMetadataCacheRequest(tenantId, schemaName,
-                        tableName));
-                invalidateServerMetadataCache(requests);
                 getCoprocessorHost().preIndexUpdate(Bytes.toString(tenantId),
                         SchemaUtil.getTableName(schemaName, tableName),
                         TableName.valueOf(loadedTable.getPhysicalName().getBytes()),

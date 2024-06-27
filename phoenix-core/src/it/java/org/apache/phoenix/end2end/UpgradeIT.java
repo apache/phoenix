@@ -68,6 +68,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -730,14 +731,13 @@ public class UpgradeIT extends ParallelStatsDisabledIT {
     }
 
     private void nullDDLTimestamps(Connection conn) throws SQLException {
-        //ignore system tables since that can interfere with other tests.
         String pkCols = TENANT_ID + ", " + TABLE_SCHEM +
             ", " + TABLE_NAME + ", " + COLUMN_NAME + ", " + COLUMN_FAMILY;
         String upsertSql =
             "UPSERT INTO " + SYSTEM_CATALOG_NAME + " (" + pkCols + ", " +
                 LAST_DDL_TIMESTAMP + ")" + " " +
                 "SELECT " + pkCols + ", NULL FROM " + SYSTEM_CATALOG_NAME + " " +
-                "WHERE " + TABLE_TYPE + " " + " != '" + PTableType.SYSTEM.getSerializedValue() + "'";
+                "WHERE " + TABLE_TYPE + " IS NOT NULL";
         conn.createStatement().execute(upsertSql);
         conn.commit();
     }

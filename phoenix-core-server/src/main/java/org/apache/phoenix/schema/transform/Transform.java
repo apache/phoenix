@@ -121,12 +121,6 @@ public class Transform extends TransformClient {
         ).execute();
     }
 
-    /**
-     * Disable caching re-design if you use Online Data Format Change since the cutover logic
-     * is currently incompatible and clients may not learn about the physical table change.
-     * See https://issues.apache.org/jira/browse/PHOENIX-6883 and
-     * https://issues.apache.org/jira/browse/PHOENIX-7284.
-     */
     public static void doCutover(PhoenixConnection connection, SystemTransformRecord systemTransformRecord) throws Exception{
         String tenantId = systemTransformRecord.getTenantId();
         String schema = systemTransformRecord.getSchemaName();

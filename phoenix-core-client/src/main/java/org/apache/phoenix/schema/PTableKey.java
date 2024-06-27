@@ -20,13 +20,10 @@ package org.apache.phoenix.schema;
 import org.apache.phoenix.query.QueryConstants;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.util.SchemaUtil;
 
 public class PTableKey {
     private final PName tenantId;
     private final String name;
-    private final String schemaName;
-    private final String tableName;
     
     public PTableKey(PName tenantId, String name) {
         Preconditions.checkNotNull(name);
@@ -36,8 +33,6 @@ public class PTableKey {
         } else {
             this.name = name;
         }
-        this.schemaName = SchemaUtil.getSchemaNameFromFullName(this.name);
-        this.tableName = SchemaUtil.getTableNameFromFullName(this.name);
     }
 
     public PName getTenantId() {
@@ -46,14 +41,6 @@ public class PTableKey {
 
     public String getName() {
         return name;
-    }
-
-    public String getSchemaName() {
-        return schemaName;
-    }
-
-    public String getTableName() {
-        return tableName;
     }
     
     @Override

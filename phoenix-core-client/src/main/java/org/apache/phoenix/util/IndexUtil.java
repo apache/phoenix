@@ -832,11 +832,6 @@ public class IndexUtil {
         return conf.getInt(QueryServices.SERVER_SIDE_PRIOIRTY_ATTRIB, QueryServicesOptions.DEFAULT_SERVER_SIDE_PRIORITY);
     }
 
-    public static int getInvalidateMetadataCachePriority(Configuration conf) {
-        return conf.getInt(QueryServices.INVALIDATE_METADATA_CACHE_PRIORITY_ATTRIB,
-                QueryServicesOptions.DEFAULT_INVALIDATE_METADATA_CACHE_PRIORITY);
-    }
-
     public static void removeEmptyColumn(Mutation m, byte[] emptyCF, byte[] emptyCQ) {
         List<Cell> cellList = m.getFamilyCellMap().get(emptyCF);
         if (cellList == null) {

@@ -424,11 +424,6 @@ public class DelegateTable implements PTable {
     }
 
     @Override
-    public Map<PTableKey, Long> getAncestorLastDDLTimestampMap() {
-        return delegate.getAncestorLastDDLTimestampMap();
-    }
-
-    @Override
     public Expression getIndexWhereExpression(PhoenixConnection connection)
             throws SQLException {
         return delegate.getIndexWhereExpression(connection);

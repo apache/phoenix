@@ -21,7 +21,6 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_MUTATE_TABLE;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -1109,8 +1108,7 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             String viewIndex2 = generateUniqueName();
             String fullNameViewIndex1 = SchemaUtil.getTableName(viewSchemaName, viewIndex1);
             String fullNameViewIndex2 = SchemaUtil.getTableName(viewSchemaName, viewIndex2);
-            List<String> fullViewIndexNames = Arrays.asList(fullNameViewIndex1, fullNameViewIndex2);
-
+            
             conn.setAutoCommit(false);
             viewConn.setAutoCommit(false);
             String ddlFormat =
@@ -1151,8 +1149,10 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             byte[] viewIndexPhysicalTable = viewIndex.getPhysicalName().getBytes();
             assertNotNull("Can't find view index", viewIndex);
             assertEquals("Unexpected number of indexes ", 2, view.getIndexes().size());
-            assertTrue("Expected index not found ",  fullViewIndexNames.contains(view.getIndexes().get(0).getName().getString()));
-            assertTrue("Expected index not found ",  fullViewIndexNames.contains(view.getIndexes().get(1).getName().getString()));
+            assertEquals("Unexpected index ",  fullNameViewIndex1 , view.getIndexes().get(0).getName()
+                    .getString());
+            assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(1).getName()
+                .getString());
             assertEquals("Unexpected salt buckets", view.getBucketNum(),
                 view.getIndexes().get(0).getBucketNum());
             assertEquals("Unexpected salt buckets", view.getBucketNum(),
@@ -1181,15 +1181,14 @@ public class AlterTableWithViewsIT extends SplitSystemCatalogIT {
             }
             
             pconn = viewConn.unwrap(PhoenixConnection.class);
-            view = pconn.getTableNoCache(viewOfTable);
-            assertEquals("Unexpected number of indexes ", 1, view.getIndexes().size());
-            assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(0).getName().getString());
-            assertNotEquals("Dropped index should not be in view metadata ",  fullNameViewIndex1 , view.getIndexes().get(0).getName().getString());
+            view = pconn.getTable(new PTableKey(tenantId,  viewOfTable ));
             try {
-                viewIndex = pconn.getTableNoCache(fullNameViewIndex1);
+                viewIndex = pconn.getTable(new PTableKey(tenantId,  fullNameViewIndex1 ));
                 fail("View index should have been dropped");
             } catch (TableNotFoundException e) {
             }
+            assertEquals("Unexpected number of indexes ", 1, view.getIndexes().size());
+            assertEquals("Unexpected index ",  fullNameViewIndex2 , view.getIndexes().get(0).getName().getString());
             
             // verify that the physical index view table is *not* dropped
             conn.unwrap(PhoenixConnection.class).getQueryServices().getTableDescriptor(viewIndexPhysicalTable);

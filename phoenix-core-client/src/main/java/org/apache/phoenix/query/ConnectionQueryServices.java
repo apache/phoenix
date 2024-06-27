@@ -25,7 +25,6 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -35,7 +34,6 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
-import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -198,8 +196,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
     public int getLowestClusterHBaseVersion();
     public Admin getAdmin() throws SQLException;
-    void refreshLiveRegionServers() throws SQLException;
-    List<ServerName> getLiveRegionServers();
 
     void clearTableRegionCache(TableName name) throws SQLException;
 
@@ -289,7 +285,4 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     }
 
     int getConnectionCount(boolean isInternal);
-
-    void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
-            throws Throwable;
 }

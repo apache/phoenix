@@ -305,7 +305,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
                     "create table IF NOT EXISTS " + tableName + " ( id char(1) NOT NULL,"
                             + " col1 integer NOT NULL,"
                             + " CONSTRAINT NAME_PK PRIMARY KEY (id, col1))"
-                            + " APPEND_ONLY_SCHEMA = true, UPDATE_CACHE_FREQUENCY=always");
+                            + " APPEND_ONLY_SCHEMA = true");
                 fail("UPDATE_CACHE_FREQUENCY attribute must not be set to ALWAYS if APPEND_ONLY_SCHEMA is true");
             } catch (SQLException e) {
                 assertEquals(SQLExceptionCode.UPDATE_CACHE_FREQUENCY_INVALID.getErrorCode(),

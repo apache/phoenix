@@ -32,7 +32,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -52,9 +51,9 @@ public class ParallelPhoenixConnectionFailureTest extends BaseTest {
     @Test
     public void testExecuteQueryChainFailure() throws SQLException {
         HBaseTestingUtility hbaseTestingUtility = new HBaseTestingUtility();
-        Properties props = new Properties();
-        PhoenixConnection conn1 = (PhoenixConnection) DriverManager.getConnection(url, props);
-        PhoenixConnection conn2 = (PhoenixConnection) DriverManager.getConnection(url, props);
+
+        PhoenixConnection conn1 = (PhoenixConnection) DriverManager.getConnection(url);
+        PhoenixConnection conn2 = (PhoenixConnection) DriverManager.getConnection(url);
         PhoenixConnection connSpy1 = Mockito.spy(conn1);
         PhoenixConnection connSpy2 = Mockito.spy(conn2);
         AtomicInteger numStatementsCreatedOnConn1 = new AtomicInteger();

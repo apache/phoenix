@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.ConnectionQueryServices.Feature;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -78,7 +77,6 @@ public class PartialResultServerConfigurationIT {
         url = PhoenixRuntime.JDBC_PROTOCOL + PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR + zkQuorum;
 
         DriverManager.registerDriver(PhoenixDriver.INSTANCE);
-        DriverManager.registerDriver(new PhoenixTestDriver());
     }
 
     @AfterClass
@@ -86,7 +84,6 @@ public class PartialResultServerConfigurationIT {
         try {
             DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
         } finally {
-            ServerMetadataCacheTestImpl.resetCache();
             hbaseTestUtil.shutdownMiniCluster();
         }
     }

@@ -222,7 +222,6 @@ public class PTableImpl implements PTable {
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
     private Long maxLookbackAge;
-    private Map<PTableKey, Long> ancestorLastDDLTimestampMap;
     private Set<CDCChangeScope> cdcIncludeScopes;
 
     public static class Builder {
@@ -292,7 +291,7 @@ public class PTableImpl implements PTable {
         private Set<CDCChangeScope> cdcIncludeScopes;
         private String indexWhere;
         private Long maxLookbackAge;
-        private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
+
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
         // Optionally set columns for the builder, but not for the actual PTable
@@ -727,11 +726,6 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setAncestorLastDDLTimestampMap(Map<PTableKey, Long> map) {
-            this.ancestorLastDDLTimestampMap = map;
-            return this;
-        }
-
         public Builder setCDCIncludeScopes(Set<CDCChangeScope> cdcIncludeScopes) {
             if (cdcIncludeScopes != null) {
                 this.cdcIncludeScopes = cdcIncludeScopes;
@@ -1032,7 +1026,6 @@ public class PTableImpl implements PTable {
         this.cdcIncludeScopes = builder.cdcIncludeScopes;
         this.indexWhere = builder.indexWhere;
         this.maxLookbackAge = builder.maxLookbackAge;
-        this.ancestorLastDDLTimestampMap = builder.ancestorLastDDLTimestampMap;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1114,8 +1107,7 @@ public class PTableImpl implements PTable {
                 .setExternalSchemaId(table.getExternalSchemaId())
                 .setStreamingTopicName(table.getStreamingTopicName())
                 .setIndexWhere(table.getIndexWhere())
-                .setMaxLookbackAge(table.getMaxLookbackAge())
-                .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap());
+                .setMaxLookbackAge(table.getMaxLookbackAge());
     }
 
     @Override
@@ -2438,11 +2430,6 @@ public class PTableImpl implements PTable {
     @Override
     public Long getMaxLookbackAge() {
         return maxLookbackAge;
-    }
-
-    @Override
-    public Map<PTableKey, Long> getAncestorLastDDLTimestampMap() {
-        return ancestorLastDDLTimestampMap;
     }
 
     private void buildIndexWhereExpression(PhoenixConnection connection) throws SQLException {

@@ -66,6 +66,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -104,7 +105,6 @@ import org.apache.phoenix.compile.UpsertCompiler;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
-import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
@@ -121,7 +121,6 @@ import org.apache.phoenix.log.QueryLogInfo;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.log.QueryLoggerUtil;
 import org.apache.phoenix.log.QueryStatus;
-import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AddColumnStatement;
@@ -198,7 +197,6 @@ import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
-import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -227,7 +225,6 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SQLCloseable;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
-import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -298,13 +295,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     private int queryTimeoutMillis;
     // Caching per Statement
     protected final Calendar localCalendar = Calendar.getInstance();
-    private boolean validateLastDdlTimestamp;
 
     public PhoenixStatement(PhoenixConnection connection) {
         this.connection = connection;
         this.queryTimeoutMillis = getDefaultQueryTimeoutMillis();
-        this.validateLastDdlTimestamp = ValidateLastDDLTimestampUtil
-                                            .getValidateLastDdlTimestampEnabled(this.connection);
     }
 
     /**
@@ -335,20 +329,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, false, this.validateLastDdlTimestamp);
+        return executeQuery(stmt, true, queryLogger, false);
     }
 
     protected PhoenixResultSet executeQuery(final CompilableStatement stmt, final QueryLogger queryLogger, boolean noCommit)
             throws SQLException {
-        return executeQuery(stmt, true, queryLogger, noCommit, this.validateLastDdlTimestamp);
+        return executeQuery(stmt, true, queryLogger, noCommit);
     }
 
-
     private PhoenixResultSet executeQuery(final CompilableStatement stmt,
-                                          final boolean doRetryOnMetaNotFoundError,
-                                          final QueryLogger queryLogger, final boolean noCommit,
-                                          boolean shouldValidateLastDdlTimestamp)
-            throws SQLException {
+                                          final boolean doRetryOnMetaNotFoundError, final QueryLogger queryLogger, final boolean noCommit) throws SQLException {
         GLOBAL_SELECT_SQL_COUNTER.increment();
 
         try {
@@ -357,12 +347,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                         @Override public PhoenixResultSet call() throws SQLException {
                             final long startTime = EnvironmentEdgeManager.currentTimeMillis();
                             boolean success = false;
-                            boolean updateMetrics = true;
                             boolean pointLookup = false;
                             String tableName = null;
                             clearResultSet();
                             PhoenixResultSet rs = null;
-                            QueryPlan plan = null;
                             try {
                                 PhoenixConnection conn = getConnection();
                                 conn.checkOpen();
@@ -372,7 +360,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         && stmt.getOperation() != Operation.UPGRADE) {
                                     throw new UpgradeRequiredException();
                                 }
-                                plan = stmt.compilePlan(PhoenixStatement.this,
+                                QueryPlan
+                                        plan =
+                                        stmt.compilePlan(PhoenixStatement.this,
                                                 Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 // Send mutations to hbase, so they are visible to subsequent reads.
                                 // Use original plan for data table so that data and immutable indexes will be sent
@@ -386,14 +376,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 plan =
                                         connection.getQueryServices().getOptimizer()
                                                 .optimize(PhoenixStatement.this, plan);
-                                setLastQueryPlan(plan);
-
-                                //verify metadata for the table/view/index in the query plan
-                                //plan.getTableRef can be null in some cases like EXPLAIN <query>
-                                if (shouldValidateLastDdlTimestamp && plan.getTableRef() != null) {
-                                    ValidateLastDDLTimestampUtil.validateLastDDLTimestamp(
-                                        connection, Arrays.asList(plan.getTableRef()), true);
-                                }
 
                                 if (plan.getTableRef() != null
                                         && plan.getTableRef().getTable() != null && !Strings
@@ -440,55 +422,21 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
                                 if (doRetryOnMetaNotFoundError && e.getTableName() != null) {
-                                    String sName = e.getSchemaName();
-                                    String tName = e.getTableName();
-                                    // when the query plan uses the local index PTable,
-                                    // the TNFE can still be for the base table
-                                    if (plan != null && plan.getTableRef() != null) {
-                                        PTable queryPlanTable = plan.getTableRef().getTable();
-                                        if (queryPlanTable != null
-                                                && queryPlanTable.getIndexType()
-                                                    == IndexType.LOCAL) {
-                                            sName = queryPlanTable.getSchemaName().getString();
-                                            tName = queryPlanTable.getTableName().getString();
-                                        }
-                                    }
                                     if (LOGGER.isDebugEnabled()) {
                                         LOGGER.debug("Reloading table {} data from server",
-                                                tName);
+                                                e.getTableName());
                                     }
                                     if (new MetaDataClient(connection)
                                             .updateCache(connection.getTenantId(),
-                                                    sName, tName, true)
+                                                    e.getSchemaName(), e.getTableName(), true)
                                             .wasUpdated()) {
-                                        updateMetrics = false;
                                         //TODO we can log retry count and error for debugging in LOG table
-                                        return executeQuery(stmt, false, queryLogger, noCommit,
-                                                                shouldValidateLastDdlTimestamp);
+                                        return executeQuery(stmt, false, queryLogger, noCommit);
                                     }
                                 }
                                 throw e;
-                            } catch (StaleMetadataCacheException e) {
-                                GlobalClientMetrics
-                                        .GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER
-                                        .increment();
-                                updateMetrics = false;
-                                PTable pTable = lastQueryPlan.getTableRef().getTable();
-                                String schemaN = pTable.getSchemaName().toString();
-                                String tableN = pTable.getTableName().toString();
-                                PName tenantId = connection.getTenantId();
-                                LOGGER.debug("Force updating client metadata cache for {}",
-                                        ValidateLastDDLTimestampUtil.getInfoString(tenantId,
-                                                Arrays.asList(getLastQueryPlan().getTableRef())));
-                                // force update client metadata cache for the table/view
-                                // this also updates the cache for all ancestors in case of a view
-                                new MetaDataClient(connection)
-                                        .updateCache(tenantId, schemaN, tableN, true);
-                                // skip last ddl timestamp validation in the retry
-                                return executeQuery(stmt, doRetryOnMetaNotFoundError, queryLogger,
-                                                        noCommit, false);
-                            }
-                            catch (RuntimeException e) {
+                            } catch (RuntimeException e) {
+
                                 // FIXME: Expression.evaluate does not throw SQLException
                                 // so this will unwrap throws from that.
                                 if (e.getCause() instanceof SQLException) {
@@ -496,43 +444,41 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
                                 throw e;
                             } finally {
-                                if (updateMetrics) {
-                                    // Regardless of whether the query was successfully handled or not,
-                                    // update the time spent so far. If needed, we can separate out the
-                                    // success times and failure times.
-                                    GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis()
-                                            - startTime);
-                                    long
-                                            executeQueryTimeSpent =
-                                            EnvironmentEdgeManager.currentTimeMillis() - startTime;
-                                    if (tableName != null) {
+                                // Regardless of whether the query was successfully handled or not,
+                                // update the time spent so far. If needed, we can separate out the
+                                // success times and failure times.
+                                GLOBAL_QUERY_TIME.update(EnvironmentEdgeManager.currentTimeMillis()
+                                        - startTime);
+                                long
+                                        executeQueryTimeSpent =
+                                        EnvironmentEdgeManager.currentTimeMillis() - startTime;
+                                if (tableName != null) {
 
-                                        TableMetricsManager
-                                                .updateMetricsMethod(tableName, SELECT_SQL_COUNTER, 1);
-                                        TableMetricsManager
-                                                .updateMetricsMethod(tableName, SELECT_SQL_QUERY_TIME,
-                                                        executeQueryTimeSpent);
-                                        if (success) {
-                                            TableMetricsManager.updateMetricsMethod(tableName,
-                                                    SELECT_SUCCESS_SQL_COUNTER, 1);
-                                            TableMetricsManager.updateMetricsMethod(tableName,
-                                                    pointLookup ?
-                                                            SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
-                                                            SELECT_SCAN_SUCCESS_SQL_COUNTER, 1);
-                                        } else {
-                                            TableMetricsManager.updateMetricsMethod(tableName,
-                                                    SELECT_FAILED_SQL_COUNTER, 1);
-                                            TableMetricsManager.updateMetricsMethod(tableName,
-                                                    SELECT_AGGREGATE_FAILURE_SQL_COUNTER, 1);
-                                            TableMetricsManager.updateMetricsMethod(tableName,
-                                                    pointLookup ?
-                                                            SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
-                                                            SELECT_SCAN_FAILED_SQL_COUNTER, 1);
-                                        }
+                                    TableMetricsManager
+                                            .updateMetricsMethod(tableName, SELECT_SQL_COUNTER, 1);
+                                    TableMetricsManager
+                                            .updateMetricsMethod(tableName, SELECT_SQL_QUERY_TIME,
+                                                    executeQueryTimeSpent);
+                                    if (success) {
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                SELECT_SUCCESS_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                pointLookup ?
+                                                        SELECT_POINTLOOKUP_SUCCESS_SQL_COUNTER :
+                                                        SELECT_SCAN_SUCCESS_SQL_COUNTER, 1);
+                                    } else {
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                SELECT_FAILED_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                SELECT_AGGREGATE_FAILURE_SQL_COUNTER, 1);
+                                        TableMetricsManager.updateMetricsMethod(tableName,
+                                                pointLookup ?
+                                                        SELECT_POINTLOOKUP_FAILED_SQL_COUNTER :
+                                                        SELECT_SCAN_FAILED_SQL_COUNTER, 1);
                                     }
-                                    if (rs != null) {
-                                        rs.setQueryTime(executeQueryTimeSpent);
-                                    }
+                                }
+                                if (rs != null) {
+                                    rs.setQueryTime(executeQueryTimeSpent);
                                 }
                             }
                             return rs;
@@ -883,19 +829,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
             CompilableStatement compilableStmt = getStatement();
             StatementPlan compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
-            // if client is validating timestamps, ensure its metadata cache is up to date.
-            if (ValidateLastDDLTimestampUtil
-                    .getValidateLastDdlTimestampEnabled(stmt.getConnection())) {
-                Set<TableRef> tableRefs = compilePlan.getSourceRefs();
-                for (TableRef tableRef : tableRefs) {
-                    new MetaDataClient(stmt.getConnection()).updateCache(
-                            stmt.getConnection().getTenantId(),
-                            tableRef.getTable().getSchemaName().getString(),
-                            tableRef.getTable().getTableName().getString(),
-                            true);
-                }
-                compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
-            }
             // For a QueryPlan, we need to get its optimized plan; for a MutationPlan, its enclosed QueryPlan
             // has already been optimized during compilation.
             if (compilePlan instanceof QueryPlan) {

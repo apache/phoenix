@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.query;
 
-import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
@@ -141,14 +140,11 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.SystemExitRule;
-import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.end2end.ParallelStatsEnabledIT;
 import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
-import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
-import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -498,8 +494,6 @@ public abstract class BaseTest {
             LOGGER.error("Exception caught when shutting down mini map reduce cluster", t);
         } finally {
             try {
-                // Clear ServerMetadataCache.
-                ServerMetadataCacheTestImpl.resetCache();
                 utility.shutdownMiniCluster();
             } catch (Throwable t) {
                 LOGGER.error("Exception caught when shutting down mini cluster", t);
@@ -647,25 +641,9 @@ public abstract class BaseTest {
         if (conf.getLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0) == 0) {
             conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 0);
         }
-        setPhoenixRegionServerEndpoint(conf);
         return conf;
     }
 
-    /*
-        Set property hbase.coprocessor.regionserver.classes to include test implementation of
-        PhoenixRegionServerEndpoint by default, if some other regionserver coprocs
-        are not already present.
-     */
-    protected static void setPhoenixRegionServerEndpoint(Configuration conf) {
-        String value = conf.get(REGIONSERVER_COPROCESSOR_CONF_KEY);
-        if (value == null) {
-            value = PhoenixRegionServerEndpointTestImpl.class.getName();
-        }
-        else {
-            value = value + "," + PhoenixRegionServerEndpointTestImpl.class.getName();
-        }
-        conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY, value);
-    }
     private static PhoenixTestDriver newTestDriver(ReadOnlyProps props) throws Exception {
         PhoenixTestDriver newDriver;
         String driverClassName = props.get(DRIVER_CLASS_NAME_ATTRIB);

@@ -17,6 +17,24 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
+
+import java.sql.ParameterMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Scan;
@@ -24,11 +42,12 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient;
-import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes
+    .ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.UngroupedAggregateRegionObserverHelper;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -43,7 +62,6 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -70,7 +88,6 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.DelegateColumn;
 import org.apache.phoenix.schema.IllegalDataException;
-import org.apache.phoenix.schema.MaxPhoenixColumnSizeExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -94,30 +111,15 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import java.sql.ParameterMetaData;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
-import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 public class UpsertCompiler {
 
@@ -140,9 +142,6 @@ public class UpsertCompiler {
         RowTimestampColInfo rowTsColInfo = new RowTimestampColInfo(useServerTimestamp, rowTimestamp);
         for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
             byte[] value = values[j];
-            if (value == null) {
-                continue;
-            }
             PColumn column = table.getColumns().get(columnIndexes[i]);
             if (value.length >= maxHBaseClientKeyValueSize &&
                     table.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
@@ -637,7 +636,7 @@ public class UpsertCompiler {
                 // as max TS, so that the query can safely restarted and still work of a snapshot
                 // (so it won't see its own data in case of concurrent splits)
                 // see PHOENIX-4849
-                long serverTime = selectResolver.getTables().get(0).getTimeStamp();
+                long serverTime = selectResolver.getTables().get(0).getCurrentTime();
                 if (serverTime == QueryConstants.UNSET_TIMESTAMP) {
                     // if this is the first time this table is resolved the ref's current time might not be defined, yet
                     // in that case force an RPC to get the server time
@@ -831,10 +830,8 @@ public class UpsertCompiler {
         final List<Expression> constantExpressions = Lists.newArrayListWithExpectedSize(valueNodes.size());
         // First build all the expressions, as with sequences we want to collect them all first
         // and initialize them in one batch
-        List<Pair<ColumnName, ParseNode>> jsonExpressions = Lists.newArrayList();
-        List<Pair<ColumnName, ParseNode>> nonPKColumns = Lists.newArrayList();
         for (ParseNode valueNode : valueNodes) {
-            if (!valueNode.hasJsonExpression() && !valueNode.isStateless()) {
+            if (!valueNode.isStateless()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.VALUE_IN_UPSERT_NOT_CONSTANT).build().buildException();
             }
             PColumn column = allColumns.get(columnIndexes[nodeIndex]);
@@ -845,24 +842,11 @@ public class UpsertCompiler {
                         expression.getDataType(), column.getDataType(), "expression: "
                                 + expression.toString() + " in column " + column);
             }
-            if (!SchemaUtil.isPKColumn(column) && !valueNode.hasJsonExpression()) {
-                nonPKColumns.add(new Pair<>(
-                        ColumnName.caseSensitiveColumnName(column.getFamilyName().getString(),
-                                column.getName().getString()), valueNode));
-            } else if (valueNode.hasJsonExpression()) {
-                jsonExpressions.add(new Pair<>(
-                        ColumnName.caseSensitiveColumnName(column.getFamilyName().getString(),
-                                column.getName().getString()), valueNode));
-            }
             constantExpressions.add(expression);
             nodeIndex++;
         }
-        if (nonPKColumns.size() > 0 && jsonExpressions.size() > 0) {
-            jsonExpressions.addAll(nonPKColumns);
-            nonPKColumns.clear();
-        }
         byte[] onDupKeyBytesToBe = null;
-        List<Pair<ColumnName, ParseNode>> onDupKeyPairs = upsert.getOnDupKeyPairs();
+        List<Pair<ColumnName,ParseNode>> onDupKeyPairs = upsert.getOnDupKeyPairs();
         if (onDupKeyPairs != null) {
             if (table.isImmutableRows()) {
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_USE_ON_DUP_KEY_FOR_IMMUTABLE)
@@ -885,82 +869,66 @@ public class UpsertCompiler {
             if (onDupKeyPairs.isEmpty()) { // ON DUPLICATE KEY IGNORE
                 onDupKeyBytesToBe = PhoenixIndexBuilderHelper.serializeOnDupKeyIgnore();
             } else {                       // ON DUPLICATE KEY UPDATE;
-                onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, onDupKeyPairs, resolver);
+                int position = table.getBucketNum() == null ? 0 : 1;
+                UpdateColumnCompiler compiler = new UpdateColumnCompiler(context);
+                int nColumns = onDupKeyPairs.size();
+                List<Expression> updateExpressions = Lists.newArrayListWithExpectedSize(nColumns);
+                LinkedHashSet<PColumn> updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
+                updateColumns.add(new PColumnImpl(
+                        table.getPKColumns().get(position).getName(), // Use first PK column name as we know it won't conflict with others
+                        null, PVarbinary.INSTANCE, null, null, false, position, SortOrder.getDefault(), 0, null, false, null, false, false, null, table.getPKColumns().get(position).getTimestamp()));
+                position++;
+                for (Pair<ColumnName,ParseNode> columnPair : onDupKeyPairs) {
+                    ColumnName colName = columnPair.getFirst();
+                    PColumn updateColumn = resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName()).getColumn();
+                    if (SchemaUtil.isPKColumn(updateColumn)) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_UPDATE_PK_ON_DUP_KEY)
+                        .setSchemaName(table.getSchemaName().getString())
+                        .setTableName(table.getTableName().getString())
+                        .setColumnName(updateColumn.getName().getString())
+                        .build().buildException();
+                    }
+                    final int columnPosition = position++;
+                    if (!updateColumns.add(new DelegateColumn(updateColumn) {
+                        @Override
+                        public int getPosition() {
+                            return columnPosition;
+                        }
+                    })) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.DUPLICATE_COLUMN_IN_ON_DUP_KEY)
+                            .setSchemaName(table.getSchemaName().getString())
+                            .setTableName(table.getTableName().getString())
+                            .setColumnName(updateColumn.getName().getString())
+                            .build().buildException();
+                    };
+                    ParseNode updateNode = columnPair.getSecond();
+                    compiler.setColumn(updateColumn);
+                    Expression updateExpression = updateNode.accept(compiler);
+                    // Check that updateExpression is coercible to updateColumn
+                    if (updateExpression.getDataType() != null && !updateExpression.getDataType().isCastableTo(updateColumn.getDataType())) {
+                        throw TypeMismatchException.newException(
+                                updateExpression.getDataType(), updateColumn.getDataType(), "expression: "
+                                        + updateExpression.toString() + " for column " + updateColumn);
+                    }
+                    if (compiler.isAggregate()) {
+                        throw new SQLExceptionInfo.Builder(SQLExceptionCode.AGGREGATION_NOT_ALLOWED_IN_ON_DUP_KEY)
+                            .setSchemaName(table.getSchemaName().getString())
+                            .setTableName(table.getTableName().getString())
+                            .setColumnName(updateColumn.getName().getString())
+                            .build().buildException();
+                    }
+                    updateExpressions.add(updateExpression);
+                }
+                PTable onDupKeyTable = PTableImpl.builderWithColumns(table, updateColumns)
+                        .build();
+                onDupKeyBytesToBe = PhoenixIndexBuilderHelper.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
             }
-        } else if (!jsonExpressions.isEmpty()) {
-            onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, jsonExpressions, resolver);
         }
         final byte[] onDupKeyBytes = onDupKeyBytesToBe;
         
         return new UpsertValuesMutationPlan(context, tableRef, nodeIndexOffset, constantExpressions,
                 allColumns, columnIndexes, overlapViewColumns, values, addViewColumns,
                 connection, pkSlotIndexes, useServerTimestamp, onDupKeyBytes, maxSize, maxSizeBytes);
-    }
-
-    private static byte[] getOnDuplicateKeyBytes(PTable table, StatementContext context,
-            List<Pair<ColumnName, ParseNode>> onDupKeyPairs, ColumnResolver resolver)
-            throws SQLException {
-        byte[] onDupKeyBytesToBe;
-        int position = table.getBucketNum() == null ? 0 : 1;
-        UpdateColumnCompiler compiler = new UpdateColumnCompiler(context);
-        int nColumns = onDupKeyPairs.size();
-        List<Expression> updateExpressions = Lists.newArrayListWithExpectedSize(nColumns);
-        LinkedHashSet<PColumn> updateColumns = Sets.newLinkedHashSetWithExpectedSize(nColumns + 1);
-        updateColumns.add(new PColumnImpl(table.getPKColumns().get(position).getName(),
-                // Use first PK column name as we know it won't conflict with others
-                null, PVarbinary.INSTANCE, null, null, false, position, SortOrder.getDefault(), 0,
-                null, false, null, false, false, null,
-                table.getPKColumns().get(position).getTimestamp()));
-        position++;
-        for (Pair<ColumnName, ParseNode> columnPair : onDupKeyPairs) {
-            ColumnName colName = columnPair.getFirst();
-            PColumn
-                    updateColumn =
-                    resolver.resolveColumn(null, colName.getFamilyName(), colName.getColumnName())
-                            .getColumn();
-            if (SchemaUtil.isPKColumn(updateColumn)) {
-                throw new SQLExceptionInfo.Builder(
-                        SQLExceptionCode.CANNOT_UPDATE_PK_ON_DUP_KEY).setSchemaName(
-                                table.getSchemaName().getString())
-                        .setTableName(table.getTableName().getString())
-                        .setColumnName(updateColumn.getName().getString()).build().buildException();
-            }
-            final int columnPosition = position++;
-            if (!updateColumns.add(new DelegateColumn(updateColumn) {
-                @Override
-                public int getPosition() {
-                    return columnPosition;
-                }
-            })) {
-                throw new SQLExceptionInfo.Builder(
-                        SQLExceptionCode.DUPLICATE_COLUMN_IN_ON_DUP_KEY).setSchemaName(
-                                table.getSchemaName().getString())
-                        .setTableName(table.getTableName().getString())
-                        .setColumnName(updateColumn.getName().getString()).build().buildException();
-            }
-            ParseNode updateNode = columnPair.getSecond();
-            compiler.setColumn(updateColumn);
-            Expression updateExpression = updateNode.accept(compiler);
-            // Check that updateExpression is coercible to updateColumn
-            if (updateExpression.getDataType() != null && !updateExpression.getDataType()
-                    .isCastableTo(updateColumn.getDataType())) {
-                throw TypeMismatchException.newException(updateExpression.getDataType(),
-                        updateColumn.getDataType(),
-                        "expression: " + updateExpression + " for column " + updateColumn);
-            }
-            if (compiler.isAggregate()) {
-                throw new SQLExceptionInfo.Builder(
-                        SQLExceptionCode.AGGREGATION_NOT_ALLOWED_IN_ON_DUP_KEY).setSchemaName(
-                                table.getSchemaName().getString())
-                        .setTableName(table.getTableName().getString())
-                        .setColumnName(updateColumn.getName().getString()).build().buildException();
-            }
-            updateExpressions.add(updateExpression);
-        }
-        PTable onDupKeyTable = PTableImpl.builderWithColumns(table, updateColumns).build();
-        onDupKeyBytesToBe =
-                PhoenixIndexBuilderHelper.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
-        return onDupKeyBytesToBe;
     }
 
     private static boolean isRowTimestampSet(int[] pkSlotIndexes, PTable table) {
@@ -1278,10 +1246,6 @@ public class UpsertCompiler {
             Tuple tuple = sequenceManager.getSequenceCount() == 0 ? null :
                 sequenceManager.newSequenceTuple(null);
             for (Expression constantExpression : constantExpressions) {
-                if (!constantExpression.isStateless()) {
-                    nodeIndex++;
-                    continue;
-                }
                 PColumn column = allColumns.get(columnIndexes[nodeIndex]);
                 constantExpression.evaluate(tuple, ptr);
                 Object value = null;

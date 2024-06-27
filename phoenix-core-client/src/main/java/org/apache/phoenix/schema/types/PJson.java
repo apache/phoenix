@@ -119,7 +119,7 @@ public class PJson extends PVarbinary {
 
     @Override
     public boolean isBytesComparableWith(@SuppressWarnings("rawtypes") PDataType otherType) {
-        return otherType == PVarbinary.INSTANCE || otherType == PJson.INSTANCE;
+        return otherType == PVarbinary.INSTANCE;
     }
 
     @Override

@@ -62,16 +62,12 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
         validatePriority(serverSidePriority);
 
         // validate index and metadata priorities are not the same
-        Preconditions.checkArgument(indexPriority != metadataPriority,
-                "Index and Metadata priority must not be same " + indexPriority);
+        Preconditions.checkArgument(indexPriority != metadataPriority, "Index and Metadata priority must not be same "+ indexPriority);
         LOGGER.info("Using custom Phoenix Index RPC Handling with index rpc priority "
                 + indexPriority + " and metadata rpc priority " + metadataPriority);
 
-        int invalidateCachePriority = IndexUtil.getInvalidateMetadataCachePriority(conf);
-        validatePriority(invalidateCachePriority);
-        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, delegate, indexPriority,
-                metadataPriority, serverSidePriority, invalidateCachePriority, priorityFunction,
-                abortable);
+        PhoenixRpcScheduler scheduler =
+                new PhoenixRpcScheduler(conf, delegate, indexPriority, metadataPriority, serverSidePriority, priorityFunction,abortable);
         return scheduler;
     }
 

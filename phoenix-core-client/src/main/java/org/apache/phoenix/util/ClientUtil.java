@@ -25,7 +25,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.protobuf.ServiceException;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.NotServingRegionException;
@@ -99,7 +98,7 @@ public class ClientUtil {
         return parseRemoteException(t);
     }
 
-    public static SQLException parseRemoteException(Throwable t) {
+    private static SQLException parseRemoteException(Throwable t) {
 
         String message = t.getLocalizedMessage();
         if (message != null) {
@@ -192,18 +191,5 @@ public class ClientUtil {
     public static boolean isHBaseNamespaceAvailable(Admin admin, String schemaName) throws IOException {
         String[] hbaseNamespaces = admin.listNamespaces();
         return Arrays.asList(hbaseNamespaces).contains(schemaName);
-    }
-
-    /**
-     * Convert ServiceException into an IOException
-     * @param se ServiceException
-     * @return IOException
-     */
-    public static IOException parseServiceException(ServiceException se) {
-        Throwable cause = se.getCause();
-        if (cause != null && cause instanceof IOException) {
-            return (IOException) cause;
-        }
-        return new IOException(se);
     }
 }

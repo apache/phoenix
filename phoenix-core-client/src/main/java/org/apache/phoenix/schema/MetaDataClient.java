@@ -207,7 +207,6 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.TaskMetaDataServiceCallBack;
-import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.apache.phoenix.util.JacksonUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -698,7 +697,7 @@ public class MetaDataClient {
                         result.setTable(table);
                     }
                     if (result.getTable()!=null) {
-                        addTableToCache(result, alwaysHitServer);
+                        addTableToCache(result);
                     }
                     return result;
                 }
@@ -712,7 +711,7 @@ public class MetaDataClient {
                     // Otherwise, a tenant would be required to create a VIEW first
                     // which is not really necessary unless you want to filter or add
                     // columns
-                    addTableToCache(result, alwaysHitServer);
+                    addTableToCache(result);
                     return result;
                 } else {
                     // if (result.getMutationCode() == MutationCode.NEWER_TABLE_FOUND) {
@@ -728,9 +727,7 @@ public class MetaDataClient {
                             // In this case, we update the parent table which may in turn pull
                             // in indexes to add to this table.
                             long resolvedTime = TransactionUtil.getResolvedTime(connection, result);
-                            if (addColumnsIndexesAndLastDDLTimestampsFromAncestors(result,
-                                    resolvedTimestamp, true, false)) {
-                                updateIndexesWithAncestorMap(result);
+                            if (addColumnsAndIndexesFromAncestors(result, resolvedTimestamp, true)) {
                                 connection.addTable(result.getTable(), resolvedTime);
                             } else {
                                 // if we aren't adding the table, we still need to update the
@@ -780,18 +777,7 @@ public class MetaDataClient {
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
             // i.e. explicitly set to 0. We should ideally be checking for something like
             // hasUpdateCacheFrequency().
-
-            //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
-            //QueryOptimizer needs that to decide whether the index can be used
-            if (PIndexState.PENDING_DISABLE.equals(table.getIndexState())) {
-                effectiveUpdateCacheFreq =
-                        (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
-                            connection.getQueryServices().getProps().get(
-                  QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
-                  QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
-                ucfInfoForLogging = "pending-disable-index-level";
-            } else if (table.getUpdateCacheFrequency()
-                    != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
+            if (table.getUpdateCacheFrequency() != 0L) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
                 ucfInfoForLogging = "table-level";
             } else {
@@ -917,19 +903,15 @@ public class MetaDataClient {
      * @param resolvedTimestamp timestamp at which child table was resolved
      * @param alwaysAddAncestorColumnsAndIndexes flag that determines whether we should recalculate
      *        all inherited columns and indexes that can be used in the view and
-     * @param alwaysHitServerForAncestors flag that determines whether we should fetch latest
-     *        metadata for ancestors from the server
      * @return true if the PTable contained by result was modified and false otherwise
      * @throws SQLException if the physical table cannot be found
      */
-    private boolean addColumnsIndexesAndLastDDLTimestampsFromAncestors(
-                                            MetaDataMutationResult result, Long resolvedTimestamp,
-                                            boolean alwaysAddAncestorColumnsAndIndexes,
-                                            boolean alwaysHitServerForAncestors)
-            throws SQLException {
+    private boolean addColumnsAndIndexesFromAncestors(MetaDataMutationResult result, Long resolvedTimestamp,
+                                                      boolean alwaysAddAncestorColumnsAndIndexes) throws SQLException {
         PTable table = result.getTable();
         boolean hasIndexId = table.getViewIndexId() != null;
-        if (table.getType() == PTableType.INDEX
+        // only need to inherit columns and indexes for view indexes and views
+        if ((table.getType()==PTableType.INDEX && hasIndexId)
                 || (table.getType() == PTableType.VIEW && table.getViewType() != ViewType.MAPPED)) {
             String tableName = null;
             try {
@@ -937,7 +919,7 @@ public class MetaDataClient {
                 String parentSchemaName = SchemaUtil.getSchemaNameFromFullName(parentName);
                 tableName = SchemaUtil.getTableNameFromFullName(parentName);
                 MetaDataMutationResult parentResult = updateCache(connection.getTenantId(), parentSchemaName, tableName,
-                        alwaysHitServerForAncestors, resolvedTimestamp);
+                        false, resolvedTimestamp);
                 PTable parentTable = parentResult.getTable();
                 if (parentResult.getMutationCode() == MutationCode.TABLE_NOT_FOUND || parentTable == null) {
                     // Try once more with different tenant id (connection can be global but view could be tenant
@@ -964,18 +946,8 @@ public class MetaDataClient {
                 if (!alwaysAddAncestorColumnsAndIndexes && !result.wasUpdated() && !parentResult.wasUpdated()) {
                     return false;
                 }
-
-                // only need to inherit columns and indexes for view indexes and views
-                if (!table.getType().equals(PTableType.INDEX) || hasIndexId) {
-                    PTable pTableWithDerivedColumnsAndIndexes
-                            = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection,
-                            table, parentTable);
-                    result.setTable(getPTableWithAncestorLastDDLTimestampMap(
-                                        pTableWithDerivedColumnsAndIndexes, parentTable));
-                } else {
-                    result.setTable(getPTableWithAncestorLastDDLTimestampMap(
-                                                    table, parentTable));
-                }
+                result.setTable(ViewUtil.addDerivedColumnsAndIndexesFromParent(
+                        connection, table, parentTable));
                 return true;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
@@ -983,42 +955,6 @@ public class MetaDataClient {
             }
         }
         return false;
-    }
-
-    /**
-     * Update the indexes within this result's table with ancestor->last_ddl_timestamp map.
-     */
-    private void updateIndexesWithAncestorMap(MetaDataMutationResult result) throws SQLException {
-        PTable table = result.getTable();
-        if (table.getIndexes().isEmpty()) {
-            return;
-        }
-        List<PTable> newIndexes = new ArrayList<>(table.getIndexes().size());
-        for (PTable index : table.getIndexes()) {
-            newIndexes.add(getPTableWithAncestorLastDDLTimestampMap(index, table));
-        }
-        result.setTable(PTableImpl.builderWithColumns(table, PTableImpl.getColumnsToClone(table))
-                .setIndexes(newIndexes).build());
-    }
-
-    /**
-     * Creates a new PTable object from the provided pTable and with the ancestorLastDDLTimestampMap
-     * Copy the map of the parent and add the last_ddl_timestamp of the parent in the map.
-     * @param pTable
-     * @param parentTable
-     */
-    private PTable getPTableWithAncestorLastDDLTimestampMap(PTable pTable, PTable parentTable)
-            throws SQLException {
-        Map<PTableKey, Long> ancestorMap
-                = new HashMap<>(parentTable.getAncestorLastDDLTimestampMap());
-        // this method can be called for an index and a view which inherited this index
-        // from its ancestors, skip adding the view as an ancestor of the index.
-        if (pTable.getParentName().equals(parentTable.getName())) {
-            ancestorMap.put(parentTable.getKey(), parentTable.getLastDDLTimestamp());
-        }
-        return PTableImpl.builderWithColumns(pTable, PTableImpl.getColumnsToClone(pTable))
-                .setAncestorLastDDLTimestampMap(ancestorMap)
-                .build();
     }
 
 	private void addFunctionArgMutation(String functionName, FunctionArgument arg, PreparedStatement argUpsert, int position) throws SQLException {
@@ -1529,17 +1465,14 @@ public class MetaDataClient {
         Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
         String physicalSchemaName = null;
         String physicalTableName = null;
-        PTable dataTable = null;
         try {
-            ColumnResolver resolver
-                    = FromCompiler.getResolverForCreateIndex(
-                            statement, connection, statement.getUdfParseNodes());
+            ColumnResolver resolver = FromCompiler.getResolver(statement, connection, statement.getUdfParseNodes());
             tableRef = resolver.getTables().get(0);
             Date asyncCreatedDate = null;
             if (statement.isAsync()) {
-                asyncCreatedDate = new Date(tableRef.getCurrentTime());
+                asyncCreatedDate = new Date(tableRef.getTimeStamp());
             }
-            dataTable = tableRef.getTable();
+            PTable dataTable = tableRef.getTable();
             boolean isTenantConnection = connection.getTenantId() != null;
             if (isTenantConnection) {
                 if (dataTable.getType() != PTableType.VIEW) {
@@ -1797,14 +1730,7 @@ public class MetaDataClient {
             return buildIndexAtTimeStamp(table, statement.getTable());
         }
 
-        MutationState state = buildIndex(table, tableRef);
-        // If client is validating LAST_DDL_TIMESTAMPS, parent's last_ddl_timestamp changed
-        // so remove it from client's cache. It will be refreshed when table is accessed next time.
-        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
-            connection.removeTable(connection.getTenantId(), dataTable.getName().getString(),
-                    null, dataTable.getTimeStamp());
-        }
-        return state;
+        return buildIndex(table, tableRef);
     }
 
     public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
@@ -3094,7 +3020,6 @@ public class MetaDataClient {
                         .setColumns(columns.values())
                         .setPhoenixTTL(PHOENIX_TTL_NOT_DEFINED)
                         .setPhoenixTTLHighWaterMark(MIN_PHOENIX_TTL_HWM)
-                        .setLastDDLTimestamp(0L)
                         .setIndexWhere(statement.getWhereClause() == null ? null
                                 : statement.getWhereClause().toString())
                         .build();
@@ -3527,7 +3452,7 @@ public class MetaDataClient {
                         .setCDCIncludeScopes(cdcIncludeScopes)
                         .build();
                 result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
-                addTableToCache(result, false);
+                addTableToCache(result);
                 return table;
             } catch (Throwable e) {
                 TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableNameNode.toString(),
@@ -3617,7 +3542,7 @@ public class MetaDataClient {
         switch(code) {
             case TABLE_ALREADY_EXISTS:
                 if (result.getTable() != null) {
-                    addTableToCache(result, false);
+                    addTableToCache(result);
                 }
                 if (!statement.ifNotExists()) {
                     throw new TableAlreadyExistsException(schemaName, tableName, result.getTable());
@@ -3634,7 +3559,7 @@ public class MetaDataClient {
             case UNALLOWED_TABLE_MUTATION:
                 throwsSQLExceptionUtil("CANNOT_MUTATE_TABLE",schemaName,tableName);
             case CONCURRENT_TABLE_MUTATION:
-                addTableToCache(result, false);
+                addTableToCache(result);
                 throw new ConcurrentTableMutationException(schemaName, tableName);
             case AUTO_PARTITION_SEQUENCE_NOT_FOUND:
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_PARTITION_SEQUENCE_UNDEFINED)
@@ -3956,7 +3881,7 @@ public class MetaDataClient {
         case COLUMN_NOT_FOUND:
             break;
         case CONCURRENT_TABLE_MUTATION:
-            addTableToCache(result, false);
+            addTableToCache(result);
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug(LogUtil.addCustomAnnotations("CONCURRENT_TABLE_MUTATION for table " + SchemaUtil.getTableName(schemaName, tableName), connection));
             }
@@ -4599,7 +4524,7 @@ public class MetaDataClient {
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
                     if (code == MutationCode.COLUMN_ALREADY_EXISTS) {
-                        addTableToCache(result, false);
+                        addTableToCache(result);
                         if (!ifNotExists) {
                             throw new ColumnAlreadyExistsException(schemaName, tableName, SchemaUtil.findExistingColumn(result.getTable(), columns));
                         }
@@ -4611,7 +4536,7 @@ public class MetaDataClient {
                     String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
                     long resolvedTimeStamp = TransactionUtil.getResolvedTime(connection, result);
                     if (table.getIndexes().isEmpty() || (numPkColumnsAdded==0 && ! metaProperties.getNonTxToTx())) {
-                        addTableToCache(result, false, resolvedTimeStamp);
+                        addTableToCache(result, resolvedTimeStamp);
                         table = result.getTable();
                     } else  {
                         // remove the table from the cache, it will be fetched from the server the
@@ -4938,16 +4863,12 @@ public class MetaDataClient {
                                 .setColumnName(columnToDrop.getName().getString()).build().buildException();
                     }
                     columnsToDrop.add(new ColumnRef(columnRef.getTableRef(), columnToDrop.getPosition()));
-                    // check if client is already holding a mutex from previous retry
-                    if (!acquiredColumnMutexSet.contains(columnToDrop.toString())) {
-                        boolean acquiredMutex = writeCell(null, physicalSchemaName,
-                                physicalTableName, columnToDrop.toString());
-                        if (!acquiredMutex) {
-                            throw new ConcurrentTableMutationException(physicalSchemaName,
-                                                                        physicalTableName);
-                        }
-                        acquiredColumnMutexSet.add(columnToDrop.toString());
+                    boolean acquiredMutex = writeCell(null, physicalSchemaName,
+                            physicalTableName, columnToDrop.toString());
+                    if (!acquiredMutex) {
+                        throw new ConcurrentTableMutationException(physicalSchemaName, physicalTableName);
                     }
+                    acquiredColumnMutexSet.add(columnToDrop.toString());
                 }
 
                 dropColumnMutations(table, tableColumnsToDrop);
@@ -5037,7 +4958,7 @@ public class MetaDataClient {
                 try {
                     MutationCode code = processMutationResult(schemaName, tableName, result);
                     if (code == MutationCode.COLUMN_NOT_FOUND) {
-                        addTableToCache(result, false);
+                        addTableToCache(result);
                         if (!statement.ifExists()) {
                             throw new ColumnNotFoundException(schemaName, tableName, Bytes.toString(result.getFamilyName()), Bytes.toString(result.getColumnName()));
                         }
@@ -5173,14 +5094,7 @@ public class MetaDataClient {
                     if (retried) {
                         throw e;
                     }
-                    if (LOGGER.isDebugEnabled()) {
-                        LOGGER.debug(LogUtil.addCustomAnnotations(
-                            "Caught ConcurrentTableMutationException for table "
-                                    + SchemaUtil.getTableName(e.getSchemaName(), e.getTableName())
-                                    + ". Will update cache and try again...", connection));
-                    }
-                    updateCache(connection.getTenantId(),
-                                    e.getSchemaName(), e.getTableName(), true);
+                    table = connection.getTable(fullTableName);
                     retried = true;
                 } catch (Throwable e) {
                     TableMetricsManager.updateMetricsForSystemCatalogTableMethod(tableName, NUM_METADATA_LOOKUP_FAILURES, 1);
@@ -5290,7 +5204,7 @@ public class MetaDataClient {
 
                 if (code == MutationCode.TABLE_ALREADY_EXISTS) {
                     if (result.getTable() != null) { // To accommodate connection-less update of index state
-                        addTableToCache(result, false);
+                        addTableToCache(result);
                         // Set so that we get the table below with the potentially modified rowKeyOrderOptimizable flag set
                         indexRef.setTable(result.getTable());
                         if (newIndexState == PIndexState.BUILDING && isAsync) {
@@ -5410,18 +5324,14 @@ public class MetaDataClient {
         }
     }
 
-    private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors)
-            throws SQLException {
-        addTableToCache(result, alwaysHitServerForAncestors,
-                TransactionUtil.getResolvedTime(connection, result));
+    private void addTableToCache(MetaDataMutationResult result) throws SQLException {
+        addTableToCache(result, TransactionUtil.getResolvedTime(connection, result));
     }
 
-    private void addTableToCache(MetaDataMutationResult result, boolean alwaysHitServerForAncestors,
-                                 long timestamp) throws SQLException {
-        addColumnsIndexesAndLastDDLTimestampsFromAncestors(result, null,
-                                false, alwaysHitServerForAncestors);
-        updateIndexesWithAncestorMap(result);
-        connection.addTable(result.getTable(), timestamp);
+    private void addTableToCache(MetaDataMutationResult result, long timestamp) throws SQLException {
+        addColumnsAndIndexesFromAncestors(result, null, false);
+        PTable table = result.getTable();
+        connection.addTable(table, timestamp);
     }
 
     private void addFunctionToCache(MetaDataMutationResult result) throws SQLException {

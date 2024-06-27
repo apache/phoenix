@@ -18,9 +18,6 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.StartMiniClusterOption;
-import org.apache.phoenix.end2end.PhoenixRegionServerEndpointTestImpl;
-import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.commons.lang3.RandomUtils;
@@ -55,7 +52,6 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.hadoop.hbase.HConstants.*;
-import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
 import static org.apache.hadoop.hbase.ipc.RpcClient.*;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
@@ -476,7 +472,6 @@ public class HighAvailabilityTestingUtility {
             admin1.close();
             admin2.close();
             try {
-                ServerMetadataCacheTestImpl.resetCache();
                 hbaseCluster1.shutdownMiniCluster();
                 hbaseCluster2.shutdownMiniCluster();
             } catch (Exception e) {
@@ -539,10 +534,6 @@ public class HighAvailabilityTestingUtility {
 
             // Hadoop cluster settings to avoid failing tests
             conf.setInt(DFS_REPLICATION_KEY, 1); // we only need one replica for testing
-
-            // Phoenix Region Server Endpoint needed for metadata caching
-            conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
-                        PhoenixRegionServerEndpointTestImpl.class.getName());
         }
     }
 

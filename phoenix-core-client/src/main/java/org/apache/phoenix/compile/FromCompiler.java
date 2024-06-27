@@ -180,8 +180,7 @@ public class FromCompiler {
         NamedTableNode tableNode = NamedTableNode.create(null, baseTable, Collections.<ColumnDef>emptyList());
         // Always use non-tenant-specific connection here
         try {
-            SingleTableColumnResolver visitor
-                    = new SingleTableColumnResolver(connection, tableNode, true, true);
+            SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, tableNode, true);
             return visitor;
         } catch (TableNotFoundException e) {
             // Used for mapped VIEW, since we won't be able to resolve that.
@@ -281,8 +280,7 @@ public class FromCompiler {
 
     public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection)
             throws SQLException {
-        SingleTableColumnResolver visitor
-                = new SingleTableColumnResolver(connection, statement.getTable(), true, true);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true);
         return visitor;
     }
 
@@ -295,14 +293,9 @@ public class FromCompiler {
         }
     }
 
-    public static ColumnResolver getResolverForCreateIndex(SingleTableStatement statement,
-                           PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes)
+    public static ColumnResolver getResolver(SingleTableStatement statement, PhoenixConnection connection, Map<String, UDFParseNode> udfParseNodes)
             throws SQLException {
-        // use alwaysHitServer=true to ensure client's cache is up-to-date even when client is
-        // validating last_ddl_timestamps and UCF = never.
-        SingleTableColumnResolver visitor
-                = new SingleTableColumnResolver(connection, statement.getTable(), true, 0,
-                                                    udfParseNodes, true, null);
+        SingleTableColumnResolver visitor = new SingleTableColumnResolver(connection, statement.getTable(), true, 0, udfParseNodes);
         return visitor;
     }
 

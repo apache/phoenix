@@ -906,8 +906,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
         String createTableString = "CREATE TABLE " + tableName + " (k VARCHAR PRIMARY KEY, "
                 + "v1 VARCHAR, v2 VARCHAR)";
-        verifyUCFValueInSysCat(tableName, createTableString, props,
-                QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY);
+        verifyUCFValueInSysCat(tableName, createTableString, props, 0L);
     }
 
     @Test

@@ -150,9 +150,6 @@ public enum MetricType {
     CLIENT_METADATA_CACHE_MISS_COUNTER("cmcm", "Number of cache misses for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
     CLIENT_METADATA_CACHE_HIT_COUNTER("cmch", "Number of cache hits for the CQSI cache.", LogLevel.DEBUG, PLong.INSTANCE),
     PAGED_ROWS_COUNTER("prc", "Number of dummy rows returned to client due to paging.", LogLevel.DEBUG, PLong.INSTANCE),
-    STALE_METADATA_CACHE_EXCEPTION_COUNTER("smce",
-            "Number of StaleMetadataCacheException encountered.",
-            LogLevel.DEBUG, PLong.INSTANCE),
 
     // hbase metrics
     COUNT_RPC_CALLS("rp", "Number of RPC calls",LogLevel.DEBUG, PLong.INSTANCE),
