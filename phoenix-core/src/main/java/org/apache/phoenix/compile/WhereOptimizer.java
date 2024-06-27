@@ -46,6 +46,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -77,7 +78,6 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigInteger;
 
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -518,7 +518,6 @@ public class WhereOptimizer {
         ScanRanges scanRange = ScanRanges.createSingleSpan(
                 schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyMatcher = scanRange.getScanRange().getLowerRange();
-        // TODO : make it a TRACE log before submission
         if (LOGGER.isTraceEnabled()) {
             String rowKeyMatcherStr = Bytes.toStringBinary(rowKeyMatcher);
             String rowKeyMatcherHex = Bytes.toHex(rowKeyMatcher);
@@ -576,7 +575,6 @@ public class WhereOptimizer {
                         fieldSortOrder,
                         CompareOperator.EQUAL,
                         field.getDataType());
-                // TODO : make it a TRACE log before submission
                 if (LOGGER.isTraceEnabled()) {
                     LOGGER.trace(String.format("Field: pos = %d, name = %s, schema = %s, "
                                             + "referenced-column %d, %s ",
@@ -593,7 +591,6 @@ public class WhereOptimizer {
                 schema, rowKeySlotRangesList, null, false);
         byte[] rowKeyMatcher = scanRange.getScanRange().getLowerRange();
 
-        // TODO : make it a TRACE log before submission
         if (LOGGER.isTraceEnabled()) {
             String rowKeyMatcherStr = Bytes.toStringBinary(rowKeyMatcher);
             String rowKeyMatcherHex = Bytes.toHex(rowKeyMatcher);
@@ -1955,7 +1952,7 @@ public class WhereOptimizer {
          * to produce the start and stop scan range.
          *
          */
-        static final class KeySlot {
+        public static final class KeySlot {
             private final int pkPosition; // Position in primary key
             private final int pkSpan; // Will be > 1 for RVC
             private final KeyPart keyPart; // Used to produce the KeyRanges below

@@ -18,8 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -111,6 +109,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -594,7 +593,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     InternalScanner internalScanner = scanner;
                     if (request.isMajor()) {
                         boolean isDisabled = false;
-                        final String fullTableName = tableName.getNameAsString();
+                        boolean isMultiTenantIndexTable = false;
+                        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+                            isMultiTenantIndexTable = true;
+                        }
+                        final String fullTableName = isMultiTenantIndexTable ?
+                                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(), MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
+                                tableName.getNameAsString();
+
                         PTable table = null;
                         try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(
                                 compactionConfig).unwrap(PhoenixConnection.class)) {
@@ -639,17 +645,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             internalScanner =
                                     new CompactionScanner(c.getEnvironment(), store, scanner,
                                             getMaxLookbackInMillis(c.getEnvironment().getConfiguration()),
-                                            SchemaUtil.getEmptyColumnFamily(table),
-                                            table.getEncodingScheme()
-                                                    == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                                                    QueryConstants.EMPTY_COLUMN_BYTES :
-                                                    table.getEncodingScheme().
-                                                            encode(QueryConstants.
-                                                                    ENCODED_EMPTY_COLUMN_NAME),
-                                            table.getTTL() == TTL_NOT_DEFINED
-                                                    ? DEFAULT_TTL : table.getTTL(),
-                                            table.getType() == PTableType.SYSTEM
-                                            );
+                                            table);
                         }
                     }
                     try {

@@ -32,7 +32,6 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.CompareFilter;
 import org.apache.hadoop.hbase.filter.SingleColumnValueFilter;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -95,6 +94,8 @@ import static org.apache.phoenix.util.SchemaUtil.getVarChars;
 public class ViewUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ViewUtil.class);
+
+    private static final byte[] LINK_ROW = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
 
     /**
      * Find all the descendant views of a given table or view in a depth-first fashion.
