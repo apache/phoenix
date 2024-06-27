@@ -79,14 +79,13 @@ public class TTLRegionScanner extends BaseRegionScanner {
         } else {
             ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
         }
-        ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
-        ttl *= 1000;
         // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is
         // an older client and does not supply the empty column parameters, the masking should not
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null && ttl != HConstants.FOREVER
-                && env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                        QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+                && (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
+                || !Bytes.toBoolean(isSystemTable)));
+
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
     }
