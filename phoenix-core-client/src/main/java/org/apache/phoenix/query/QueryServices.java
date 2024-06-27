@@ -186,6 +186,9 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_PRIOIRTY_ATTRIB = "phoenix.index.rpc.priority";
     public static final String METADATA_PRIOIRTY_ATTRIB = "phoenix.metadata.rpc.priority";
     public static final String SERVER_SIDE_PRIOIRTY_ATTRIB = "phoenix.serverside.rpc.priority";
+    String INVALIDATE_METADATA_CACHE_PRIORITY_ATTRIB =
+            "phoenix.invalidate.metadata.cache.rpc.priority";
+
     public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 
     // Retries when doing server side writes to SYSTEM.CATALOG
@@ -251,6 +254,7 @@ public interface QueryServices extends SQLCloseable {
     public static final String INDEX_HANDLER_COUNT_ATTRIB = "phoenix.rpc.index.handler.count";
     public static final String METADATA_HANDLER_COUNT_ATTRIB = "phoenix.rpc.metadata.handler.count";
     public static final String SERVER_SIDE_HANDLER_COUNT_ATTRIB = "phoenix.rpc.serverside.handler.count";
+    String INVALIDATE_CACHE_HANDLER_COUNT_ATTRIB = "phoenix.rpc.invalidate.cache.handler.count";
 
     public static final String FORCE_ROW_KEY_ORDER_ATTRIB = "phoenix.query.force.rowkeyorder";
     public static final String ALLOW_USER_DEFINED_FUNCTIONS_ATTRIB = "phoenix.functions.allowUserDefinedFunctions";
@@ -321,6 +325,13 @@ public interface QueryServices extends SQLCloseable {
 
     //Update Cache Frequency default config attribute
     public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB  = "phoenix.default.update.cache.frequency";
+
+    //Update Cache Frequency for indexes in PENDING_DISABLE state
+    public static final String UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
+            = "phoenix.update.cache.frequency.pending.disable.index";
+
+    // whether to validate last ddl timestamps during client operations
+    public static final String LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = "phoenix.ddl.timestamp.validation.enabled";
 
     // Whether to enable cost-based-decision in the query optimizer
     public static final String COST_BASED_OPTIMIZER_ENABLED = "phoenix.costbased.optimizer.enabled";
@@ -438,7 +449,14 @@ public interface QueryServices extends SQLCloseable {
      *  Parameter to disable the server merges for hinted uncovered indexes
      */
     String SERVER_MERGE_FOR_UNCOVERED_INDEX = "phoenix.query.global.server.merge.enable";
+    String PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS =
+            "phoenix.metadata.cache.invalidation.timeoutMs";
+    // Default to 10 seconds.
+    long PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT = 10 * 1000;
+    String PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = "phoenix.metadata.invalidate.cache.enabled";
 
+    String PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE =
+            "phoenix.metadata.cache.invalidation.threadPool.size";
     /**
      * Param to determine whether client can disable validation to figure out if any of the
      * descendent views extend primary key of their parents. Since this is a bit of

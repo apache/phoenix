@@ -25,6 +25,7 @@ import org.apache.phoenix.schema.*;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.RunUntilFailure;
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -50,6 +51,9 @@ public class MetaDataCachingIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MetaDataCachingIT.class);
     private final Random RAND = new Random(11);
+
+    private boolean isLastDDLTimestampValidationEnabled
+            = ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(config);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -143,7 +147,7 @@ public class MetaDataCachingIT extends BaseTest {
     @Test
     public void testGlobalClientCacheMetrics() throws Exception {
         int numThreads = 5;
-        int numTables = 1;
+        int numTables = 1; // test with only 1 table because we pick tables randomly in the workload
         int numMaxDML = 2;
 
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().reset();
@@ -152,12 +156,19 @@ public class MetaDataCachingIT extends BaseTest {
         simulateWorkload("testGlobalClientCacheMetrics", numTables, numThreads, numMaxDML);
 
         // only 1 miss when the table is created
+        int numExpectedMisses = 1;
+        if (isLastDDLTimestampValidationEnabled) {
+            // if we are validating last_ddl_timestamps,
+            // region server will see 2 more misses when trying to update its cache
+            numExpectedMisses += 2;
+        }
+
         assertEquals("Incorrect number of client metadata cache misses",
-                1, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
+                numExpectedMisses, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER.getMetric().getValue());
 
         // (2 hits per upsert + 1 hit per select) per thread
-        assertEquals("Incorrect number of client metadata cache hits",
-                3*numMaxDML*numThreads, GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().getValue());
+        assertTrue("number of total metadata cache hits (server+client) should be more than or equal to client cache hits",
+                3*numMaxDML*numThreads <= GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER.getMetric().getValue());
     }
 
     /*

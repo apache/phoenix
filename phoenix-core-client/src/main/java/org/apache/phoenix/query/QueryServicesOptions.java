@@ -119,6 +119,7 @@ import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 import java.util.Map.Entry;
 
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Coprocessor;
@@ -239,10 +240,12 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SERVER_SIDE_PRIORITY = 500;
     public static final int DEFAULT_INDEX_PRIORITY = 1000;
     public static final int DEFAULT_METADATA_PRIORITY = 2000;
+    public static final int DEFAULT_INVALIDATE_METADATA_CACHE_PRIORITY = 3000;
     public static final boolean DEFAULT_ALLOW_LOCAL_INDEX = true;
     public static final int DEFAULT_INDEX_HANDLER_COUNT = 30;
     public static final int DEFAULT_METADATA_HANDLER_COUNT = 30;
     public static final int DEFAULT_SERVERSIDE_HANDLER_COUNT = 30;
+    public static final int DEFAULT_INVALIDATE_CACHE_HANDLER_COUNT = 10;
     public static final int DEFAULT_SYSTEM_MAX_VERSIONS = 1;
     public static final boolean DEFAULT_SYSTEM_KEEP_DELETED_CELLS = false;
 
@@ -368,9 +371,26 @@ public class QueryServicesOptions {
     //Security defaults
     public static final boolean DEFAULT_PHOENIX_ACLS_ENABLED = false;
 
-    //default update cache frequency
-    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY = 0;
     public static final int DEFAULT_SMALL_SCAN_THRESHOLD = 100;
+
+    /**
+     * Metadata caching configs, see https://issues.apache.org/jira/browse/PHOENIX-6883.
+     * Disable the boolean flags and set UCF=always to disable the caching re-design.
+     *
+     * Disable caching re-design if you use Online Data Format Change since the cutover logic
+     * is currently incompatible and clients may not learn about the physical table change.
+     * See https://issues.apache.org/jira/browse/PHOENIX-7284.
+     *
+     * Disable caching re-design if your clients will not have ADMIN perms to call region server
+     * RPC. See https://issues.apache.org/jira/browse/HBASE-28508
+     */
+    public static final long DEFAULT_UPDATE_CACHE_FREQUENCY
+                = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS");
+    public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = false;
+    public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = false;
+    public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
+                                                                            = Long.toString(0L);
+    public static final int DEFAULT_PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE = 20;
 
     // default system task handling interval in milliseconds
     public static final long DEFAULT_TASK_HANDLING_INTERVAL_MS = 60*1000; // 1 min
