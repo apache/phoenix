@@ -19,6 +19,7 @@ package org.apache.hadoop.hbase.ipc;
 
 import static org.apache.hadoop.hbase.ipc.TestProtobufRpcServiceImpl.SERVICE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.when;
 
 import java.net.InetSocketAddress;
@@ -38,16 +39,9 @@ import org.mockito.Mockito;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-/**
- * Test that the rpc scheduler schedules index writes to the index handler queue and sends
- * everything else to the standard queues
- */
-public class PhoenixIndexRpcSchedulerTest {
-
+public class PhoenixRpcSchedulerTest {
     private static final Configuration conf = HBaseConfiguration.create();
     private static final InetSocketAddress isa = new InetSocketAddress("localhost", 0);
-
-    
     private class AbortServer implements Abortable {
       private boolean aborted = false;
 
@@ -62,25 +56,29 @@ public class PhoenixIndexRpcSchedulerTest {
       }
     }
 
+    /**
+     * Test that the rpc scheduler schedules index writes to the index handler queue and sends
+     * everything else to the standard queues
+     */
     @Test
     public void testIndexPriorityWritesToIndexHandler() throws Exception {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
         PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
         Abortable abortable = new AbortServer();
-        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250, 225, qosFunction,abortable);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250, 225, 230, qosFunction,abortable);
         BalancedQueueRpcExecutor executor = new BalancedQueueRpcExecutor("test-queue", 1, 1,qosFunction,conf,abortable);
         scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 200);
         List<BlockingQueue<CallRunner>> queues = executor.getQueues();
         assertEquals(1, queues.size());
         BlockingQueue<CallRunner> queue = queues.get(0);
-        queue.poll(20, TimeUnit.SECONDS);
+        assertNotNull(queue.poll(5, TimeUnit.SECONDS));
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110, 105, qosFunction,abortable);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110, 105, 115, qosFunction,abortable);
         scheduler.setIndexExecutorForTesting(executor);
         dispatchCallWithPriority(scheduler, 101);
-        queue.poll(20, TimeUnit.SECONDS);
+        assertNotNull(queue.poll(5, TimeUnit.SECONDS));
 
         Mockito.verify(mock, Mockito.times(2)).init(Mockito.any(Context.class));
         scheduler.stop();
@@ -92,7 +90,7 @@ public class PhoenixIndexRpcSchedulerTest {
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
         PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
         Abortable abortable = new AbortServer();
-        PhoenixRpcScheduler scheduler1 = new PhoenixRpcScheduler(conf, mock, 200, 250, 100, qosFunction,abortable);
+        PhoenixRpcScheduler scheduler1 = new PhoenixRpcScheduler(conf, mock, 200, 250, 100, 300, qosFunction,abortable);
         RpcExecutor executor1  = scheduler1.getServerSideExecutorForTesting();
         for (int c = 0; c < 10; c++) {
             dispatchCallWithPriority(scheduler1, 100);
@@ -103,7 +101,7 @@ public class PhoenixIndexRpcSchedulerTest {
             if (queue1.size() > 0) {
                 numDispatches1 += queue1.size();
                 for (int i = 0; i < queue1.size(); i++) {
-                    queue1.poll(20, TimeUnit.SECONDS);
+                    assertNotNull(queue1.poll(5, TimeUnit.SECONDS));
                 }
             }
         }
@@ -111,7 +109,7 @@ public class PhoenixIndexRpcSchedulerTest {
         scheduler1.stop();
 
         // try again, with the incorrect executor
-        PhoenixRpcScheduler scheduler2 = new PhoenixRpcScheduler(conf, mock, 101, 110, 50, qosFunction,abortable);
+        PhoenixRpcScheduler scheduler2 = new PhoenixRpcScheduler(conf, mock, 101, 110, 50, 25,  qosFunction,abortable);
         RpcExecutor executor2  = scheduler2.getIndexExecutorForTesting();
         dispatchCallWithPriority(scheduler2, 50);
         List<BlockingQueue<CallRunner>> queues2 = executor2.getQueues();
@@ -119,7 +117,7 @@ public class PhoenixIndexRpcSchedulerTest {
         for (BlockingQueue<CallRunner> queue2 : queues2) {
             if (queue2.size() > 0) {
                 numDispatches2++;
-                queue2.poll(20, TimeUnit.SECONDS);
+                assertNotNull(queue2.poll(5, TimeUnit.SECONDS));
             }
         }
         assertEquals(0, numDispatches2);
@@ -140,18 +138,45 @@ public class PhoenixIndexRpcSchedulerTest {
         PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
         Abortable abortable = new AbortServer();
         RpcScheduler mock = Mockito.mock(RpcScheduler.class);
-        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250, 225, qosFunction,abortable);
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock, 200, 250, 225, 275, qosFunction,abortable);
         dispatchCallWithPriority(scheduler, 100);
         dispatchCallWithPriority(scheduler, 251);
 
         // try again, this time we tweak the ranges we support
-        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110, 105, qosFunction,abortable);
+        scheduler = new PhoenixRpcScheduler(conf, mock, 101, 110, 105, 115,  qosFunction,abortable);
         dispatchCallWithPriority(scheduler, 200);
         dispatchCallWithPriority(scheduler, 111);
 
         Mockito.verify(mock, Mockito.times(4)).init(Mockito.any(Context.class));
         Mockito.verify(mock, Mockito.times(4)).dispatch(Mockito.any(CallRunner.class));
         scheduler.stop();
+    }
+
+    /**
+     * Test that the rpc scheduler schedules invalidate metadata cache RPC to
+     * the invalidate metadata cache executor.
+     */
+    @Test
+    public void testInvalidateMetadataCacheExecutor() throws Exception {
+        RpcScheduler mock = Mockito.mock(RpcScheduler.class);
+        PriorityFunction qosFunction = Mockito.mock(PriorityFunction.class);
+        Abortable abortable = new AbortServer();
+        // Set invalidate metadata cache priority to 230.
+        int invalidateMetadataCacheCallPriority = 230;
+        PhoenixRpcScheduler scheduler = new PhoenixRpcScheduler(conf, mock,
+                200, 250, 225, invalidateMetadataCacheCallPriority, qosFunction,abortable);
+        BalancedQueueRpcExecutor executor = new BalancedQueueRpcExecutor("test-queue",
+                1, 1, qosFunction, conf, abortable);
+        scheduler.setInvalidateMetadataCacheExecutorForTesting(executor);
+        dispatchCallWithPriority(scheduler, invalidateMetadataCacheCallPriority);
+        List<BlockingQueue<CallRunner>> queues = executor.getQueues();
+        assertEquals(1, queues.size());
+        BlockingQueue<CallRunner> queue = queues.get(0);
+        assertEquals(1, queue.size());
+        assertNotNull(queue.poll(5, TimeUnit.SECONDS));
+        Mockito.verify(mock, Mockito.times(1)).init(Mockito.any(RpcScheduler.Context.class));
+        scheduler.stop();
+        executor.stop();
     }
 
     private void dispatchCallWithPriority(RpcScheduler scheduler, int priority) throws Exception {

@@ -19,8 +19,6 @@ package org.apache.hadoop.hbase.ipc.controller;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * {@link RpcControllerFactory} that should only be used when
@@ -28,7 +26,6 @@ import org.slf4j.LoggerFactory;
  */
 public class ServerSideRPCControllerFactory  {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ServerSideRPCControllerFactory.class);
     protected final Configuration conf;
 
     public ServerSideRPCControllerFactory(Configuration conf) {

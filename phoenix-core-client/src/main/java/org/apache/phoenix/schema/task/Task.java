@@ -161,10 +161,11 @@ public class Task {
         try (PhoenixConnection newConnection =
                      QueryUtil.getConnectionOnServer(curConn.getClientInfo(), conf)
                              .unwrap(PhoenixConnection.class)) {
-            PreparedStatement statement = addTaskAndGetStatement(
-                    systemTaskParams, newConnection);
-            return executeStatementAndGetTaskMutations(newConnection,
-                    statement);
+            try (PreparedStatement statement = addTaskAndGetStatement(
+                    systemTaskParams, newConnection)) {
+                return executeStatementAndGetTaskMutations(newConnection,
+                        statement);
+            }
         }
     }
 
@@ -202,14 +203,14 @@ public class Task {
 
     private static List<TaskRecord> populateTasks(Connection connection, String taskQuery)
             throws SQLException {
-        PreparedStatement taskStatement = connection.prepareStatement(taskQuery);
-        ResultSet rs = taskStatement.executeQuery();
-
         List<TaskRecord> result = new ArrayList<>();
-        while (rs.next()) {
-            // delete child views only if the parent table is deleted from the system catalog
-            TaskRecord taskRecord = parseResult(rs);
-            result.add(taskRecord);
+        try (PreparedStatement taskStatement = connection.prepareStatement(taskQuery);
+             ResultSet rs = taskStatement.executeQuery()) {
+            while (rs.next()) {
+                // delete child views only if the parent table is deleted from the system catalog
+                TaskRecord taskRecord = parseResult(rs);
+                result.add(taskRecord);
+            }
         }
         return result;
     }

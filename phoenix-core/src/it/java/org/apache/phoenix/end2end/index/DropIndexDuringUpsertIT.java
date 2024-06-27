@@ -43,6 +43,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -101,6 +102,7 @@ public abstract class DropIndexDuringUpsertIT extends BaseTest {
             service.shutdownNow();
             destroyDriver(driver);
         } finally {
+            ServerMetadataCacheTestImpl.resetCache();
             util.shutdownMiniCluster();
         }
     }

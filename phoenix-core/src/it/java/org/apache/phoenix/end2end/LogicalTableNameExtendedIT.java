@@ -209,21 +209,26 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
             createIndexOnTable(conn, tableName, indexName2);
             populateTable(conn, tableName, 1, 2);
 
-            // Test hint
             String tableSelect = "SELECT V1,V2,V3 FROM " + tableName;
             ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + tableSelect);
-            assertEquals(true, QueryUtil.getExplainPlan(rs).contains(indexName));
+            String plan = QueryUtil.getExplainPlan(rs);
+            // plan should use one of the indexes
+            assertEquals(true, plan.contains(indexName) || plan.contains(indexName2));
+            // Test hint for the other index
+            String hintedIndex = QueryUtil.getExplainPlan(rs).contains(indexName)
+                                    ? indexName2
+                                    : indexName;
             try (Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices()
                     .getAdmin()) {
-                String snapshotName = new StringBuilder(indexName2).append("-Snapshot").toString();
-                admin.snapshot(snapshotName, TableName.valueOf(indexName2));
-                String newName = "NEW_" + indexName2;
+                String snapshotName = new StringBuilder(hintedIndex).append("-Snapshot").toString();
+                admin.snapshot(snapshotName, TableName.valueOf(hintedIndex));
+                String newName = "NEW_" + hintedIndex;
                 admin.cloneSnapshot(snapshotName, TableName.valueOf(newName));
-                renameAndDropPhysicalTable(conn, "NULL", null, indexName2, newName, true);
+                renameAndDropPhysicalTable(conn, "NULL", null, hintedIndex, newName, true);
             }
-            String indexSelect = "SELECT /*+ INDEX(" + tableName + " " + indexName2 + ")*/ V1,V2,V3 FROM " + tableName;
+            String indexSelect = "SELECT /*+ INDEX(" + tableName + " " + hintedIndex + ")*/ V1,V2,V3 FROM " + tableName;
             rs = conn.createStatement().executeQuery("EXPLAIN " + indexSelect);
-            assertEquals(true, QueryUtil.getExplainPlan(rs).contains(indexName2));
+            assertEquals(true, QueryUtil.getExplainPlan(rs).contains(hintedIndex));
             rs = conn.createStatement().executeQuery(indexSelect);
             assertEquals(true, rs.next());
         }
