@@ -23,7 +23,6 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -88,6 +87,7 @@ public class TableTTLIT extends BaseTest {
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
+        props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -157,7 +157,7 @@ public class TableTTLIT extends BaseTest {
      */
 
     @Test
-    public void testMaskingAndCompaction() throws Exception {
+    public void testMaskingAndMajorCompaction() throws Exception {
         final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
         final int maxDeleteCounter = maxLookbackAge == 0 ? 1 : maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
@@ -172,7 +172,6 @@ public class TableTTLIT extends BaseTest {
             conn.commit();
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
-            conn.createStatement().execute("Alter Table " + noCompactTableName + " set \"phoenix.table.ttl.enabled\" = false");
             conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
@@ -415,6 +414,7 @@ public class TableTTLIT extends BaseTest {
                         "val5 varchar, val6 varchar, val7 varchar) " +
                         tableDDLOptions;
             }
+            LOG.debug(String.format("Creating table %s, %s", tableName, createSql));
             conn.createStatement().execute(createSql);
             conn.commit();
         }

@@ -92,6 +92,8 @@ public class ViewUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ViewUtil.class);
 
+    private static final byte[] LINK_ROW = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
+
     /**
      * Find all the descendant views of a given table or view in a depth-first fashion.
      * Note that apart from scanning the {@code parent->child } links, we also validate each view

@@ -18,8 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import static org.apache.phoenix.util.ScanUtil.adjustScanFilterForGlobalIndexRegionScanner;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
@@ -115,6 +113,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -619,7 +618,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                     maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
                             store.getColumnFamilyName(), maxLookbackInMillis);
                     return new CompactionScanner(c.getEnvironment(), store, scanner,
-                            maxLookbackInMillis, null, null, false, true);
+                            maxLookbackInMillis, false, true, null);
                 }
             });
         }
@@ -702,12 +701,8 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     MetaDataUtil.getMaxLookbackAge(
                                             c.getEnvironment().getConfiguration(),
                                             maxLookbackAge),
-                                    SchemaUtil.getEmptyColumnFamily(table),
-                                    table.getEncodingScheme()
-                                            == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
-                                            QueryConstants.EMPTY_COLUMN_BYTES :
-                                            table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME),
-                                    request.isMajor() || request.isAllFiles(), keepDeleted
+                                    request.isMajor() || request.isAllFiles(),
+                                    keepDeleted, table
                             );
                 }
                 if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
