@@ -57,7 +57,7 @@ import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
 import static org.junit.Assert.assertFalse;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class MaxLookbackIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;
     private static final int TABLE_LEVEL_MAX_LOOKBACK_AGE = 10;

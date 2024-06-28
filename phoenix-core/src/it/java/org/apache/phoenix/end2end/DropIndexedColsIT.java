@@ -40,7 +40,7 @@ import org.junit.runners.Parameterized;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(Parameterized.class)
 public class DropIndexedColsIT extends SplitSystemCatalogIT {
 

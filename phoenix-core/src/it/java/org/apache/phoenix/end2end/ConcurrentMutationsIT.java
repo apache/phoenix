@@ -40,7 +40,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 @RunWith(RunUntilFailure.class)
 public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 

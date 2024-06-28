@@ -42,7 +42,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(Parameterized.class)
 public class MutationBatchFailedStateMetricWithAllUpsertIT extends BaseMutationBatchFailedStateMetricIT {
     String transactionProvider;

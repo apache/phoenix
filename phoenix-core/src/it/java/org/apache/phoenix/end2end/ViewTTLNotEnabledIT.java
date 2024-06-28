@@ -39,7 +39,7 @@ import java.util.Properties;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
 
     @Test

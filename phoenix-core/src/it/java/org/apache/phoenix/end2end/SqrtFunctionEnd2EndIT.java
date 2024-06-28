@@ -34,7 +34,7 @@ import org.junit.experimental.categories.Category;
 /**
  * End to end tests for {@link SqrtFunction}
  */
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class SqrtFunctionEnd2EndIT extends ParallelStatsDisabledIT {
 
     private static final String KEY = "key";

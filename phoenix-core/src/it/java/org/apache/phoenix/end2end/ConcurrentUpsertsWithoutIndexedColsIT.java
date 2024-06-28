@@ -48,7 +48,7 @@ import static org.apache.phoenix.end2end.ConcurrentMutationsExtendedIT
 import static org.junit.Assert.assertTrue;
 
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(RunUntilFailure.class)
 public class ConcurrentUpsertsWithoutIndexedColsIT
         extends BaseTest {

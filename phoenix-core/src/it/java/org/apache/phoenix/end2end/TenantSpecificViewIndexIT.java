@@ -47,7 +47,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
 	
     @Test

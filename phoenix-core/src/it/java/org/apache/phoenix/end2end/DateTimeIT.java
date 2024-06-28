@@ -85,7 +85,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class DateTimeIT extends ParallelStatsDisabledIT {
     private static final String PRODUCT_METRICS_NAME = "PRODUCT_METRICS";
     private static final Date SPLIT1 = toDate("1970-01-01 01:30:00");

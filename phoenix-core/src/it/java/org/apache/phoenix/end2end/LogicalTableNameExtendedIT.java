@@ -43,7 +43,7 @@ import java.util.Properties;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
     private Properties propsNamespace = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 

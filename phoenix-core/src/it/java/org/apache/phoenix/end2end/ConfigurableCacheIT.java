@@ -32,7 +32,7 @@ import org.junit.experimental.categories.Category;
  * use a class ITGuidePostsCacheFactory which is for testing only that keeps track of the number
  * of cache instances generated.
  */
-@Category({ParallelStatsEnabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsEnabledTest.class})
 public class ConfigurableCacheIT extends ParallelStatsEnabledIT {
 
     static String table;

@@ -42,7 +42,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class UnionAllIT extends ParallelStatsDisabledIT {
 
     @Test

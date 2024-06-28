@@ -100,7 +100,7 @@ import org.slf4j.LoggerFactory;
  * or at the end of test class.
  *
  */
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 @RunWith(Parameterized.class)
 public class AlterTableIT extends ParallelStatsDisabledIT {
     private String schemaName;

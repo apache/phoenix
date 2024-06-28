@@ -39,7 +39,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class TopNIT extends ParallelStatsDisabledIT {
 
     @Test

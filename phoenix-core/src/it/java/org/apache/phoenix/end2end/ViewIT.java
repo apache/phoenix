@@ -93,7 +93,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Basic test suite for views
  */
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(Parameterized.class)
 public class ViewIT extends SplitSystemCatalogIT {
 

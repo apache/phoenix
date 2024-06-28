@@ -62,7 +62,7 @@ import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 @RunWith(RunUntilFailure.class)
 public class MutationStateIT extends ParallelStatsDisabledIT {
 

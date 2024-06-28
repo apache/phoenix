@@ -41,7 +41,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import static org.junit.Assert.assertFalse;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class IndexToolTimeRangeIT extends BaseTest {
     private static final String
             CREATE_TABLE_DDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, "

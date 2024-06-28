@@ -46,7 +46,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class QueryWithLimitIT extends BaseTest {
     
     private String tableName;

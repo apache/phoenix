@@ -32,7 +32,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class StringToArrayFunctionIT extends ParallelStatsDisabledIT {
 
     private String tableName;

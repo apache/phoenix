@@ -42,7 +42,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class SystemCatalogRegionObserverIT extends BaseTest {
 
     public SystemCatalogRegionObserverIT() {

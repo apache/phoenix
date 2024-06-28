@@ -59,7 +59,7 @@ import static org.apache.phoenix.end2end.index.IndexMetadataIT.assertUpdateCache
 /**
  * Test properties that need to be kept in sync amongst all column families and indexes of a table
  */
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class PropertiesInSyncIT extends ParallelStatsDisabledIT {
     private static final String COL_FAM1 = "CF1";
     private static final String COL_FAM2 = "CF2";

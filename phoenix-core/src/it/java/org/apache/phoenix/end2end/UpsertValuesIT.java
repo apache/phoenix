@@ -63,7 +63,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class UpsertValuesIT extends ParallelStatsDisabledIT {
     @Test
     public void testGroupByWithLimitOverRowKey() throws Exception {

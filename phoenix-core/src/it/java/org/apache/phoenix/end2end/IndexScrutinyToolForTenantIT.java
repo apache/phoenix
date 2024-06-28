@@ -52,7 +52,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Tests for the {@link IndexScrutinyTool}
  */
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public  class IndexScrutinyToolForTenantIT extends IndexScrutinyToolBaseIT {
     private Connection connGlobal = null;
     private Connection connTenant = null;

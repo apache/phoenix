@@ -66,7 +66,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * ServerPagingIT tests that include some region moves while performing rs#next.
  */
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
 
     private static final Logger LOGGER =

@@ -69,7 +69,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 @RunWith(Parameterized.class)
 public class DeleteIT extends ParallelStatsDisabledIT {
     private static final int NUMBER_OF_ROWS = 20;

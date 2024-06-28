@@ -106,7 +106,7 @@ import org.junit.runners.Parameterized.Parameters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(Parameterized.class)
 public class IndexToolIT extends BaseTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(IndexToolIT.class);

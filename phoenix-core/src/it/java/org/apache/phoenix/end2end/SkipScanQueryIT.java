@@ -55,7 +55,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 
-@Category({ParallelStatsDisabledTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({ParallelStatsDisabledTest.class})
 public class SkipScanQueryIT extends ParallelStatsDisabledIT {
     
     private String initIntInTable(Connection conn, List<Integer> data) throws SQLException {

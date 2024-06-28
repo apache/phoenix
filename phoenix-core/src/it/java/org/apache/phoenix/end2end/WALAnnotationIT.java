@@ -70,7 +70,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 @RunWith(Parameterized.class)
-@Category({NeedsOwnMiniClusterTest.class, DoesNotSupportDistributedClusterTest.class})
+@Category({NeedsOwnMiniClusterTest.class})
 public class WALAnnotationIT extends BaseTest {
     private final boolean isImmutable;
     private final boolean isMultiTenant;
