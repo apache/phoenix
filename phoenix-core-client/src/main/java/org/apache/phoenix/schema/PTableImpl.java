@@ -1115,6 +1115,7 @@ public class PTableImpl implements PTable {
                 .setStreamingTopicName(table.getStreamingTopicName())
                 .setIndexWhere(table.getIndexWhere())
                 .setMaxLookbackAge(table.getMaxLookbackAge())
+                .setCDCIncludeScopes(table.getCDCIncludeScopes())
                 .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap());
     }
 
@@ -2282,6 +2283,10 @@ public class PTableImpl implements PTable {
         }
         if (table.getMaxLookbackAge() != null) {
             builder.setMaxLookbackAge(table.getMaxLookbackAge());
+        }
+        if (table.getCDCIncludeScopes() != null) {
+            builder.setCDCIncludeScopes(
+                    CDCUtil.makeChangeScopeStringFromEnums(table.getCDCIncludeScopes()));
         }
         return builder.build();
     }

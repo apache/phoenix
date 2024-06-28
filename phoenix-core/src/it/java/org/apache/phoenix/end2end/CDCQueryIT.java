@@ -275,7 +275,7 @@ public class CDCQueryIT extends CDCBaseIT {
                 tableName = viewName;
             }
             cdcName = generateUniqueName();
-            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
                         indexSaltBuckets);
@@ -344,6 +344,9 @@ public class CDCQueryIT extends CDCBaseIT {
             for (Set<ChangeRow> batch: allBatches.get(tenantId)) {
                 changes.addAll(batch);
             }
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT * FROM " + cdcFullName),
+                    datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
                     datatableName, dataColumns, changes, CHANGE_IMG);
