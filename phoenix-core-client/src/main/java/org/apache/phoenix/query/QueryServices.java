@@ -486,6 +486,8 @@ public interface QueryServices extends SQLCloseable {
 
     int DEFAULT_PHOENIX_GET_REGIONS_RETRIES = 10;
 
+    String PHOENIX_GET_METADATA_READ_LOCK_ENABLED = "phoenix.get.metadata.read.lock.enabled";
+
     /**
      * Get executor service used for parallel scans
      */
