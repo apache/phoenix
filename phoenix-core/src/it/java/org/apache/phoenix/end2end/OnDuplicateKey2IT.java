@@ -59,7 +59,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class OnDuplicateKeyIT2 extends ParallelStatsDisabledIT {
+public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     private final String indexDDL;
     private final String tableDDLOptions;
 
@@ -73,12 +73,12 @@ public class OnDuplicateKeyIT2 extends ParallelStatsDisabledIT {
                     "create uncovered index %s_IDX on %s(counter1)",
                     "create uncovered index %s_IDX on %s(counter1, counter2)"};
 
-    public OnDuplicateKeyIT2(String indexDDL, boolean columnEncoded) {
+    public OnDuplicateKey2IT(String indexDDL, boolean columnEncoded) {
         this.indexDDL = indexDDL;
         this.tableDDLOptions = columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0";
     }
 
-    @Parameters(name="OnDuplicateKeyIT2_{index},columnEncoded={1}")
+    @Parameters(name="OnDuplicateKey2IT_{index},columnEncoded={1}")
     public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
         for (String indexDDL : INDEX_DDLS) {
