@@ -246,7 +246,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
         this.estimatedByteSize = limit == null ? 0 : Math.min((limit + this.offset) * estimatedEntrySize, thresholdBytes);
         this.pageSizeMs = pageSizeMs;
         // only called in #NonAggregateRegionScannerFactory.deserializeFromScan
-        this.hasRegionScannerContext = delegate instanceof RegionScannerResultIterator;
+        this.hasRegionScannerContext = delegate instanceof BaseResultIterator;
     }
 
     public Integer getLimit() {
@@ -488,7 +488,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
     public ScannerContext getRegionScannerContext() {
         if (hasRegionScannerContext) {
-            return ((RegionScannerResultIterator)delegate).getRegionScannerContext();
+            return ((RegionScannerResultIterator)getDelegate()).getRegionScannerContext();
         }
         return null;
     }

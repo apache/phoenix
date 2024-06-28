@@ -45,7 +45,7 @@ public class OffsetResultIterator extends DelegateResultIterator {
         super(delegate);
         this.offset = offset == null ? -1 : offset;
         this.lastScannedTuple = null;
-        this.hasRegionScannerContext = delegate instanceof RegionScannerResultIterator;
+        this.hasRegionScannerContext = delegate instanceof BaseResultIterator;
     }
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs,
