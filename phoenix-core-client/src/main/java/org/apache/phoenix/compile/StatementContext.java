@@ -24,7 +24,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.hadoop.hbase.client.Scan;
@@ -47,6 +46,7 @@ import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.NumberUtil;
@@ -90,7 +90,9 @@ public class StatementContext {
     private TableRef cdcTableRef;
     private TableRef cdcDataTableRef;
     private AtomicBoolean hasFirstValidResult;
-    
+
+    private Set<StatementContext> subStatementContexts;
+
     public StatementContext(PhoenixStatement statement) {
         this(statement, new Scan());
     }
@@ -118,6 +120,7 @@ public class StatementContext {
         this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
         this.isUncoveredIndex = context.isUncoveredIndex;
         this.hasFirstValidResult = new AtomicBoolean(context.getHasFirstValidResult());
+        this.subStatementContexts = Sets.newHashSet();
     }
     /**
      *  Constructor that lets you override whether or not to collect request level metrics.
@@ -163,6 +166,7 @@ public class StatementContext {
         this.overAllQueryMetrics = new OverAllQueryMetrics(isRequestMetricsEnabled,connection.getLogLevel());
         this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
         this.hasFirstValidResult = new AtomicBoolean(false);
+        this.subStatementContexts = Sets.newHashSet();
     }
 
     /**
@@ -344,11 +348,11 @@ public class StatementContext {
     public void setSubqueryResult(SelectStatement select, Object result) {
         subqueryResults.put(select, result);
     }
-    
+
     public ReadMetricQueue getReadMetricsQueue() {
         return readMetricsQueue;
     }
-    
+
     public OverAllQueryMetrics getOverallQueryMetrics() {
         return overAllQueryMetrics;
     }
@@ -416,5 +420,13 @@ public class StatementContext {
 
     public void setCDCTableRef(TableRef cdcTableRef) {
         this.cdcTableRef = cdcTableRef;
+    }
+
+    public void addSubStatementContext(StatementContext sub) {
+        subStatementContexts.add(sub);
+    }
+
+    public Set<StatementContext> getSubStatementContexts() {
+        return subStatementContexts;
     }
 }

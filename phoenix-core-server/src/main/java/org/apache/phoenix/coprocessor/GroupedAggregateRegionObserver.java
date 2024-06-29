@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -433,6 +434,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private boolean firstScan = true;
         private boolean skipValidRowsSent = false;
         private byte[] lastReturnedRowKey = null;
+        private final ScannerContext groupScannerContext;
 
         private UnorderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                               final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
@@ -471,6 +473,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             groupByCache = GroupByCacheFactory.INSTANCE.newCache(
                     env, ScanUtil.getTenantId(scan), ScanUtil.getCustomAnnotations(scan),
                     aggregators, estDistVals, isIncompatibleClient);
+            if (scan.isScanMetricsEnabled()) {
+                groupScannerContext = ScannerContext.newBuilder()
+                        .setTrackMetrics(scan.isScanMetricsEnabled()).build();
+            } else {
+                groupScannerContext = null;
+            }
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug(LogUtil.addCustomAnnotations(
                         "Grouped aggregation over unordered rows with scan " + scan
@@ -632,7 +640,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // since this is an indication of whether or not there are
                         // more values after the
                         // ones returned
-                        hasMore = delegate.nextRaw(results);
+                        if (groupScannerContext == null) {
+                            hasMore = delegate.nextRaw(results);
+                        } else {
+                            hasMore = delegate.nextRaw(results, groupScannerContext);
+                        }
                         if (!results.isEmpty()) {
                             if (isDummy(results)) {
                                 return getDummyResult(resultsToReturn);
@@ -753,6 +765,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         private final byte[] initStartRowKey;
         private final boolean includeInitStartRowKey;
         private byte[] previousResultRowKey;
+        private final ScannerContext groupScannerContext;
 
         private OrderedGroupByRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                             final Scan scan, final RegionScanner scanner, final List<Expression> expressions,
@@ -776,6 +789,12 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         "Grouped aggregation over ordered rows with scan " + scan + ", group by "
                                 + expressions + ", aggregators " + aggregators,
                         ScanUtil.getCustomAnnotations(scan)));
+            }
+            if (scan.isScanMetricsEnabled()) {
+                groupScannerContext = ScannerContext.newBuilder()
+                               .setTrackMetrics(scan.isScanMetricsEnabled()).build();
+            } else {
+                groupScannerContext = null;
             }
         }
 
@@ -807,7 +826,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // since this is an indication of whether or not there
                         // are more values after the
                         // ones returned
-                        hasMore = delegate.nextRaw(kvs);
+                        if (groupScannerContext == null) {
+                            hasMore = delegate.nextRaw(results);
+                        } else {
+                            hasMore = delegate.nextRaw(results, groupScannerContext);
+                        }
                         if (!kvs.isEmpty()) {
                             if (isDummy(kvs)) {
                                 updateDummyWithPrevRowKey(results, initStartRowKey,

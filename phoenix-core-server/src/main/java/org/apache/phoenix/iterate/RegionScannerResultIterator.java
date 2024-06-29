@@ -24,7 +24,9 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.tuple.EncodedColumnQualiferCellsList;
@@ -43,12 +45,19 @@ public class RegionScannerResultIterator extends BaseResultIterator {
     private final Pair<Integer, Integer> minMaxQualifiers;
     private final boolean useQualifierAsIndex;
     private final QualifierEncodingScheme encodingScheme;
+    private final ScannerContext regionScannerContext;
     
-    public RegionScannerResultIterator(RegionScanner scanner, Pair<Integer, Integer> minMaxQualifiers, QualifierEncodingScheme encodingScheme) {
+    public RegionScannerResultIterator(Scan scan, RegionScanner scanner, Pair<Integer, Integer> minMaxQualifiers, QualifierEncodingScheme encodingScheme) {
         this.scanner = scanner;
         this.useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
         this.minMaxQualifiers = minMaxQualifiers;
         this.encodingScheme = encodingScheme;
+        if (scan.isScanMetricsEnabled()) {
+            regionScannerContext = ScannerContext.newBuilder()
+                    .setTrackMetrics(scan.isScanMetricsEnabled()).build();
+        } else {
+            regionScannerContext = null;
+        }
     }
 
     @Override
@@ -62,7 +71,12 @@ public class RegionScannerResultIterator extends BaseResultIterator {
                 // Results are potentially returned even when the return value of s.next is false
                 // since this is an indication of whether or not there are more values after the
                 // ones returned
-                boolean hasMore = scanner.nextRaw(results);
+                boolean hasMore;
+                if (regionScannerContext == null) {
+                    hasMore = scanner.nextRaw(results);
+                } else {
+                    hasMore = scanner.nextRaw(results, regionScannerContext);
+                }
 
                 if (!hasMore && results.isEmpty()) {
                     return null;
@@ -80,7 +94,9 @@ public class RegionScannerResultIterator extends BaseResultIterator {
             }
         }
     }
-
+    public ScannerContext getRegionScannerContext() {
+        return regionScannerContext;
+    }
 	@Override
 	public String toString() {
 		return "RegionScannerResultIterator [scanner=" + scanner + "]";

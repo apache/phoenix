@@ -14,7 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */package org.apache.phoenix.coprocessor;
+ */
+package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.List;
@@ -25,10 +26,13 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 
 public class DelegateRegionScanner implements RegionScanner {
 
     protected RegionScanner delegate;
+    private boolean nextScannerContextAvailable = true;
+    private boolean nextRawScannerContextAvailable = true;
 
     public DelegateRegionScanner(RegionScanner scanner) {
         this.delegate = scanner;
@@ -61,7 +65,27 @@ public class DelegateRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
+        try {
+            if (nextScannerContextAvailable && scannerContext != null && scannerContext
+                    .isTrackingMetrics()) {
+                ScannerContext noLimitContext = ScannerContextUtil
+                        .copyNoLimitScanner(scannerContext);
+                boolean hasMore = delegate.next(result, noLimitContext);
+                if (scannerContext != null) {
+                    ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
+                }
+                return hasMore;
+            }
+        } catch (IOException e) {
+            if (e instanceof ScannerContextNextNotImplementedException) {
+                nextScannerContextAvailable = false;
+            } else {
+                throw e;
+            }
+        }
+
+        // reach here only nextScannerContextAvailable = false
+        return delegate.next(result);
     }
 
     @Override
@@ -71,7 +95,27 @@ public class DelegateRegionScanner implements RegionScanner {
 
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
+        try {
+            if (nextRawScannerContextAvailable && scannerContext != null && scannerContext
+                    .isTrackingMetrics()) {
+                ScannerContext noLimitContext = ScannerContextUtil
+                        .copyNoLimitScanner(scannerContext);
+                boolean hasMore = delegate.nextRaw(result, noLimitContext);
+                if (scannerContext != null) {
+                    ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
+                }
+                return hasMore;
+            }
+        } catch (IOException e) {
+            if (e instanceof ScannerContextNextNotImplementedException) {
+                nextRawScannerContextAvailable = false;
+            } else {
+                throw e;
+            }
+        }
+
+        // reach here only nextRawScannerContextAvailable = false
+        return delegate.nextRaw(result);
     }
 
     @Override
@@ -95,6 +139,12 @@ public class DelegateRegionScanner implements RegionScanner {
             return ((DelegateRegionScanner) delegate).getNewRegionScanner(scan);
         } catch (ClassCastException e) {
             throw new DoNotRetryIOException(e);
+        }
+    }
+
+    public static class ScannerContextNextNotImplementedException extends IOException {
+        public ScannerContextNextNotImplementedException(String message) {
+            super(message);
         }
     }
 }
