@@ -184,16 +184,18 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         if (scanOffset != null) {
             final boolean isIncompatibleClient =
                     ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+            RegionScannerResultIterator iterator = new RegionScannerResultIterator(scan,
+                    innerScanner,
+                    getMinMaxQualifiersFromScan(scan),
+                    encodingScheme);
             innerScanner = getOffsetScanner(
                     innerScanner,
                     new OffsetResultIterator(
-                            new RegionScannerResultIterator(scan,
-                                    innerScanner,
-                                    getMinMaxQualifiersFromScan(scan),
-                                    encodingScheme),
+                            iterator,
                             scanOffset,
                             getPageSizeMsForRegionScanner(scan),
-                            isIncompatibleClient),
+                            isIncompatibleClient,
+                            iterator.getRegionScannerContext()),
                     scan.getAttribute(QueryConstants.LAST_SCAN) != null,
                     isIncompatibleClient,
                     scan);
@@ -284,11 +286,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
             PTable.QualifierEncodingScheme encodingScheme =
                     EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-            ResultIterator inner = new RegionScannerResultIterator(scan, s,
+            RegionScannerResultIterator inner = new RegionScannerResultIterator(scan, s,
                     EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
             return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
                     thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
-                    getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
+                    getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo(), inner.getRegionScannerContext());
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {

@@ -39,20 +39,20 @@ public class OffsetResultIterator extends DelegateResultIterator {
     private Tuple lastScannedTuple;
     private long pageSizeMs = Long.MAX_VALUE;
     private boolean isIncompatibleClient = false;
-    private boolean hasRegionScannerContext;
+    private ScannerContext scannerContext;
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset) {
         super(delegate);
         this.offset = offset == null ? -1 : offset;
         this.lastScannedTuple = null;
-        this.hasRegionScannerContext = delegate instanceof BaseResultIterator;
     }
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs,
-                                boolean isIncompatibleClient) {
+                                boolean isIncompatibleClient, ScannerContext scannerContext) {
         this(delegate, offset);
         this.pageSizeMs = pageSizeMs;
         this.isIncompatibleClient = isIncompatibleClient;
+        this.scannerContext = scannerContext;
     }
 
     @Override
@@ -118,9 +118,6 @@ public class OffsetResultIterator extends DelegateResultIterator {
     }
 
     public ScannerContext getRegionScannerContext() {
-        if (hasRegionScannerContext) {
-            return ((RegionScannerResultIterator)getDelegate()).getRegionScannerContext();
-        }
-        return null;
+        return scannerContext;
     }
 }
