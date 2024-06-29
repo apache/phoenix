@@ -1590,10 +1590,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // read the column values requested in the get from the current data row
       List<Cell> cells = IndexUtil.readColumnsFromRow(currentDataRowState, colsReadInExpr);
 
-      // store current cells into a map where the key is column family and the value is a map with
-      // column qualifier as key and a pair of cell and a boolean (is true if the expression is
-      // CaseExpression and Else-clause is evaluated to be true, is null if there is no
-      // expression on this column, otherwise false)
+      // store current cells into a map where the key is ColumnReference of the column family and
+      // column qualifier, and value is a pair of cell and a boolean. The value of the boolean
+      // will be true if the expression is CaseExpression and Else-clause is evaluated to be
+      // true, will be null if there is no expression on this column, otherwise false
       Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap = new HashMap<>();
 
       if (currentDataRowState == null) { // row doesn't exist
@@ -1662,9 +1662,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   byte[] bytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
                   row.setValue(column, bytes);
 
-                  // If the column exist in currColumnCellExprMap that is stored before, set the
-                  // boolean in the value pair from currColumnCellExprMap, which will be true if the
-                  // expression is CaseExpression and the Else-clause is evaluated to be true
+                  // If the column exist in currColumnCellExprMap, set the boolean value in the
+                  // map to be true if the expression is CaseExpression and the Else-clause is
+                  // evaluated to be true
                   ColumnReference colRef = new ColumnReference(column.getFamilyName().getBytes(),
                           column.getColumnQualifierBytes());
                   if (currColumnCellExprMap.containsKey(colRef)) {
