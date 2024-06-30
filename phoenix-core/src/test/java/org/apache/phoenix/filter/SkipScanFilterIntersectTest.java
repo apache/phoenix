@@ -55,7 +55,7 @@ public class SkipScanFilterIntersectTest {
 
     public SkipScanFilterIntersectTest(List<List<KeyRange>> slots, RowKeySchema schema, byte[] lowerInclusiveKey,
             byte[] upperExclusiveKey, List<List<KeyRange>> expectedNewSlots) {
-        this.filter = new SkipScanFilter(slots, schema);
+        this.filter = new SkipScanFilter(slots, schema, false);
         this.lowerInclusiveKey = lowerInclusiveKey;
         this.upperExclusiveKey = upperExclusiveKey;
         this.expectedNewSlots = expectedNewSlots;

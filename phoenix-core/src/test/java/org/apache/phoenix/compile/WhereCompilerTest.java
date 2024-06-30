@@ -139,7 +139,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     ImmutableList.of(Arrays.asList(
                         pointRange("i1"),
                         pointRange("i2"))),
-                    SchemaUtil.VAR_BINARY_SCHEMA),
+                    SchemaUtil.VAR_BINARY_SCHEMA, false),
                 singleKVFilter(
                         or(constantComparison(CompareOperator.EQUAL,id,"i1"),
                            and(constantComparison(CompareOperator.EQUAL,id,"i2"),
@@ -682,7 +682,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     pointRange(tenantId1),
                     pointRange(tenantId2),
                     pointRange(tenantId3))),
-                plan.getTableRef().getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema(), false),
             filter);
     }
 
@@ -705,7 +705,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     pointRange(tenantId1),
                     pointRange(tenantId2),
                     pointRange(tenantId3))),
-                plan.getTableRef().getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema(), false),
             filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId1);
@@ -738,7 +738,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     Arrays.asList(
                         pointRange(tenantId,entityId1),
                         pointRange(tenantId,entityId2))),
-                SchemaUtil.VAR_BINARY_SCHEMA),
+                SchemaUtil.VAR_BINARY_SCHEMA, false),
             filter);
     }
 
@@ -768,7 +768,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         true,
                         Bytes.toBytes(entityId2),
                         true, SortOrder.ASC))),
-                plan.getTableRef().getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema(), false),
             filter);
     }
 
@@ -792,7 +792,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         pointRange(tenantId1, entityId),
                         pointRange(tenantId2, entityId),
                         pointRange(tenantId3, entityId))),
-                SchemaUtil.VAR_BINARY_SCHEMA),
+                SchemaUtil.VAR_BINARY_SCHEMA, false),
             filter);
     }
     @Test
@@ -846,7 +846,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         pointRange(tenantId1, entityId2),
                         pointRange(tenantId2, entityId1),
                         pointRange(tenantId2, entityId2))),
-                SchemaUtil.VAR_BINARY_SCHEMA),
+                SchemaUtil.VAR_BINARY_SCHEMA, false),
             filter);
     }
 

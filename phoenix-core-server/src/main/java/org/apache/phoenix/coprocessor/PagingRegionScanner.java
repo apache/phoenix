@@ -21,12 +21,17 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.PagingFilter;
+import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
@@ -48,6 +53,12 @@ public class PagingRegionScanner extends BaseRegionScanner {
     private Region region;
     private Scan scan;
     private PagingFilter pagingFilter;
+    private SkipScanFilter skipScanFilter;
+    private int keyIndex = 0;
+    private List<KeyRange> multiKeyPointLookupRanges = null;
+    private int multiKeyPointLookupPosition = 0;
+    private boolean isMultiKeyPointLookup = false;
+    private Cell lastCell = null;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PagingRegionScanner.class);
 
@@ -59,8 +70,32 @@ public class PagingRegionScanner extends BaseRegionScanner {
         if (pagingFilter != null) {
             pagingFilter.init();
         }
+
+        TableDescriptor tableDescriptor = region.getTableDescriptor();
+        BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
+        if (bloomFilterType == BloomType.ROW) {
+            // Check if the scan is a multi-point-lookup scan
+            skipScanFilter = ScanUtil.getSkipScanFilter(scan);
+            if (skipScanFilter != null && skipScanFilter.isMultiKeyPointLookup()) {
+                isMultiKeyPointLookup = true;
+                multiKeyPointLookupRanges = skipScanFilter.getPointLookupKeyRange();
+            }
+        }
     }
 
+    private void setMultiKeyPointLookupPosition(byte[] rowKey) throws IOException {
+        multiKeyPointLookupPosition = 0;
+        for (KeyRange keyRange : multiKeyPointLookupRanges) {
+            if (Bytes.compareTo(keyRange.getLowerRange(), rowKey) == 0) {
+                return;
+            } else {
+                multiKeyPointLookupPosition++;
+            }
+        }
+        throw new DoNotRetryIOException("Row key " + rowKey
+                + " does not exist in skip scan filter key ranges!"
+                + " Region " + region);
+    }
     private boolean next(List<Cell> results, boolean raw) throws IOException {
         try {
             byte[] adjustedStartRowKey =
@@ -81,16 +116,29 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 scan.withStartRow(adjustedStartRowKey,
                         Bytes.toBoolean(adjustedStartRowKeyIncludeBytes));
                 PackagePrivateFieldAccessor.setMvccReadPoint(scan, mvccReadPoint);
+                if (isMultiKeyPointLookup) {
+                    setMultiKeyPointLookupPosition(adjustedStartRowKey);
+                    scan.withStopRow(adjustedStartRowKey, true);
+                    multiKeyPointLookupPosition++;
+                }
                 delegate = region.getScanner(scan);
                 scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY, null);
                 scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE, null);
+            } else {
+                if (isMultiKeyPointLookup) {
+                    byte[] rowKey = multiKeyPointLookupRanges.get(multiKeyPointLookupPosition++).getLowerRange();
+                    scan.withStartRow(rowKey, true);
+                    scan.withStopRow(rowKey, true);
+                    delegate = region.getScanner(scan);
+                }
             }
             if (pagingFilter != null) {
                 pagingFilter.init();
             }
+
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
             if (pagingFilter == null) {
-                return hasMore;
+                return isMultiKeyPointLookup ? multiKeyPointLookupPosition < multiKeyPointLookupRanges.size() : hasMore;
             }
             if (!hasMore) {
                 // There is no more row from the HBase region scanner. We need to check if PageFilter
@@ -104,17 +152,24 @@ public class PagingRegionScanner extends BaseRegionScanner {
                     }
                     return true;
                 }
-                return false;
+                return isMultiKeyPointLookup ? multiKeyPointLookupPosition < multiKeyPointLookupRanges.size() : false;
             } else {
                 // We got a row from the HBase scanner within the configured time (i.e., the page size). We need to
                 // start a new page on the next next() call.
-                return true;
+                return isMultiKeyPointLookup ? multiKeyPointLookupPosition < multiKeyPointLookupRanges.size() : true;
             }
         } catch (Exception e) {
             if (pagingFilter != null) {
                 pagingFilter.init();
             }
+            if (isMultiKeyPointLookup) {
+                --multiKeyPointLookupPosition;
+            }
             throw e;
+        } finally {
+            if (isMultiKeyPointLookup) {
+                delegate.close();
+            }
         }
     }
 

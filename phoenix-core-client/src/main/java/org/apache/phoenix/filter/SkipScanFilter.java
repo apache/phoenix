@@ -79,6 +79,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private int endKeyLength;
     private boolean isDone;
     private int offset;
+    private boolean isMultiKeyPointLookup;
     private Map<ImmutableBytesWritable, Cell> nextCellHintMap =
             new HashMap<ImmutableBytesWritable, Cell>();
 
@@ -91,27 +92,39 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public SkipScanFilter() {
     }
 
-    public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions) {
-        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions);
+    public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions,
+            boolean isMultiKeyPointLookup) {
+        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions,
+                isMultiKeyPointLookup);
     }
 
-    public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
-        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema);
+    public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema, boolean isMultiKeyPointLookup) {
+        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema, isMultiKeyPointLookup);
     }
 
-    public SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema) {
-        this(slots, slotSpan, schema, false);
+    public SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
+            boolean isMultiKeyPointLookup) {
+        this(slots, slotSpan, schema, false, isMultiKeyPointLookup);
     }
     
-    private SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema, boolean includeMultipleVersions) {
-        init(slots, slotSpan, schema, includeMultipleVersions);
+    private SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
+            boolean includeMultipleVersions, boolean isMultiKeyPointLookup) {
+        init(slots, slotSpan, schema, includeMultipleVersions, isMultiKeyPointLookup);
     }
     
     public void setOffset(int offset) {
         this.offset = offset;
     }
+    public boolean isMultiKeyPointLookup() {
+        return isMultiKeyPointLookup;
+    }
 
-    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema, boolean includeMultipleVersions) {
+    public List<KeyRange> getPointLookupKeyRange() {
+        return slots.get(0);
+    }
+
+    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
+            boolean includeMultipleVersions, boolean isPointLookup) {
         for (List<KeyRange> ranges : slots) {
             if (ranges.isEmpty()) {
                 throw new IllegalStateException();
@@ -126,6 +139,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         this.endKey = new byte[maxKeyLength];
         this.endKeyLength = 0;
         this.includeMultipleVersions = includeMultipleVersions;
+        this.isMultiKeyPointLookup = isPointLookup;
     }
 
     // Exposed for testing.
@@ -194,7 +208,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public SkipScanFilter intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
         List<List<KeyRange>> newSlots = Lists.newArrayListWithCapacity(slots.size());
         if (intersect(lowerInclusiveKey, upperExclusiveKey, newSlots)) {
-            return new SkipScanFilter(newSlots, slotSpan, schema);
+            return new SkipScanFilter(newSlots, slotSpan, schema, isMultiKeyPointLookup);
         }
         return null;
     }
@@ -618,7 +632,8 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 orClause.add(range);
             }
         }
-        this.init(slots, slotSpan, schema, includeMultipleVersions);
+        boolean isPointLookup = in.readBoolean();
+        this.init(slots, slotSpan, schema, includeMultipleVersions, isPointLookup);
     }
 
     @Override
@@ -636,6 +651,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 range.write(out);
             }
         }
+        out.writeBoolean(isMultiKeyPointLookup);
     }
     
     @Override

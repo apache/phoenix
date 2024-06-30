@@ -162,7 +162,7 @@ public class CachedLocalTable implements LocalHBaseState {
              */
             long timestamp = getMaxTimestamp(dataTableMutationsWithSameRowKeyAndTimestamp);
             scan.setTimeRange(0, timestamp);
-            scan.setFilter(new SkipScanFilter(skipScanFilter, true));
+            scan.setFilter(new SkipScanFilter(skipScanFilter, true, true));
         } else {
             assert scan.isRaw();
             scan.readVersions(1);
