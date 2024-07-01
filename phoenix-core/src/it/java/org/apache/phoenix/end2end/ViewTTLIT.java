@@ -1638,7 +1638,7 @@ public class ViewTTLIT extends BaseViewTTLIT {
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED,
                     PDataType.TRUE_BYTES);
             scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
-                    Bytes.toBytes(Long.valueOf(table.getTTL())));
+                    Bytes.toBytes(table.getTTL().getTTLExpression()));
 
             PhoenixResultSet
                     rs =

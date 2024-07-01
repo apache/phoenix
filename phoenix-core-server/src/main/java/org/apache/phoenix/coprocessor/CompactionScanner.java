@@ -64,6 +64,7 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
@@ -88,13 +89,13 @@ import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBA
 import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.GLOBAL_VIEWS;
 import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_INDEXES;
 import static org.apache.phoenix.coprocessor.CompactionScanner.MatcherType.TENANT_VIEWS;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.query.QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_FORVER;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import java.util.ArrayList;
@@ -207,7 +208,7 @@ public class CompactionScanner implements InternalScanner {
 
         LOGGER.info("Starting CompactionScanner for table " + tableName + " store "
                 + columnFamilyName + (major ? " major " : " not major ") + "compaction ttl "
-                + ttlTracker.getRowContext().getTTL() + "ms " + "max lookback " + this.maxLookbackInMillis + "ms");
+                + ttlTracker.getDefaultTTL() + " " + "max lookback " + this.maxLookbackInMillis + "ms");
         LOGGER.info(String.format("CompactionScanner params:- (" +
                         "physical-data-tablename = %s, compaction-tablename = %s, region = %s, " +
                         "start-key = %s, end-key = %s, " +
@@ -563,7 +564,7 @@ public class CompactionScanner implements InternalScanner {
 
             if (tableList != null && !tableList.isEmpty()) {
                 tableList.forEach(m -> {
-                    if (m.getTTL() != TTL_NOT_DEFINED) {
+                    if (m.getTTL() != TTL_EXPRESSION_NOT_DEFINED) {
                         // add the ttlInfo to the cache.
                         // each new/unique ttlInfo object added returns a unique tableId.
                         int tableId = -1;
@@ -643,7 +644,7 @@ public class CompactionScanner implements InternalScanner {
 
             if (tableList != null && !tableList.isEmpty()) {
                 tableList.forEach(m -> {
-                    if (m.getTTL() != TTL_NOT_DEFINED) {
+                    if (m.getTTL() != TTL_EXPRESSION_NOT_DEFINED) {
                         // add the ttlInfo to the cache.
                         // each new/unique ttlInfo object added returns a unique tableId.
                         int tableId = -1;
@@ -992,8 +993,8 @@ public class CompactionScanner implements InternalScanner {
                             String schem = viewTTLRS.getString("TABLE_SCHEM");
                             String tName = viewTTLRS.getString("TABLE_NAME");
                             String viewTTLStr = viewTTLRS.getString("TTL");
-                            int viewTTL = viewTTLStr == null || viewTTLStr.isEmpty() ?
-                                    TTL_NOT_DEFINED : Integer.valueOf(viewTTLStr);
+                            TTLExpression viewTTL = viewTTLStr == null || viewTTLStr.isEmpty() ?
+                                    TTL_EXPRESSION_NOT_DEFINED : TTLExpression.create(viewTTLStr);
                             byte[] rowKeyMatcher = viewTTLRS.getBytes("ROW_KEY_MATCHER");
                             byte[]
                                     tenantIdBytes =
@@ -1155,12 +1156,11 @@ public class CompactionScanner implements InternalScanner {
      *          For Flushes and Minor compaction we do not need to track the TTL.
      */
     private interface TTLTracker {
-        // Set the TTL for the given row in the row-context being tracked.
-        void setTTL(Cell firstCell) throws IOException;
-        // get the row context for the current row.
-        RowContext getRowContext();
-        // set the row context for the current row.
-        void setRowContext(RowContext rowContext);
+        // get TTL for the row
+        long getTTL(List<Cell> result) throws IOException;
+
+        // get the default TTL
+        TTLExpression getDefaultTTL();
     }
 
     /**
@@ -1169,47 +1169,31 @@ public class CompactionScanner implements InternalScanner {
      */
     private class TableTTLTrackerForFlushesAndMinor implements TTLTracker {
 
-        private long ttl;
-        private RowContext rowContext;
+        private TTLExpression ttl;
 
         public TableTTLTrackerForFlushesAndMinor(String tableName) {
 
-            ttl = DEFAULT_TTL;
+            ttl = TTL_EXPRESSION_FORVER;
             LOGGER.info(String.format(
                     "TableTTLTrackerForFlushesAndMinor params:- " +
-                            "(table-name=%s, ttl=%d)",
-                    tableName, ttl*1000));
+                            "(table-name=%s, ttl=%s)",
+                    tableName, ttl));
         }
 
         @Override
-        public void setTTL(Cell firstCell) {
-            if (this.rowContext == null) {
-                this.rowContext = new RowContext();
-            }
-            this.rowContext.setTTL(ttl);
-
+        public long getTTL(List<Cell> result) throws IOException {
+            return ttl.getTTLForRow(result);
         }
 
         @Override
-        public RowContext getRowContext() {
-            if (this.rowContext == null) {
-                this.rowContext = new RowContext();
-                this.rowContext.setTTL(ttl);
-            }
-            return rowContext;
-        }
-
-        @Override
-        public void setRowContext(RowContext rowContext) {
-            this.rowContext = rowContext;
-            this.rowContext.setTTL(ttl);
+        public TTLExpression getDefaultTTL() {
+            return ttl;
         }
     }
 
     private class NonPartitionedTableTTLTracker implements TTLTracker {
 
-        private long ttl;
-        private RowContext rowContext;
+        private TTLExpression ttl;
 
         public NonPartitionedTableTTLTracker(
                 PTable pTable,
@@ -1218,38 +1202,25 @@ public class CompactionScanner implements InternalScanner {
             boolean isSystemTable = pTable.getType() == PTableType.SYSTEM;
             if (isSystemTable) {
                 ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
-                ttl = cfd.getTimeToLive();
+                ttl = TTLExpression.create(cfd.getTimeToLive());
             } else {
-                ttl = pTable.getTTL() != TTL_NOT_DEFINED ? pTable.getTTL() : DEFAULT_TTL;
+                ttl = pTable.getTTL() != TTL_EXPRESSION_NOT_DEFINED ? pTable.getTTL() :
+                        TTL_EXPRESSION_FORVER;
             }
             LOGGER.info(String.format(
                     "NonPartitionedTableTTLTracker params:- " +
-                            "(physical-name=%s, ttl=%d, isSystemTable=%s)",
-                    pTable.getName().toString(), ttl*1000, isSystemTable));
+                            "(physical-name=%s, ttl=%s, isSystemTable=%s)",
+                    pTable.getName().toString(), ttl.getTTLExpression(), isSystemTable));
         }
 
         @Override
-        public void setTTL(Cell firstCell) {
-            if (this.rowContext == null) {
-                this.rowContext = new RowContext();
-            }
-            this.rowContext.setTTL(ttl);
-
+        public long getTTL(List<Cell> result) throws IOException {
+            return ttl.getTTLForRow(result);
         }
 
         @Override
-        public RowContext getRowContext() {
-            if (this.rowContext == null) {
-                this.rowContext = new RowContext();
-                this.rowContext.setTTL(ttl);
-            }
-            return rowContext;
-        }
-
-        @Override
-        public void setRowContext(RowContext rowContext) {
-            this.rowContext = rowContext;
-            this.rowContext.setTTL(ttl);
+        public TTLExpression getDefaultTTL() {
+            return ttl;
         }
     }
 
@@ -1258,9 +1229,7 @@ public class CompactionScanner implements InternalScanner {
                 PartitionedTableTTLTracker.class);
 
         // Default or Table-Level TTL
-        private long ttl;
-        private RowContext rowContext;
-
+        private TTLExpression ttl;
         private boolean isSharedIndex = false;
         private boolean isMultiTenant = false;
         private boolean isSalted = false;
@@ -1281,7 +1250,8 @@ public class CompactionScanner implements InternalScanner {
                 this.tableRowKeyMatcher =
                         new PartitionedTableRowKeyMatcher(table, isSalted, isSharedIndex,
                                 isLongViewIndexEnabled, viewTTLTenantViewsPerScanLimit);
-                this.ttl = table.getTTL() != TTL_NOT_DEFINED ? table.getTTL() : DEFAULT_TTL;
+                this.ttl = table.getTTL() != TTL_EXPRESSION_NOT_DEFINED ? table.getTTL() :
+                        TTL_EXPRESSION_FORVER;
                 this.isSharedIndex = isSharedIndex || localIndex;
                 this.isLongViewIndexEnabled = isLongViewIndexEnabled;
                 this.isSalted = isSalted;
@@ -1292,7 +1262,7 @@ public class CompactionScanner implements InternalScanner {
                         "PartitionedTableTTLTracker params:- " + 
                                 "region-name = %s, table-name = %s,  " +
                                 "multi-tenant = %s, shared-index = %s, salted = %s, " +
-                                "default-ttl = %d, startingPKPosition = %d",
+                                "default-ttl = %s, startingPKPosition = %d",
                         region.getRegionInfo().getEncodedName(),
                         region.getRegionInfo().getTable().getNameAsString(), this.isMultiTenant,
                         this.isSharedIndex, this.isSalted, this.ttl, this.startingPKPosition));
@@ -1370,15 +1340,16 @@ public class CompactionScanner implements InternalScanner {
         }
 
         @Override
-        public void setTTL(Cell firstCell) throws IOException {
-
+        public long getTTL(List<Cell> result) throws IOException {
             boolean matched = false;
             TableTTLInfo tableTTLInfo = null;
             List<Integer> pkPositions = null;
-            long rowTTLInSecs = ttl;
+            long defaultTTLInSecs = ttl.getTTLForRow(result);
+            long rowTTLInSecs = defaultTTLInSecs;
             long matchedOffset = -1;
             int pkPosition = startingPKPosition;
             MatcherType matchedType = null;
+            Cell firstCell = result.get(0);
             try {
                 // pkPositions holds the byte offsets for the PKs of the base table
                 // for the current row
@@ -1430,11 +1401,12 @@ public class CompactionScanner implements InternalScanner {
                 }
                 matched = tableTTLInfo != null;
                 matchedOffset = matched ? offset : -1;
-                rowTTLInSecs = matched ? tableTTLInfo.getTTL() : ttl; /* in secs */
-                if (this.rowContext == null) {
-                    this.rowContext = new RowContext();
+                if (matched) {
+                    rowTTLInSecs = tableTTLInfo.getTTL().getTTLForRow(result);
+                } else {
+                    rowTTLInSecs = defaultTTLInSecs; /* in secs */
                 }
-                this.rowContext.setTTL(rowTTLInSecs);
+                return rowTTLInSecs;
             } catch (SQLException e) {
                 LOGGER.error(String.format("Exception when visiting table: " + e.getMessage()));
                 throw new IOException(e);
@@ -1459,22 +1431,11 @@ public class CompactionScanner implements InternalScanner {
                                     .collect(Collectors.joining(",")) : ""));
                 }
             }
-
         }
 
         @Override
-        public RowContext getRowContext() {
-            if (this.rowContext == null) {
-                this.rowContext = new RowContext();
-                this.rowContext.setTTL(ttl);
-            }
-            return rowContext;
-        }
-
-        @Override
-        public void setRowContext(RowContext rowContext) {
-            this.rowContext = rowContext;
-            this.rowContext.setTTL(ttl);
+        public TTLExpression getDefaultTTL() {
+            return ttl;
         }
     }
 
@@ -2082,9 +2043,9 @@ public class CompactionScanner implements InternalScanner {
         }
 
         private void formCompactionRowVersions(LinkedList<LinkedList<Cell>> columns,
-                List<Cell> result) {
+                List<Cell> result) throws IOException {
             rowContext.init();
-            rowTracker.setRowContext(rowContext);
+            rowContext.setTTL(rowTracker.getTTL(result));
             while (!columns.isEmpty()) {
                 formNextCompactionRowVersion(columns, rowContext, result);
                 // Remove the columns that are empty
@@ -2129,7 +2090,7 @@ public class CompactionScanner implements InternalScanner {
          * Compacts a single row at the HBase level. The result parameter is the input row and
          * modified to be the output of the compaction.
          */
-        private void compact(List<Cell> result) {
+        private void compact(List<Cell> result) throws IOException {
             if (result.isEmpty()) {
                 return;
             }
@@ -2181,7 +2142,7 @@ public class CompactionScanner implements InternalScanner {
             boolean isEmptyColumn = false;
             Cell cellAtMaxLookbackWindowStart = null;
             for (Cell cell : result) {
-                if (cell.getTimestamp() > rowTracker.getRowContext().getMaxLookbackWindowStart()) {
+                if (cell.getTimestamp() > rowContext.getMaxLookbackWindowStart()) {
                     retainedCells.add(cell);
                     if (cell.getTimestamp() == maxLookbackWindowStart) {
                         cellAtMaxLookbackWindowStart = cell;
@@ -2257,8 +2218,9 @@ public class CompactionScanner implements InternalScanner {
             if (lastRow.isEmpty()) {
                 return;
             }
+            // init doesn't change ttl
             rowContext.init();
-            rowTracker.setRowContext(rowContext);
+            // ttl has already been evaluated
             long ttl = rowContext.getTTL();
             rowContext.getNextRowVersionTimestamps(lastRow, storeColumnFamily);
             Cell firstCell = lastRow.get(0);
@@ -2322,7 +2284,7 @@ public class CompactionScanner implements InternalScanner {
                 retainCellsOfLastRowVersion(lastRowVersion, emptyColumn, retainedCells);
                 return true;
             }
-            long ttl = rowTracker.getRowContext().getTTL();
+            long ttl = rowContext.getTTL();
             long maxTimestamp = 0;
             long minTimestamp = Long.MAX_VALUE;
             long ts;
@@ -2424,7 +2386,7 @@ public class CompactionScanner implements InternalScanner {
                 return;
             }
             phoenixResult.clear();
-            rowTracker.setTTL(result.get(0));
+            rowContext.setTTL(rowTracker.getTTL(result));
             if (!retainCellsForMaxLookback(result, regionLevel, phoenixResult)) {
                 if (familyCount == 1 || regionLevel) {
                     throw new RuntimeException("UNEXPECTED");

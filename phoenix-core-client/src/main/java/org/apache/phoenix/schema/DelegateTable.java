@@ -381,7 +381,7 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedUseStatsForParallelization();
     }
 
-    @Override public int getTTL() {
+    @Override public TTLExpression getTTL() {
         return delegate.getTTL();
     }
 

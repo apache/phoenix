@@ -261,16 +261,12 @@ public enum TableProperty {
         @Override
         public Object getValue(Object value) {
             if (value instanceof String) {
-                String strValue = (String) value;
-                if ("FOREVER".equalsIgnoreCase(strValue)) {
-                    return HConstants.FOREVER;
-                } else if ("NONE".equalsIgnoreCase(strValue)) {
-                    return TTL_NOT_DEFINED;
-                }
+                return TTLExpression.create((String)value);
             } else if (value != null) {
                 //Not converting to milli-seconds for better understanding at compaction and masking
                 //stage. As HBase Descriptor level gives this value in seconds.
-                return ((Number) value).intValue();
+                int ttlValue = ((Number) value).intValue();
+                return TTLExpression.create(ttlValue);
             }
             return value;
         }

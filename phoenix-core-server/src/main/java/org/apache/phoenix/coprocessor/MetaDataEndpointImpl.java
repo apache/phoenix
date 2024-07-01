@@ -96,6 +96,7 @@ import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.schema.PTableType.VIEW;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.SchemaUtil.*;
 import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
@@ -241,6 +242,7 @@ import org.apache.phoenix.schema.SequenceAlreadyExistsException;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SequenceNotFoundException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.export.SchemaRegistryRepository;
 import org.apache.phoenix.schema.export.SchemaRegistryRepositoryFactory;
@@ -1476,17 +1478,17 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
         }
         Cell ttlKv = tableKeyValues[TTL_INDEX];
-        int ttl = TTL_NOT_DEFINED;
+        TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         if (ttlKv != null) {
             String ttlStr = (String) PVarchar.INSTANCE.toObject(
                     ttlKv.getValueArray(),
                     ttlKv.getValueOffset(),
                     ttlKv.getValueLength());
-            ttl = Integer.parseInt(ttlStr);
+            ttl = TTLExpression.create(ttlStr);
         }
         ttl = ttlKv != null ? ttl : oldTable != null
-                ? oldTable.getTTL() : TTL_NOT_DEFINED;
-        if (tableType == VIEW && viewType != MAPPED && ttl == TTL_NOT_DEFINED) {
+                ? oldTable.getTTL() : TTL_EXPRESSION_NOT_DEFINED;
+        if (tableType == VIEW && viewType != MAPPED && ttl == TTL_EXPRESSION_NOT_DEFINED) {
             //Scan SysCat to get TTL from Parent View/Table
             byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
@@ -1658,7 +1660,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
                 (oldTable != null ? oldTable.getMaxLookbackAge() : null));
 
-        if(tableType == INDEX && !isThisAViewIndex && ttl == TTL_NOT_DEFINED) {
+        if(tableType == INDEX && !isThisAViewIndex && ttl == TTL_EXPRESSION_NOT_DEFINED) {
             //If this is an index on Table get TTL from Table
             byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     parentSchemaName == null ? null : parentSchemaName.getBytes(),
@@ -1764,7 +1766,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @throws SQLException
      */
 
-    private int getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp, boolean checkForMappedView) throws IOException, SQLException {
+    private TTLExpression getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp, boolean checkForMappedView) throws IOException, SQLException {
         Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
@@ -1776,12 +1778,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         do {
 
             if (result == null) {
-                return TTL_NOT_DEFINED;
+                return TTL_EXPRESSION_NOT_DEFINED;
             }
 
             //return TTL_NOT_DEFINED for Index on a Mapped View.
             if (checkForMappedView && checkIfViewIsMappedView(result)) {
-                return TTL_NOT_DEFINED;
+                return TTL_EXPRESSION_NOT_DEFINED;
             }
 
             byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
@@ -1791,7 +1793,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
                 String ttlStr = (String) PVarchar.INSTANCE.toObject(
                         result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-                return Integer.parseInt(ttlStr);
+                return TTLExpression.create(ttlStr);
             } else if (linkTypeBytes != null ) {
                 String parentSchema =SchemaUtil.getSchemaNameFromFullName(
                         rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
@@ -1840,7 +1842,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
      * @return TTL defined for a given table if it is null then return TTL_NOT_DEFINED(0)
      * @throws IOException
      */
-    private int getTTLForTable(byte[] tableKey, long clientTimeStamp) throws IOException {
+    private TTLExpression getTTLForTable(byte[] tableKey, long clientTimeStamp) throws IOException {
         Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
                 SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
@@ -1849,16 +1851,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Result result = scanner.next();
         do {
             if (result == null) {
-                return TTL_NOT_DEFINED;
+                return TTL_EXPRESSION_NOT_DEFINED;
             }
             if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
                 String ttlStr = (String) PVarchar.INSTANCE.toObject(
                         result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-                return Integer.parseInt(ttlStr);
+                return TTLExpression.create(ttlStr);
             }
             result = scanner.next();
         } while (result != null);
-        return TTL_NOT_DEFINED;
+        return TTL_EXPRESSION_NOT_DEFINED;
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
@@ -3826,8 +3828,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     Cell cell = cells.get(0);
                     String newTTLStr = (String) PVarchar.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    int newTTL = Integer.parseInt(newTTLStr);
-                    return newTTL != TTL_NOT_DEFINED;
+                    TTLExpression newTTL = TTLExpression.create(newTTLStr);
+                    return newTTL != TTL_EXPRESSION_NOT_DEFINED;
                 }
             }
         }

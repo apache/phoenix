@@ -18,10 +18,13 @@
 
 package org.apache.phoenix.coprocessorclient;
 
-import org.apache.hadoop.hbase.util.Bytes;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.schema.TTLExpression;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Simple POJO class to hold TTL info
@@ -31,9 +34,29 @@ public class TableTTLInfo implements Comparable {
     private final byte[] tenantId;
     private final byte[] entityName;
     private final byte[] matchPattern;
-    private final int ttl;
+    private final TTLExpression ttl;
 
+    @VisibleForTesting
     public TableTTLInfo(String physicalTableName, String tenantId, String entityName, String matchPattern, int ttl) {
+        super();
+        this.physicalTableName = physicalTableName.getBytes(StandardCharsets.UTF_8);
+        this.tenantId = tenantId.getBytes(StandardCharsets.UTF_8);
+        this.entityName = entityName.getBytes(StandardCharsets.UTF_8);
+        this.matchPattern = matchPattern.getBytes(StandardCharsets.UTF_8);
+        this.ttl = TTLExpression.create(ttl);
+    }
+
+    @VisibleForTesting
+    public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] entityName, byte[] matchPattern, int ttl) {
+        super();
+        this.physicalTableName = physicalTableName;
+        this.tenantId = tenantId;
+        this.matchPattern = matchPattern;
+        this.entityName = entityName;
+        this.ttl = TTLExpression.create(ttl);
+    }
+
+    public TableTTLInfo(String physicalTableName, String tenantId, String entityName, String matchPattern, TTLExpression ttl) {
         super();
         this.physicalTableName = physicalTableName.getBytes(StandardCharsets.UTF_8);
         this.tenantId = tenantId.getBytes(StandardCharsets.UTF_8);
@@ -42,7 +65,7 @@ public class TableTTLInfo implements Comparable {
         this.ttl = ttl;
     }
 
-    public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] entityName, byte[] matchPattern, int ttl) {
+    public TableTTLInfo(byte[] physicalTableName, byte[] tenantId, byte[] entityName, byte[] matchPattern, TTLExpression ttl) {
         super();
         this.physicalTableName = physicalTableName;
         this.tenantId = tenantId;
@@ -51,7 +74,7 @@ public class TableTTLInfo implements Comparable {
         this.ttl = ttl;
     }
 
-    public int getTTL() {
+    public TTLExpression getTTL() {
         return ttl;
     }
     public byte[] getTenantId() {
