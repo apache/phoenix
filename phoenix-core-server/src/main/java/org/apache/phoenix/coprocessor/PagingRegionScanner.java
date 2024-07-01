@@ -78,7 +78,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
             skipScanFilter = ScanUtil.getSkipScanFilter(scan);
             if (skipScanFilter != null && skipScanFilter.isMultiKeyPointLookup()) {
                 isMultiKeyPointLookup = true;
-                multiKeyPointLookupRanges = skipScanFilter.getPointLookupKeyRange();
+                multiKeyPointLookupRanges = skipScanFilter.getPointLookupKeyRanges();
             }
         }
     }
@@ -149,6 +149,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                         LOGGER.info("Page filter stopped, generating dummy key {} ",
                                 Bytes.toStringBinary(rowKey));
                         ScanUtil.getDummyResult(rowKey, results);
+                        --multiKeyPointLookupPosition;
                     }
                     return true;
                 }

@@ -119,7 +119,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return isMultiKeyPointLookup;
     }
 
-    public List<KeyRange> getPointLookupKeyRange() {
+    public List<KeyRange> getPointLookupKeyRanges() {
         return slots.get(0);
     }
 
