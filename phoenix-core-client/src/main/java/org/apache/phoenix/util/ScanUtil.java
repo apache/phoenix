@@ -1683,6 +1683,42 @@ public class ScanUtil {
         return null;
     }
 
+    public static SkipScanFilter getSkipScanFilterFromFilterList(FilterList filterList) {
+        List<Filter> list = filterList.getFilters();
+        for (Filter filter : list) {
+            if (filter instanceof SkipScanFilter) {
+                return (SkipScanFilter) filter;
+            } else if (filter instanceof FilterList) {
+                return getSkipScanFilterFromFilterList((FilterList) filter);
+            }
+        }
+        return null;
+    }
+    public static SkipScanFilter getSkipScanFilter(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null) {
+            PagingFilter pagingFilter = null;
+            if (filter instanceof PagingFilter) {
+                pagingFilter = (PagingFilter) filter;
+                filter = pagingFilter.getDelegateFilter();
+                if (filter == null) {
+                    return null;
+                }
+            }
+        }
+        if (filter != null) {
+            SkipScanFilter skipScanFilter;
+            if (filter instanceof SkipScanFilter) {
+                skipScanFilter = (SkipScanFilter) filter;
+                return skipScanFilter;
+            }
+            if (filter instanceof FilterList) {
+                return getSkipScanFilterFromFilterList((FilterList) filter);
+            }
+        }
+        return null;
+    }
+
     public static void setScanAttributeForMaxLookbackAge(Scan scan, Long maxLookbackAge) {
         Preconditions.checkNotNull(scan);
         if (maxLookbackAge != null) {

@@ -95,9 +95,9 @@ public class SkipScanFilterTest extends TestCase {
             }, width <= 0, SortOrder.getDefault());
         }
         if(slotSpans==null) {
-            skipper = new SkipScanFilter(cnf, builder.build());
+            skipper = new SkipScanFilter(cnf, builder.build(), false);
         } else {
-            skipper = new SkipScanFilter(cnf, slotSpans,builder.build());
+            skipper = new SkipScanFilter(cnf, slotSpans,builder.build(), false);
         }
     }
 

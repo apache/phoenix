@@ -199,7 +199,7 @@ public class PhoenixTxIndexMutationGenerator {
             // checkpointed versions.
             SkipScanFilter filter = scanRanges.getSkipScanFilter();
             if (isRollback) {
-                filter = new SkipScanFilter(filter,true);
+                filter = new SkipScanFilter(filter,true, false);
                 indexMetaData.getTransactionContext().setVisibilityLevel(PhoenixVisibilityLevel.SNAPSHOT_ALL);
             }
             scan.setFilter(filter);
