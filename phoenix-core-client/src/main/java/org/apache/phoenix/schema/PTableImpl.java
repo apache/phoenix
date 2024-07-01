@@ -62,6 +62,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -2284,10 +2285,9 @@ public class PTableImpl implements PTable {
         if (table.getMaxLookbackAge() != null) {
             builder.setMaxLookbackAge(table.getMaxLookbackAge());
         }
-        if (table.getCDCIncludeScopes() != null) {
-            builder.setCDCIncludeScopes(
-                    CDCUtil.makeChangeScopeStringFromEnums(table.getCDCIncludeScopes()));
-        }
+        builder.setCDCIncludeScopes(CDCUtil.makeChangeScopeStringFromEnums(
+                table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
+                : Collections.EMPTY_SET));
         return builder.build();
     }
 
