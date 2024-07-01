@@ -176,7 +176,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
         String[] versionArr = hbaseVersion.split("\\.");
         int majorVersion = Integer.parseInt(versionArr[0]);
         int minorVersion = Integer.parseInt(versionArr[1]);
-        int patchVersion = Integer.parseInt(versionArr[2].split("-hadoop")[0]);
+        int patchVersion = Integer.parseInt(versionArr[2].split("-")[0]);
         if (majorVersion > 2) {
             return true;
         }

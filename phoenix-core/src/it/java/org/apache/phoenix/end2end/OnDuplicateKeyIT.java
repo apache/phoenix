@@ -44,8 +44,10 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -60,11 +62,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 @RunWith(Parameterized.class)
 public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     private final String indexDDL;
-    
+
     public OnDuplicateKeyIT(String indexDDL) {
         this.indexDDL = indexDDL;
     }
-    
+
     @Parameters
     public static synchronized Collection<Object> data() {
         List<Object> testCases = Lists.newArrayList();
@@ -861,17 +863,26 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     }
 
     private void assertHBaseRowTimestamp(String tableName, long expectedTimestamp) throws Exception {
+        long actualTimestamp = getEmptyKVLatestCellTimestamp(tableName);
+        assertEquals(expectedTimestamp, actualTimestamp);
+    }
+
+    private long getEmptyKVLatestCellTimestamp(String tableName) throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        PTable pTable = PhoenixRuntime.getTable(conn, tableName);
+        byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(pTable).getFirst();
+        return getColumnLatestCellTimestamp(tableName, emptyCQ);
+    }
+
+    private long getColumnLatestCellTimestamp(String tableName, byte[] cq) throws Exception {
         Scan scan = new Scan();
-        byte[] emptyKVQualifier = EncodedColumnsUtil.getEmptyKeyValueInfo(true).getFirst();
         try (org.apache.hadoop.hbase.client.Connection hconn =
-                 ConnectionFactory.createConnection(config)) {
+                     ConnectionFactory.createConnection(config)) {
             Table table = hconn.getTable(TableName.valueOf(tableName));
             ResultScanner resultScanner = table.getScanner(scan);
             Result result = resultScanner.next();
-            long actualTimestamp = result.getColumnLatestCell(
-                QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, emptyKVQualifier).getTimestamp();
-            assertEquals(expectedTimestamp, actualTimestamp);
+            return result.getColumnLatestCell(
+                    QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES, cq).getTimestamp();
         }
     }
 }
-    
