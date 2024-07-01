@@ -586,6 +586,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    protected boolean getMetadataReadLockEnabled;
+
     private MetricsMetadataSource metricsSource;
 
     public static void setFailConcurrentMutateAddColumnOneTimeForTesting(boolean fail) {
@@ -623,6 +625,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 new ReadOnlyProps(config.iterator()));
         this.allowSplittableSystemCatalogRollback = config.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                 QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
+        this.getMetadataReadLockEnabled
+                = config.getBoolean(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED,
+                            QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
@@ -2218,7 +2223,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<RowLock> locks = Lists.newArrayList();
             // Place a lock using key for the table to be created
             try {
-                acquireLock(region, tableKey, locks);
+                acquireLock(region, tableKey, locks, false);
 
                 // If the table key resides outside the region, return without doing anything
                 MetaDataMutationResult result = checkTableKeyInRegion(tableKey, region);
@@ -2247,7 +2252,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             done.run(builder.build());
                             return;
                         }
-                        acquireLock(region, parentTableKey, locks);
+                        acquireLock(region, parentTableKey, locks, false);
                     }
                     // make sure we haven't gone over our threshold for indexes on this table.
                     if (execeededIndexQuota(tableType, parentTable)) {
@@ -2755,9 +2760,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             List<RowLock> locks = Lists.newArrayList();
             try {
-                acquireLock(region, lockKey, locks);
+                acquireLock(region, lockKey, locks, false);
                 if (parentLockKey != null) {
-                    acquireLock(region, parentLockKey, locks);
+                    acquireLock(region, parentLockKey, locks, false);
                 }
 
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
@@ -2889,8 +2894,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
     }
 
-    private RowLock acquireLock(Region region, byte[] lockKey, List<RowLock> locks) throws IOException {
-        RowLock rowLock = region.getRowLock(lockKey, false);
+    protected RowLock acquireLock(Region region, byte[] lockKey, List<RowLock> locks, boolean readLock) throws IOException {
+        RowLock rowLock = region.getRowLock(lockKey, this.getMetadataReadLockEnabled && readLock);
         if (rowLock == null) {
             throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(lockKey));
         }
@@ -3171,8 +3176,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 if (mutationResult.isPresent()) {
                     return mutationResult.get();
                 }
-
-                acquireLock(region, key, locks);
+                // We take a write row lock for tenantId, schemaName, tableOrViewName
+                acquireLock(region, key, locks, false);
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(key);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
                 invalidateList.add(cacheKey);
@@ -3574,7 +3579,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         final boolean wasLocked = (rowLock != null);
         try {
             if (!wasLocked) {
-                rowLock = acquireLock(region, key, null);
+                rowLock = acquireLock(region, key, null, true);
             }
             PTable table =
                     getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
@@ -3625,7 +3630,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         ;
         try {
             for (int i = 0; i < keys.size(); i++) {
-                acquireLock(region, keys.get(i), rowLocks);
+                acquireLock(region, keys.get(i), rowLocks, true);
             }
 
             List<PFunction> functionsAvailable = new ArrayList<PFunction>(keys.size());
@@ -3736,7 +3741,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // Since we're dropping the index, lock it to ensure
                 // that a change in index state doesn't
                 // occur while we're dropping it.
-                acquireLock(region, indexKey, locks);
+                acquireLock(region, indexKey, locks, false);
                 List<Mutation> childLinksMutations = Lists.newArrayList();
                 MetaDataMutationResult result = doDropTable(indexKey, tenantId,
                         index.getSchemaName().getBytes(), index.getTableName().getBytes(),
@@ -3948,7 +3953,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             }
             PIndexState newState =
                     PIndexState.fromSerializedValue(newKV.getValueArray()[newKV.getValueOffset()]);
-            RowLock rowLock = acquireLock(region, key, null);
+            RowLock rowLock = acquireLock(region, key, null, false);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(key));
             }
@@ -4269,7 +4274,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         List<RowLock> locks = Lists.newArrayList();
         try {
             getCoprocessorHost().preGetSchema(schemaName);
-            acquireLock(region, lockKey, locks);
+            acquireLock(region, lockKey, locks, false);
             // Get as of latest timestamp so we can detect if we have a
             // newer schema that already
             // exists without making an additional query
@@ -4373,7 +4378,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(functionMetaData);
             try {
-                acquireLock(region, lockKey, locks);
+                acquireLock(region, lockKey, locks, false);
                 // Get as of latest timestamp so we can detect if we have a newer function that already
                 // exists without making an additional query
                 ImmutableBytesPtr cacheKey = new FunctionBytesPtr(lockKey);
@@ -4449,7 +4454,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(functionMetaData);
             try {
-                acquireLock(region, lockKey, locks);
+                acquireLock(region, lockKey, locks, false);
                 List<byte[]> keys = new ArrayList<byte[]>(1);
                 keys.add(lockKey);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>();
@@ -4557,7 +4562,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(schemaMutations);
             try {
-                acquireLock(region, lockKey, locks);
+                acquireLock(region, lockKey, locks, false);
                 // Get as of latest timestamp so we can detect if we have a newer schema that already exists without
                 // making an additional query
                 ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(lockKey);
@@ -4624,7 +4629,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             List<RowLock> locks = Lists.newArrayList();
             long clientTimeStamp = MetaDataUtil.getClientTimeStamp(schemaMetaData);
             try {
-                acquireLock(region, lockKey, locks);
+                acquireLock(region, lockKey, locks, false);
                 List<ImmutableBytesPtr> invalidateList = new ArrayList<ImmutableBytesPtr>(1);
                 result = doDropSchema(clientTimeStamp, schemaName, lockKey, schemaMetaData, invalidateList);
                 if (result.getMutationCode() != MutationCode.SCHEMA_ALREADY_EXISTS) {
