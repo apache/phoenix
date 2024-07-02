@@ -987,6 +987,10 @@ public interface PTable extends PMetaDataEntity {
      */
     String getIndexWhere();
 
+    /**
+     * @return the map of all ancestors to their LAST_DDL_TIMESTAMP
+     */
+    Map<PTableKey, Long> getAncestorLastDDLTimestampMap();
 
     /**
      *

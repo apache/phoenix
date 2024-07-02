@@ -38,6 +38,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Properties;
 
 import static org.junit.Assert.assertEquals;
@@ -104,17 +105,19 @@ public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
             } catch (TableNotFoundException e) {
                 //Expected
             }
-            rs = conn2.createStatement().executeQuery("select * from "+tableName);
             try {
+                rs = conn2.createStatement().executeQuery("select * from "+tableName);
                 rs.next();
                 fail("Should throw org.apache.hadoop.hbase.TableNotFoundException since the latest metadata " +
                         "wasn't fetched");
-            } catch (PhoenixIOException ex) {
-                boolean foundHBaseTableNotFound = false;
-                for(Throwable throwable : Throwables.getCausalChain(ex)) {
-                    if(org.apache.hadoop.hbase.TableNotFoundException.class.equals(throwable.getClass())) {
-                        foundHBaseTableNotFound = true;
-                        break;
+            } catch (SQLException ex) {
+                boolean foundHBaseTableNotFound = (ex instanceof TableNotFoundException);
+                if (!foundHBaseTableNotFound) {
+                    for(Throwable throwable : Throwables.getCausalChain(ex)) {
+                        if(org.apache.hadoop.hbase.TableNotFoundException.class.equals(throwable.getClass())) {
+                            foundHBaseTableNotFound = true;
+                            break;
+                        }
                     }
                 }
                 assertTrue("Should throw org.apache.hadoop.hbase.TableNotFoundException since the latest" +

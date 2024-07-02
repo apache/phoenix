@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -88,6 +89,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
     @AfterClass
     public static synchronized void tearDownClass() throws Exception {
         SlowBatchRegionObserver.SLOW_MUTATE = false;
+        ServerMetadataCacheTestImpl.resetCache();
         getUtility().shutdownMiniCluster();
     }
 

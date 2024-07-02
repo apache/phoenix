@@ -130,6 +130,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         // to force multiple verification tasks to be spawned so that we can exercise the page splitting logic
         props.put(GlobalIndexRegionScanner.INDEX_VERIFY_ROW_COUNTS_PER_TASK_CONF_KEY, Long.toString(2));
+        props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
