@@ -62,6 +62,8 @@ public class BaseScannerRegionObserverConstants {
     public static final String UPSERT_SELECT_EXPRS = "_UpsertSelectExprs";
     public static final String DELETE_CQ = "_DeleteCQ";
     public static final String DELETE_CF = "_DeleteCF";
+    public static final String UPSERT_STATUS_CQ = "_UpsertStatusCQ";
+    public static final String UPSERT_CF = "_UpsertCF";
     public static final String EMPTY_CF = "_EmptyCF";
     public static final String EMPTY_COLUMN_QUALIFIER = "_EmptyColumnQualifier";
     public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
