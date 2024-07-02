@@ -81,6 +81,8 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
@@ -89,6 +91,7 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_UPDATABLE_VIEW_REST
 
 
 public class CreateTableCompiler {
+    private static final Logger LOGGER = LoggerFactory.getLogger(CreateTableCompiler.class);
     private static final PDatum VARBINARY_DATUM = new VarbinaryDatum();
     private final PhoenixStatement statement;
     private final Operation operation;
@@ -267,11 +270,13 @@ public class CreateTableCompiler {
                                      final Set<PColumn> pkColumnsInWhere,
                                      final Set<PColumn> nonPkColumnsInWhere)
             throws IOException, SQLException {
-        // 1. Check the view specification uses only the PK columns
-        if (nonPkColumnsInWhere.size() > 0) {
+        // 1. Check the view specification WHERE clause uses only the PK columns
+        if (!nonPkColumnsInWhere.isEmpty()) {
+            LOGGER.info("Setting the view type as READ_ONLY because the statement contains non-PK" +
+                    " columns");
             return ViewType.READ_ONLY;
         }
-        if (pkColumnsInWhere.size() == 0) {
+        if (pkColumnsInWhere.isEmpty()) {
             return ViewType.UPDATABLE;
         }
 
@@ -281,16 +286,26 @@ public class CreateTableCompiler {
                 tablePkPositions.add(tablePkColumn.getPosition()));
         pkColumnsInWhere.forEach(pkColumn -> pkPositions.add(pkColumn.getPosition()));
         Collections.sort(pkPositions);
-        // 2. If not multi tenant, view specification (WHERE clause) should start from the first PK
+
+        // 2. If not multi tenant, view specification WHERE clause should start from the first PK
         // column; otherwise, start from the second PK column
         boolean isMultiTenant = parentToBe.isMultiTenant();
         int firstPkPosition = pkPositions.get(0);
-        if (!isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(0))
-                || isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(1))) {
+        if (!isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(0))) {
+            LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
+                    "does not start from the first PK column");
+        }
+        if (isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(1))) {
+            LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
+                    "does not start from the second PK column (the parent table is multi tenant " +
+                    "with the first column TENANT_ID");
             return ViewType.READ_ONLY;
         }
+
         // 3. Otherwise, PK column(s) should be in the order they are defined
         if (!isPkColumnsInOrder(pkPositions, tablePkPositions, isMultiTenant)) {
+            LOGGER.info("Setting the view type as READ_ONLY because the PK columns is not in the " +
+                    "order they are defined");
             return ViewType.READ_ONLY;
         }
 
@@ -320,6 +335,8 @@ public class CreateTableCompiler {
                     siblingViewWhere.accept(siblingViewValidatorVisitor);
                 }
                 if (!pkColumnsInWhere.equals(siblingViewPkColsInWhere)) {
+                    LOGGER.info("Setting the view type as READ_ONLY because the set of PK columns" +
+                            " are different from its sibling views'");
                     return ViewType.READ_ONLY;
                 }
             }
