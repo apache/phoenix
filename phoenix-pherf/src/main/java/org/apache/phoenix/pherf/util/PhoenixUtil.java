@@ -518,7 +518,8 @@ public class PhoenixUtil {
                 }
                 break;
             case JSON:
-                if (dataValue.getValue().equals("")) {
+            case BSON:
+              if (dataValue.getValue().equals("")) {
                     statement.setNull(count, Types.VARBINARY);
                 } else {
                     statement.setString(count, dataValue.getValue());
