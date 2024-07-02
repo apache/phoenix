@@ -568,13 +568,18 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 checkIfDDLStatementandMutationState(stmt, state);
                                 MutationState lastState = plan.execute();
                                 state.join(lastState);
-                                if (connection.getAutoCommit()) {
-                                    connection.commit();
-                                }
-                                setLastQueryPlan(null);
                                 // Unfortunately, JDBC uses an int for update count, so we
                                 // just max out at Integer.MAX_VALUE
-                                int lastUpdateCount = (int) Math.min(Integer.MAX_VALUE, lastState.getUpdateCount());
+                                int lastUpdateCount = (int) Math.min(Integer.MAX_VALUE,
+                                        lastState.getUpdateCount());
+                                if (connection.getAutoCommit()) {
+                                    connection.commit();
+                                    if (isAtomicUpsert) {
+                                        lastUpdateCount = connection.getMutationState()
+                                                .getNumUpdatedRowsForAutoCommit();
+                                    }
+                                }
+                                setLastQueryPlan(null);
                                 setLastUpdateCount(lastUpdateCount);
                                 setLastUpdateOperation(stmt.getOperation());
                                 setLastUpdateTable(tableName == null ? TABLE_UNKNOWN : tableName);
