@@ -34,7 +34,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
-public final class PhoenixIndexBuilderHelper {
+public final class AtomicUpsertHelper {
     private static final byte[] ON_DUP_KEY_IGNORE_BYTES = new byte[] {1}; // boolean true
     private static final int ON_DUP_KEY_HEADER_BYTE_SIZE = Bytes.SIZEOF_SHORT + Bytes.SIZEOF_BOOLEAN;
     public static final String ATOMIC_OP_ATTRIB = "_ATOMIC_OP_ATTRIB";

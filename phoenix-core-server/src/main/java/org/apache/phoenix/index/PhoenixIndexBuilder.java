@@ -102,7 +102,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     
     @Override
     public boolean isAtomicOp(Mutation m) {
-        return m.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null;
+        return m.getAttribute(AtomicUpsertHelper.ATOMIC_OP_ATTRIB) != null;
     }
 
     private static void transferCells(Mutation source, Mutation target) {
@@ -123,11 +123,11 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     
     @Override
     public List<Mutation> executeAtomicOp(Increment inc) throws IOException {
-        byte[] opBytes = inc.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB);
+        byte[] opBytes = inc.getAttribute(AtomicUpsertHelper.ATOMIC_OP_ATTRIB);
         if (opBytes == null) { // Unexpected
             return null;
         }
-        inc.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB, null);
+        inc.setAttribute(AtomicUpsertHelper.ATOMIC_OP_ATTRIB, null);
         Put put = null;
         Delete delete = null;
         // We cannot neither use the time stamp in the Increment to set the Get time range
@@ -140,7 +140,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
         long ts = HConstants.LATEST_TIMESTAMP;
         byte[] rowKey = inc.getRow();
         final Get get = new Get(rowKey);
-        if (PhoenixIndexBuilderHelper.isDupKeyIgnore(opBytes)) {
+        if (AtomicUpsertHelper.isDupKeyIgnore(opBytes)) {
             get.setFilter(new FirstKeyOnlyFilter());
             try (RegionScanner scanner = this.env.getRegion().getScanner(new Scan(get))) {
                 List<Cell> cells = new ArrayList<>();

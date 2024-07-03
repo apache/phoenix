@@ -82,7 +82,7 @@ import org.apache.phoenix.hbase.index.exception.IndexWriteException;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.IndexMetaDataCacheClient;
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.index.AtomicUpsertHelper;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper;
 import org.apache.phoenix.index.PhoenixIndexFailurePolicyHelper.MutateCommand;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
@@ -845,7 +845,7 @@ public class MutationState implements SQLCloseable {
                 // TODO: use our ServerCache
                 for (Mutation mutation : rowMutations) {
                     if (onDupKeyBytes != null) {
-                        mutation.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB, onDupKeyBytes);
+                        mutation.setAttribute(AtomicUpsertHelper.ATOMIC_OP_ATTRIB, onDupKeyBytes);
                     }
                 }
                 rowMutationsPertainingToIndex = rowMutations;
@@ -1103,7 +1103,7 @@ public class MutationState implements SQLCloseable {
                 } else if (mutation instanceof Put) {
                     upsertsize += temp;
                     upsertCounter++;
-                    if (mutation.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null) {
+                    if (mutation.getAttribute(AtomicUpsertHelper.ATOMIC_OP_ATTRIB) != null) {
                         atomicUpsertsize += temp;
                     }
                     allDeletesMutations = false;
@@ -2374,7 +2374,7 @@ public class MutationState implements SQLCloseable {
             }
             // Concatenate ON DUPLICATE KEY bytes to allow multiple
             // increments of the same row in the same commit batch.
-            this.onDupKeyBytes = PhoenixIndexBuilderHelper.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
+            this.onDupKeyBytes = AtomicUpsertHelper.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
             statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
             return true;
         }
