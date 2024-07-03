@@ -115,6 +115,9 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public void setOffset(int offset) {
         this.offset = offset;
     }
+    public int getOffset() {
+        return offset;
+    }
     public boolean isMultiKeyPointLookup() {
         return isMultiKeyPointLookup;
     }
@@ -632,8 +635,14 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 orClause.add(range);
             }
         }
-        boolean isPointLookup = in.readBoolean();
-        this.init(slots, slotSpan, schema, includeMultipleVersions, isPointLookup);
+        try {
+            boolean isPointLookup = in.readBoolean();
+            this.init(slots, slotSpan, schema, includeMultipleVersions, isPointLookup);
+        } catch (IOException e) {
+            // Reached the end of the stream before reading the boolean field. The client can be
+            // an older client
+            this.init(slots, slotSpan, schema, includeMultipleVersions, false);
+        }
     }
 
     @Override
