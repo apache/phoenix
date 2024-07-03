@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -123,7 +124,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
 
     public List<KeyRange> getPointLookupKeyRanges() {
-        return slots.get(0);
+        return isMultiKeyPointLookup ? slots.get(0) : Collections.emptyList();
     }
 
     private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
