@@ -91,7 +91,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       IndexToolIT.runIndexTool(false, "", tableName,
               "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
       Timestamp ts1 = new Timestamp(System.currentTimeMillis());
-      Thread.sleep(10);
+      Thread.sleep(100);
 
       String sample1 = getJsonString("json/sample_01.json");
       String sample2 = getJsonString("json/sample_02.json");
@@ -118,13 +118,13 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
-      Thread.sleep(10);
+      Thread.sleep(100);
       Timestamp ts2 = new Timestamp(System.currentTimeMillis());
 
       testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
 
       ts1 = new Timestamp(System.currentTimeMillis());
-      Thread.sleep(10);
+      Thread.sleep(100);
 
       String conditionExpression =
               "press = $press AND track[0].shot[2][0].city.standard[50] = $softly";
@@ -419,7 +419,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
-      Thread.sleep(10);
+      Thread.sleep(100);
       ts2 = new Timestamp(System.currentTimeMillis());
 
       testCDCPostUpdate(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
@@ -578,6 +578,38 @@ public class Bson3IT extends ParallelStatsDisabledIT {
     }
   }
 
+  private static void testCDCUpdateOneRowChange(Connection conn, String cdcName, Timestamp ts1,
+                                                Timestamp ts2, BsonDocument bsonDocument1)
+          throws SQLException, IOException {
+    ResultSet rs;
+    try (PreparedStatement pst = conn.prepareStatement(
+            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcName +
+                    " WHERE PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() <= ?")) {
+      pst.setTimestamp(1, ts1);
+      pst.setTimestamp(2, ts2);
+
+      rs = pst.executeQuery();
+      Assert.assertTrue(rs.next());
+
+      String cdcVal = rs.getString(3);
+      Map<String, Object> map = OBJECT_MAPPER.readValue(cdcVal, Map.class);
+      Map<String, Object> preImage = (Map<String, Object>) map.get(QueryConstants.CDC_PRE_IMAGE);
+      String encodedBytes = (String) preImage.get("COL");
+      byte[] bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument preDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument1, preDoc);
+
+      Map<String, Object> postImage =
+              (Map<String, Object>) map.get(QueryConstants.CDC_POST_IMAGE);
+      encodedBytes = (String) postImage.get("COL");
+      bytes = Base64.getDecoder().decode(encodedBytes);
+      RawBsonDocument postDoc = new RawBsonDocument(bytes, 0, bytes.length);
+      Assert.assertEquals(bsonDocument1, postDoc);
+
+      Assert.assertFalse(rs.next());
+    }
+  }
+
   /**
    * Conditional Upserts for BSON pass where the Condition Expression is of Document style.
    */
@@ -596,7 +628,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       IndexToolIT.runIndexTool(false, "", tableName,
               "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
       Timestamp ts1 = new Timestamp(System.currentTimeMillis());
-      Thread.sleep(10);
+      Thread.sleep(100);
 
       String sample1 = getJsonString("json/sample_01.json");
       String sample2 = getJsonString("json/sample_02.json");
@@ -624,13 +656,13 @@ public class Bson3IT extends ParallelStatsDisabledIT {
 
       conn.commit();
 
-      Thread.sleep(10);
+      Thread.sleep(100);
       Timestamp ts2 = new Timestamp(System.currentTimeMillis());
 
       testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
 
       ts1 = new Timestamp(System.currentTimeMillis());
-      Thread.sleep(10);
+      Thread.sleep(100);
 
       //{
       //  "$and": [
@@ -987,7 +1019,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
 
       conn.commit();
 
-      Thread.sleep(10);
+      Thread.sleep(100);
       ts2 = new Timestamp(System.currentTimeMillis());
 
       testCDCPostUpdate(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
@@ -1031,11 +1063,18 @@ public class Bson3IT extends ParallelStatsDisabledIT {
   public void testBsonOpsWithSqlConditionsUpdateFailure() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
+    String cdcName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
               + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
               + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
+      conn.createStatement().execute(cdcDdl);
+      IndexToolIT.runIndexTool(false, "", tableName,
+              "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+      Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(100);
 
       String sample1 = getJsonString("json/sample_01.json");
       String sample2 = getJsonString("json/sample_02.json");
@@ -1062,6 +1101,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+
+      Thread.sleep(100);
+      Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      Thread.sleep(100);
+      ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(100);
 
       String conditionExpression =
               "press = $press AND track[0].shot[2][0].city.standard[50] = $softly";
@@ -1344,6 +1392,11 @@ public class Bson3IT extends ParallelStatsDisabledIT {
 
       conn.commit();
 
+      Thread.sleep(100);
+      ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCUpdateOneRowChange(conn, cdcName, ts1, ts2, bsonDocument1);
+
       query = "SELECT * FROM " + tableName;
       rs = conn.createStatement().executeQuery(query);
 
@@ -1380,11 +1433,18 @@ public class Bson3IT extends ParallelStatsDisabledIT {
   public void testBsonOpsWithDocumentConditionsUpdateFailure() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
+    String cdcName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName
               + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
               + " CONSTRAINT pk PRIMARY KEY(PK1))";
+      String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
       conn.createStatement().execute(ddl);
+      conn.createStatement().execute(cdcDdl);
+      IndexToolIT.runIndexTool(false, "", tableName,
+              "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+      Timestamp ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(100);
 
       String sample1 = getJsonString("json/sample_01.json");
       String sample2 = getJsonString("json/sample_02.json");
@@ -1411,6 +1471,15 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+
+      Thread.sleep(100);
+      Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
+
+      Thread.sleep(100);
+      ts1 = new Timestamp(System.currentTimeMillis());
+      Thread.sleep(100);
 
       //{
       //  "$and": [
@@ -1753,6 +1822,11 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+
+      Thread.sleep(100);
+      ts2 = new Timestamp(System.currentTimeMillis());
+
+      testCDCUpdateOneRowChange(conn, cdcName, ts1, ts2, bsonDocument1);
 
       query = "SELECT * FROM " + tableName;
       rs = conn.createStatement().executeQuery(query);
