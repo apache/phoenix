@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -183,15 +184,27 @@ public class TTLRegionScanner extends BaseRegionScanner {
         return false;
     }
 
-    private boolean next(List<Cell> result, boolean raw) throws IOException {
+    private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext) throws IOException {
+        boolean hasMore;
         if (!isMaskingEnabled) {
-            return raw ? delegate.nextRaw(result) : delegate.next(result);
+            if (scannerContext != null) {
+                hasMore = raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
+            } else {
+                hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
+            }
+            return hasMore;
         }
         if (!initialized) {
             init();
             initialized = true;
         }
-        boolean hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
+
+        if (scannerContext != null) {
+            hasMore = raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
+        } else {
+            hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
+        }
+
         if (result.isEmpty() || ScanUtil.isDummy(result)) {
             return hasMore;
         }
@@ -208,12 +221,22 @@ public class TTLRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
-        return next(results, false);
+        return next(results, false, null);
     }
 
     @Override
     public boolean nextRaw(List<Cell> results) throws IOException {
-        return next(results, true);
+        return next(results, true, null);
+    }
+
+    @Override
+    public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+        return next(results, false, scannerContext);
+    }
+
+    @Override
+    public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+        return next(results, true, scannerContext);
     }
 
     @Override
