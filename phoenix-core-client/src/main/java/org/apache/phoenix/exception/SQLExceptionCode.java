@@ -511,6 +511,8 @@ public enum SQLExceptionCode {
     ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR(2015, "INT17", "Row Value Constructor Offset had an Unexpected Error."),
     ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_ALLOWED_IN_QUERY(2016, "INT18", "Row Value Constructor Offset Not Allowed In Query."),
 
+    UPGRADE_BLOCKED(2017, "INT19", ""),
+
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {

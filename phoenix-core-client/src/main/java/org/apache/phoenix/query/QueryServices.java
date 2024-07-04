@@ -443,6 +443,11 @@ public interface QueryServices extends SQLCloseable {
     String SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = "phoenix.skip.system.tables.existence.check";
 
     /**
+     * Parameter to skip the minimum version check for system table upgrades
+     */
+    String SKIP_UPGRADE_BLOCK_CHECK = "phoenix.skip.upgrade.block.check";
+
+    /**
      * Config key to represent max region locations to be displayed as part of the Explain plan
      * output.
      */
