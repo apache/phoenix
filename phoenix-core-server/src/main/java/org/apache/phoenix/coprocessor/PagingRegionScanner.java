@@ -87,7 +87,13 @@ public class PagingRegionScanner extends BaseRegionScanner {
             return pointLookupRanges.size();
         }
 
-        private boolean verifyStartRowKey(byte[] startRowKey) throws IOException {
+        private boolean verifyStartRowKey(byte[] startRowKey) {
+            // The startRowKey may not be one of the point lookup keys. This happens when
+            // the region moves and the HBase client adjusts the scan start row key. In this case,
+            // the next scan will not be a point lookup but a range scan effectively as the start
+            // row key and the stop row key will not be the same.
+            // This range scan with the skip scan filter will return the next valid row
+            // (eventually after possibly retuning  zero or more different dummy rows).
             lookupPosition = findLookupPosition(startRowKey);
             if (lookupPosition == pointLookupRanges.size()) {
                 return false;
@@ -162,10 +168,10 @@ public class PagingRegionScanner extends BaseRegionScanner {
             byte[] adjustedStartRowKeyIncludeBytes =
                     scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE);
             // If scanners at higher level needs to re-scan the data that were already scanned
-            // earlier, they can provide adjusted new start rowkey for the scan and whether to
+            // earlier, they can provide adjusted new start row key for the scan and whether to
             // include it.
             // If they are set as the scan attributes, close the scanner, reopen it with
-            // updated start rowkey and whether to include it. Update mvcc read point from the
+            // updated start row key and whether to include it. Update mvcc read point from the
             // previous scanner and set it back to the new scanner to maintain the read
             // consistency for the given region.
             // Once done, continue the scan operation and reset the attributes.
@@ -209,6 +215,14 @@ public class PagingRegionScanner extends BaseRegionScanner {
                                 Bytes.toStringBinary(rowKey));
                         ScanUtil.getDummyResult(rowKey, results);
                         if (multiKeyPointLookup != null) {
+                            // We got a dummy row during multi key point lookup. This means
+                            // the next scan cannot be a point lookup since if we insist on
+                            // doing the same point lookup, then we may go into a infinite loop of
+                            // retrieving the same dummy row. Thus, the next scan has to be a range
+                            // scan starting after the current row key (the row key of the dummy
+                            // row). This range scan with the skip scan filter will return the next
+                            // valid row (eventually after possibly retuning zero or more different
+                            // dummy rows).
                             multiKeyPointLookup.lastDummyCell = results.get(0);
                             multiKeyPointLookup.lookupPosition--;
                         }
