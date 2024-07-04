@@ -1683,29 +1683,18 @@ public class ScanUtil {
         return null;
     }
 
-    public static SkipScanFilter removeSkipScanFilterWithMultiKeyPointLookupFromFilterList(
-            FilterList filterList) {
-        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
-        while (filterIterator.hasNext()) {
-            Filter filter = filterIterator.next();
+    public static SkipScanFilter getSkipScanFilterFromFilterList(FilterList filterList) {
+        List<Filter> list = filterList.getFilters();
+        for (Filter filter : list) {
             if (filter instanceof SkipScanFilter) {
-                if (!((SkipScanFilter) filter).isMultiKeyPointLookup()) {
-                    return null;
-                }
-                filterIterator.remove();
                 return (SkipScanFilter) filter;
             } else if (filter instanceof FilterList) {
-                SkipScanFilter skipScanFilter =
-                        removeSkipScanFilterWithMultiKeyPointLookupFromFilterList((FilterList) filter);
-                if (skipScanFilter != null) {
-                    return skipScanFilter;
-                }
+                return getSkipScanFilterFromFilterList((FilterList) filter);
             }
         }
         return null;
     }
-
-    public static SkipScanFilter removeSkipScanFilterWithMultiKeyPointLookup(Scan scan) {
+    public static SkipScanFilter getSkipScanFilter(Scan scan) {
         Filter filter = scan.getFilter();
         if (filter != null) {
             PagingFilter pagingFilter = null;
@@ -1716,20 +1705,15 @@ public class ScanUtil {
                     return null;
                 }
             }
+        }
+        if (filter != null) {
+            SkipScanFilter skipScanFilter;
             if (filter instanceof SkipScanFilter) {
-                if (!((SkipScanFilter) filter).isMultiKeyPointLookup()) {
-                    return null;
-                }
-                if (pagingFilter != null) {
-                    pagingFilter.setDelegateFilter(null);
-                    scan.setFilter(pagingFilter);
-                } else {
-                    scan.setFilter(null);
-                }
-                return (SkipScanFilter) filter;
-            } else if (filter instanceof FilterList) {
-                return removeSkipScanFilterWithMultiKeyPointLookupFromFilterList(
-                        (FilterList) filter);
+                skipScanFilter = (SkipScanFilter) filter;
+                return skipScanFilter;
+            }
+            if (filter instanceof FilterList) {
+                return getSkipScanFilterFromFilterList((FilterList) filter);
             }
         }
         return null;
