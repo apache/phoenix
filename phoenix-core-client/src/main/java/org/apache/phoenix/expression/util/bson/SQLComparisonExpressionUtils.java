@@ -25,6 +25,8 @@ import org.mvel2.MVEL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.regex.Pattern;
+
 /**
  * SQL style condition expression evaluation support.
  */
@@ -48,6 +50,23 @@ public class SQLComparisonExpressionUtils {
   private static final String AND = "\\bAND\\b";
   private static final String OR = "\\bOR\\b";
   private static final String NOT = "\\bNOT\\b\\s*";
+
+  private static final Pattern FIELD_NOT_EXISTS_PATTERN = Pattern.compile(FIELD_NOT_EXISTS);
+  private static final Pattern FIELD_EXISTS_PATTERN = Pattern.compile(FIELD_EXISTS);
+  private static final Pattern EQUALS1_PATTERN = Pattern.compile(EQUALS1);
+  private static final Pattern EQUALS2_PATTERN = Pattern.compile(EQUALS2);
+  private static final Pattern NOT_EQUALS1_PATTERN = Pattern.compile(NOT_EQUALS1);
+  private static final Pattern NOT_EQUALS2_PATTERN = Pattern.compile(NOT_EQUALS2);
+  private static final Pattern LESS_THAN_PATTERN = Pattern.compile(LESS_THAN);
+  private static final Pattern LESS_THAN_OR_EQUALS_PATTERN = Pattern.compile(LESS_THAN_OR_EQUALS);
+  private static final Pattern GREATER_THAN_PATTERN = Pattern.compile(GREATER_THAN);
+  private static final Pattern GREATER_THAN_OR_EQUALS_PATTERN =
+          Pattern.compile(GREATER_THAN_OR_EQUALS);
+  private static final Pattern BETWEEN_PATTERN = Pattern.compile(BETWEEN);
+  private static final Pattern IN_PATTERN = Pattern.compile(IN);
+  private static final Pattern AND_PATTERN = Pattern.compile(AND);
+  private static final Pattern OR_PATTERN = Pattern.compile(OR);
+  private static final Pattern NOT_PATTERN = Pattern.compile(NOT);
 
   private static final String FUNC_FIELD_NOT_EXISTS = "!exists('$1')";
   private static final String FUNC_FIELD_EXISTS = "exists('$1')";
@@ -85,21 +104,23 @@ public class SQLComparisonExpressionUtils {
   }
 
   public String convertExpression(String expression) {
-    expression = expression.replaceAll(FIELD_NOT_EXISTS, FUNC_FIELD_NOT_EXISTS);
-    expression = expression.replaceAll(FIELD_EXISTS, FUNC_FIELD_EXISTS);
-    expression = expression.replaceAll(EQUALS1, FUNC_EQUALS);
-    expression = expression.replaceAll(EQUALS2, FUNC_EQUALS);
-    expression = expression.replaceAll(NOT_EQUALS1, FUNC_NOT_EQUALS);
-    expression = expression.replaceAll(NOT_EQUALS2, FUNC_NOT_EQUALS);
-    expression = expression.replaceAll(LESS_THAN, FUNC_LESS_THAN);
-    expression = expression.replaceAll(LESS_THAN_OR_EQUALS, FUNC_LESS_THAN_OR_EQUALS);
-    expression = expression.replaceAll(GREATER_THAN, FUNC_GREATER_THAN);
-    expression = expression.replaceAll(GREATER_THAN_OR_EQUALS, FUNC_GREATER_THAN_OR_EQUALS);
-    expression = expression.replaceAll(BETWEEN, FUNC_BETWEEN);
-    expression = expression.replaceAll(IN, FUNC_IN);
-    expression = expression.replaceAll(AND, OP_AND);
-    expression = expression.replaceAll(OR, OP_OR);
-    expression = expression.replaceAll(NOT, OP_NOT);
+    expression = FIELD_NOT_EXISTS_PATTERN.matcher(expression).replaceAll(FUNC_FIELD_NOT_EXISTS);
+    expression = FIELD_EXISTS_PATTERN.matcher(expression).replaceAll(FUNC_FIELD_EXISTS);
+    expression = EQUALS1_PATTERN.matcher(expression).replaceAll(FUNC_EQUALS);
+    expression = EQUALS2_PATTERN.matcher(expression).replaceAll(FUNC_EQUALS);
+    expression = NOT_EQUALS1_PATTERN.matcher(expression).replaceAll(FUNC_NOT_EQUALS);
+    expression = NOT_EQUALS2_PATTERN.matcher(expression).replaceAll(FUNC_NOT_EQUALS);
+    expression = LESS_THAN_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN);
+    expression =
+            LESS_THAN_OR_EQUALS_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN_OR_EQUALS);
+    expression = GREATER_THAN_PATTERN.matcher(expression).replaceAll(FUNC_GREATER_THAN);
+    expression = GREATER_THAN_OR_EQUALS_PATTERN.matcher(expression)
+            .replaceAll(FUNC_GREATER_THAN_OR_EQUALS);
+    expression = BETWEEN_PATTERN.matcher(expression).replaceAll(FUNC_BETWEEN);
+    expression = IN_PATTERN.matcher(expression).replaceAll(FUNC_IN);
+    expression = AND_PATTERN.matcher(expression).replaceAll(OP_AND);
+    expression = OR_PATTERN.matcher(expression).replaceAll(OP_OR);
+    expression = NOT_PATTERN.matcher(expression).replaceAll(OP_NOT);
     return expression;
   }
 
