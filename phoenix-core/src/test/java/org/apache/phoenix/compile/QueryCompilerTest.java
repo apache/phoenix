@@ -74,6 +74,7 @@ import org.apache.phoenix.execute.UnnestArrayPlan;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
@@ -5570,6 +5571,310 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                 conn.close();
             }
         }
+    }
+
+    @Test
+    public void testPartialOrderForTupleProjectionWithJoin() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String cpc_pv_dumper = generateUniqueName();
+            String sql = "create table " + cpc_pv_dumper + " ( "
+                    + " aid BIGINT not null,"
+                    + " k BIGINT  not null,"
+                    + " cm BIGINT, "
+                    + " CONSTRAINT TEST_PK PRIMARY KEY (aid, k))";
+            conn.createStatement().execute(sql);
+
+            String group_temp = generateUniqueName();
+            sql = "create table " + group_temp + " ("
+                    + "  aid BIGINT not null,"
+                    + "  gid TINYINT not null,"
+                    + " CONSTRAINT TEST_PK PRIMARY KEY (aid, gid))";
+            conn.createStatement().execute(sql);
+
+            sql = "select a_key, sum(groupCost) from ( "
+                    + " select t1.k as a_key, sum(t1.cm) as groupCost "
+                    + " from " + cpc_pv_dumper + " as t1 join " + group_temp + " as t2 on t1.aid = t2.aid group by t1.k, t2.gid" +
+                    ") group by a_key having count(1) >= 2 order by sum(groupCost) desc limit 100";
+            QueryPlan plan =  TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+
+            sql = "select a_key, sum(groupCost) from ( "
+                    + " select t1.k as a_key, t2.gid as b_gid, sum(t1.cm) as groupCost "
+                    + " from " + cpc_pv_dumper + " as t1 join " + group_temp + " as t2 on t1.aid = t2.aid group by t1.k, t2.gid" +
+                    ") group by a_key having count(1) >= 2 order by sum(groupCost) desc limit 100";
+            plan =  TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+
+            sql = "select b_gid, sum(groupCost) from ( "
+                    + " select t1.k as a_key, t2.gid as b_gid, sum(t1.cm) as groupCost "
+                    + " from " + cpc_pv_dumper + " as t1 join " + group_temp + " as t2 on t1.aid = t2.aid group by t1.k, t2.gid" +
+                    ") group by b_gid having count(1) >= 2 order by sum(groupCost) desc limit 100";
+            plan =  TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertFalse(plan.getGroupBy().isOrderPreserving());
+
+            sql = "select b_gid, a_key, groupCost from ( "
+                    + " select t1.k as a_key, t2.gid as b_gid, cast(sum(t1.cm) as bigint) as groupCost "
+                    + " from " + cpc_pv_dumper + " as t1 join " + group_temp
+                    + " as t2 on t1.aid = t2.aid group by t1.k, t2.gid, t2.aid order by sum(t1.cm), a_key, t2.aid desc limit 20" +
+                    ") order by groupCost";
+            ClientScanPlan clientScanPlan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(clientScanPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            List<OrderBy> outputOrderBys = ((TupleProjectionPlan)(clientScanPlan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            OrderBy outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("GROUPCOST"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("A_KEY"));
+
+            sql = "select b_gid, a_key, groupCost from ( "
+                    + " select t1.k as a_key, t2.gid as b_gid, cast(sum(t1.cm) as bigint) as groupCost "
+                    + " from " + cpc_pv_dumper + " as t1 join " + group_temp
+                    + " as t2 on t1.aid = t2.aid group by t1.k, t2.gid order by sum(t1.cm) desc, a_key asc limit 20" +
+                    ") order by groupCost desc";
+            clientScanPlan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(clientScanPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(clientScanPlan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("GROUPCOST DESC"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("A_KEY"));
+
+            sql = "select b_gid, groupCost from ( "
+                    + " select t2.gid as b_gid, cast(sum(t1.cm) as bigint) as groupCost "
+                    + " from " + cpc_pv_dumper + " as t1 join " + group_temp
+                    + " as t2 on t1.aid = t2.aid group by t1.k, t2.gid order by sum(t1.cm), t1.k limit 20" +
+                    ") order by groupCost";
+            clientScanPlan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
+            assertTrue(clientScanPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(clientScanPlan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 1);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("GROUPCOST"));
+        }
+    }
+
+    @Test
+    public void testPartialOrderForTupleProjectionPlanBug7352() throws Exception {
+        doTestPartialOrderForTupleProjectionPlanBug7352(false, false);
+        doTestPartialOrderForTupleProjectionPlanBug7352(false, true);
+        doTestPartialOrderForTupleProjectionPlanBug7352(true, false);
+        doTestPartialOrderForTupleProjectionPlanBug7352(true, true);
+    }
+
+    private void doTestPartialOrderForTupleProjectionPlanBug7352(boolean desc, boolean salted) throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String sql = "create table " + tableName + "( "+
+                    " pk1 char(20) not null , " +
+                    " pk2 char(20) not null, " +
+                    " pk3 char(20) not null," +
+                    " v1 varchar, " +
+                    " v2 varchar, " +
+                    " v3 varchar, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( " +
+                    " pk1 " + (desc ? "desc" : "")+", "+
+                    " pk2 " + (desc ? "desc" : "")+", "+
+                    " pk3 " + (desc ? "desc" : "")+
+                    " )) " + (salted ? "SALT_BUCKETS =4" : "");
+            conn.createStatement().execute(sql);
+
+            sql = "select pk3, v1, v2 from (select v1,v2,pk3 from " + tableName
+                    + " t where pk1 = '6' order by t.v2,t.v1 limit 10) a order by v2";
+            ClientScanPlan plan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            List<OrderBy> outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            OrderBy outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("V2"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("V1"));
+
+            sql = "select pk3, v1, v2 from (select v1,v2,pk3 from " + tableName
+                    + " t where pk1 = '6' order by t.v2 desc,t.v1 desc limit 10) a order by v2 desc";
+            plan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("V2 DESC"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("V1 DESC"));
+
+            sql = "select pk3, v1, v2 from (select v1,v2,pk3 from " + tableName
+                    + " t where pk1 = '6' order by t.v2 desc,t.v1 desc, t.v3 desc limit 10) a order by v2 desc";
+            plan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("V2 DESC"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("V1 DESC"));
+
+            sql = "select pk3, v1, v2 from (select v1,v2,pk3 from " + tableName
+                    + " t where pk1 = '6' order by t.v2 desc,t.v1 desc, t.v3 asc limit 10) a order by v2 desc";
+            plan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("V2 DESC"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("V1 DESC"));
+
+            sql = "select v2,cnt from (select count(pk3) cnt,v1,v2 from " + tableName
+                    + " t where pk1 = '6' group by t.v1,t.v2,t.v3 limit 10) a order by v1";
+            plan = (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("V1"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("V2"));
+
+            sql = "select sub, pk2Cnt from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt, count(pk2) pk2Cnt from "
+                    + tableName
+                    + " t where pk1 = '6' group by t.v1 ,t.v2, t.v3 "
+                    + " order by count(pk3) desc,t.v2 desc,t.v3 desc limit 10) a order by cnt desc ,sub desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("CNT DESC"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("SUB DESC"));
+
+            sql = "select sub, pk2Cnt from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt, count(pk2) pk2Cnt from "
+                    + tableName
+                    + " t where pk1 = '6' group by t.v1 ,t.v2, t.v3 "
+                    + " order by count(pk3) desc,t.v2 desc,t.v3 asc limit 10) a order by cnt desc ,sub desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("CNT DESC"));
+            assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("SUB DESC"));
+
+            sql = "select sub, pk2Cnt from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt, count(pk2) pk2Cnt from "
+                    + tableName
+                    + " t where pk1 = '6' group by t.v1 ,t.v2, t.v3 "
+                    + " order by t.v2 desc, count(pk3) desc, t.v3 desc limit 10) a order by sub desc, cnt desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() == 2);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().get(0).toString().equals("SUB DESC"));
+            assertTrue(plan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CNT DESC"));
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 1);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("SUB DESC"));
+
+            sql = "select sub, pk2Cnt from (select substr(v2,0,2) sub,cast (count(pk3) as bigint) cnt, count(pk2) pk2Cnt from "
+                    + tableName
+                    + " t where pk1 = '6' group by v1 ,v2, v3 "
+                    + " order by t.v2 desc, count(pk3) desc, t.v3 asc limit 10) a order by sub desc, cnt desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() == 2);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().get(0).toString().equals("SUB DESC"));
+            assertTrue(plan.getOrderBy().getOrderByExpressions().get(1).toString().equals("CNT DESC"));
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 1);
+            assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("SUB DESC"));
+
+            sql = "select v1, pk3, v2 from (select v1,v2,pk3 from " + tableName
+                    + " t where pk1 = '6' order by t.v2, t.v1, t.v3 limit 10) a order by v1";
+            plan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() == 1);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().get(0).toString().equals("V1"));
+
+            sql = "select pk3, pk1, pk2 from (select pk1,pk2,pk3 from " + tableName
+                    + " t where pk1 = '6' order by t.v2, t.v1, t.v3 limit 10) a order by pk3";
+            plan =  (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() == 1);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().get(0).toString().equals("PK3"));
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 0);
+
+            sql = "select sub, v1 from (select substr(pk3,0,2) sub, pk2, v1 from "
+                    + tableName + " t where pk1 = '6' order by pk2, pk3 limit 10) a order by pk2 desc ,sub desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            //Here because for subquery, there is no OrderBy REV_ROW_KEY_ORDER_BY
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            if (desc) {
+                assertOrderByForDescExpression(outputOrderBy.getOrderByExpressions().get(0), "PK2", true, true);
+                assertOrderByForDescExpression(outputOrderBy.getOrderByExpressions().get(1), "SUB", true, true);
+            } else {
+                assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("PK2"));
+                assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("SUB"));
+            }
+
+            sql = "select sub, v1 from (select substr(pk3,0,2) sub, pk2, v1 from "
+                    + tableName + " t where pk1 = '6' order by pk2 desc, pk3 desc limit 10) a order by pk2 desc ,sub desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 2);
+            if (desc) {
+                assertOrderByForDescExpression(outputOrderBy.getOrderByExpressions().get(0), "PK2", false, false);
+                assertOrderByForDescExpression(outputOrderBy.getOrderByExpressions().get(1), "SUB", false, false);
+            } else {
+                assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("PK2 DESC NULLS LAST"));
+                assertTrue(outputOrderBy.getOrderByExpressions().get(1).toString().equals("SUB DESC NULLS LAST"));
+            }
+
+            sql = "select sub, v1 from (select substr(pk2,0,2) sub, pk3, v1 from "
+                    + tableName + " t where pk1 = '6' order by pk2, pk3 limit 10) a order by sub desc ,pk3 desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            //Here because for subquery, there is no OrderBy REV_ROW_KEY_ORDER_BY
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 1);
+            if (desc) {
+                assertOrderByForDescExpression(outputOrderBy.getOrderByExpressions().get(0), "SUB", true, true);
+            } else {
+                assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("SUB"));
+            }
+
+            sql = "select sub, v1 from (select substr(pk2,0,2) sub, pk3, v1 from "
+                    + tableName + " t where pk1 = '6' order by pk2 desc, pk3 desc limit 10) a order by sub desc,pk3 desc";
+            plan =   (ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getOrderBy().getOrderByExpressions().size() > 0);
+            outputOrderBys = ((TupleProjectionPlan)(plan.getDelegate())).getOutputOrderBys();
+            assertTrue(outputOrderBys.size() == 1);
+            outputOrderBy = outputOrderBys.get(0);
+            assertTrue(outputOrderBy.getOrderByExpressions().size() == 1);
+            if (desc) {
+                assertOrderByForDescExpression(outputOrderBy.getOrderByExpressions().get(0), "SUB", false, false);
+            } else {
+                assertTrue(outputOrderBy.getOrderByExpressions().get(0).toString().equals("SUB DESC NULLS LAST"));
+            }
+        }
+    }
+
+    private static void assertOrderByForDescExpression(
+            OrderByExpression orderByExpression,
+            String strExpression,
+            boolean isNullsLast,
+            boolean isAscending) {
+        assertEquals(strExpression, orderByExpression.getExpression().toString());
+        assertEquals(isNullsLast, orderByExpression.isNullsLast());
+        assertEquals(isAscending, orderByExpression.isAscending());
     }
 
     @Test

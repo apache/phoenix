@@ -54,9 +54,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 public class TupleProjectionPlan extends DelegateQueryPlan {
     private final TupleProjector tupleProjector;
     private final Expression postFilter;
-    private final StatementContext statementContext;
-    private ColumnResolver columnResolver = null;
-    private List<OrderBy> actualOutputOrderBys = Collections.<OrderBy> emptyList();
+    private final ColumnResolver columnResolver;
+    private final List<OrderBy> actualOutputOrderBys;
 
     public TupleProjectionPlan(
             QueryPlan plan,
@@ -64,13 +63,17 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
             StatementContext statementContext,
             Expression postFilter) throws SQLException {
         super(plan);
-        if (tupleProjector == null) throw new IllegalArgumentException("tupleProjector is null");
+        if (tupleProjector == null) {
+            throw new IllegalArgumentException("tupleProjector is null");
+        }
         this.tupleProjector = tupleProjector;
-        this.statementContext = statementContext;
         this.postFilter = postFilter;
-        if(this.statementContext != null) {
+        if (statementContext != null) {
             this.columnResolver = statementContext.getResolver();
             this.actualOutputOrderBys = this.convertInputOrderBys(plan);
+        } else {
+            this.columnResolver = null;
+            this.actualOutputOrderBys = Collections.<OrderBy> emptyList();
         }
     }
 
@@ -95,6 +98,7 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
         List<OrderBy> newOrderBys = new ArrayList<OrderBy>(inputOrderBys.size());
         for(OrderBy inputOrderBy : inputOrderBys) {
             OrderBy newOrderBy = this.convertSingleInputOrderBy(
+                    targetQueryPlan,
                     selectColumnExpressionToIndex,
                     selectColumnExpressions,
                     inputOrderBy);
@@ -109,12 +113,13 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
     }
 
     private OrderBy convertSingleInputOrderBy(
+            QueryPlan targetQueryPlan,
             Map<Expression,Integer> selectColumnExpressionToIndex,
             Expression[] selectColumnExpressions,
             OrderBy inputOrderBy) throws SQLException {
-
+        //Here we track targetQueryPlan's output so we use targetQueryPlan's StatementContext
         OrderPreservingTracker orderPreservingTracker = new OrderPreservingTracker(
-                this.statementContext,
+                targetQueryPlan.getContext(),
                 GroupBy.EMPTY_GROUP_BY,
                 Ordering.UNORDERED,
                 selectColumnExpressions.length,

@@ -53,25 +53,28 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * for each group will be contiguous. For ORDER BY, we can drop the ORDER BY statement if
  * the order is preserved.
  * 
- * There are mainly three changes for refactoring this class in PHOENIX-5148:
- * 1.added a {@link #getInputOrderBys} method to determine the input OrderBys by the combination
- *   of innerQueryPlan's output OrderBys ， GroupBy of current QueryPlan and the rowKeyColumns of current table.
+ * There are mainly four changes for refactoring this class after PHOENIX-5148:
+ * 1.Add a {@link #getInputOrderBys} method to determine the input OrderBys through
+ *   innerQueryPlan's output OrderBys, GroupBy of current QueryPlan or the rowKeyColumns of current table.
  *
- * 2.because the innerQueryPlan may have multiple output OrderBys(for {@link SortMergeJoinPlan}),
- *   so I extracted many stateful member variables (such as orderPreservingTrackInfos, isOrderPreserving
- *   and isReverse etc.) to a new inner class {@link TrackOrderByContext}, {@link TrackOrderByContext}
+ * 2.Because the innerQueryPlan may have multiple output OrderBys(eg. {@link SortMergeJoinPlan}),
+ *   so many stateful member variables (such as orderPreservingTrackInfos, isOrderPreserving
+ *   and isReverse etc.) are extracted to a new inner class {@link TrackOrderByContext}, {@link TrackOrderByContext}
  *   is used to track if a single Input OrderBy matches the target OrderByExpressions in {@link #isOrderPreserving()}
  *   method, and once we found a  {@link TrackOrderByContext} satisfied {@link #isOrderPreserving()},
- *   {@link #selectedTrackOrderByContext} member variable is set to this {@link TrackOrderByContext},
- *   then we can use this {@link #selectedTrackOrderByContext} to implement the {@link #getOrderPreservingTrackInfos()}
+ *   {@link OrderPreservingTracker#selectedTrackOrderByContext} member variable is set to this {@link TrackOrderByContext},
+ *   then we can use this {@link #selectedTrackOrderByContext} to serve the {@link OrderPreservingTracker#getOrderPreservingTrackInfos}
  *   and {@link #isReverse()} methods etc.
  *   BTW. at most only one {@link TrackOrderByContext} can meet {@link #isOrderPreserving()} is true.
  *
- * 3.added ascending and nullsLast to the inner class {@link Info} , and extracted complete ordering
+ * 3.Add ascending and nullsLast to the inner class {@link Info} , and extracted complete ordering
  *   information in {@link Info} class by the inner {@link TrackOrderPreservingExpressionVisitor} class,
  *   so we can inferring alignment between the target OrderByExpressions and the input OrderBys based on
- *   {@link Info} in {@link TrackOrderByContext#doTrack} method, not on the row keys like the original
- *   {@link #track} method does.
+ *   {@link Info} in {@link TrackOrderByContext#isOrderPreserving} method, not on the row keys like the original
+ *   method does.
+ *
+ * 4.{@link OrderPreservingTracker#getOrderPreservingTrackInfos} could extract partial continuous ordering columns which start from the
+ *   first column even if {@link OrderPreservingTracker#isOrderPreserving} is false.
  * </pre>
  */
 public class OrderPreservingTracker {
@@ -83,7 +86,7 @@ public class OrderPreservingTracker {
         private final int slotSpan;
         private final boolean ascending;
         private final boolean nullsLast;
-        private Expression expression;
+        private TrackingOrderByExpression trackingOrderByExpression;
 
         public Info(int pkPosition, boolean ascending, boolean nullsLast) {
             this.pkPosition = pkPosition;
@@ -104,13 +107,13 @@ public class OrderPreservingTracker {
         public static List<Expression> extractExpressions(List<Info> orderPreservingTrackInfos) {
             List<Expression> newExpressions = new ArrayList<Expression>(orderPreservingTrackInfos.size());
             for(Info trackInfo : orderPreservingTrackInfos) {
-                newExpressions.add(trackInfo.expression);
+                newExpressions.add(trackInfo.getExpression());
             }
             return newExpressions;
         }
 
         public Expression getExpression() {
-            return expression;
+            return this.trackingOrderByExpression.expression;
         }
 
         public boolean isAscending() {
@@ -124,12 +127,12 @@ public class OrderPreservingTracker {
     private final StatementContext context;
     private final GroupBy groupBy;
     private final Ordering ordering;
-    private int pkPositionOffset = 0;
+    private final int pkPositionOffset;
     private Expression whereExpression;
-    private List<TrackOrderByCell> trackOrderByCells = new LinkedList<TrackOrderByCell>();
-    private List<TrackOrderByContext> trackOrderByContexts = Collections.<TrackOrderByContext> emptyList();
+    private List<TrackingOrderByExpression> trackingOrderByExpressions = new LinkedList<TrackingOrderByExpression>();
+    private final List<TrackOrderByContext> trackOrderByContexts;
     private TrackOrderByContext selectedTrackOrderByContext = null;
-    private List<OrderBy> inputOrderBys = Collections.<OrderBy> emptyList();
+    private final List<OrderBy> inputOrderBys;
 
     public OrderPreservingTracker(StatementContext context, GroupBy groupBy, Ordering ordering, int nNodes) throws SQLException {
         this(context, groupBy, ordering, nNodes, null, null, null);
@@ -145,94 +148,99 @@ public class OrderPreservingTracker {
             Expression whereExpression) throws SQLException {
 
         this.context = context;
-        boolean isOrderPreserving = false;
-        if (groupBy.isEmpty() && inputOrderBys == null) {
-            PTable table = context.getResolver().getTables().get(0).getTable();
-            isOrderPreserving = table.rowKeyOrderOptimizable();
-        } else {
-            isOrderPreserving = true;
-        }
         this.groupBy = groupBy;
         this.ordering = ordering;
         this.whereExpression = whereExpression;
-        if(inputOrderBys != null) {
+        if (inputOrderBys != null) {
             this.inputOrderBys = inputOrderBys;
+            this.pkPositionOffset = 0;
         } else {
-            this.getInputOrderBys(innerQueryPlan, groupBy, context);
+            Pair<List<OrderBy>,Integer> orderBysAndRowKeyColumnOffset =
+                    getInputOrderBys(innerQueryPlan, groupBy, context);
+            this.inputOrderBys = orderBysAndRowKeyColumnOffset.getFirst();
+            this.pkPositionOffset = orderBysAndRowKeyColumnOffset.getSecond();
         }
-        if(this.inputOrderBys.isEmpty()) {
+
+        if (this.inputOrderBys.isEmpty()) {
+            this.trackOrderByContexts = Collections.emptyList();
             return;
         }
+
         this.trackOrderByContexts = new ArrayList<TrackOrderByContext>(this.inputOrderBys.size());
         for(OrderBy inputOrderBy : this.inputOrderBys) {
             this.trackOrderByContexts.add(
-                    new TrackOrderByContext(isOrderPreserving, nNodes, inputOrderBy));
+                    new TrackOrderByContext(nNodes, inputOrderBy));
         }
     }
 
     /**
      * Infer input OrderBys, if the innerQueryPlan is null, we make the OrderBys from the pk columns of {@link PTable}.
-     * @param innerQueryPlan
-     * @param groupBy
-     * @param statementContext
-     * @throws SQLException
      */
-    private void getInputOrderBys(QueryPlan innerQueryPlan, GroupBy groupBy, StatementContext statementContext) throws SQLException {
-        if(!groupBy.isEmpty()) {
-            this.inputOrderBys = Collections.singletonList(ExpressionUtil.convertGroupByToOrderBy(groupBy, false));
-            return;
+    private static Pair<List<OrderBy>,Integer> getInputOrderBys(
+            QueryPlan innerQueryPlan, GroupBy groupBy, StatementContext statementContext) throws SQLException {
+        if (!groupBy.isEmpty()) {
+            return Pair.newPair(
+                    Collections.singletonList(
+                            ExpressionUtil.convertGroupByToOrderBy(groupBy, false)), 0);
         }
-        if(innerQueryPlan != null) {
-            this.inputOrderBys = innerQueryPlan.getOutputOrderBys();
-            return;
+        if (innerQueryPlan != null) {
+            return Pair.newPair(innerQueryPlan.getOutputOrderBys(), 0);
         }
-        this.inputOrderBys = Collections.<OrderBy> emptyList();
+
         TableRef tableRef = statementContext.getResolver().getTables().get(0);
+        if (!tableRef.getTable().rowKeyOrderOptimizable()) {
+            return Pair.newPair(Collections.<OrderBy> emptyList(), 0);
+        }
         PhoenixConnection phoenixConnection = statementContext.getConnection();
         Pair<OrderBy,Integer> orderByAndRowKeyColumnOffset =
                 ExpressionUtil.getOrderByFromTable(tableRef, phoenixConnection, false);
         OrderBy orderBy = orderByAndRowKeyColumnOffset.getFirst();
-        this.pkPositionOffset = orderByAndRowKeyColumnOffset.getSecond();
-        if(orderBy != OrderBy.EMPTY_ORDER_BY) {
-            this.inputOrderBys = Collections.singletonList(orderBy);
-        }
+        Integer rowKeyColumnOffset = orderByAndRowKeyColumnOffset.getSecond();
+        return Pair.newPair(
+                    orderBy != OrderBy.EMPTY_ORDER_BY ?
+                    Collections.singletonList(orderBy)
+                    : Collections.<OrderBy> emptyList(),
+                    rowKeyColumnOffset);
     }
 
     private class TrackOrderByContext {
-        private List<Info> orderPreservingTrackInfos;
+        private final List<Info> orderPreservingTrackedInfos;
         private boolean isOrderPreserving = true;
         private Boolean isReverse = null;
         private int orderPreservingColumnCount = 0;
         private final TrackOrderPreservingExpressionVisitor trackOrderPreservingExpressionVisitor;
-        private OrderBy inputOrderBy = null;
+        private final OrderBy inputOrderBy;
+        private int trackingOrderByExpressionCount = 0;
+        private boolean isOrderPreservingCalled = false;
 
-        public TrackOrderByContext(boolean isOrderPreserving, int orderByNodeCount, OrderBy inputOrderBy) {
-            this.isOrderPreserving = isOrderPreserving;
+        public TrackOrderByContext(int orderByNodeCount, OrderBy inputOrderBy) {
             this.trackOrderPreservingExpressionVisitor = new TrackOrderPreservingExpressionVisitor(inputOrderBy);
-            this.orderPreservingTrackInfos = Lists.newArrayListWithExpectedSize(orderByNodeCount);
+            this.orderPreservingTrackedInfos = Lists.newArrayListWithExpectedSize(orderByNodeCount);
             this.inputOrderBy = inputOrderBy;
         }
 
-        public void track(List<TrackOrderByCell> trackOrderByCells) {
-            for(TrackOrderByCell trackOrderByCell : trackOrderByCells) {
-                doTrack(trackOrderByCell.expression,
-                        trackOrderByCell.isAscending,
-                        trackOrderByCell.isNullsLast);
-            }
+        public void track(List<TrackingOrderByExpression> trackingOrderByExpressions) {
+            this.trackingOrderByExpressionCount = trackingOrderByExpressions.size();
+            trackingOrderByExpressions.forEach(trackingOrderByExpression -> {
+                Expression expression = trackingOrderByExpression.expression;
+                Info trackedInfo = expression.accept(trackOrderPreservingExpressionVisitor);
+                if (trackedInfo != null) {
+                    trackedInfo.trackingOrderByExpression = trackingOrderByExpression;
+                    orderPreservingTrackedInfos.add(trackedInfo);
+                }
+            });
         }
 
-        private void doTrack(Expression expression, Boolean isAscending, Boolean isNullsLast) {
-            if (!isOrderPreserving) {
-               return;
-            }
-            Info trackInfo = expression.accept(trackOrderPreservingExpressionVisitor);
-            if (trackInfo == null) {
-                isOrderPreserving = false;
-                return;
-            }
+        private void checkAscendingAndNullsLast(Info trackedInfo) {
+            TrackingOrderByExpression trackingOrderByExpression =
+                    trackedInfo.trackingOrderByExpression;
+            Expression expression = trackingOrderByExpression.expression;
+            Boolean isAscending = trackingOrderByExpression.isAscending;
+            Boolean isNullsLast = trackingOrderByExpression.isNullsLast;
+
             // If the expression is sorted in a different order than the specified sort order
             // then the expressions are not order preserving.
-            if (isAscending != null && trackInfo.ascending != isAscending.booleanValue()) {
+            if (isAscending != null && trackedInfo.ascending != isAscending.booleanValue()) {
                 if (isReverse == null) {
                     isReverse = true;
                 } else if (!isReverse){
@@ -250,22 +258,25 @@ public class OrderPreservingTracker {
                 }
             }
 
-            if (isNullsLast!=null && expression.isNullable()) {
-                if ((trackInfo.nullsLast == isNullsLast.booleanValue()) && isReverse.booleanValue() ||
-                    (trackInfo.nullsLast != isNullsLast.booleanValue()) && !isReverse.booleanValue()) {
+            assert isReverse != null;
+            if (isNullsLast != null && expression.isNullable()) {
+                if ((trackedInfo.nullsLast == isNullsLast.booleanValue()) && isReverse.booleanValue() ||
+                    (trackedInfo.nullsLast != isNullsLast.booleanValue()) && !isReverse.booleanValue()) {
                     isOrderPreserving = false;
                     isReverse = false;
                     return;
                 }
             }
-            trackInfo.expression = expression;
-            orderPreservingTrackInfos.add(trackInfo);
         }
 
-        /*
+        /**
          * Only valid AFTER call to isOrderPreserving
          */
         public int getOrderPreservingColumnCount() {
+            if (!isOrderPreservingCalled) {
+                throw new IllegalStateException(
+                        "getOrderPreservingColumnCount must be called after isOrderPreserving is called!");
+            }
             return orderPreservingColumnCount;
         }
 
@@ -273,26 +284,31 @@ public class OrderPreservingTracker {
          * Only valid AFTER call to isOrderPreserving
          */
         public List<Info> getOrderPreservingTrackInfos() {
-            if(this.isOrderPreserving) {
-                return ImmutableList.copyOf(this.orderPreservingTrackInfos);
+            if (!isOrderPreservingCalled) {
+                throw new IllegalStateException(
+                        "getOrderPreservingTrackInfos must be called after isOrderPreserving is called!");
+            }
+            if (this.isOrderPreserving) {
+                return ImmutableList.copyOf(this.orderPreservingTrackedInfos);
             }
             int orderPreservingColumnCountToUse = this.orderPreservingColumnCount - pkPositionOffset;
-            if(orderPreservingColumnCountToUse <= 0) {
+            if (orderPreservingColumnCountToUse <= 0) {
                 return Collections.<Info> emptyList();
             }
-            return ImmutableList.copyOf(this.orderPreservingTrackInfos.subList(0, orderPreservingColumnCountToUse));
+            return ImmutableList.copyOf(this.orderPreservingTrackedInfos.subList(0, orderPreservingColumnCountToUse));
         }
 
         public boolean isOrderPreserving() {
-            if (!isOrderPreserving) {
-                return false;
+            if (this.isOrderPreservingCalled) {
+                return isOrderPreserving;
             }
+
             if (ordering == Ordering.UNORDERED) {
                 // Sort by position
-                Collections.sort(orderPreservingTrackInfos, new Comparator<Info>() {
+                Collections.sort(orderPreservingTrackedInfos, new Comparator<Info>() {
                     @Override
                     public int compare(Info o1, Info o2) {
-                        int cmp = o1.pkPosition-o2.pkPosition;
+                        int cmp = o1.pkPosition - o2.pkPosition;
                         if (cmp != 0) return cmp;
                         // After pk position, sort on reverse OrderPreserving ordinal: NO, YES_IF_LAST, YES
                         // In this way, if we have an ORDER BY over a YES_IF_LAST followed by a YES, we'll
@@ -306,24 +322,29 @@ public class OrderPreservingTracker {
             // order.
             int prevSlotSpan = 1;
             int prevPos =  -1;
+            this.orderPreservingColumnCount += pkPositionOffset;
             OrderPreserving prevOrderPreserving = OrderPreserving.YES;
-            for (int i = 0; i < orderPreservingTrackInfos.size(); i++) {
-                Info entry = orderPreservingTrackInfos.get(i);
+            for (int i = 0; i < orderPreservingTrackedInfos.size(); i++) {
+                Info entry = orderPreservingTrackedInfos.get(i);
                 int pos = entry.pkPosition;
+                this.checkAscendingAndNullsLast(entry);
                 isOrderPreserving = isOrderPreserving &&
                         entry.orderPreserving != OrderPreserving.NO &&
                         prevOrderPreserving == OrderPreserving.YES &&
                         (pos == prevPos ||
                          pos - prevSlotSpan == prevPos  ||
-                         hasEqualityConstraints(prevPos+prevSlotSpan, pos));
-                if(!isOrderPreserving) {
+                         hasEqualityConstraints(prevPos + prevSlotSpan, pos));
+                if (!isOrderPreserving) {
                     break;
                 }
+                this.orderPreservingColumnCount++;
                 prevPos = pos;
                 prevSlotSpan = entry.slotSpan;
                 prevOrderPreserving = entry.orderPreserving;
             }
-            orderPreservingColumnCount = prevPos + prevSlotSpan + pkPositionOffset;
+            isOrderPreserving &=
+                    (this.orderPreservingTrackedInfos.size() == this.trackingOrderByExpressionCount);
+            this.isOrderPreservingCalled = true;
             return isOrderPreserving;
         }
 
@@ -345,6 +366,13 @@ public class OrderPreservingTracker {
         }
 
         public boolean isReverse() {
+            if (!isOrderPreservingCalled) {
+                throw new IllegalStateException(
+                        "isReverse must be called after isOrderPreserving is called!");
+            }
+            if (!isOrderPreserving) {
+                throw new IllegalStateException("isReverse should only be called when isOrderPreserving is true!");
+            }
             return Boolean.TRUE.equals(isReverse);
         }
 
@@ -360,13 +388,13 @@ public class OrderPreservingTracker {
         }
     }
 
-    private static class TrackOrderByCell
+    private static class TrackingOrderByExpression
     {
         private Expression expression;
         private Boolean isAscending;
         private Boolean isNullsLast;
 
-        public TrackOrderByCell(Expression expression,Boolean isAscending, Boolean isNullsLast) {
+        public TrackingOrderByExpression(Expression expression,Boolean isAscending, Boolean isNullsLast) {
             this.expression = expression;
             this.isAscending = isAscending;
             this.isNullsLast = isNullsLast;
@@ -378,12 +406,12 @@ public class OrderPreservingTracker {
     }
 
     public void track(Expression expression, Boolean isAscending, Boolean isNullsLast) {
-        TrackOrderByCell trackOrderByContext =
-                new TrackOrderByCell(expression, isAscending, isNullsLast);
-        this.trackOrderByCells.add(trackOrderByContext);
+        TrackingOrderByExpression trackingOrderByExpression =
+                new TrackingOrderByExpression(expression, isAscending, isNullsLast);
+        this.trackingOrderByExpressions.add(trackingOrderByExpression);
     }
 
-    /*
+    /**
      * Only valid AFTER call to isOrderPreserving
      */
     public int getOrderPreservingColumnCount() {
@@ -404,15 +432,15 @@ public class OrderPreservingTracker {
     }
 
     public boolean isOrderPreserving() {
-        if(this.selectedTrackOrderByContext != null) {
-            throw new IllegalStateException("isOrderPreserving should be called only once");
+        if (this.selectedTrackOrderByContext != null) {
+            return this.selectedTrackOrderByContext.isOrderPreserving();
         }
 
         if(this.trackOrderByContexts.isEmpty()) {
            return false;
         }
 
-        if(this.trackOrderByCells.isEmpty()) {
+        if(this.trackingOrderByExpressions.isEmpty()) {
             return false;
         }
 
@@ -420,7 +448,7 @@ public class OrderPreservingTracker {
          * at most only one TrackOrderByContext can meet isOrderPreserving is true
          */
         for(TrackOrderByContext trackOrderByContext : this.trackOrderByContexts) {
-            trackOrderByContext.track(trackOrderByCells);
+            trackOrderByContext.track(trackingOrderByExpressions);
             if(trackOrderByContext.isOrderPreserving()) {
                this.selectedTrackOrderByContext = trackOrderByContext;
                break;
@@ -430,7 +458,7 @@ public class OrderPreservingTracker {
                 this.selectedTrackOrderByContext = trackOrderByContext;
             }
         }
-        return this.selectedTrackOrderByContext.isOrderPreserving;
+        return this.selectedTrackOrderByContext.isOrderPreserving();
     }
 
     public boolean isReverse() {
