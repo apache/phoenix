@@ -73,7 +73,7 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
             this.actualOutputOrderBys = this.convertInputOrderBys(plan);
         } else {
             this.columnResolver = null;
-            this.actualOutputOrderBys = Collections.<OrderBy> emptyList();
+            this.actualOutputOrderBys = Collections.<OrderBy>emptyList();
         }
     }
 
