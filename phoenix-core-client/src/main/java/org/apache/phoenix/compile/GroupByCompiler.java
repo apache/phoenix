@@ -155,6 +155,10 @@ public class GroupByCompiler {
             return isUngroupedAggregate;
         }
 
+        /**
+         * NOTE: This value is meaningful only when {@link GroupBy#isOrderPreserving}
+         * is true.
+         */
         public int getOrderPreservingColumnCount() {
             return orderPreservingColumnCount;
         }

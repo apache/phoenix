@@ -208,6 +208,7 @@ public class OrderPreservingTracker {
         private boolean isOrderPreserving = true;
         private Boolean isReverse = null;
         private int orderPreservingColumnCount = 0;
+        private int orderPreservingTrackedInfosCount = 0;
         private final TrackOrderPreservingExpressionVisitor trackOrderPreservingExpressionVisitor;
         private final OrderBy inputOrderBy;
         private int trackingOrderByExpressionCount = 0;
@@ -270,7 +271,9 @@ public class OrderPreservingTracker {
         }
 
         /**
-         * Only valid AFTER call to isOrderPreserving
+         * Only valid AFTER call to isOrderPreserving.
+         * This value is meaningful only when {@link TrackOrderByContext#isOrderPreserving}
+         * is true.
          */
         public int getOrderPreservingColumnCount() {
             if (!isOrderPreservingCalled) {
@@ -291,11 +294,11 @@ public class OrderPreservingTracker {
             if (this.isOrderPreserving) {
                 return ImmutableList.copyOf(this.orderPreservingTrackedInfos);
             }
-            int orderPreservingColumnCountToUse = this.orderPreservingColumnCount - pkPositionOffset;
-            if (orderPreservingColumnCountToUse <= 0) {
+            if (this.orderPreservingTrackedInfosCount <= 0) {
                 return Collections.<Info> emptyList();
             }
-            return ImmutableList.copyOf(this.orderPreservingTrackedInfos.subList(0, orderPreservingColumnCountToUse));
+            return ImmutableList.copyOf(
+                    this.orderPreservingTrackedInfos.subList(0, this.orderPreservingTrackedInfosCount));
         }
 
         public boolean isOrderPreserving() {
@@ -322,8 +325,8 @@ public class OrderPreservingTracker {
             // order.
             int prevSlotSpan = 1;
             int prevPos =  -1;
-            this.orderPreservingColumnCount += pkPositionOffset;
             OrderPreserving prevOrderPreserving = OrderPreserving.YES;
+            this.orderPreservingTrackedInfosCount = 0;
             for (int i = 0; i < orderPreservingTrackedInfos.size(); i++) {
                 Info entry = orderPreservingTrackedInfos.get(i);
                 int pos = entry.pkPosition;
@@ -337,13 +340,14 @@ public class OrderPreservingTracker {
                 if (!isOrderPreserving) {
                     break;
                 }
-                this.orderPreservingColumnCount++;
+                this.orderPreservingTrackedInfosCount ++;
                 prevPos = pos;
                 prevSlotSpan = entry.slotSpan;
                 prevOrderPreserving = entry.orderPreserving;
             }
             isOrderPreserving &=
                     (this.orderPreservingTrackedInfos.size() == this.trackingOrderByExpressionCount);
+            orderPreservingColumnCount = prevPos + prevSlotSpan + pkPositionOffset;
             this.isOrderPreservingCalled = true;
             return isOrderPreserving;
         }
@@ -412,7 +416,9 @@ public class OrderPreservingTracker {
     }
 
     /**
-     * Only valid AFTER call to isOrderPreserving
+     * Only valid AFTER call to isOrderPreserving.
+     * NOTE: This value is meaningful only when {@link OrderPreservingTracker#isOrderPreserving}
+     * is true.
      */
     public int getOrderPreservingColumnCount() {
         if(this.selectedTrackOrderByContext == null) {
