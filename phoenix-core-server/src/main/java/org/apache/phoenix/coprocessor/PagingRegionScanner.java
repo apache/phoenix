@@ -33,6 +33,7 @@ import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,9 +63,11 @@ public class PagingRegionScanner extends BaseRegionScanner {
         private int lookupPosition = 0;
         private byte[] lookupKeyPrefix = null;
         private Cell lastDummyCell = null;
+        private long pageSizeMs;
 
         private MultiKeyPointLookup(SkipScanFilter skipScanFilter) throws IOException {
             this.skipScanFilter = skipScanFilter;
+            pageSizeMs = ScanUtil.getPageSizeMsForRegionScanner(scan);
             pointLookupRanges = skipScanFilter.getPointLookupKeyRanges();
             lookupPosition = findLookupPosition(scan.getStartRow());;
             if (skipScanFilter.getOffset() > 0) {
@@ -132,6 +135,85 @@ public class PagingRegionScanner extends BaseRegionScanner {
         private boolean hasMore() {
             return lookupPosition < pointLookupRanges.size();
         }
+        private boolean next(List<Cell> results, boolean raw, RegionScanner scanner)
+                throws IOException {
+            try {
+                long startTime = EnvironmentEdgeManager.currentTimeMillis();
+                while (true) {
+                    if (raw ? scanner.nextRaw(results) : scanner.next(results)) {
+                        // Since each scan is supposed to return only one row (even when the
+                        // start and stop row key are not the same, which happens after region
+                        // moves or when there are delete markers in the table), this should not
+                        // happen
+                        LOGGER.warn("Each scan is supposed to return only one row, scan " + scan
+                                + ", region " + region);
+                    }
+                    if (pagingFilter == null) {
+                        if (!results.isEmpty()) {
+                            return hasMore();
+                        }
+                    }
+                    if (pagingFilter.isStopped()) {
+                        // This can only happen if the current scan is not a point lookup but a
+                        // range scan, that is, the start and stop row keys are not the same. The
+                        // start and stop row keys can be different after the region moves as the
+                        // hbase client adjust the start key.
+                        if (results.isEmpty()) {
+                            byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
+                            LOGGER.info("Page filter stopped, generating dummy key {} ",
+                                    Bytes.toStringBinary(rowKey));
+                            ScanUtil.getDummyResult(rowKey, results);
+
+                            // We got a dummy row during multi key point lookup. This means
+                            // the next scan cannot be a point lookup either since if we insist on
+                            // doing the same point lookup, then we may go into a infinite loop of
+                            // retrieving the same dummy row. Thus, the next scan has to be a range
+                            // scan starting after the current row key (the row key of the dummy
+                            // row). This range scan with the skip scan filter will return the next
+                            // valid row (eventually after possibly retuning zero or more different
+                            // dummy rows).
+                            lastDummyCell = results.get(0);
+                            lookupPosition--;
+                            return true;
+                        }
+                        return hasMore();
+                    }
+                    if (!results.isEmpty()) {
+                        return hasMore();
+                    }
+                    // The scanner returned an empty result. This means that one of the row keys
+                    // has been deleted.
+                    if (!hasMore()) {
+                        return false;
+                    }
+                    byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
+                    if (pagingFilter.getCurrentRowKeyToBeExcluded() != null) {
+                        if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSizeMs) {
+                            ScanUtil.getDummyResult(rowKey, results);
+                            lastDummyCell = results.get(0);
+                            return true;
+                        }
+                    }
+                    RegionScanner regionScanner = getNewScanner();
+                    if (regionScanner == null) {
+                        return false;
+                    }
+                    scanner.close();
+                    scanner = regionScanner;
+                    if (pagingFilter == null) {
+                        pagingFilter.init();
+                    }
+                }
+            } catch (Exception e) {
+                if (pagingFilter != null) {
+                    pagingFilter.init();
+                }
+                lookupPosition--;
+                throw e;
+            } finally {
+                scanner.close();
+            }
+        }
     }
 
     public PagingRegionScanner(Region region, RegionScanner scanner, Scan scan) {
@@ -160,9 +242,13 @@ public class PagingRegionScanner extends BaseRegionScanner {
         }
         initialized = true;
     }
+
     private boolean next(List<Cell> results, boolean raw) throws IOException {
         try {
             init();
+            if (pagingFilter != null) {
+                pagingFilter.init();
+            }
             byte[] adjustedStartRowKey =
                     scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY);
             byte[] adjustedStartRowKeyIncludeBytes =
@@ -188,6 +274,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 delegate = region.getScanner(scan);
                 scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY, null);
                 scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE, null);
+
             } else {
                 if (multiKeyPointLookup != null) {
                    RegionScanner regionScanner = multiKeyPointLookup.getNewScanner();
@@ -197,13 +284,13 @@ public class PagingRegionScanner extends BaseRegionScanner {
                    delegate = regionScanner;
                 }
             }
-            if (pagingFilter != null) {
-                pagingFilter.init();
-            }
 
+            if (multiKeyPointLookup != null) {
+                return multiKeyPointLookup.next(results, raw, delegate);
+            }
             boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
             if (pagingFilter == null) {
-                return multiKeyPointLookup != null ? multiKeyPointLookup.hasMore() : hasMore;
+                return hasMore;
             }
             if (!hasMore) {
                 // There is no more row from the HBase region scanner. We need to check if
@@ -214,40 +301,20 @@ public class PagingRegionScanner extends BaseRegionScanner {
                         LOGGER.info("Page filter stopped, generating dummy key {} ",
                                 Bytes.toStringBinary(rowKey));
                         ScanUtil.getDummyResult(rowKey, results);
-                        if (multiKeyPointLookup != null) {
-                            // We got a dummy row during multi key point lookup. This means
-                            // the next scan cannot be a point lookup since if we insist on
-                            // doing the same point lookup, then we may go into a infinite loop of
-                            // retrieving the same dummy row. Thus, the next scan has to be a range
-                            // scan starting after the current row key (the row key of the dummy
-                            // row). This range scan with the skip scan filter will return the next
-                            // valid row (eventually after possibly retuning zero or more different
-                            // dummy rows).
-                            multiKeyPointLookup.lastDummyCell = results.get(0);
-                            multiKeyPointLookup.lookupPosition--;
-                        }
-                        return true;
                     }
-                    return multiKeyPointLookup != null ? multiKeyPointLookup.hasMore() : true;
+                    return true;
                 }
-                return multiKeyPointLookup != null ? multiKeyPointLookup.hasMore() : false;
+                return false;
             } else {
                 // We got a row from the HBase scanner within the configured time (i.e.,
                 // the page size). We need to start a new page on the next next() call.
-                return multiKeyPointLookup != null ? multiKeyPointLookup.hasMore() : true;
+                return true;
             }
         } catch (Exception e) {
             if (pagingFilter != null) {
                 pagingFilter.init();
             }
-            if (multiKeyPointLookup != null) {
-                multiKeyPointLookup.lookupPosition--;
-            }
             throw e;
-        } finally {
-            if (multiKeyPointLookup != null) {
-                delegate.close();
-            }
         }
     }
 
