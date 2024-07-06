@@ -212,7 +212,7 @@ public class OrderPreservingTracker {
         private boolean isOrderPreserving = true;
         private Boolean isReverse = null;
         private int orderPreservingColumnCount = 0;
-        private int orderPreservingTrackedInfosCount = 0;
+        private int orderedTrackedInfosCount = 0;
         private final TrackOrderPreservingExpressionVisitor trackOrderPreservingExpressionVisitor;
         private final OrderBy inputOrderBy;
         private int trackingOrderByExpressionCount = 0;
@@ -265,10 +265,10 @@ public class OrderPreservingTracker {
 
             assert isReverse != null;
             if (isNullsLast != null && expression.isNullable()) {
-                if ((trackedInfo.nullsLast == isNullsLast.booleanValue()
-                        && isReverse.booleanValue())
-                    || (trackedInfo.nullsLast != isNullsLast.booleanValue()
-                        && !isReverse.booleanValue())) {
+                if (trackedInfo.nullsLast == isNullsLast.booleanValue()
+                        && isReverse.booleanValue()
+                    || trackedInfo.nullsLast != isNullsLast.booleanValue()
+                        && !isReverse.booleanValue()) {
                     isOrderPreserving = false;
                     isReverse = false;
                     return;
@@ -278,8 +278,10 @@ public class OrderPreservingTracker {
 
         /**
          * Only valid AFTER call to isOrderPreserving.
-         * This value is meaningful only when {@link TrackOrderByContext#isOrderPreserving}
-         * is true.
+         * This value represents the input column count of {@link TrackOrderByContext#inputOrderBy}
+         * corresponding to longest continuous ordering columns returned by
+         * {@link TrackOrderByContext#getOrderPreservingTrackInfos}, it may not equal to the size
+         * of {@link TrackOrderByContext#getOrderPreservingTrackInfos}.
          */
         public int getOrderPreservingColumnCount() {
             if (!isOrderPreservingCalled) {
@@ -300,12 +302,12 @@ public class OrderPreservingTracker {
             if (this.isOrderPreserving) {
                 return ImmutableList.copyOf(this.orderPreservingTrackedInfos);
             }
-            if (this.orderPreservingTrackedInfosCount <= 0) {
+            if (this.orderedTrackedInfosCount <= 0) {
                 return Collections.<Info> emptyList();
             }
             return ImmutableList.copyOf(
                     this.orderPreservingTrackedInfos.subList(
-                            0, this.orderPreservingTrackedInfosCount));
+                            0, this.orderedTrackedInfosCount));
         }
 
         public boolean isOrderPreserving() {
@@ -333,7 +335,7 @@ public class OrderPreservingTracker {
             int prevSlotSpan = 1;
             int prevPos =  -1;
             OrderPreserving prevOrderPreserving = OrderPreserving.YES;
-            this.orderPreservingTrackedInfosCount = 0;
+            this.orderedTrackedInfosCount = 0;
             for (int i = 0; i < orderPreservingTrackedInfos.size(); i++) {
                 Info entry = orderPreservingTrackedInfos.get(i);
                 int pos = entry.pkPosition;
@@ -347,13 +349,14 @@ public class OrderPreservingTracker {
                 if (!isOrderPreserving) {
                     break;
                 }
-                this.orderPreservingTrackedInfosCount ++;
+                this.orderedTrackedInfosCount++;
                 prevPos = pos;
                 prevSlotSpan = entry.slotSpan;
                 prevOrderPreserving = entry.orderPreserving;
             }
             isOrderPreserving = isOrderPreserving
-               && (this.orderPreservingTrackedInfos.size() == this.trackingOrderByExpressionCount);
+                    && this.orderPreservingTrackedInfos.size()
+                    == this.trackingOrderByExpressionCount;
             orderPreservingColumnCount = prevPos + prevSlotSpan + pkPositionOffset;
             this.isOrderPreservingCalled = true;
             return isOrderPreserving;
@@ -426,8 +429,9 @@ public class OrderPreservingTracker {
 
     /**
      * Only valid AFTER call to isOrderPreserving.
-     * NOTE: This value is meaningful only when {@link OrderPreservingTracker#isOrderPreserving}
-     * is true.
+     * This value represents the input column count corresponding to longest continuous ordering
+     * columns returned by {@link OrderPreservingTracker#getOrderPreservingTrackInfos}, it may not
+     * equal to the size of {@link OrderPreservingTracker#getOrderPreservingTrackInfos}.
      */
     public int getOrderPreservingColumnCount() {
         if(this.selectedTrackOrderByContext == null) {

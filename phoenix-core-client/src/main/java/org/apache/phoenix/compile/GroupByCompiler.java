@@ -156,8 +156,10 @@ public class GroupByCompiler {
         }
 
         /**
-         * NOTE: This value is meaningful only when {@link GroupBy#isOrderPreserving}
-         * is true.
+         * This value represents the row key column count corresponding to longest continuous
+         * ordering columns returned by
+         * {@link GroupBy#getOrderPreservingTrackInfos()#getOrderPreservingTrackInfos}, it may
+         * not equal to the size of {@link GroupBy#getOrderPreservingTrackInfos}.
          */
         public int getOrderPreservingColumnCount() {
             return orderPreservingColumnCount;
