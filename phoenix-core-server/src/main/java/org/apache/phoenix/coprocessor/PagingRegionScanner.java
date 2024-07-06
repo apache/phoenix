@@ -281,6 +281,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                    if (regionScanner == null) {
                        return false;
                    }
+                   delegate.close();
                    delegate = regionScanner;
                 }
             }
