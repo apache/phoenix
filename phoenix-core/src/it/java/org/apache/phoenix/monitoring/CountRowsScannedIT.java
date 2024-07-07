@@ -89,8 +89,74 @@ public class CountRowsScannedIT extends BaseTest {
         long count5 = countRowsScannedFromSql(stmt,
                 "SELECT A,Z FROM " + tableName + " WHERE Z >= 7 limit 1");
         assertEquals(7, count5);
+
+        // primary key with order by primary and limit
+        long count6 = countRowsScannedFromSql(stmt,
+                "SELECT A,Z FROM " + tableName + " WHERE A >= 3 ORDER BY A limit 1");
+        assertEquals(1, count6);
+
+        // primary key with order by non-primary and limit
+        long count7 = countRowsScannedFromSql(stmt,
+                "SELECT A,Z FROM " + tableName + " WHERE A >= 3 ORDER BY Z limit 1");
+        assertEquals(98, count7);
+
+        // select non-primary key with order by primary limit
+        long count8 = countRowsScannedFromSql(stmt,
+                "SELECT A,Z FROM " + tableName + " WHERE Z >= 7 ORDER BY A limit 1");
+        assertEquals(7, count8);
+
+        // select non-primary key with order by primary limit desc
+        // scan from the last, 1 row
+        long count9 = countRowsScannedFromSql(stmt,
+                "SELECT A,Z FROM " + tableName + " WHERE Z >= 7 ORDER BY A desc limit 1");
+        assertEquals(1, count9);
+
+        // select non-primary key with order by primary limit desc
+        // scan from the last, 1 row
+        long count10 = countRowsScannedFromSql(stmt, "SELECT A,Z FROM " + tableName
+                + " WHERE Z >= 7 AND Z <= 60 ORDER BY A desc limit 1");
+        assertEquals(41, count10);
+
+        // select non-primary key with order by primary limit
+        long count11 = countRowsScannedFromSql(stmt,
+                "SELECT A,Z FROM " + tableName + " WHERE Z >= 7 ORDER BY Z limit 1");
+        assertEquals(100, count11);
     }
 
+    @Test
+    public void testMultiPrimaryKeys() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+        // force many rpc calls
+        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName
+                + " (A UNSIGNED_LONG NOT NULL, B UNSIGNED_LONG NOT NULL, "
+                + " Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (A, B))");
+        for (int i = 1; i <= 100; i++) {
+            String sql = String
+                    .format("UPSERT INTO %s VALUES (%d, %d, %d)", tableName, (i % 5) + 1, i, i);
+            stmt.execute(sql);
+        }
+        conn.commit();
+
+        // pk1 and pk2, only needed rows are scanned
+        long count1 = countRowsScannedFromSql(stmt,
+                "SELECT A,B,Z FROM " + tableName + " WHERE A >= 2 AND B >= 3");
+        assertEquals(79, count1);
+
+        // pk2, all rows
+        long count2 = countRowsScannedFromSql(stmt,
+                "SELECT A,B,Z FROM " + tableName + " WHERE B >= 3");
+        assertEquals(100, count2);
+
+        // non-pk,  all rows
+        long count3 = countRowsScannedFromSql(stmt,
+                "SELECT A,B,Z FROM " + tableName + " WHERE Z >= 7");
+        assertEquals(100, count3);
+    }
     private long countRowsScannedFromSql(Statement stmt, String sql) throws SQLException {
         ResultSet rs = stmt.executeQuery(sql);
         while (rs.next()) {
