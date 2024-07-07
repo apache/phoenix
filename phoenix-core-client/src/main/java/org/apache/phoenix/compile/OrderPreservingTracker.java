@@ -71,7 +71,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * 3.Add ascending and nullsLast to the inner class {@link Info} , and extracted complete ordering
  *   information in {@link Info} class by the inner {@link TrackOrderPreservingExpressionVisitor} class,
  *   so we can inferring alignment between the target OrderByExpressions and the input OrderBys based on
- *   {@link Info} in {@link TrackOrderByContext#isOrderPreserving} method, not on the row keys like the original
+ *   {@link Info} in {@link TrackOrderByContext#isOrderPreserving()} method, not on the row keys like the original
  *   method does.
  *
  * 4.{@link OrderPreservingTracker#getOrderPreservingTrackInfos} could extract partial continuous ordering columns which start from the
