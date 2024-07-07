@@ -225,9 +225,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
         this.region = region;
         this.scan = scan;
         pagingFilter = ScanUtil.getPhoenixPagingFilter(scan);
-        if (pagingFilter != null) {
-            pagingFilter.init();
-        }
     }
 
     void init() throws IOException {
@@ -248,7 +245,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
     }
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
-        try {
             init();
             if (pagingFilter != null) {
                 pagingFilter.init();
@@ -315,12 +311,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 // the page size). We need to start a new page on the next next() call.
                 return true;
             }
-        } catch (Exception e) {
-            if (pagingFilter != null) {
-                pagingFilter.init();
-            }
-            throw e;
-        }
     }
 
     @Override
