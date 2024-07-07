@@ -48,6 +48,10 @@ import org.slf4j.LoggerFactory;
  *  PagingFilter has stopped the scanner, and returning a dummy result to signal to
  *  Phoenix client to resume the scan operation by skipping this dummy result and calling
  *  ResultScanner#next().
+ *
+ *  PagingRegionScanner also converts a multi-key point lookup scan into N single point lookup
+ *  scans to allow individual scan to leverage HBase bloom filter. This conversion is done within
+ *  the MultiKeyPointLookup inner class.
  */
 public class PagingRegionScanner extends BaseRegionScanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(PagingRegionScanner.class);
@@ -75,7 +79,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 System.arraycopy(scan.getStartRow(), 0, lookupKeyPrefix, 0,
                         skipScanFilter.getOffset());
             }
-
         }
 
         private int findLookupPosition(byte[] startRowKey) {
@@ -103,7 +106,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
             }
             lastDummyCell = null;
             scan.withStopRow(pointLookupRanges.get(lookupPosition++).getLowerRange(), true);
-            multiKeyPointLookup.skipScanFilter.resetState();
+            skipScanFilter.resetState();
             return true;
         }
 
@@ -125,6 +128,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 byte[] dummyRowKey = CellUtil.cloneRow(lastDummyCell);
                 scan.withStartRow(dummyRowKey, false);
                 lastDummyCell = null;
+                skipScanFilter.resetState();
             } else {
                 scan.withStartRow(adjustedRowKey, true);
             }

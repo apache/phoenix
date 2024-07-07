@@ -38,6 +38,29 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  * This is a top level Phoenix filter which is injected to a scan at the server side. If the scan has
  * already a filter then PagingFilter wraps it. This filter for server paging. It makes sure that
  * the scan does not take more than pageSizeInMs.
+ *
+ * PagingFilter has four states that are INITIAL, STARTED, TIME_TO_STOP, and STOPPED.
+ * PagingRegionScanner initializes PagingFilter before retrieving a row. During this
+ * initialization, the state becomes INITIAL.
+ *
+ * PagingFilter implements the paging state machine in three  filter methods that are
+ * hasFilterRow(), filterAllRemaining(), and filterRowKey(). These methods are called in this order.
+ * Sometimes, filterAllRemaining() is called multiple times back to back.
+ *
+ * In hasFilterRow(), PagingFilter moves to STARTED and records the starting time to scan rows if
+ * the current state is INITIAL. If the current state is STARTED, and it is time to page out, then
+ * PagingFilter changes the state to TIME_TO_STOP.
+ *
+ * In filterAllRemaining(), PagingFilter returns true if the current state is TIME_TO_STOP or
+ * STOPPED. If the state is TIME_TO_STOP then it becomes STOPPED. This method can be called
+ * back to back. Returning true from this method causes the HBase region scanner to signal the
+ * caller (that is PagingRegionScanner) that there is no more rows to scan by returning false from
+ * the next() call. In this case, PagingRegionScanner checks if PagingFilter is stopped to see if
+ * the scan operation paged out or really ended.
+ *
+ * If the scan operation has not been terminated by PageFilter, HBase subsequently calls
+ * filterRowKey(). In this method, PagingFilter records the last row that is scanned.
+ *
  */
 public class PagingFilter extends FilterBase implements Writable {
     private enum State {
@@ -85,39 +108,22 @@ public class PagingFilter extends FilterBase implements Writable {
         currentCell = null;
     }
 
+    /**
+     * This is called once for every row in the beginning.
+     */
     @Override
-    public void reset() throws IOException {
+    public boolean hasFilterRow() {
         long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-        // reset can be called multiple times for the same row sometimes even before we have
-        // scanned even one row. The order in which it is called is not very predictable.
-        // So we need to ensure that we have seen at least one row before we page.
-        // The currentCell != null check ensures that.
-        if (state == State.STARTED && currentCell != null
-                && currentTime - startTime >= pageSizeMs) {
-            state = State.TIME_TO_STOP;
+        if (state == State.INITIAL) {
+            startTime = currentTime;
+            state = State.STARTED;
+        } else {
+            if (state == State.STARTED && currentCell != null
+                    && currentTime - startTime >= pageSizeMs) {
+                state = State.TIME_TO_STOP;
+            }
         }
-        if (delegate != null) {
-            delegate.reset();
-            return;
-        }
-        super.reset();
-    }
-
-    @Override
-    public Cell getNextCellHint(Cell currentKV) throws IOException {
-        if (delegate != null) {
-            return delegate.getNextCellHint(currentKV);
-        }
-        return super.getNextCellHint(currentKV);
-    }
-
-    @Override
-    public boolean filterRowKey(Cell cell) throws IOException {
-        currentCell = cell;
-        if (delegate != null) {
-            return delegate.filterRowKey(cell);
-        }
-        return super.filterRowKey(cell);
+        return true;
     }
 
     @Override
@@ -136,22 +142,33 @@ public class PagingFilter extends FilterBase implements Writable {
     }
 
     @Override
-    /**
-     * This is called once for every row in the beginning.
-     */
-    public boolean hasFilterRow() {
-        if (state == State.INITIAL) {
-            startTime = EnvironmentEdgeManager.currentTimeMillis();
-            state = State.STARTED;
+    public boolean filterRowKey(Cell cell) throws IOException {
+        currentCell = cell;
+        if (delegate != null) {
+            return delegate.filterRowKey(cell);
         }
-        return true;
+        return super.filterRowKey(cell);
+    }
+
+    @Override
+    public void reset() throws IOException {
+        if (delegate != null) {
+            delegate.reset();
+            return;
+        }
+        super.reset();
+    }
+
+    @Override
+    public Cell getNextCellHint(Cell currentKV) throws IOException {
+        if (delegate != null) {
+            return delegate.getNextCellHint(currentKV);
+        }
+        return super.getNextCellHint(currentKV);
     }
 
     @Override
     public boolean filterRow() throws IOException {
-        if (state == State.TIME_TO_STOP) {
-            return true;
-        }
         if (delegate != null) {
             return delegate.filterRow();
         }
@@ -201,7 +218,6 @@ public class PagingFilter extends FilterBase implements Writable {
 
     @Override
     public ReturnCode filterKeyValue(Cell v) throws IOException {
-
         if (delegate != null) {
             return delegate.filterKeyValue(v);
         }
@@ -210,7 +226,6 @@ public class PagingFilter extends FilterBase implements Writable {
 
     @Override
     public Filter.ReturnCode filterCell(Cell c) throws IOException {
-        currentCell = c;
         if (delegate != null) {
             return delegate.filterCell(c);
         }
