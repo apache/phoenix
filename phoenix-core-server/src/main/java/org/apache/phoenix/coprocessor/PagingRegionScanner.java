@@ -98,11 +98,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
 
         private boolean verifyStartRowKey(byte[] startRowKey) {
             // The startRowKey may not be one of the point lookup keys. This happens when
-            // the region moves and the HBase client adjusts the scan start row key. In this case,
-            // the next scan will not be a point lookup but a range scan effectively as the start
-            // row key and the stop row key will not be the same.
-            // This range scan with the skip scan filter will return the next valid row
-            // (eventually after possibly retuning  zero or more different dummy rows).
+            // the region moves and the HBase client adjusts the scan start row key.
             lookupPosition = findLookupPosition(startRowKey);
             if (lookupPosition == pointLookupRanges.size()) {
                 return false;
@@ -110,7 +106,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
             byte[] rowKey = pointLookupRanges.get(lookupPosition++).getLowerRange();
             scan.withStopRow(rowKey, true);
             scan.withStopRow(rowKey, true);
-            skipScanFilter.resetState();
             return true;
         }
 
@@ -152,7 +147,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                     if (!results.isEmpty()) {
                         return hasMore();
                     }
-                    // The scanner returned an empty result. This means that one of the row keys
+                    // The scanner returned an empty result. This means that one of the rows
                     // has been deleted.
                     if (!hasMore()) {
                         return false;

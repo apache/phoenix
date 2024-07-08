@@ -226,11 +226,10 @@ public class SkipScanFilter extends FilterBase implements Writable {
         return true;
     }
     
-    public void resetState() {
+    private void resetState() {
         isDone = false;
         endKeyLength = 0;
         Arrays.fill(position, 0);
-        nextCellHintMap.clear();
     }
     
     private boolean intersect(final byte[] lowerInclusiveKey, final byte[] upperExclusiveKey, List<List<KeyRange>> newSlots) {
