@@ -66,18 +66,21 @@ public class PagingRegionScanner extends BaseRegionScanner {
         private List<KeyRange> pointLookupRanges = null;
         private int lookupPosition = 0;
         private byte[] lookupKeyPrefix = null;
-        private Cell lastDummyCell = null;
         private long pageSizeMs;
 
         private MultiKeyPointLookup(SkipScanFilter skipScanFilter) throws IOException {
             this.skipScanFilter = skipScanFilter;
             pageSizeMs = ScanUtil.getPageSizeMsForRegionScanner(scan);
             pointLookupRanges = skipScanFilter.getPointLookupKeyRanges();
-            lookupPosition = findLookupPosition(scan.getStartRow());;
+            lookupPosition = findLookupPosition(scan.getStartRow());
             if (skipScanFilter.getOffset() > 0) {
                 lookupKeyPrefix = new byte[skipScanFilter.getOffset()];
                 System.arraycopy(scan.getStartRow(), 0, lookupKeyPrefix, 0,
                         skipScanFilter.getOffset());
+            }
+            // A point lookup scan does not need to have a paging filter
+            if (pagingFilter != null) {
+                scan.setFilter(pagingFilter.getDelegateFilter());
             }
         }
 
@@ -104,8 +107,9 @@ public class PagingRegionScanner extends BaseRegionScanner {
             if (lookupPosition == pointLookupRanges.size()) {
                 return false;
             }
-            lastDummyCell = null;
-            scan.withStopRow(pointLookupRanges.get(lookupPosition++).getLowerRange(), true);
+            byte[] rowKey = pointLookupRanges.get(lookupPosition++).getLowerRange();
+            scan.withStopRow(rowKey, true);
+            scan.withStopRow(rowKey, true);
             skipScanFilter.resetState();
             return true;
         }
@@ -124,14 +128,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                 System.arraycopy(rowKey, 0, adjustedRowKey, lookupKeyPrefix.length,
                         rowKey.length);
             }
-            if (lastDummyCell != null) {
-                byte[] dummyRowKey = CellUtil.cloneRow(lastDummyCell);
-                scan.withStartRow(dummyRowKey, false);
-                lastDummyCell = null;
-                skipScanFilter.resetState();
-            } else {
-                scan.withStartRow(adjustedRowKey, true);
-            }
+            scan.withStartRow(adjustedRowKey, true);
             scan.withStopRow(adjustedRowKey, true);
             return region.getScanner(scan);
         }
@@ -152,36 +149,6 @@ public class PagingRegionScanner extends BaseRegionScanner {
                         LOGGER.warn("Each scan is supposed to return only one row, scan " + scan
                                 + ", region " + region);
                     }
-                    if (pagingFilter == null) {
-                        if (!results.isEmpty()) {
-                            return hasMore();
-                        }
-                    }
-                    if (pagingFilter.isStopped()) {
-                        // This can only happen if the current scan is not a point lookup but a
-                        // range scan, that is, the start and stop row keys are not the same. The
-                        // start and stop row keys can be different after the region moves as the
-                        // hbase client adjust the start key.
-                        if (results.isEmpty()) {
-                            byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
-                            LOGGER.info("Page filter stopped, generating dummy key {} ",
-                                    Bytes.toStringBinary(rowKey));
-                            ScanUtil.getDummyResult(rowKey, results);
-
-                            // We got a dummy row during multi key point lookup. This means
-                            // the next scan cannot be a point lookup either since if we insist on
-                            // doing the same point lookup, then we may go into a infinite loop of
-                            // retrieving the same dummy row. Thus, the next scan has to be a range
-                            // scan starting after the current row key (the row key of the dummy
-                            // row). This range scan with the skip scan filter will return the next
-                            // valid row (eventually after possibly retuning zero or more different
-                            // dummy rows).
-                            lastDummyCell = results.get(0);
-                            lookupPosition--;
-                            return true;
-                        }
-                        return hasMore();
-                    }
                     if (!results.isEmpty()) {
                         return hasMore();
                     }
@@ -190,28 +157,21 @@ public class PagingRegionScanner extends BaseRegionScanner {
                     if (!hasMore()) {
                         return false;
                     }
-                    byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
-                    if (pagingFilter.getCurrentRowKeyToBeExcluded() != null) {
-                        if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSizeMs) {
-                            ScanUtil.getDummyResult(rowKey, results);
-                            lastDummyCell = results.get(0);
-                            return true;
-                        }
+
+                    if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSizeMs) {
+                        byte[] rowKey = pointLookupRanges.get(lookupPosition - 1).getLowerRange();;
+                        ScanUtil.getDummyResult(rowKey, results);
+                        return true;
                     }
+
                     RegionScanner regionScanner = getNewScanner();
                     if (regionScanner == null) {
                         return false;
                     }
                     scanner.close();
                     scanner = regionScanner;
-                    if (pagingFilter == null) {
-                        pagingFilter.init();
-                    }
                 }
             } catch (Exception e) {
-                if (pagingFilter != null) {
-                    pagingFilter.init();
-                }
                 lookupPosition--;
                 throw e;
             } finally {
@@ -235,9 +195,8 @@ public class PagingRegionScanner extends BaseRegionScanner {
         BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
         if (bloomFilterType == BloomType.ROW) {
             // Check if the scan is a multi-point-lookup scan if so remove it from the scan
-            SkipScanFilter skipScanFilter =
-                    ScanUtil.getSkipScanFilter(scan);
-            if (skipScanFilter != null && skipScanFilter.isMultiKeyPointLookup()) {
+            SkipScanFilter skipScanFilter = ScanUtil.removeSkipScanFilter(scan);
+            if (skipScanFilter != null) {
                 multiKeyPointLookup = new MultiKeyPointLookup(skipScanFilter);
             }
         }
