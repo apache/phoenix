@@ -72,6 +72,7 @@ message IndexMaintainer {
   optional bytes indexWhere = 29;
   repeated ColumnReference indexWhereColumns = 30;
   optional bool isCDCIndex = 31;
+  optional int32 dataTableSaltBuckets = 32;
 }
 
 message TransformMaintainer {

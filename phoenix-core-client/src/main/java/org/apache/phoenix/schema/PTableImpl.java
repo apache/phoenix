@@ -142,7 +142,6 @@ import org.apache.phoenix.util.TrustedByteArrayOutputStream;
  * @since 0.1
  */
 public class PTableImpl implements PTable {
-    private static final Integer NO_SALTING = -1;
     private static final int VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS = 0;
     private static final int VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS = 1;
     private static final int VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS = 2;

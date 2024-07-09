@@ -397,6 +397,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private RowKeyMetaData rowKeyMetaData;
     private byte[] indexTableName;
     private int nIndexSaltBuckets;
+    private int nDataTableSaltBuckets;
     private byte[] dataEmptyKeyValueCF;
     private ImmutableBytesPtr emptyKeyValueCFPtr;
     private int nDataCFs;
@@ -470,6 +471,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
         this.dataEncodingScheme = dataTable.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : dataTable.getEncodingScheme();
         this.dataImmutableStorageScheme = dataTable.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : dataTable.getImmutableStorageScheme();
+        this.nDataTableSaltBuckets = isDataTableSalted ? dataTable.getBucketNum() : PTable.NO_SALTING;
 
         byte[] indexTableName = index.getPhysicalName().getBytes();
         // Use this for the nDataSaltBuckets as we need this for local indexes
@@ -925,7 +927,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // there to maintain compatibility between an old client and a new server.
             if (isDataTableSalted) {
                 // Set salt byte
-                byte saltByte = SaltingUtil.getSaltingByte(dataRowKey, SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES, nIndexSaltBuckets);
+                byte saltByte = SaltingUtil.getSaltingByte(dataRowKey,
+                        SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES,
+                        nDataTableSaltBuckets);
                 dataRowKey[0] = saltByte;
             }
             return dataRowKey.length == length ? dataRowKey : Arrays.copyOf(dataRowKey, length);
@@ -1789,6 +1793,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         } else {
             maintainer.isCDCIndex = false;
         }
+        if (proto.hasDataTableSaltBuckets()) {
+            maintainer.nDataTableSaltBuckets = proto.getDataTableSaltBuckets();
+        }
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1933,6 +1940,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         builder.setIsCDCIndex(maintainer.isCDCIndex);
+        if (maintainer.isDataTableSalted) {
+            builder.setDataTableSaltBuckets(maintainer.nDataTableSaltBuckets);
+        }
         return builder.build();
     }
 

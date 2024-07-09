@@ -102,7 +102,7 @@ public class CDCQueryIT extends CDCBaseIT {
                 { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 1, 1,
                         Boolean.FALSE },
                 // Once PHOENIX-7239, change this to have different salt buckets for data and index.
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 1, 1,
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 3, 5,
                         Boolean.TRUE },
                 { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null,
                         Boolean.FALSE },
