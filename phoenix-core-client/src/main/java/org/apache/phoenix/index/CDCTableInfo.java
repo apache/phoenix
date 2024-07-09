@@ -164,7 +164,6 @@ public class CDCTableInfo {
         if (cdcDataTableRef.getTable().isImmutableRows() &&
                 cdcDataTableRef.getTable().getImmutableStorageScheme() ==
                         PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
-
             List<ColumnRef> dataColumns = new ArrayList<ColumnRef>();
             PTable table = cdcDataTableRef.getTable();
             for (PColumn column : table.getColumns()) {
