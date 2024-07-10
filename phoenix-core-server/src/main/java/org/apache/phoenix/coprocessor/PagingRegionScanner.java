@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -154,7 +153,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
                     }
 
                     if (EnvironmentEdgeManager.currentTimeMillis() - startTime > pageSizeMs) {
-                        byte[] rowKey = pointLookupRanges.get(lookupPosition - 1).getLowerRange();;
+                        byte[] rowKey = pointLookupRanges.get(lookupPosition - 1).getLowerRange();
                         ScanUtil.getDummyResult(rowKey, results);
                         return true;
                     }
@@ -199,72 +198,72 @@ public class PagingRegionScanner extends BaseRegionScanner {
     }
 
     private boolean next(List<Cell> results, boolean raw) throws IOException {
-            init();
-            if (pagingFilter != null) {
-                pagingFilter.init();
-            }
-            byte[] adjustedStartRowKey =
-                    scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY);
-            byte[] adjustedStartRowKeyIncludeBytes =
-                    scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE);
-            // If scanners at higher level needs to re-scan the data that were already scanned
-            // earlier, they can provide adjusted new start row key for the scan and whether to
-            // include it.
-            // If they are set as the scan attributes, close the scanner, reopen it with
-            // updated start row key and whether to include it. Update mvcc read point from the
-            // previous scanner and set it back to the new scanner to maintain the read
-            // consistency for the given region.
-            // Once done, continue the scan operation and reset the attributes.
-            if (adjustedStartRowKey != null && adjustedStartRowKeyIncludeBytes != null) {
-                long mvccReadPoint = delegate.getMvccReadPoint();
-                delegate.close();
-                scan.withStartRow(adjustedStartRowKey,
-                        Bytes.toBoolean(adjustedStartRowKeyIncludeBytes));
-                PackagePrivateFieldAccessor.setMvccReadPoint(scan, mvccReadPoint);
-                if (multiKeyPointLookup != null
-                        && !multiKeyPointLookup.verifyStartRowKey(adjustedStartRowKey)) {
-                    return false;
-                }
-                delegate = region.getScanner(scan);
-                scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY, null);
-                scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE, null);
-
-            } else {
-                if (multiKeyPointLookup != null) {
-                   RegionScanner regionScanner = multiKeyPointLookup.getNewScanner();
-                   if (regionScanner == null) {
-                       return false;
-                   }
-                   delegate.close();
-                   delegate = regionScanner;
-                }
-            }
-
-            if (multiKeyPointLookup != null) {
-                return multiKeyPointLookup.next(results, raw, delegate);
-            }
-            boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
-            if (pagingFilter == null) {
-                return hasMore;
-            }
-            if (!hasMore) {
-                // There is no more row from the HBase region scanner. We need to check if
-                // PagingFilter has stopped the region scanner
-                if (pagingFilter.isStopped()) {
-                    if (results.isEmpty()) {
-                        byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
-                        LOGGER.info("Page filter stopped, generating dummy key {} ",
-                                Bytes.toStringBinary(rowKey));
-                        ScanUtil.getDummyResult(rowKey, results);
-                    }
-                    return true;
-                }
+        init();
+        if (pagingFilter != null) {
+            pagingFilter.init();
+        }
+        byte[] adjustedStartRowKey =
+                scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY);
+        byte[] adjustedStartRowKeyIncludeBytes =
+                scan.getAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE);
+        // If scanners at higher level needs to re-scan the data that were already scanned
+        // earlier, they can provide adjusted new start row key for the scan and whether to
+        // include it.
+        // If they are set as the scan attributes, close the scanner, reopen it with
+        // updated start row key and whether to include it. Update mvcc read point from the
+        // previous scanner and set it back to the new scanner to maintain the read
+        // consistency for the given region.
+        // Once done, continue the scan operation and reset the attributes.
+        if (adjustedStartRowKey != null && adjustedStartRowKeyIncludeBytes != null) {
+            long mvccReadPoint = delegate.getMvccReadPoint();
+            delegate.close();
+            scan.withStartRow(adjustedStartRowKey,
+                    Bytes.toBoolean(adjustedStartRowKeyIncludeBytes));
+            PackagePrivateFieldAccessor.setMvccReadPoint(scan, mvccReadPoint);
+            if (multiKeyPointLookup != null
+                    && !multiKeyPointLookup.verifyStartRowKey(adjustedStartRowKey)) {
                 return false;
-            } else {
-                // We got a row from the HBase scanner within the configured time (i.e.,
-                // the page size). We need to start a new page on the next next() call.
+            }
+            delegate = region.getScanner(scan);
+            scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY, null);
+            scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE, null);
+
+        } else {
+            if (multiKeyPointLookup != null) {
+               RegionScanner regionScanner = multiKeyPointLookup.getNewScanner();
+               if (regionScanner == null) {
+                   return false;
+               }
+               delegate.close();
+               delegate = regionScanner;
+            }
+        }
+
+        if (multiKeyPointLookup != null) {
+            return multiKeyPointLookup.next(results, raw, delegate);
+        }
+        boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
+        if (pagingFilter == null) {
+            return hasMore;
+        }
+        if (!hasMore) {
+            // There is no more row from the HBase region scanner. We need to check if
+            // PagingFilter has stopped the region scanner
+            if (pagingFilter.isStopped()) {
+                if (results.isEmpty()) {
+                    byte[] rowKey = pagingFilter.getCurrentRowKeyToBeExcluded();
+                    LOGGER.info("Page filter stopped, generating dummy key {} ",
+                            Bytes.toStringBinary(rowKey));
+                    ScanUtil.getDummyResult(rowKey, results);
+                }
                 return true;
             }
+            return false;
+        } else {
+            // We got a row from the HBase scanner within the configured time (i.e.,
+            // the page size). We need to start a new page on the next next() call.
+            return true;
+        }
     }
 
     @Override
