@@ -32,6 +32,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
@@ -89,6 +90,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeFalse;
 import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -132,7 +134,6 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
         serverProps.put(PhoenixConfigurationUtilHelper.TRANSFORM_MONITOR_ENABLED, Boolean.FALSE.toString());
         Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
         clientProps.put(PhoenixConfigurationUtilHelper.TRANSFORM_MONITOR_ENABLED, Boolean.FALSE.toString());
-        clientProps.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
         setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
                 new ReadOnlyProps(clientProps.entrySet().iterator()));
     }
@@ -1163,6 +1164,9 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInvalidRowsWithTableLevelMaxLookback() throws Exception {
+        assumeFalse("HBase 2.6+ hangs with stopped clock",
+            VersionInfo.compareVersion(VersionInfo.getVersion().replace("-hadoop3", ""),
+                "2.6.0") >= 0);
         if (! mutable) {
             return;
         }
