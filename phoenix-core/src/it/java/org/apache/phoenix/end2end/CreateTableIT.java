@@ -118,7 +118,6 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     public void testSplitsWithFile() throws Exception {
         File splitFile = new File("splitFile.txt");
         try {
-            System.out.println("RSS splitFile:" + splitFile.getAbsolutePath());
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(splitFile))) {
                 writer.write("EA");
                 writer.newLine();

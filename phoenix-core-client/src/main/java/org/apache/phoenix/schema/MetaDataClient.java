@@ -1173,7 +1173,7 @@ public class MetaDataClient {
                 splitsListFromFile.add(Bytes.toBytes(line));
             }
         } catch (IOException ioe) {
-            LOGGER.info("Exception while reading splits file", ioe);
+            LOGGER.warn("Exception while reading splits file", ioe);
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_OPEN_SPLIT_FILE)
                     .build().buildException();
         }
