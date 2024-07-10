@@ -134,8 +134,13 @@ import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
+import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
@@ -1035,12 +1040,20 @@ public class MetaDataClient {
         argUpsert.execute();
     }
 
-    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType, byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
+    public MutationState createTable(CreateTableStatement statement, byte[][] splits, PTable parent,
+            String viewStatement, ViewType viewType, PDataType viewIndexIdType,
+            byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
         TableName tableName = statement.getTableName();
+        LOGGER.info("RSS properties: {}", statement.getProps());
+        LOGGER.info("RSS splits: {}", splits);
+
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, statement.getTableType());
 
+        splits = processSplits(tableProps, splits);
+        LOGGER.info("RSS table Properties: {}", tableProps);
+        LOGGER.info("RSS cf props: {}", commonFamilyProps);
         boolean isAppendOnlySchema = false;
         long updateCacheFrequency = (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
                 connection.getQueryServices().getProps().get(
@@ -1122,6 +1135,51 @@ public class MetaDataClient {
         byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         MutationPlan plan = compiler.compile(Collections.singletonList(tableRef), emptyCF, null, null, ts);
         return connection.getQueryServices().updateData(plan);
+    }
+
+    private byte[][] processSplits(Map<String, Object> tableProperties, byte[][] splits)
+            throws SQLException {
+        String splitFilesLocation = (String)tableProperties.get("SPLITS_FILE");
+        if (splitFilesLocation == null || splitFilesLocation.isEmpty()) {
+            splitFilesLocation = null;
+        }
+
+        // Both splits and split file location are not passed, so return empty split.
+        if (splits.length == 0 && splitFilesLocation == null) {
+            return splits;
+        }
+
+        // Both splits[] and splitFileLocation are provided. Throw an exception in this case.
+        if (splits.length != 0 && splitFilesLocation != null) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLITS_AND_SPLIT_FILE_EXISTS)
+                    .build().buildException();
+        }
+
+        // This means we only have splits[] and no split file location is specified
+        if (splitFilesLocation == null) {
+            return splits;
+        }
+        // This means splits[] is empty and split file location is not null.
+        File splitFile = new File(splitFilesLocation);
+        // Check if file exists and is a file not a directory.
+        if (!splitFile.exists() || !splitFile.isFile()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.SPLIT_FILE_DONT_EXIST)
+                    .build().buildException();
+        }
+        List<byte[]> splitsListFromFile = new ArrayList<>();
+        try {
+            Path path = Paths.get(splitFilesLocation);
+            BufferedReader reader = Files.newBufferedReader(path);
+            String line;
+            while ((line = reader.readLine()) != null) {
+                splitsListFromFile.add(Bytes.toBytes(line));
+            }
+        } catch (IOException ioe) {
+            LOGGER.info("Exception while reading splits file", ioe);
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_OPEN_SPLIT_FILE)
+                    .build().buildException();
+        }
+        return splitsListFromFile.toArray(new byte[splitsListFromFile.size()][]);
     }
 
     /**

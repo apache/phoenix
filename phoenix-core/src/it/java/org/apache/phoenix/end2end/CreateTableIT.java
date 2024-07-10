@@ -29,6 +29,9 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertThrows;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -86,6 +89,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -108,6 +112,77 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
         List<KeyRange> splits = pstatement.getQueryPlan().getSplits();
         assertTrue(splits.size() > 0);
+    }
+
+    @Test
+    public void testSplitsWithFile() throws Exception {
+        File splitFile = new File("splitFile.txt");
+        try {
+            System.out.println("RSS splitFile:" + splitFile.getAbsolutePath());
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(splitFile))) {
+                writer.write("EA");
+                writer.newLine();
+                writer.write("EZ");
+            }
+            Properties props = new Properties();
+            Connection conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            conn.createStatement().execute("CREATE TABLE " + tableName
+                    + " (pk char(2) not null primary key) SPLITS_FILE='splitFile.txt'");
+            conn.close();
+            String query = "select * from  " + tableName;
+            conn = DriverManager.getConnection(getUrl(), props);
+            Statement statement = conn.createStatement();
+            statement.execute(query);
+            PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
+            List<KeyRange> splits = pstatement.getQueryPlan().getSplits();
+            // There will be 3 region splits: '' - EA, EA - EZ, EZ - ''
+            assertEquals(3, splits.size());
+        } finally {
+            // Delete split file.
+            splitFile.delete();
+        }
+    }
+
+    /**
+     * Test create table fails with an invalid file name.
+     * @throws Exception
+     */
+    @Test
+    public void testSplitsWithBadFileName() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tableName
+                    + " (pk char(2) not null primary key) SPLITS_FILE='bad-split-file.txt'");
+            Assert.fail("Shouldn't come here");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.SPLIT_FILE_DONT_EXIST.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
+    }
+
+    /**
+     * Test create table fails when both split file and split points are provided.
+     * @throws Exception
+     */
+    @Test
+    public void testSplitsWithBothSplitPointsAndSplitFileProvided() throws Exception {
+        Properties props = new Properties();
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName = generateUniqueName();
+        try {
+            conn.createStatement().execute("CREATE TABLE " + tableName
+                    + " (pk char(2) not null primary key) SPLITS_FILE='bad-split-file.txt'" +
+                    " SPLIT ON ('EA','EZ')" );
+            Assert.fail("Shouldn't come here");
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.SPLITS_AND_SPLIT_FILE_EXISTS.getErrorCode(), e.getErrorCode());
+        } finally {
+            conn.close();
+        }
     }
 
     @Test

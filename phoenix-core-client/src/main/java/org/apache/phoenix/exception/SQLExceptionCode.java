@@ -474,7 +474,10 @@ public enum SQLExceptionCode {
             "Missing ENCODED_QUALIFIER."),
     EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
             + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
-
+    SPLITS_AND_SPLIT_FILE_EXISTS(1152, "XCL52", "Both splits and split file are passed"),
+    // 1153 code is taken by CANNOT_DROP_CDC_INDEX
+    SPLIT_FILE_DONT_EXIST(1154, "XCL54", "Either split file don't exist or is not a file"),
+    UNABLE_TO_OPEN_SPLIT_FILE(1155, "XCL55", "Exception occurred while opening splits file"),
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
