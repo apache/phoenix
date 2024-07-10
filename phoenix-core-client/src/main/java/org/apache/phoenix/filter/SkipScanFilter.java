@@ -93,12 +93,21 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public SkipScanFilter() {
     }
 
+    public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions) {
+        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions,
+                filter.isMultiKeyPointLookup);
+    }
+
     public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions,
             boolean isMultiKeyPointLookup) {
         this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions,
                 isMultiKeyPointLookup);
     }
 
+    public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
+        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema, false);
+    }
+    
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema, boolean isMultiKeyPointLookup) {
         this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema, isMultiKeyPointLookup);
     }
@@ -107,7 +116,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
             boolean isMultiKeyPointLookup) {
         this(slots, slotSpan, schema, false, isMultiKeyPointLookup);
     }
-    
+
     private SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
             boolean includeMultipleVersions, boolean isMultiKeyPointLookup) {
         init(slots, slotSpan, schema, includeMultipleVersions, isMultiKeyPointLookup);
