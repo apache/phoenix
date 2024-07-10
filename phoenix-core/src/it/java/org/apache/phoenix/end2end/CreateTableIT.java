@@ -145,6 +145,40 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
 
     /**
+     * Pass the absolute path of the splits file while creating the table.
+     * @throws Exception
+     */
+    @Test
+    public void testSplitsWithAbsoluteFileName() throws Exception {
+        File splitFile = new File("splitFile.txt");
+        try {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(splitFile))) {
+                writer.write("EA");
+                writer.newLine();
+                writer.write("EZ");
+            }
+            Properties props = new Properties();
+            Connection conn = DriverManager.getConnection(getUrl(), props);
+            String tableName = generateUniqueName();
+            String createTableSql = "CREATE TABLE " + tableName
+                    + " (pk char(2) not null primary key) SPLITS_FILE='" + splitFile.getAbsolutePath() + "'";
+            conn.createStatement().execute(createTableSql);
+            conn.close();
+            String query = "select * from  " + tableName;
+            conn = DriverManager.getConnection(getUrl(), props);
+            Statement statement = conn.createStatement();
+            statement.execute(query);
+            PhoenixStatement pstatement = statement.unwrap(PhoenixStatement.class);
+            List<KeyRange> splits = pstatement.getQueryPlan().getSplits();
+            // There will be 3 region splits: '' - EA, EA - EZ, EZ - ''
+            assertEquals(3, splits.size());
+        } finally {
+            // Delete split file.
+            splitFile.delete();
+        }
+    }
+
+    /**
      * Test create table fails with an invalid file name.
      * @throws Exception
      */

@@ -23,6 +23,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
+import static org.apache.phoenix.query.QueryConstants.SPLITS_FILE;
 import static org.apache.phoenix.query.QueryConstants.SYSTEM_SCHEMA_NAME;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.schema.PTableType.CDC;
@@ -1044,16 +1045,11 @@ public class MetaDataClient {
             String viewStatement, ViewType viewType, PDataType viewIndexIdType,
             byte[][] viewColumnConstants, BitSet isViewColumnReferenced) throws SQLException {
         TableName tableName = statement.getTableName();
-        LOGGER.info("RSS properties: {}", statement.getProps());
-        LOGGER.info("RSS splits: {}", splits);
-
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, statement.getTableType());
 
         splits = processSplits(tableProps, splits);
-        LOGGER.info("RSS table Properties: {}", tableProps);
-        LOGGER.info("RSS cf props: {}", commonFamilyProps);
         boolean isAppendOnlySchema = false;
         long updateCacheFrequency = (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
                 connection.getQueryServices().getProps().get(
@@ -1137,9 +1133,12 @@ public class MetaDataClient {
         return connection.getQueryServices().updateData(plan);
     }
 
+    /*
+      Create splits either from the provided splits or reading from SPLITS_FILE.
+     */
     private byte[][] processSplits(Map<String, Object> tableProperties, byte[][] splits)
             throws SQLException {
-        String splitFilesLocation = (String)tableProperties.get("SPLITS_FILE");
+        String splitFilesLocation = (String) tableProperties.get(SPLITS_FILE);
         if (splitFilesLocation == null || splitFilesLocation.isEmpty()) {
             splitFilesLocation = null;
         }
@@ -1167,9 +1166,8 @@ public class MetaDataClient {
                     .build().buildException();
         }
         List<byte[]> splitsListFromFile = new ArrayList<>();
-        try {
-            Path path = Paths.get(splitFilesLocation);
-            BufferedReader reader = Files.newBufferedReader(path);
+        Path path = Paths.get(splitFilesLocation);
+        try (BufferedReader reader = Files.newBufferedReader(path)) {
             String line;
             while ((line = reader.readLine()) != null) {
                 splitsListFromFile.add(Bytes.toBytes(line));
