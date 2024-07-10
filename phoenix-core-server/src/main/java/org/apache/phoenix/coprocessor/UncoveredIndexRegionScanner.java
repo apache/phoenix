@@ -198,7 +198,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
             scanRanges.initializeScan(dataScan);
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            dataScan.setFilter(new SkipScanFilter(skipScanFilter, false));
+            dataScan.setFilter(new SkipScanFilter(skipScanFilter, false, true));
             dataScan.setAttribute(SERVER_PAGE_SIZE_MS,
                     Bytes.toBytes(Long.valueOf(pageSizeMs)));
             return dataScan;

@@ -1637,6 +1637,50 @@ public class ScanUtil {
         return null;
     }
 
+    public static SkipScanFilter removeSkipScanFilterFromFilterList(FilterList filterList) {
+        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+        while (filterIterator.hasNext()) {
+            Filter filter = filterIterator.next();
+            if (filter instanceof SkipScanFilter
+                    && ((SkipScanFilter) filter).isMultiKeyPointLookup()) {
+                filterIterator.remove();
+                return (SkipScanFilter) filter;
+            } else if (filter instanceof FilterList) {
+                SkipScanFilter skipScanFilter = removeSkipScanFilterFromFilterList((FilterList) filter);
+                if (skipScanFilter != null) {
+                    return skipScanFilter;
+                }
+            }
+        }
+        return null;
+    }
+    public static SkipScanFilter removeSkipScanFilter(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null) {
+            PagingFilter pagingFilter = null;
+            if (filter instanceof PagingFilter) {
+                pagingFilter = (PagingFilter) filter;
+                filter = pagingFilter.getDelegateFilter();
+                if (filter == null) {
+                    return null;
+                }
+            }
+            if (filter instanceof SkipScanFilter
+                    && ((SkipScanFilter) filter).isMultiKeyPointLookup()) {
+                if (pagingFilter != null) {
+                    pagingFilter.setDelegateFilter(null);
+                    scan.setFilter(pagingFilter);
+                } else {
+                    scan.setFilter(null);
+                }
+                return (SkipScanFilter) filter;
+            } else if (filter instanceof FilterList) {
+                return removeSkipScanFilterFromFilterList((FilterList) filter);
+            }
+        }
+        return null;
+    }
+
     /**
      * Verify whether the given row key is in the scan boundaries i.e. scan start and end keys.
      *
