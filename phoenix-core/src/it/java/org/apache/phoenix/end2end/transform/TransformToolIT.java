@@ -1164,7 +1164,8 @@ public class TransformToolIT extends ParallelStatsDisabledIT {
 
     @Test
     public void testInvalidRowsWithTableLevelMaxLookback() throws Exception {
-        assumeFalse("HBase 2.6+ hangs with stopped clock",
+        assumeFalse(
+            "Skipping for HBase 2.6+. See PHOENIX-7355",
             VersionInfo.compareVersion(VersionInfo.getVersion().replace("-hadoop3", ""),
                 "2.6.0") >= 0);
         if (! mutable) {
