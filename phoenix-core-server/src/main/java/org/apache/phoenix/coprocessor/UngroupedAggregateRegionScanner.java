@@ -63,6 +63,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.GlobalCache;
@@ -561,7 +562,18 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     }
 
     @Override
+    public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+            throws IOException {
+        return next(results, scannerContext);
+    }
+
+    @Override
     public boolean next(List<Cell> resultsToReturn) throws IOException {
+        return next(resultsToReturn, null);
+    }
+
+    @Override
+    public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext) throws IOException {
         boolean hasMore;
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Configuration conf = env.getConfiguration();
@@ -589,7 +601,9 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         // Results are potentially returned even when the return value of s.next is false
                         // since this is an indication of whether or not there are more values after the
                         // ones returned
-                        hasMore = innerScanner.nextRaw(results);
+                        hasMore = (scannerContext == null)
+                            ? innerScanner.nextRaw(results)
+                            : innerScanner.nextRaw(results, scannerContext);
                         if (isDummy(results)) {
                             if (!hasAny) {
                                 resultsToReturn.addAll(results);

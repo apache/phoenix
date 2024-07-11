@@ -156,6 +156,21 @@ public class CountRowsScannedIT extends BaseTest {
         long count3 = countRowsScannedFromSql(stmt,
                 "SELECT A,B,Z FROM " + tableName + " WHERE Z >= 7");
         assertEquals(100, count3);
+
+        // non group aggregate, pk2 only, all rows
+        long count4 = countRowsScannedFromSql(stmt, "SELECT SUM(A) FROM " + tableName
+                + " WHERE B >= 3");
+        assertEquals(100, count4);
+
+        // pk1 and pk2, group by
+        long count5 = countRowsScannedFromSql(stmt, "SELECT B, SUM(A), SUM(Z) FROM " + tableName
+                + " WHERE A >= 2 AND B >= 3 GROUP BY B");
+        assertEquals(79, count5);
+
+        // pk1 and pk2, group by, ordered
+        long count6 = countRowsScannedFromSql(stmt, "SELECT B, SUM(A), SUM(Z) FROM " + tableName
+                + " WHERE A >= 2 AND B >= 3 GROUP BY B ORDER BY B DESC");
+        assertEquals(79, count6);
     }
     private long countRowsScannedFromSql(Statement stmt, String sql) throws SQLException {
         ResultSet rs = stmt.executeQuery(sql);
