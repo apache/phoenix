@@ -172,6 +172,100 @@ public class CountRowsScannedIT extends BaseTest {
                 + " WHERE A >= 2 AND B >= 3 GROUP BY B ORDER BY B DESC");
         assertEquals(79, count6);
     }
+
+    @Test
+    public void testJoin() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+        // force many rpc calls
+        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName1
+                + " (A UNSIGNED_LONG NOT NULL, B UNSIGNED_LONG NOT NULL, "
+                + " Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (A, B))");
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName2
+                + " (A UNSIGNED_LONG NOT NULL, B UNSIGNED_LONG NOT NULL, "
+                + " Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (A, B))");
+        // table1.B = table2.A
+        for (int i = 1; i <= 100; i++) {
+            // table1.B in [51, 150], table2.A in [1, 100]
+            String sql1 = String
+                    .format("UPSERT INTO %s VALUES (%d, %d, %d)", tableName1, i, i + 50, i);
+            stmt.execute(sql1);
+            String sql2 = String.format("UPSERT INTO %s VALUES (%d, %d, %d)", tableName2, i, i, i);
+            stmt.execute(sql2);
+        }
+
+        conn.commit();
+
+        // table1
+        long count1 = countRowsScannedFromSql(stmt,
+                "SELECT * FROM " + tableName1 + " WHERE A >= 40");
+        assertEquals(61, count1);
+
+        // table2, all rows
+        long count2 = countRowsScannedFromSql(stmt,
+                "SELECT * FROM " + tableName2 + " WHERE B >= 20");
+        assertEquals(100, count2);
+
+        // join
+        String sqlJoin = "SELECT X.K, X.VX, Y.VY FROM ( SELECT B AS K, A AS VX FROM " + tableName1
+                + " WHERE A >= 40) X JOIN (SELECT A AS K, B AS VY FROM " + tableName2
+                + " WHERE B >= 20) Y ON X.K=Y.K";
+        long count3 = countRowsScannedFromSql(stmt, sqlJoin);
+        assertEquals(161, count3);
+    }
+
+    @Test
+    public void testUnionAll() throws Exception {
+        Properties props = new Properties();
+        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+        // force many rpc calls
+        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName1
+                + " (A UNSIGNED_LONG NOT NULL, Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (A))");
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName2
+                + " (B UNSIGNED_LONG NOT NULL, Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (B))");
+        for (int i = 1; i <= 100; i++) {
+            String sql1 = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName1, i, i);
+            stmt.execute(sql1);
+            String sql2 = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName2, i, i);
+            stmt.execute(sql2);
+        }
+
+        conn.commit();
+
+        // table1
+        long count1 = countRowsScannedFromSql(stmt,
+                "SELECT A, Z FROM " + tableName1 + " WHERE A >= 40");
+        assertEquals(61, count1);
+
+        // table2, all rows
+        long count2 = countRowsScannedFromSql(stmt,
+                "SELECT B, Z FROM " + tableName2 + " WHERE B >= 20");
+        assertEquals(81, count2);
+
+        // union all
+        String sqlUnionAll = "SELECT SUM(Z) FROM ( SELECT Z FROM " + tableName1
+                + " WHERE A >= 40 UNION ALL SELECT Z FROM " + tableName2 + " WHERE B >= 20)";
+        long count3 = countRowsScannedFromSql(stmt, sqlUnionAll);
+        assertEquals(142, count3);
+
+        // union all then group by
+        String sqlUnionAllGroupBy = "SELECT K, SUM(Z) FROM ( SELECT A AS K, Z FROM " + tableName1
+                + " WHERE A >= 40 UNION ALL SELECT B AS K, Z FROM " + tableName2
+                + " WHERE B >= 20) GROUP BY K";
+        long count4 = countRowsScannedFromSql(stmt, sqlUnionAllGroupBy);
+        assertEquals(142, count4);
+    }
+
     private long countRowsScannedFromSql(Statement stmt, String sql) throws SQLException {
         ResultSet rs = stmt.executeQuery(sql);
         while (rs.next()) {
