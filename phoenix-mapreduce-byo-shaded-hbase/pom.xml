@@ -556,30 +556,26 @@
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-netty</artifactId>
-      <!-- random version, for exclusion only -->
-      <version>4.0.0</version>
+      <version>${hbase-thirdparty.excludeonly.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-miscellaneous</artifactId>
-      <!-- random version, for exclusion only -->
-      <version>4.0.0</version>
+      <version>${hbase-thirdparty.excludeonly.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase.thirdparty</groupId>
       <artifactId>hbase-shaded-protobuf</artifactId>
-      <!-- random version, for exclusion only -->
-      <version>4.0.0</version>
+      <version>${hbase-thirdparty.excludeonly.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
        <!-- provided by Hadoop -->
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-configuration2</artifactId>
-      <!-- random version, for exclusion only -->
-      <version>2.1.1</version>
+      <version>${commons-configuration2.excludeonly.version}</version>
       <scope>provided</scope>
     </dependency>
 

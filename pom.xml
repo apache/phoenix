@@ -140,6 +140,13 @@
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
 
+    <!-- These are only used for exclusion when shading, and the exact version is completely
+    irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
+    use theses packages, it does not explicitly depend on them, but instead takes the transitve
+    dependencies from the Hadoop/HBase version used for building. -->
+    <comons-configuration2.excludeonly.version>2.10.1</comons-configuration2.excludeonly.version>
+    <hbase-thirdparty.excludeonly.version>4.1.7</hbase-thirdparty.excludeonly.version>
+
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.10</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>3.5.0</maven-build-helper-plugin.version>
