@@ -198,7 +198,7 @@ public class ScanRanges {
                 ranges = ranges.subList(0, boundSlotCount);
                 slotSpan = Arrays.copyOf(slotSpan, boundSlotCount);
             }
-            this.filter = new SkipScanFilter(ranges, slotSpan, this.schema);
+            this.filter = new SkipScanFilter(ranges, slotSpan, this.schema, isPointLookup);
         }
     }
     
