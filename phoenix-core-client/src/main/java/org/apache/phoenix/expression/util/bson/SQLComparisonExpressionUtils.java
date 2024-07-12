@@ -105,7 +105,7 @@ public class SQLComparisonExpressionUtils {
 
   public boolean isConditionExpressionMatching(final String conditionExpression) {
     String expression = convertExpression(conditionExpression);
-    LOGGER.info("Evaluating Expression: {}", expression);
+    LOGGER.trace("Evaluating Expression: {}", expression);
     try {
       Object result = MVEL.eval(expression, this);
       return result instanceof Boolean && (Boolean) result;

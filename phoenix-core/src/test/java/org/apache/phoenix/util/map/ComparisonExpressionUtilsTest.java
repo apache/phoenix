@@ -51,7 +51,7 @@ import static org.junit.Assert.assertTrue;
 public class ComparisonExpressionUtilsTest {
 
   @Test
-  public void testSQLComparisonExpression() {
+  public void testSQLComparisonExpression1() {
     TestFieldsMap testFieldsMap1 = getPhoenixFieldMap1();
     TestFieldsMap compareValMap1 = getCompareValMap1();
 
@@ -147,6 +147,144 @@ public class ComparisonExpressionUtilsTest {
             + "NestedMap1.NList1[0] IN ($Id,  $Id1, $Id20, #NMap1_NList1) AND NestedMap1.NList1[2] <= $NestedMap1_NList1_30 AND "
             + "(NestedMap1.NList1[2] = $NestedMap1_NList1_30 OR NestedList1[0] BETWEEN $NestedList1_4850 AND $Id2)"
             + " AND NOT NestedMap1.InPublication IN ($Id, $Id1, $Id20, $Id21)"));
+
+  }
+
+  /**
+   * Test that directly uses executable expression to reduce the dependency on pattern-matcher.
+   */
+  @Test
+  public void testSQLComparisonExpression2() {
+    TestFieldsMap testFieldsMap1 = getPhoenixFieldMap1();
+    TestFieldsMap compareValMap1 = getCompareValMap1();
+
+    RawBsonDocument rawBsonDocument = TestUtil.getRawBsonDocument(testFieldsMap1);
+    //{
+    //  "$Id20": 101.011,
+    //  "$Id2": 12,
+    //  "#NestedList1_10": "1234abce",
+    //  "$Id1": 120,
+    //  "$Id10": 101,
+    //  "$Ids1": "12",
+    //  ":ISBN": "111-1111111111",
+    //  "#NestedList1_xyz0123": "xyz0123",
+    //  "$NestedList1_485": -485.33,
+    //  "$NestedMap1_NList1_30": {
+    //    "$binary": {
+    //      "base64": "V2hpdGVl",
+    //      "subType": "00"
+    //    }
+    //  },
+    //  "InPublication": false,
+    //  "$Ids10": "100",
+    //  "#NestedMap1_NList1_3": {
+    //    "$binary": {
+    //      "base64": "V2hpdA==",
+    //      "subType": "00"
+    //    }
+    //  },
+    //  "#NestedList1_1": "1234abcc",
+    //  "#NMap1_NList1": "NListVal01",
+    //  "$NestedList1_4850": -485.35,
+    //  "$Id": 101.01,
+    //  "#Title": "Book 101 Title"
+    //}
+    RawBsonDocument compareValues = TestUtil.getRawBsonDocument(compareValMap1);
+
+    SQLComparisonExpressionUtils SQLComparisonExpressionUtils =
+            new SQLComparisonExpressionUtils(rawBsonDocument, compareValues);
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "(exists('Id') || !exists('Title'))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "((!exists('Id') && !exists('Title1')) || exists('ISBN2')) || " +
+                    "((!isEquals('Id', '#Title'))" +
+                    " && ((isEquals('InPublication', 'InPublication'))" +
+                    " || ((isEquals('ISBN', ':ISBN')) && (isEquals('Title', '#Title')))))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "((exists('NestedMap1.ISBN') && !exists('NestedMap1.NList1[3]')))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "isEquals('NestedMap1.Id', '$Id')" +
+                    " && (isEquals('NestedMap1.InPublication', 'InPublication'))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "((isEquals('NestedMap1.Id', '$Id'))" +
+                    " && ((isEquals('NestedMap1.InPublication[0]', 'InPublication'))" +
+                    " || ((isEquals('ISBN[0]', ':ISBN')) && (isEquals('Title', '#Title'))))" +
+                    " || (isEquals('NestedMap1.NList1[0]', '#NMap1_NList1')))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "((!exists('Id') && !exists('Title1')) || exists('ISBN2')) ||" +
+                    " ((isEquals('NestedMap1.Id', '$Id'))" +
+                    " && ((isEquals('NestedMap1.InPublication', 'InPublication'))" +
+                    " || ((isEquals('ISBN', ':ISBN')) && (isEquals('Title', '#Title')))))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "lessThanOrEquals('NestedList1[0]', '$NestedList1_485')" +
+                    " && greaterThan('NestedList1[1]', '#NestedList1_1')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && lessThan('NestedList1[2][1].Id', '$Id1') && lessThan('IdS', '$Ids1')" +
+                    " && greaterThan('Id2', '$Id2')" +
+                    " && greaterThan('NestedMap1.NList1[2]', '#NestedMap1_NList1_3')"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "lessThanOrEquals('NestedList1[0]', '$NestedList1_485')" +
+                    " && greaterThanOrEquals('NestedList1[1]', '#NestedList1_1')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && lessThanOrEquals('NestedList1[2][1].Id', '$Id1')" +
+                    " && lessThanOrEquals('IdS', '$Ids1')" +
+                    " && greaterThanOrEquals('Id2', '$Id2')" +
+                    " && greaterThanOrEquals('NestedMap1.NList1[2]', '#NestedMap1_NList1_3')"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
+                    " && lessThan('NestedList1[1]', '#NestedList1_10')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && greaterThan('NestedList1[2][1].Id', '$Id10')" +
+                    " && greaterThan('IdS', '$Ids10') && lessThan('Id2', '$Id20')" +
+                    " && lessThan('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
+                    " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && greaterThanOrEquals('NestedList1[2][1].Id', '$Id10')" +
+                    " && greaterThanOrEquals('IdS', '$Ids10') && lessThanOrEquals('Id2', '$Id20')" +
+                    " && lessThanOrEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " && !isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
+                    " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && greaterThanOrEquals('NestedList1[2][1].Id', '$Id10')" +
+                    " && greaterThanOrEquals('IdS', '$Ids10')" +
+                    " && lessThanOrEquals('Id2', '$Id20')" +
+                    " && lessThanOrEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " && (isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " || between('NestedList1[0]', '$NestedList1_4850', '$Id2'))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
+                    " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && in('NestedMap1.NList1[0]', '$Id, $Id1, $Id20, #NMap1_NList1')" +
+                    " && lessThanOrEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " && (isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " || between('NestedList1[0]', '$NestedList1_4850', '$Id2'))"));
+
+    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+            "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
+                    " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
+                    " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
+                    " && in('NestedMap1.NList1[0]', '$Id,  $Id1, $Id20, #NMap1_NList1')" +
+                    " && lessThanOrEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " && (isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
+                    " || between('NestedList1[0]', '$NestedList1_4850', '$Id2'))" +
+                    " && !in('NestedMap1.InPublication', '$Id, $Id1, $Id20, $Id21')"));
 
   }
 

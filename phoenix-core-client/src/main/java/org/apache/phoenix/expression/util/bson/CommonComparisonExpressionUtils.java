@@ -103,7 +103,7 @@ public class CommonComparisonExpressionUtils {
     if (documentFieldKey.charAt(curIdx) == '.') {
       BsonDocument nestedMap = value != null && value.isDocument() ? (BsonDocument) value : null;
       if (nestedMap == null) {
-        LOGGER.error("Incorrect access. Should have found nested map for value: {}", value);
+        LOGGER.warn("Incorrect access. Should have found nested map for value: {}", value);
         return null;
       }
       curIdx++;
@@ -131,11 +131,11 @@ public class CommonComparisonExpressionUtils {
       int arrayIdx = Integer.parseInt(arrayIdxStr.toString());
       BsonArray nestedList = value != null && value.isArray() ? (BsonArray) value : null;
       if (nestedList == null) {
-        LOGGER.error("Incorrect access. Should have found nested list for value: {}", value);
+        LOGGER.warn("Incorrect access. Should have found nested list for value: {}", value);
         return null;
       }
       if (arrayIdx >= nestedList.size()) {
-        LOGGER.error(
+        LOGGER.warn(
             "Incorrect access. Nested list size {} is less than attempted index access at {}",
             nestedList.size(), arrayIdx);
         return null;
@@ -146,7 +146,7 @@ public class CommonComparisonExpressionUtils {
       }
       return getNestedFieldVal(valueAtIdx, curIdx, documentFieldKey);
     }
-    LOGGER.error("This is erroneous case. getNestedFieldVal should not be used for "
+    LOGGER.warn("This is erroneous case. getNestedFieldVal should not be used for "
         + "top level document fields");
     return null;
   }
@@ -207,7 +207,7 @@ public class CommonComparisonExpressionUtils {
           return ((BsonDateTime) value).getValue() >= ((BsonDateTime) compareValue).getValue();
       }
     }
-    LOGGER.error("Expected value comparison for {} is not of type String, Number, Binary"
+    LOGGER.warn("Expected value comparison for {} is not of type String, Number, Binary"
             + " or DateTime. Actual value: {} , Expected value: {}", op, value, compareValue);
     return false;
   }
