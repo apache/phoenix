@@ -353,6 +353,10 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             return new BaseRegionScanner(s) {
                 private int index = 0;
 
+                public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+                    return next(result);
+                }
+
                 @Override
                 public void close() throws IOException {
                     try {
