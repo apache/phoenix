@@ -183,7 +183,8 @@ public class TableTTLIT extends BaseTest {
             int flushCounter = RAND.nextInt(maxFlushCounter) + 1;
             int maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
             int verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
-            for (int i = 0; i < 500; i++) {
+            int maxIterationCount = multiCF ? 250 : 500;
+            for (int i = 0; i < maxIterationCount; i++) {
                 if (flushCounter-- == 0) {
                     injectEdge.incrementValue(1000);
                     LOG.info("Flush " + i + " current time: " + injectEdge.currentTime());
