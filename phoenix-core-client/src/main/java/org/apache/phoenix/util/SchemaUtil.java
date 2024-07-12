@@ -36,7 +36,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -59,7 +58,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -68,7 +66,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -940,7 +937,14 @@ public class SchemaUtil {
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, SortOrder sortOrder) {
         return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
     }
-    
+
+    public static byte[] getSeparatorBytesForVarBinaryEncoded(boolean rowKeyOrderOptimizable,
+        boolean isNullValue, SortOrder sortOrder) {
+        return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ?
+            QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES :
+            QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES;
+    }
+
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Field f) {
         return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, f.getSortOrder());
     }
@@ -1379,6 +1383,21 @@ public class SchemaUtil {
             if (!(Character.isAlphabetic(charAtI)) && !Character.isDigit(charAtI) && charAtI != '_') {
                 return true;
             }
+        }
+        return false;
+    }
+
+    public static boolean areSeparatorBytesForVarBinaryEncoded(byte[] bytes, int offset,
+        SortOrder sortOrder) {
+        if (offset >= (bytes.length - 1)) {
+            return false;
+        }
+        if (sortOrder == SortOrder.ASC || sortOrder == null) {
+            return bytes[offset] == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[0]
+                && bytes[offset + 1] == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[1];
+        } else if (sortOrder == SortOrder.DESC) {
+            return bytes[offset] == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[0]
+                && bytes[offset + 1] == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[1];
         }
         return false;
     }

@@ -109,6 +109,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -1224,7 +1225,15 @@ public class PTableImpl implements PTable {
             while (i < nValues && i < nColumns) {
                 // Separate variable length column values in key with zero byte
                 if (type != null && !type.isFixedWidth()) {
-                    os.write(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable(), wasNull, sortOrder));
+                    if (type != PVarbinaryEncoded.INSTANCE) {
+                        os.write(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable(), wasNull,
+                            sortOrder));
+                    } else {
+                        byte[] separatorBytes =
+                            SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable(),
+                                wasNull, sortOrder);
+                        os.write(separatorBytes, 0, separatorBytes.length);
+                    }
                 }
                 PColumn column = columns.get(i);
                 sortOrder = column.getSortOrder();
@@ -1288,8 +1297,20 @@ public class PTableImpl implements PTable {
                 os.write(byteValue, 0, byteValue.length);
             }
             // Need trailing byte for DESC columns
-            if (type != null && !type.isFixedWidth() && SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable(), wasNull, sortOrder) == QueryConstants.DESC_SEPARATOR_BYTE) {
-                os.write(QueryConstants.DESC_SEPARATOR_BYTE);
+            if (type != null && !type.isFixedWidth()) {
+                if (type != PVarbinaryEncoded.INSTANCE) {
+                    if (SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable(), wasNull, sortOrder)
+                        == QueryConstants.DESC_SEPARATOR_BYTE) {
+                        os.write(QueryConstants.DESC_SEPARATOR_BYTE);
+                    }
+                } else {
+                    byte[] separatorBytes =
+                        SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable(),
+                            wasNull, sortOrder);
+                    if (separatorBytes == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES) {
+                        os.write(separatorBytes, 0, separatorBytes.length);
+                    }
+                }
             }
             // If some non null pk values aren't set, then throw
             if (i < nColumns) {

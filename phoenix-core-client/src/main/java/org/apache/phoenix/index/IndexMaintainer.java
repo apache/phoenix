@@ -105,6 +105,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -737,7 +738,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 dataRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
-                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength()==0, dataRowKeySchema.getField(dataPosOffset)));
+                    if (dataRowKeySchema.getField(dataPosOffset).getDataType()
+                        != PVarbinaryEncoded.INSTANCE) {
+                        output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable,
+                            ptr.getLength() == 0, dataRowKeySchema.getField(dataPosOffset)));
+                    } else {
+                        byte[] sepBytes =
+                            SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable,
+                                ptr.getLength() == 0,
+                                dataRowKeySchema.getField(dataPosOffset).getSortOrder());
+                        output.write(sepBytes);
+                    }
                 }
                 dataPosOffset++;
             }
@@ -762,6 +773,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
             Iterator<Expression> expressionIterator = indexedExpressions.iterator();
             int trailingVariableWidthColumnNum = 0;
+            PDataType[] indexedColumnDataTypes = new PDataType[nIndexedColumns];
             for (int i = 0; i < nIndexedColumns; i++) {
                 PDataType dataColumnType;
                 boolean isNullable;
@@ -782,6 +794,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 boolean isDataColumnInverted = dataSortOrder != SortOrder.ASC;
                 PDataType indexColumnType = IndexUtil.getIndexColumnDataType(isNullable, dataColumnType);
+                indexedColumnDataTypes[i] = indexColumnType;
                 boolean isBytesComparable = dataColumnType.isBytesComparableWith(indexColumnType);
                 boolean isIndexColumnDesc = descIndexColumnBitSet.get(i);
                 if (isBytesComparable && isDataColumnInverted == isIndexColumnDesc) {
@@ -798,8 +811,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
 
                 if (!indexColumnType.isFixedWidth()) {
-                    byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC);
-                    output.writeByte(sepByte);
+                    if (indexColumnType != PVarbinaryEncoded.INSTANCE) {
+                        byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable,
+                            ptr.getLength() == 0,
+                            isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC);
+                        output.writeByte(sepByte);
+                    } else {
+                        byte[] sepBytes =
+                            SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable,
+                                ptr.getLength() == 0,
+                                isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC);
+                        output.write(sepBytes);
+                    }
                     trailingVariableWidthColumnNum++;
                 } else {
                     trailingVariableWidthColumnNum = 0;
@@ -811,9 +834,23 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int minLength = length - maxTrailingNulls;
             // The existing code does not eliminate the separator if the data type is not nullable. It not clear why.
             // The actual bug is in the calculation of maxTrailingNulls with view indexes. So, in order not to impact some other cases, we should keep minLength check here.
-            while (trailingVariableWidthColumnNum > 0 && length > minLength && indexRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
-                length--;
+            int indexColumnTypeIdx = nIndexedColumns - 1;
+            while (trailingVariableWidthColumnNum > 0 && length > minLength) {
+                if (indexColumnTypeIdx >= 0
+                    && indexedColumnDataTypes[indexColumnTypeIdx] != PVarbinaryEncoded.INSTANCE
+                    && indexRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
+                    length--;
+                } else if (indexColumnTypeIdx >= 0
+                    && indexedColumnDataTypes[indexColumnTypeIdx] == PVarbinaryEncoded.INSTANCE
+                    && length >= 2 && indexRowKey[length - 1]
+                    == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[1]
+                    && indexRowKey[length - 2]
+                    == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[0]) {
+                    length -= 2;
+
+                }
                 trailingVariableWidthColumnNum--;
+                indexColumnTypeIdx--;
             }
 
             if (isIndexSalted) {
@@ -833,10 +870,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
     }
 
+    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants) {
+        return this.buildDataRowKey(indexRowKeyPtr, viewConstants, false);
+    }
+
     /*
      * Build the data row key from the index row key
      */
-    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants)  {
+    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants,
+        boolean truncateEndSeparators) {
         RowKeySchema indexRowKeySchema = getIndexRowKeySchema();
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedIndexRowKeyBytes);
@@ -859,7 +901,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexRowKeySchema.next(ptr, indexPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
-                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(dataPosOffset)));
+                    if (dataRowKeySchema.getField(dataPosOffset).getDataType()
+                        != PVarbinaryEncoded.INSTANCE) {
+                        output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable,
+                            ptr.getLength() == 0, dataRowKeySchema.getField(dataPosOffset)));
+                    } else {
+                        byte[] sepBytes =
+                            SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable,
+                                ptr.getLength() == 0,
+                                dataRowKeySchema.getField(dataPosOffset).getSortOrder());
+                        output.write(sepBytes);
+                    }
                 }
                 indexPosOffset++;
                 dataPosOffset++;
@@ -902,10 +954,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                 }
-                // Write separator byte if variable length
-                byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(i));
-                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()){
-                    output.writeByte(sepByte);
+                // Write separator byte(s) if variable length
+                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()) {
+                    if (!truncateEndSeparators || i != dataRowKeySchema.getFieldCount() - 1) {
+                        if (dataRowKeySchema.getField(i).getDataType()
+                            != PVarbinaryEncoded.INSTANCE) {
+                            byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable,
+                                ptr.getLength() == 0, dataRowKeySchema.getField(i));
+                            output.writeByte(sepByte);
+                        } else {
+                            byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(
+                                rowKeyOrderOptimizable, ptr.getLength() == 0,
+                                dataRowKeySchema.getField(i).getSortOrder());
+                            output.write(sepBytes);
+                        }
+                    }
                     trailingVariableWidthColumnNum++;
                 } else {
                     trailingVariableWidthColumnNum = 0;

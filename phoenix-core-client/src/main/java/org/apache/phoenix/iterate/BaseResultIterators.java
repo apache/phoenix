@@ -111,6 +111,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -890,8 +891,15 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 trailingNullsToTrim = 0;
             } else {
                 boolean isNull = ptr.getLength() == 0;
-                byte sepByte = SchemaUtil.getSeparatorByte(true, isNull, field);
-                newRowKey[offset++] = sepByte;
+                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                    byte sepByte = SchemaUtil.getSeparatorByte(true, isNull, field);
+                    newRowKey[offset++] = sepByte;
+                } else {
+                    byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(true, isNull,
+                        field.getSortOrder());
+                    newRowKey[offset++] = sepBytes[0];
+                    newRowKey[offset++] = sepBytes[1];
+                }
                 if (isNull) {
                     if (trimTrailingNulls) {
                         trailingNullsToTrim++;
