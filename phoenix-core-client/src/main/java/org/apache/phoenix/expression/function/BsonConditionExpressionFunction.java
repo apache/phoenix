@@ -88,12 +88,14 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
             String conditionExpression =
                     (String) PVarchar.INSTANCE.toObject(ptr, getChildren().get(1).getSortOrder());
             if (conditionExpression == null || conditionExpression.isEmpty()) {
+                ptr.set(PBoolean.INSTANCE.toBytes(true));
                 return true;
             }
             conditionExpressionBsonDoc = RawBsonDocument.parse(conditionExpression);
         } else {
             conditionExpressionBsonDoc = (RawBsonDocument) PBson.INSTANCE.toObject(ptr);
             if (conditionExpressionBsonDoc == null || conditionExpressionBsonDoc.isEmpty()) {
+                ptr.set(PBoolean.INSTANCE.toBytes(true));
                 return true;
             }
         }

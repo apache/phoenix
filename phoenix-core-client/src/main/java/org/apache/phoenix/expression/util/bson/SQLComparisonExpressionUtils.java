@@ -25,6 +25,9 @@ import org.mvel2.MVEL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -33,6 +36,15 @@ import java.util.regex.Pattern;
 public class SQLComparisonExpressionUtils {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(SQLComparisonExpressionUtils.class);
+
+  /**
+   * All supported operators. Used to parse the input string and identify how many of the
+   * operators are in use and accordingly performs string conversions using individual
+   * pattern-matcher-replace.
+   */
+  private static final String ALL_SUPPORTED_OPS =
+          "\\b(field_not_exists|field_exists|BETWEEN|IN|AND|OR|NOT)\\b|<=|>=|!=|==|=|<>|<|>";
+  private static final Pattern ALL_SUPPORTED_OPS_PATTERN = Pattern.compile(ALL_SUPPORTED_OPS);
 
   private static final String FIELD_NOT_EXISTS = "field_not_exists\\(([^)]+)\\)";
   private static final String FIELD_EXISTS = "field_exists\\(([^)]+)\\)";
@@ -103,24 +115,66 @@ public class SQLComparisonExpressionUtils {
     }
   }
 
+  /**
+   * Converts the input string expression into Java executable statement.
+   *
+   * @param expression Input string expression.
+   * @return Executable string conversion statement.
+   */
   public String convertExpression(String expression) {
-    expression = FIELD_NOT_EXISTS_PATTERN.matcher(expression).replaceAll(FUNC_FIELD_NOT_EXISTS);
-    expression = FIELD_EXISTS_PATTERN.matcher(expression).replaceAll(FUNC_FIELD_EXISTS);
-    expression = EQUALS1_PATTERN.matcher(expression).replaceAll(FUNC_EQUALS);
-    expression = EQUALS2_PATTERN.matcher(expression).replaceAll(FUNC_EQUALS);
-    expression = NOT_EQUALS1_PATTERN.matcher(expression).replaceAll(FUNC_NOT_EQUALS);
-    expression = NOT_EQUALS2_PATTERN.matcher(expression).replaceAll(FUNC_NOT_EQUALS);
-    expression = LESS_THAN_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN);
-    expression =
-            LESS_THAN_OR_EQUALS_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN_OR_EQUALS);
-    expression = GREATER_THAN_PATTERN.matcher(expression).replaceAll(FUNC_GREATER_THAN);
-    expression = GREATER_THAN_OR_EQUALS_PATTERN.matcher(expression)
-            .replaceAll(FUNC_GREATER_THAN_OR_EQUALS);
-    expression = BETWEEN_PATTERN.matcher(expression).replaceAll(FUNC_BETWEEN);
-    expression = IN_PATTERN.matcher(expression).replaceAll(FUNC_IN);
-    expression = AND_PATTERN.matcher(expression).replaceAll(OP_AND);
-    expression = OR_PATTERN.matcher(expression).replaceAll(OP_OR);
-    expression = NOT_PATTERN.matcher(expression).replaceAll(OP_NOT);
+    Set<String> patternsMatched = new HashSet<>();
+    Matcher matcher = ALL_SUPPORTED_OPS_PATTERN.matcher(expression);
+    while (matcher.find()) {
+      patternsMatched.add(matcher.group());
+    }
+
+    if (patternsMatched.contains("field_not_exists")) {
+      expression = FIELD_NOT_EXISTS_PATTERN.matcher(expression).replaceAll(FUNC_FIELD_NOT_EXISTS);
+    }
+    if (patternsMatched.contains("field_exists")) {
+      expression = FIELD_EXISTS_PATTERN.matcher(expression).replaceAll(FUNC_FIELD_EXISTS);
+    }
+    if (patternsMatched.contains("=")) {
+      expression = EQUALS1_PATTERN.matcher(expression).replaceAll(FUNC_EQUALS);
+    }
+    if (patternsMatched.contains("==")) {
+      expression = EQUALS2_PATTERN.matcher(expression).replaceAll(FUNC_EQUALS);
+    }
+    if (patternsMatched.contains("!=")) {
+      expression = NOT_EQUALS1_PATTERN.matcher(expression).replaceAll(FUNC_NOT_EQUALS);
+    }
+    if (patternsMatched.contains("<>")) {
+      expression = NOT_EQUALS2_PATTERN.matcher(expression).replaceAll(FUNC_NOT_EQUALS);
+    }
+    if (patternsMatched.contains("<")) {
+      expression = LESS_THAN_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN);
+    }
+    if (patternsMatched.contains("<=")) {
+      expression =
+              LESS_THAN_OR_EQUALS_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN_OR_EQUALS);
+    }
+    if (patternsMatched.contains(">")) {
+      expression = GREATER_THAN_PATTERN.matcher(expression).replaceAll(FUNC_GREATER_THAN);
+    }
+    if (patternsMatched.contains(">=")) {
+      expression = GREATER_THAN_OR_EQUALS_PATTERN.matcher(expression)
+              .replaceAll(FUNC_GREATER_THAN_OR_EQUALS);
+    }
+    if (patternsMatched.contains("BETWEEN")) {
+      expression = BETWEEN_PATTERN.matcher(expression).replaceAll(FUNC_BETWEEN);
+    }
+    if (patternsMatched.contains("IN")) {
+      expression = IN_PATTERN.matcher(expression).replaceAll(FUNC_IN);
+    }
+    if (patternsMatched.contains("AND")) {
+      expression = AND_PATTERN.matcher(expression).replaceAll(OP_AND);
+    }
+    if (patternsMatched.contains("OR")) {
+      expression = OR_PATTERN.matcher(expression).replaceAll(OP_OR);
+    }
+    if (patternsMatched.contains("NOT")) {
+      expression = NOT_PATTERN.matcher(expression).replaceAll(OP_NOT);
+    }
     return expression;
   }
 

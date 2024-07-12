@@ -103,7 +103,7 @@ public class PBson extends PVarbinary {
         if (value == null || value.isEmpty()) {
             return null;
         }
-        return BsonDocument.parse(value);
+        return RawBsonDocument.parse(value);
     }
 
     @Override
