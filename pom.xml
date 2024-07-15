@@ -144,7 +144,7 @@
     irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
     use theses packages, it does not explicitly depend on them, but instead takes the transitve
     dependencies from the Hadoop/HBase version used for building. -->
-    <comons-configuration2.excludeonly.version>2.10.1</comons-configuration2.excludeonly.version>
+    <commons-configuration2.excludeonly.version>2.10.1</commons-configuration2.excludeonly.version>
     <hbase-thirdparty.excludeonly.version>4.1.7</hbase-thirdparty.excludeonly.version>
 
     <!-- Plugin versions -->
