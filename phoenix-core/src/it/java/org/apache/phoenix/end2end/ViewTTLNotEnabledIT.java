@@ -22,83 +22,107 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.PhoenixTTLRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.PhoenixTestBuilder;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
 import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.junit.Assert.fail;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ViewTTLNotEnabledIT extends ParallelStatsDisabledIT {
 
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(60*60)); // An hour
+        props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+        props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
     @Test
-    public void testPhoenixTTLNotEnabled() throws Exception {
+    public void testCreateViewWithTTLWithConfigFalse() throws Exception {
+        PhoenixTestBuilder.SchemaBuilder schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+        PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions globalViewOptions = PhoenixTestBuilder.SchemaBuilder.
+                GlobalViewOptions.withDefaults();
+        globalViewOptions.setTableProps("TTL = 10000");
+        try {
+            schemaBuilder.withTableOptions(PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults()).withGlobalViewOptions(
+                    globalViewOptions).build();
+            fail();
+        } catch (SQLException sqe) {
+            Assert.assertEquals(sqe.getErrorCode(), SQLExceptionCode.VIEW_TTL_NOT_ENABLED.getErrorCode());
+        }
+    }
 
-        // PHOENIX TTL is set in seconds (for e.g 10 secs)
-        long phoenixTTL = 10;
-        PhoenixTestBuilder.SchemaBuilder.TableOptions
-                tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
-        tableOptions.getTableColumns().clear();
-        tableOptions.getTableColumnTypes().clear();
+    @Test
+    public void testAlterViewWithTTLWithConfigFalse() throws Exception {
+        PhoenixTestBuilder.SchemaBuilder schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+        PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions globalViewOptions = PhoenixTestBuilder.SchemaBuilder.
+                GlobalViewOptions.withDefaults();
+        schemaBuilder.withTableOptions(PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults()).withGlobalViewOptions(
+                    globalViewOptions).build();
 
-        PhoenixTestBuilder.SchemaBuilder.TenantViewOptions
-                tenantViewOptions = PhoenixTestBuilder.SchemaBuilder.TenantViewOptions.withDefaults();
-        tenantViewOptions.setTableProps(String.format("PHOENIX_TTL=%d", phoenixTTL));
+        String dml = "ALTER VIEW " + schemaBuilder.getEntityGlobalViewName() + " SET TTL = 10000";
+        try (Connection connection = DriverManager.getConnection(getUrl())){
+            try {
+                connection.createStatement().execute(dml);
+                fail();
+            } catch (SQLException sqe) {
+                Assert.assertEquals(sqe.getErrorCode(), SQLExceptionCode.VIEW_TTL_NOT_ENABLED.getErrorCode());
+            }
 
-        // Define the test schema.
-        final PhoenixTestBuilder.SchemaBuilder schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(url);
-        schemaBuilder
-                .withTableOptions(tableOptions)
-                .withTenantViewOptions(tenantViewOptions)
-                .build();
+        }
+    }
 
-        String viewName = schemaBuilder.getEntityTenantViewName();
+    @Test
+    public void testSettingTTLFromTableToViewWithConfigDisabled() throws Exception {
+        PhoenixTestBuilder.SchemaBuilder schemaBuilder = new PhoenixTestBuilder.SchemaBuilder(getUrl());
+        PhoenixTestBuilder.SchemaBuilder.TableOptions tableOptions = PhoenixTestBuilder.SchemaBuilder.TableOptions.withDefaults();
+        tableOptions.setTableProps("TTL = 10000");
+        PhoenixTestBuilder.SchemaBuilder.GlobalViewOptions globalViewOptions = PhoenixTestBuilder.SchemaBuilder.
+                GlobalViewOptions.withDefaults();
+        schemaBuilder.withTableOptions(tableOptions).withGlobalViewOptions(
+                globalViewOptions).build();
 
-        Properties props = new Properties();
-        String tenantConnectUrl =
-                url + ';' + TENANT_ID_ATTRIB + '=' + schemaBuilder.getDataOptions().getTenantId();
+        try (Connection connection = DriverManager.getConnection(getUrl())){
 
-        // Test the coproc is not registered
-        org.apache.hadoop.hbase.client.Connection hconn = getUtility().getConnection();
-        Admin admin = hconn.getAdmin();
-        HTableDescriptor tableDescriptor = admin.getTableDescriptor(
-                TableName.valueOf(schemaBuilder.getEntityTableName()));
-        Assert.assertFalse("Coprocessor " + PhoenixTTLRegionObserver.class.getName()
-                        + " should not have been added: ",
-                tableDescriptor.hasCoprocessor(PhoenixTTLRegionObserver.class.getName()));
+            String dml = "ALTER TABLE " + schemaBuilder.getEntityTableName() + " SET TTL = NONE";
+            connection.createStatement().execute(dml);
 
+            //Clearing cache as  metaDataCaching is not there for TTL usecase
+            connection.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
 
-        // Test masking expired rows property are not set
-        try (Connection conn = DriverManager.getConnection(tenantConnectUrl, props);
-                final Statement statement = conn.createStatement()) {
-            conn.setAutoCommit(true);
+            try {
+                dml = "ALTER VIEW " + schemaBuilder.getEntityGlobalViewName() + " SET TTL = 10000";
+                connection.createStatement().execute(dml);
+                fail();
+            } catch (SQLException sqe) {
+                Assert.assertEquals(sqe.getErrorCode(), SQLExceptionCode.VIEW_TTL_NOT_ENABLED.getErrorCode());
+            }
 
-            final String stmtString = String.format("select * from  %s", viewName);
-            Preconditions.checkNotNull(stmtString);
-            final PhoenixStatement pstmt = statement.unwrap(PhoenixStatement.class);
-            final QueryPlan queryPlan = pstmt.optimizeQuery(stmtString);
-
-            PhoenixResultSet
-                    rs = pstmt.newResultSet(queryPlan.iterator(), queryPlan.getProjector(), queryPlan.getContext());
-            Assert.assertFalse("Should not have any rows", rs.next());
-            Assert.assertEquals("Should have at least one element", 1, queryPlan.getScans().size());
-            Assert.assertEquals("PhoenixTTL should not be set",
-                    0, ScanUtil.getPhoenixTTL(queryPlan.getScans().get(0).get(0)));
-            Assert.assertFalse("Masking attribute should not be set",
-                    ScanUtil.isMaskTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
-            Assert.assertFalse("Delete Expired attribute should not set",
-                    ScanUtil.isDeleteTTLExpiredRows(queryPlan.getScans().get(0).get(0)));
         }
     }
 

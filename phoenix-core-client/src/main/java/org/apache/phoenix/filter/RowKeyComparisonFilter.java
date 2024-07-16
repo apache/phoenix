@@ -88,7 +88,7 @@ public class RowKeyComparisonFilter extends BooleanExpressionFilter {
         return keepRow ? ReturnCode.INCLUDE_AND_NEXT_COL : ReturnCode.NEXT_ROW;
     }
 
-    private static final class RowKeyTuple extends BaseTuple {
+    public static final class RowKeyTuple extends BaseTuple {
         private byte[] buf;
         private int offset;
         private int length;
