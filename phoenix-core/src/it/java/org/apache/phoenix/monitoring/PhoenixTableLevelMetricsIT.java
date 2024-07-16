@@ -26,6 +26,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hbase.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.CommitException;
@@ -37,6 +38,7 @@ import org.apache.phoenix.query.ConfigurationFactory;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.query.QueryServicesTestImpl;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -45,6 +47,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.DelayedOrFailingRegionServer;
 import org.apache.phoenix.util.ReadOnlyProps;
 
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
@@ -52,6 +55,8 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+
+import javax.annotation.concurrent.GuardedBy;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.exception.SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY;
@@ -132,6 +137,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -152,6 +158,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
 
     @BeforeClass public static void doSetup() throws Exception {
         final Configuration conf = HBaseConfiguration.create();
+        setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.TABLE_LEVEL_METRICS_ENABLED, String.valueOf(true));
         conf.set(QueryServices.METRIC_PUBLISHER_ENABLED, String.valueOf(true));
         conf.set(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
@@ -170,7 +177,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 return copy;
             }
         });
-        hbaseTestUtil = new HBaseTestingUtility();
+        hbaseTestUtil = new HBaseTestingUtility(conf);
         hbaseTestUtil.startMiniCluster(1, 1, null, null, DelayedOrFailingRegionServer.class);
         // establish url and quorum. Need to use PhoenixDriver and not PhoenixTestDriver
         String zkQuorum = "localhost:" + hbaseTestUtil.getZkCluster().getClientPort();
@@ -189,6 +196,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
             }
         } catch (Exception e) {
             // ignore
+        } finally {
+            ServerMetadataCacheTestImpl.resetCache();
         }
     }
 
@@ -1273,14 +1282,21 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
                 assertTrue(metricExists);
                 metricExists = false;
                 //assert BaseTable is not being queried
-                for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
-                    if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
-                        metricExists = true;
-                        assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
-                        break;
+                //if client is validating last_ddl_timestamps with ucf=never,
+                //there will be no metrics for base table (like getTable RPC times/counts).
+                if (ValidateLastDDLTimestampUtil
+                        .getValidateLastDdlTimestampEnabled(conn.unwrap(PhoenixConnection.class))) {
+                    assertFalse(getPhoenixTableClientMetrics().containsKey(dataTable));
+                } else {
+                    for (PhoenixTableMetric metric : getPhoenixTableClientMetrics().get(dataTable)) {
+                        if (metric.getMetricType().equals(SELECT_SQL_COUNTER)) {
+                            metricExists = true;
+                            assertMetricValue(metric, SELECT_SQL_COUNTER, 0, CompareOp.EQ);
+                            break;
+                        }
                     }
+                    assertTrue(metricExists);
                 }
-                assertTrue(metricExists);
             }
         }
     }
@@ -1613,11 +1629,16 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
      * Custom driver to return a custom QueryServices object
      */
     public static class PhoenixMetricsTestingDriver extends PhoenixTestDriver {
-        private ConnectionQueryServices cqs;
+        @GuardedBy("this")
+        private final Map<ConnectionInfo, ConnectionQueryServices>
+                connectionQueryServicesMap = new HashMap<>();
+
+        private final QueryServices qsti;
         private ReadOnlyProps overrideProps;
 
         public PhoenixMetricsTestingDriver(ReadOnlyProps props) {
             overrideProps = props;
+            qsti = new QueryServicesTestImpl(getDefaultProps(), overrideProps);
         }
 
         @Override public boolean acceptsURL(String url) {
@@ -1625,17 +1646,16 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
         }
 
         @Override public synchronized ConnectionQueryServices getConnectionQueryServices(String url,
-                Properties info) throws SQLException {
-            if (cqs == null) {
-                QueryServicesTestImpl qsti =
-                        new QueryServicesTestImpl(getDefaultProps(), overrideProps);
-                cqs =
-                        new PhoenixMetricsTestingQueryServices(
-                            qsti,
-                                ConnectionInfo.create(url, qsti.getProps(), info), info);
-                cqs.init(url, info);
+                                                                                         Properties info) throws SQLException {
+            ConnectionInfo connInfo = ConnectionInfo.create(url, null, info);
+            ConnectionQueryServices connectionQueryServices = connectionQueryServicesMap.get(connInfo);
+            if (connectionQueryServices != null) {
+                return connectionQueryServices;
             }
-            return cqs;
+            connectionQueryServices = new PhoenixMetricsTestingQueryServices(qsti, connInfo, info);
+            connectionQueryServices.init(url, info);
+            connectionQueryServicesMap.put(connInfo, connectionQueryServices);
+            return connectionQueryServices;
         }
     }
 }

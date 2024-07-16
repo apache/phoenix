@@ -289,7 +289,7 @@ public class StatementContext {
     }
 
     public long getCurrentTime() throws SQLException {
-        long ts = this.getCurrentTable().getCurrentTime();
+        long ts = this.getCurrentTable().getTimeStamp();
         // if the table is transactional then it is only resolved once per query, so we can't use the table timestamp
         if (this.getCurrentTable().getTable().getType() != PTableType.SUBQUERY
                 && this.getCurrentTable().getTable().getType() != PTableType.PROJECTED

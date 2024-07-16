@@ -71,7 +71,7 @@ public class ServerViewUtil extends ViewUtil {
 
         TableViewFinderResult childViewsResult;
         try {
-            childViewsResult = findImmediateRelatedViews(
+            childViewsResult = ViewUtil.findImmediateRelatedViews(
                     hTable,
                     tenantIdBytes,
                     schemaName,

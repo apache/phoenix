@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.hbase.index.covered.ColumnGroup;
 import org.apache.phoenix.hbase.index.covered.CoveredColumn;
 import org.apache.phoenix.hbase.index.covered.CoveredColumnIndexSpecifierBuilder;
@@ -160,6 +161,7 @@ public class FailForUnsupportedHBaseVersionsIT {
 
         } finally {
             // cleanup
+            ServerMetadataCacheTestImpl.resetCache();
             util.shutdownMiniCluster();
         }
     }

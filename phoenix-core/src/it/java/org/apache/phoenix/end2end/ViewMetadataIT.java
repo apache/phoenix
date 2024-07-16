@@ -86,7 +86,10 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnAlreadyExistsException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PNameImpl;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -1373,6 +1376,120 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
                     SchemaUtil.getSchemaNameFromFullName(fullViewName),
                     SchemaUtil.getTableNameFromFullName(fullViewName));
         assertPKs(rs, new String[] {"K1", "K2", "K3", "K4"});
+    }
+
+    @Test
+    public void testAncestorLastDDLMapPopulatedInViewAndIndexHierarchy() throws SQLException {
+        String baseTable = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String view1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String view2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        String view3 = SchemaUtil.getTableName(SCHEMA4, generateUniqueName());
+        String view4 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String index1 = generateUniqueName();
+        String index2 = generateUniqueName();
+        String tenant1 = TENANT1;
+        String tenant2 = TENANT2;
+        /*                                     baseTable
+                                 /                  |            \                  \
+                         view1(tenant1)    view3(tenant2)    index1(global)       view4(global)
+                          /
+                        view2(tenant1)
+                        /
+                    index2(tenant1)
+        */
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String baseTableDDL = "CREATE TABLE " + baseTable + " (TENANT_ID VARCHAR NOT NULL, PK1 VARCHAR NOT NULL, V1 VARCHAR, V2 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(TENANT_ID, PK1)) MULTI_TENANT = true ";
+            conn.createStatement().execute(baseTableDDL);
+            String index1DDL = "CREATE INDEX " + index1 + " ON " + baseTable + "(V1)";
+            conn.createStatement().execute(index1DDL);
+
+
+            try (Connection tenant1Conn = getTenantConnection(tenant1)) {
+                String view1DDL = "CREATE VIEW " + view1 + " AS SELECT * FROM " + baseTable;
+                tenant1Conn.createStatement().execute(view1DDL);
+
+                String view2DDL = "CREATE VIEW " + view2 + " AS SELECT * FROM " + view1;
+                tenant1Conn.createStatement().execute(view2DDL);
+
+                String index2DDL = "CREATE INDEX " + index2 + " ON " + view2 + "(V1)";
+                tenant1Conn.createStatement().execute(index2DDL);
+            }
+
+            try (Connection tenant2Conn = getTenantConnection(tenant2)) {
+                String view3DDL = "CREATE VIEW " + view3 + " AS SELECT * FROM " + baseTable;
+                tenant2Conn.createStatement().execute(view3DDL);
+            }
+
+            String view4DDL = "CREATE VIEW " + view4 + " AS SELECT * FROM " + baseTable;
+            conn.createStatement().execute(view4DDL);
+
+            //validate ancestor->last_ddl_timestamps maps
+            PTable basePTable = PhoenixRuntime.getTable(conn, baseTable);
+            Long baseTableLastDDLTimestamp = basePTable.getLastDDLTimestamp();
+            PTableKey baseTableKey = new PTableKey(null, baseTable);
+            //base table map should be empty
+            Map<PTableKey,Long> map = basePTable.getAncestorLastDDLTimestampMap();
+            assertEquals(0, map.size());
+
+            //global view
+            map = PhoenixRuntime.getTable(conn, view4).getAncestorLastDDLTimestampMap();
+            assertEquals(1, map.size());
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+
+            //global index in cache and in parent PTable
+            PTable index1PTable = PhoenixRuntime.getTable(conn, SchemaUtil.getTableName(SCHEMA1, index1));
+            map = index1PTable.getAncestorLastDDLTimestampMap();
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+            assertEquals(1, basePTable.getIndexes().size());
+            map = basePTable.getIndexes().get(0).getAncestorLastDDLTimestampMap();
+            assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+
+            //tenant2 view
+            try (Connection tenant2Conn = getTenantConnection(tenant2)) {
+                map = PhoenixRuntime.getTable(tenant2Conn, view3).getAncestorLastDDLTimestampMap();
+                assertEquals(1, map.size());
+                assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+            }
+            try (Connection tenant1Conn = getTenantConnection(tenant1)) {
+                //tenant1 view
+                PTable view1PTable = PhoenixRuntime.getTable(tenant1Conn, view1);
+                map = view1PTable.getAncestorLastDDLTimestampMap();
+                assertEquals(1, map.size());
+                assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                //tenant1 child view
+                PTableKey view1Key = new PTableKey(view1PTable.getTenantId(), view1);
+                map = PhoenixRuntime.getTable(tenant1Conn, view2).getAncestorLastDDLTimestampMap();
+                assertEquals(2, map.size());
+                assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                assertEquals(view1PTable.getLastDDLTimestamp(), map.get(view1Key));
+                //tenant1 child view index in cache and in child view PTable
+                PTable view2PTable = PhoenixRuntime.getTable(tenant1Conn, view2);
+                PTableKey view2Key = new PTableKey(view2PTable.getTenantId(), view2);
+                PTable index2PTable = PhoenixRuntime.getTable(tenant1Conn, SchemaUtil.getTableName(SCHEMA3, index2));
+                map = index2PTable.getAncestorLastDDLTimestampMap();
+                assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
+                assertEquals(2, view2PTable.getIndexes().size());
+                for (PTable index : view2PTable.getIndexes()) {
+                    // inherited index
+                    if (index.getTableName().getString().equals(index1)) {
+                        map = index.getAncestorLastDDLTimestampMap();
+                        assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                    } else {
+                        // view index
+                        map = index.getAncestorLastDDLTimestampMap();
+                        assertEquals(baseTableLastDDLTimestamp, map.get(baseTableKey));
+                        assertEquals(view2PTable.getLastDDLTimestamp(), map.get(view2Key));
+                    }
+                }
+            }
+        }
+    }
+
+    private Connection getTenantConnection(String tenantId) throws SQLException {
+        Properties tenantProps = new Properties();
+        tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+        return DriverManager.getConnection(getUrl(), tenantProps);
     }
 
     @Test

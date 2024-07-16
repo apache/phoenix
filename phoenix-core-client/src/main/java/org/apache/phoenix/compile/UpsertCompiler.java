@@ -637,7 +637,7 @@ public class UpsertCompiler {
                 // as max TS, so that the query can safely restarted and still work of a snapshot
                 // (so it won't see its own data in case of concurrent splits)
                 // see PHOENIX-4849
-                long serverTime = selectResolver.getTables().get(0).getCurrentTime();
+                long serverTime = selectResolver.getTables().get(0).getTimeStamp();
                 if (serverTime == QueryConstants.UNSET_TIMESTAMP) {
                     // if this is the first time this table is resolved the ref's current time might not be defined, yet
                     // in that case force an RPC to get the server time

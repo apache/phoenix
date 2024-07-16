@@ -56,6 +56,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 
 
 /**
@@ -349,15 +350,18 @@ public enum SQLExceptionCode {
             + MetaDataUtil.SYNCED_DATA_TABLE_AND_INDEX_COL_FAM_PROPERTIES.toString()),
     CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX(10950, "44A31", "Cannot set or alter "
             + PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY + " on an index"),
-    PHOENIX_TTL_SUPPORTED_FOR_VIEWS_ONLY(10951, "44A32", PhoenixDatabaseMetaData.PHOENIX_TTL
+    @Deprecated
+    PHOENIX_LEVEL_TTL_SUPPORTED_FOR_VIEWS_ONLY(10951, "44A32", PhoenixDatabaseMetaData.TTL
             + " property can only be set for views"),
-    CANNOT_SET_OR_ALTER_PHOENIX_TTL_FOR_TABLE_WITH_TTL(10952, "44A33", "Cannot set or alter "
-            + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an table with TTL,"),
+    @Deprecated
+    CANNOT_SET_OR_ALTER_PHOENIX_LEVEL_TTL_FOR_TABLE_WITH_TTL(10952, "44A33", "Cannot set or alter "
+            + TTL + " property on an table with TTL,"),
     ABOVE_INDEX_NON_ASYNC_THRESHOLD(1097, "44A34", "The estimated read size for index creation "
             + "is higher than " + QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD+ ". You can edit the"
             + " limit or create ASYNC index."),
-    CANNOT_SET_OR_ALTER_PHOENIX_TTL(10953, "44A35", "Cannot set or alter "
-            + PhoenixDatabaseMetaData.PHOENIX_TTL + " property on an view when parent/child view has PHOENIX_TTL set,"),
+    CANNOT_SET_OR_ALTER_TTL(10953, "44A35", "Cannot set or alter "
+            + PhoenixDatabaseMetaData.TTL + " property on an view when parent/child "
+            + "view has TTL set,"),
     CHANGE_DETECTION_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10954, "44A36",
         CHANGE_DETECTION_ENABLED + " is only supported on tables and views"),
     CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK(10955, "44A37", "Index can be created "
@@ -366,6 +370,13 @@ public enum SQLExceptionCode {
             + " only if none of the parents have indexes in the parent hierarchy"),
     MAX_LOOKBACK_AGE_SUPPORTED_FOR_TABLES_ONLY(10957, "44A39", "Max lookback age can only be set for tables"),
     UNKNOWN_INCLUDE_CHANGE_SCOPE(10958, "44A40", "Unknown change scope for CDC INCLUDE"),
+    TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY(10959, "44A41", TTL
+            + "property can only be set for tables and updatable views only"),
+
+    TTL_ALREADY_DEFINED_IN_HIERARCHY(10960, "44A42", TTL
+            + " property is already defined in hierarchy for this entity"),
+    VIEW_TTL_NOT_ENABLED(10961,"44A43", TTL +
+            " property can not be set on views as phoenix.view.ttl.enabled is false"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
@@ -612,6 +623,9 @@ public enum SQLExceptionCode {
     CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA(913, "43M24", "Cannot transform a table with append-only schema."),
 
     CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table."),
+
+    STALE_METADATA_CACHE_EXCEPTION(915, "43M26", "Stale metadata cache exception",
+        info -> new StaleMetadataCacheException(info.getMessage())),
 
     //SQLCode for testing exceptions
     FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");

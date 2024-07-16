@@ -22,11 +22,13 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.SchemaUtil;
 import static org.apache.phoenix.util.TestUtil.DEFAULT_SCHEMA_NAME;
 
+import org.apache.phoenix.util.ValidateLastDDLTimestampUtil;
 import org.junit.AfterClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -61,6 +63,8 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
     private static Connection conn1;
     private static Connection conn2;
     private static ConnectionQueryServices spyForConn2;
+    private boolean isLastDDLTimestampValidationEnabled
+            = ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(config);
 
     @AfterClass
     public static synchronized void freeResources() {
@@ -135,6 +139,12 @@ public class UpdateCacheConnectionLevelPropIT extends ParallelStatsDisabledIT {
         // both connection and table level properties are not set
         int numExecutions = 2;
         int numExpectedGetTableCalls = 4; // 2 for SELECTs, and 2 for UPSERTs
+
+        // there will be no getTable calls if we are validating last_ddl_timestamps
+        // and schema has not changed.
+        if (isLastDDLTimestampValidationEnabled) {
+            numExpectedGetTableCalls = 0;
+        }
         setUpTableAndConnections(fullTableName, null, null);
         verifyExpectedGetTableCalls(fullTableName, numExecutions, numExpectedGetTableCalls);
     }

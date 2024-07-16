@@ -25,6 +25,7 @@ import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
@@ -209,6 +211,16 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public int getLowestClusterHBaseVersion() {
         return getDelegate().getLowestClusterHBaseVersion();
+    }
+
+    @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        getDelegate().refreshLiveRegionServers();
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        return getDelegate().getLiveRegionServers();
     }
 
     @Override
@@ -451,5 +463,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices imple
     @Override
     public int getConnectionCount(boolean isInternal) {
         return getDelegate().getConnectionCount(isInternal);
+    }
+
+    @Override
+    public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
+            throws Throwable {
+        getDelegate().invalidateServerMetadataCache(requests);
     }
 }

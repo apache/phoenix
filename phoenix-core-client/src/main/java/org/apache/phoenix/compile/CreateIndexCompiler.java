@@ -227,7 +227,9 @@ public class CreateIndexCompiler {
     }
     public MutationPlan compile(final CreateIndexStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
-        final ColumnResolver resolver = FromCompiler.getResolver(create, connection, create.getUdfParseNodes());
+        final ColumnResolver resolver
+                = FromCompiler.getResolverForCreateIndex(
+                        create, connection, create.getUdfParseNodes());
         Scan scan = new Scan();
         final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         verifyIndexWhere(create.getWhere(), context, create.getTable().getName());
