@@ -834,23 +834,28 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int minLength = length - maxTrailingNulls;
             // The existing code does not eliminate the separator if the data type is not nullable. It not clear why.
             // The actual bug is in the calculation of maxTrailingNulls with view indexes. So, in order not to impact some other cases, we should keep minLength check here.
-            int indexColumnTypeIdx = nIndexedColumns - 1;
+            int indexColumnIdx = nIndexedColumns - 1;
             while (trailingVariableWidthColumnNum > 0 && length > minLength) {
-                if (indexColumnTypeIdx >= 0
-                    && indexedColumnDataTypes[indexColumnTypeIdx] != PVarbinaryEncoded.INSTANCE
-                    && indexRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
-                    length--;
-                } else if (indexColumnTypeIdx >= 0
-                    && indexedColumnDataTypes[indexColumnTypeIdx] == PVarbinaryEncoded.INSTANCE
-                    && length >= 2 && indexRowKey[length - 1]
-                    == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[1]
-                    && indexRowKey[length - 2]
-                    == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[0]) {
-                    length -= 2;
-
+                if (indexColumnIdx < 0) {
+                    break;
+                }
+                if (indexedColumnDataTypes[indexColumnIdx] != PVarbinaryEncoded.INSTANCE) {
+                    if (indexRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
+                        length--;
+                    } else {
+                        break;
+                    }
+                } else {
+                    byte[] sepBytes = QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES;
+                    if (length >= 2 && indexRowKey[length - 1] == sepBytes[1]
+                        && indexRowKey[length - 2] == sepBytes[0]) {
+                        length -= 2;
+                    } else {
+                        break;
+                    }
                 }
                 trailingVariableWidthColumnNum--;
-                indexColumnTypeIdx--;
+                indexColumnIdx--;
             }
 
             if (isIndexSalted) {
@@ -870,15 +875,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         }
     }
 
-    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants) {
-        return this.buildDataRowKey(indexRowKeyPtr, viewConstants, false);
-    }
-
     /*
      * Build the data row key from the index row key
      */
-    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants,
-        boolean truncateEndSeparators) {
+    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants)  {
         RowKeySchema indexRowKeySchema = getIndexRowKeySchema();
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedIndexRowKeyBytes);
@@ -956,18 +956,15 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 // Write separator byte(s) if variable length
                 if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()) {
-                    if (!truncateEndSeparators || i != dataRowKeySchema.getFieldCount() - 1) {
-                        if (dataRowKeySchema.getField(i).getDataType()
-                            != PVarbinaryEncoded.INSTANCE) {
-                            byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable,
-                                ptr.getLength() == 0, dataRowKeySchema.getField(i));
-                            output.writeByte(sepByte);
-                        } else {
-                            byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(
-                                rowKeyOrderOptimizable, ptr.getLength() == 0,
-                                dataRowKeySchema.getField(i).getSortOrder());
-                            output.write(sepBytes);
-                        }
+                    if (dataRowKeySchema.getField(i).getDataType() != PVarbinaryEncoded.INSTANCE) {
+                        byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable,
+                            ptr.getLength() == 0, dataRowKeySchema.getField(i));
+                        output.writeByte(sepByte);
+                    } else {
+                        byte[] sepBytes =
+                            SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable,
+                                ptr.getLength() == 0, dataRowKeySchema.getField(i).getSortOrder());
+                        output.write(sepBytes);
                     }
                     trailingVariableWidthColumnNum++;
                 } else {
@@ -977,9 +974,26 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int length = stream.size();
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            while (trailingVariableWidthColumnNum > 0 && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
-                length--;
+            int indexColumnIdx = dataRowKeySchema.getFieldCount() - 1;
+            while (trailingVariableWidthColumnNum > 0) {
+                PDataType<?> dataType = dataRowKeySchema.getField(indexColumnIdx).getDataType();
+                if (dataType != PVarbinaryEncoded.INSTANCE) {
+                    if (dataRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
+                        length--;
+                    } else {
+                        break;
+                    }
+                } else {
+                    byte[] sepBytes = QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES;
+                    if (length >= 2 && dataRowKey[length - 1] == sepBytes[1]
+                        && dataRowKey[length - 2] == sepBytes[0]) {
+                        length -= 2;
+                    } else {
+                        break;
+                    }
+                }
                 trailingVariableWidthColumnNum--;
+                indexColumnIdx--;
             }
             // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
             // we store this in nIndexSaltBuckets, as we only use this function for local indexes

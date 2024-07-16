@@ -270,7 +270,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 indexToDataRowKeyMap.put(
                     offset == 0 ? lastIndexRowKey : CellUtil.cloneRow(firstCell),
                     indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(lastIndexRowKey),
-                        viewConstants, true));
+                        viewConstants));
                 indexRows.add(row);
                 indexRowCount++;
                 if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime)
