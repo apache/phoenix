@@ -376,6 +376,10 @@ public interface QueryServices extends SQLCloseable {
     public static final String PHOENIX_TABLE_TTL_ENABLED = "phoenix.table.ttl.enabled";
     // Copied here to avoid dependency on hbase-server
     public static final String WAL_EDIT_CODEC_ATTRIB = "hbase.regionserver.wal.codec";
+    //Property to know whether TTL at View Level is enabled
+    public static final String PHOENIX_VIEW_TTL_ENABLED = "phoenix.view.ttl.enabled";
+
+    public static final String PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = "phoenix.view.ttl.tenant_views_per_scan.limit";
 
     // Before 4.15 when we created a view we included the parent table column metadata in the view
     // metadata. After PHOENIX-3534 we allow SYSTEM.CATALOG to split and no longer store the parent

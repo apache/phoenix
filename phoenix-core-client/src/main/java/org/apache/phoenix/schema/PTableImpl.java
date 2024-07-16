@@ -32,10 +32,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_COLUMN_ENCODED_BYTES;
@@ -49,8 +51,66 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FO
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
 import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
+
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Durability;
+import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compile.ExpressionCompiler;
+import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.exception.DataExceedsCapacityException;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.SingleCellConstructorExpression;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
+import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
+import org.apache.phoenix.schema.transform.TransformMaintainer;
+import org.apache.phoenix.schema.types.PBinary;
+import org.apache.phoenix.schema.types.PChar;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSortedMap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+import org.apache.phoenix.transaction.TransactionFactory;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.EncodedColumnsUtil;
+import org.apache.phoenix.util.MetaDataUtil;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.SizedUtil;
+import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 import java.io.IOException;
 import java.sql.DriverManager;
@@ -68,9 +128,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import javax.annotation.Nonnull;
 
 import javax.annotation.Nonnull;
 
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
@@ -145,8 +208,6 @@ public class PTableImpl implements PTable {
     private static final Integer NO_SALTING = -1;
     private static final int VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS = 0;
     private static final int VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS = 1;
-    private static final int VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS = 2;
-
     private IndexMaintainer indexMaintainer;
     private TransformMaintainer transformMaintainer;
     private ImmutableBytesWritable indexMaintainersPtr;
@@ -210,8 +271,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
-    private final long phoenixTTL;
-    private final long phoenixTTLHighWaterMark;
+    private final int ttl;
     private final BitSet viewModifiedPropSet;
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
@@ -219,6 +279,7 @@ public class PTableImpl implements PTable {
     private String schemaVersion;
     private String externalSchemaId;
     private String streamingTopicName;
+    private byte[] rowKeyMatcher;
     private String indexWhere;
     private Expression indexWhereExpression;
     private Set<ColumnReference> indexWhereColumns;
@@ -282,8 +343,6 @@ public class PTableImpl implements PTable {
         private QualifierEncodingScheme qualifierEncodingScheme;
         private EncodedCQCounter encodedCQCounter;
         private Boolean useStatsForParallelization;
-        private long phoenixTTL;
-        private long phoenixTTLHighWaterMark;
         private Long lastDDLTimestamp;
         private boolean isChangeDetectionEnabled = false;
         private Map<String, String> propertyValues = new HashMap<>();
@@ -294,6 +353,9 @@ public class PTableImpl implements PTable {
         private String indexWhere;
         private Long maxLookbackAge;
         private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
+        private int ttl;
+        private byte[] rowKeyMatcher;
+
         // Used to denote which properties a view has explicitly modified
         private BitSet viewModifiedPropSet = new BitSet(3);
         // Optionally set columns for the builder, but not for the actual PTable
@@ -627,19 +689,9 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setPhoenixTTL(long phoenixTTL) {
-            this.phoenixTTL = phoenixTTL;
-            return this;
-        }
-
-        public Builder setPhoenixTTLHighWaterMark(long phoenixTTLHighWaterMark) {
-            this.phoenixTTLHighWaterMark = phoenixTTLHighWaterMark;
-            return this;
-        }
-
-        public Builder setViewModifiedPhoenixTTL(boolean modified) {
-            this.viewModifiedPropSet.set(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS,
-                    modified);
+        public Builder setTTL(int ttl) {
+            propertyValues.put(TTL, String.valueOf(ttl));
+            this.ttl = ttl;
             return this;
         }
 
@@ -704,14 +756,21 @@ public class PTableImpl implements PTable {
                 this.externalSchemaId = externalSchemaId;
             }
             return this;
-         }
+        }
 
-         public Builder setStreamingTopicName(String streamingTopicName) {
+        public Builder setStreamingTopicName(String streamingTopicName) {
             if (streamingTopicName != null) {
                 this.streamingTopicName = streamingTopicName;
             }
             return this;
-         }
+        }
+
+        public Builder setRowKeyMatcher(byte[] rowKeyMatcher) {
+            if (rowKeyMatcher != null) {
+                this.rowKeyMatcher = rowKeyMatcher;
+            }
+            return this;
+        }
 
         public Builder setIndexWhere(String indexWhere) {
             if (indexWhere != null) {
@@ -1021,8 +1080,7 @@ public class PTableImpl implements PTable {
         this.qualifierEncodingScheme = builder.qualifierEncodingScheme;
         this.encodedCQCounter = builder.encodedCQCounter;
         this.useStatsForParallelization = builder.useStatsForParallelization;
-        this.phoenixTTL = builder.phoenixTTL;
-        this.phoenixTTLHighWaterMark = builder.phoenixTTLHighWaterMark;
+        this.ttl = builder.ttl;
         this.viewModifiedPropSet = builder.viewModifiedPropSet;
         this.propertyValues = builder.propertyValues;
         this.lastDDLTimestamp = builder.lastDDLTimestamp;
@@ -1034,6 +1092,7 @@ public class PTableImpl implements PTable {
         this.indexWhere = builder.indexWhere;
         this.maxLookbackAge = builder.maxLookbackAge;
         this.ancestorLastDDLTimestampMap = builder.ancestorLastDDLTimestampMap;
+        this.rowKeyMatcher = builder.rowKeyMatcher;
     }
 
     // When cloning table, ignore the salt column as it will be added back in the constructor
@@ -1106,9 +1165,6 @@ public class PTableImpl implements PTable {
                 .setViewModifiedUseStatsForParallelization(table
                         .hasViewModifiedUseStatsForParallelization())
                 .setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency())
-                .setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL())
-                .setPhoenixTTL(table.getPhoenixTTL())
-                .setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark())
                 .setLastDDLTimestamp(table.getLastDDLTimestamp())
                 .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
                 .setSchemaVersion(table.getSchemaVersion())
@@ -1117,7 +1173,9 @@ public class PTableImpl implements PTable {
                 .setIndexWhere(table.getIndexWhere())
                 .setMaxLookbackAge(table.getMaxLookbackAge())
                 .setCDCIncludeScopes(table.getCDCIncludeScopes())
-                .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap());
+                .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap())
+                .setTTL(table.getTTL())
+                .setRowKeyMatcher(table.getRowKeyMatcher());
     }
 
     @Override
@@ -2021,27 +2079,15 @@ public class PTableImpl implements PTable {
         if (table.hasUseStatsForParallelization()) {
             useStatsForParallelization = table.getUseStatsForParallelization();
         }
-        long phoenixTTL = PHOENIX_TTL_NOT_DEFINED;
-        if (table.hasPhoenixTTL()) {
-            phoenixTTL = table.getPhoenixTTL();
-        }
-        long phoenixTTLHighWaterMark = MIN_PHOENIX_TTL_HWM;
-        if (table.hasPhoenixTTLHighWaterMark()) {
-            phoenixTTLHighWaterMark = table.getPhoenixTTLHighWaterMark();
-        }
 
         // for older clients just use the value of the properties that are set on the view
         boolean viewModifiedUpdateCacheFrequency = true;
         boolean viewModifiedUseStatsForParallelization = true;
-        boolean viewModifiedPhoenixTTL = true;
         if (table.hasViewModifiedUpdateCacheFrequency()) {
             viewModifiedUpdateCacheFrequency = table.getViewModifiedUpdateCacheFrequency();
         }
         if (table.hasViewModifiedUseStatsForParallelization()) {
             viewModifiedUseStatsForParallelization = table.getViewModifiedUseStatsForParallelization();
-        }
-        if (table.hasViewModifiedPhoenixTTL()) {
-            viewModifiedPhoenixTTL = table.getViewModifiedPhoenixTTL();
         }
         Long lastDDLTimestamp = null;
         if (table.hasLastDDLTimestamp()) {
@@ -2078,6 +2124,18 @@ public class PTableImpl implements PTable {
         if (table.hasCDCIncludeScopes()) {
             cdcIncludeScopesStr = table.getCDCIncludeScopes();
         }
+
+        Integer ttl = TTL_NOT_DEFINED;
+        if (table.hasTtl()) {
+            String ttlStr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
+            ttl = Integer.parseInt(ttlStr);
+        }
+
+        byte[] rowKeyMatcher = null;
+        if (table.hasRowKeyMatcher()) {
+            rowKeyMatcher = table.getRowKeyMatcher().toByteArray();
+        }
+
         try {
             return new PTableImpl.Builder()
                     .setType(tableType)
@@ -2108,8 +2166,6 @@ public class PTableImpl implements PTable {
                     .setBaseColumnCount(baseColumnCount)
                     .setEncodedCQCounter(encodedColumnQualifierCounter)
                     .setUseStatsForParallelization(useStatsForParallelization)
-                    .setPhoenixTTL(phoenixTTL)
-                    .setPhoenixTTLHighWaterMark(phoenixTTLHighWaterMark)
                     .setExcludedColumns(ImmutableList.of())
                     .setTenantId(tenantId)
                     .setSchemaName(schemaName)
@@ -2129,7 +2185,6 @@ public class PTableImpl implements PTable {
                     .setColumns(columns)
                     .setViewModifiedUpdateCacheFrequency(viewModifiedUpdateCacheFrequency)
                     .setViewModifiedUseStatsForParallelization(viewModifiedUseStatsForParallelization)
-                    .setViewModifiedPhoenixTTL(viewModifiedPhoenixTTL)
                     .setLastDDLTimestamp(lastDDLTimestamp)
                     .setIsChangeDetectionEnabled(isChangeDetectionEnabled)
                     .setSchemaVersion(schemaVersion)
@@ -2139,6 +2194,8 @@ public class PTableImpl implements PTable {
                             CDCUtil.makeChangeScopeEnumsFromString(cdcIncludeScopesStr))
                     .setIndexWhere(indexWhere)
                     .setMaxLookbackAge(maxLookbackAge)
+                    .setTTL(ttl)
+                    .setRowKeyMatcher(rowKeyMatcher)
                     .build();
         } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
@@ -2260,11 +2317,8 @@ public class PTableImpl implements PTable {
         if (table.useStatsForParallelization() != null) {
             builder.setUseStatsForParallelization(table.useStatsForParallelization());
         }
-        builder.setPhoenixTTL(table.getPhoenixTTL());
-        builder.setPhoenixTTLHighWaterMark(table.getPhoenixTTLHighWaterMark());
         builder.setViewModifiedUpdateCacheFrequency(table.hasViewModifiedUpdateCacheFrequency());
         builder.setViewModifiedUseStatsForParallelization(table.hasViewModifiedUseStatsForParallelization());
-        builder.setViewModifiedPhoenixTTL(table.hasViewModifiedPhoenixTTL());
         if (table.getLastDDLTimestamp() != null) {
             builder.setLastDDLTimestamp(table.getLastDDLTimestamp());
         }
@@ -2288,6 +2342,12 @@ public class PTableImpl implements PTable {
         builder.setCDCIncludeScopes(CDCUtil.makeChangeScopeStringFromEnums(
                 table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
                 : Collections.EMPTY_SET));
+
+        builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(String.valueOf(table.getTTL()))));
+
+        if (table.getRowKeyMatcher() != null) {
+            builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
+        }
         return builder.build();
     }
 
@@ -2384,13 +2444,8 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public long getPhoenixTTL() {
-        return phoenixTTL;
-    }
-
-    @Override
-    public long getPhoenixTTLHighWaterMark() {
-        return phoenixTTLHighWaterMark;
+    public int getTTL() {
+        return ttl;
     }
 
     @Override public boolean hasViewModifiedUpdateCacheFrequency() {
@@ -2399,10 +2454,6 @@ public class PTableImpl implements PTable {
 
     @Override public boolean hasViewModifiedUseStatsForParallelization() {
         return viewModifiedPropSet.get(VIEW_MODIFIED_USE_STATS_FOR_PARALLELIZATION_BIT_SET_POS);
-    }
-
-    @Override public boolean hasViewModifiedPhoenixTTL() {
-        return viewModifiedPropSet.get(VIEW_MODIFIED_PHOENIX_TTL_BIT_SET_POS);
     }
 
     @Override
@@ -2476,10 +2527,15 @@ public class PTableImpl implements PTable {
     @Override
     public Set<ColumnReference> getIndexWhereColumns(PhoenixConnection connection)
             throws SQLException {
-        if (indexWhereColumns == null && indexWhere != null) {
-            buildIndexWhereExpression(connection);
-        }
-        return indexWhereColumns;
+            if (indexWhereColumns == null && indexWhere != null) {
+                buildIndexWhereExpression(connection);
+            }
+            return indexWhereColumns;
+    }
+
+    @Override
+    public byte[] getRowKeyMatcher() {
+        return rowKeyMatcher;
     }
 
     private static final class KVColumnFamilyQualifier {

@@ -381,14 +381,8 @@ public class DelegateTable implements PTable {
         return delegate.hasViewModifiedUseStatsForParallelization();
     }
 
-    @Override public long getPhoenixTTL() { return delegate.getPhoenixTTL(); }
-
-    @Override public long getPhoenixTTLHighWaterMark() {
-        return delegate.getPhoenixTTLHighWaterMark();
-    }
-
-    @Override public boolean hasViewModifiedPhoenixTTL() {
-        return delegate.hasViewModifiedPhoenixTTL();
+    @Override public int getTTL() {
+        return delegate.getTTL();
     }
 
     @Override
@@ -417,6 +411,10 @@ public class DelegateTable implements PTable {
     @Override
     public Set<CDCChangeScope> getCDCIncludeScopes() {
         return delegate.getCDCIncludeScopes();
+    }
+
+    public byte[] getRowKeyMatcher() {
+        return delegate.getRowKeyMatcher();
     }
 
     public String getIndexWhere() {
