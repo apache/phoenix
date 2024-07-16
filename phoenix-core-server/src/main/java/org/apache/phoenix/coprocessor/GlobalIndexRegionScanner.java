@@ -287,11 +287,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         throw new IllegalStateException("No cell found");
     }
 
-    protected static boolean isTimestampBeforeTTL(long tableTTL, long currentTime, long tsToCheck) {
+    protected static boolean isTimestampBeforeTTL(int tableTTL, long currentTime, long tsToCheck) {
         if (tableTTL == HConstants.FOREVER) {
             return false;
         }
-        return tsToCheck < (currentTime - tableTTL * 1000);
+        return tsToCheck < (currentTime - tableTTL * 1000L);
     }
 
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
