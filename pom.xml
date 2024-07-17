@@ -162,7 +162,7 @@
     <skipNeedsOwnMiniClusterTests>false</skipNeedsOwnMiniClusterTests>
     <numForkedUT>8</numForkedUT>
     <numForkedIT>7</numForkedIT>
-    <failsafe.failIfNoSpecifiedTestsc>false</failsafe.failIfNoSpecifiedTestsc>
+    <failsafe.failIfNoSpecifiedTests>false</failsafe.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
     <!-- Empty argument when code coverage is deactivated -->
     <jacocoArgLine></jacocoArgLine>
