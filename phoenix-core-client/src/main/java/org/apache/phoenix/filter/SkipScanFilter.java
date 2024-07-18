@@ -583,14 +583,12 @@ public class SkipScanFilter extends FilterBase implements Writable {
         if (atEndOfKey && i > 0 && i - 1 < nSlots) {
             Field field = schema.getField(i - 1);
             if (!field.getDataType().isFixedWidth()) {
-                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
-                    startKey[startKeyLength++] =
-                        SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), true, field);
-                } else {
-                    byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(
-                        schema.rowKeyOrderOptimizable(), true, field.getSortOrder());
-                    startKey[startKeyLength++] = sepBytes[0];
-                    startKey[startKeyLength++] = sepBytes[1];
+                byte[] sepBytes = SchemaUtil.getSeparatorBytes(field.getDataType(),
+                    schema.rowKeyOrderOptimizable(),
+                    true,
+                    field.getSortOrder());
+                for (byte sepByte : sepBytes) {
+                    startKey[startKeyLength++] = sepByte;
                 }
             }
         }

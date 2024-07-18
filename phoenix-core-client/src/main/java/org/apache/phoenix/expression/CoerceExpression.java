@@ -147,6 +147,11 @@ public class CoerceExpression extends BaseSingleExpression {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+        // For CoerceExpression evaluation, lhs is coerced to rhs literal expression. However,
+        // in case of variable length binary literal expression, literal value by default
+        // gets VARBINARY data type. If lhs expression is of type VARBINARY_ENCODED, we should
+        // encode rhs literal value to VARBINARY_ENCODED type. This makes the eventual coerce
+        // evaluation successful.
         if (getChild() instanceof LiteralExpression
             && getChild().getDataType() == PVarbinary.INSTANCE
             && getDataType() == PVarbinaryEncoded.INSTANCE) {

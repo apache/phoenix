@@ -1283,15 +1283,10 @@ public class PTableImpl implements PTable {
             while (i < nValues && i < nColumns) {
                 // Separate variable length column values in key with zero byte
                 if (type != null && !type.isFixedWidth()) {
-                    if (type != PVarbinaryEncoded.INSTANCE) {
-                        os.write(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable(), wasNull,
-                            sortOrder));
-                    } else {
-                        byte[] separatorBytes =
-                            SchemaUtil.getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable(),
-                                wasNull, sortOrder);
-                        os.write(separatorBytes, 0, separatorBytes.length);
-                    }
+                    os.write(SchemaUtil.getSeparatorBytes(type,
+                        rowKeyOrderOptimizable(),
+                        wasNull,
+                        sortOrder));
                 }
                 PColumn column = columns.get(i);
                 sortOrder = column.getSortOrder();

@@ -891,14 +891,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 trailingNullsToTrim = 0;
             } else {
                 boolean isNull = ptr.getLength() == 0;
-                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
-                    byte sepByte = SchemaUtil.getSeparatorByte(true, isNull, field);
+                byte[] sepBytes = SchemaUtil.getSeparatorBytes(field.getDataType(),
+                    true,
+                    isNull,
+                    field.getSortOrder());
+                for (byte sepByte : sepBytes) {
                     newRowKey[offset++] = sepByte;
-                } else {
-                    byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(true, isNull,
-                        field.getSortOrder());
-                    newRowKey[offset++] = sepBytes[0];
-                    newRowKey[offset++] = sepBytes[1];
                 }
                 if (isNull) {
                     if (trimTrailingNulls) {

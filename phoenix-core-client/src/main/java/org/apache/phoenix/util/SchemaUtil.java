@@ -91,6 +91,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
@@ -944,12 +945,42 @@ public class SchemaUtil {
         return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
     }
 
+    /**
+     * Get separator bytes for Variable length encoded data type (e.g. VARBINARY_ENCODED).
+     *
+     * @param rowKeyOrderOptimizable Whether the table may optimize descending row keys.
+     * @param isNullValue Whether the value is null.
+     * @param sortOrder Whether the value sorts ascending or descending.
+     * @return The separator byte array.
+     */
     public static byte[] getSeparatorBytesForVarBinaryEncoded(boolean rowKeyOrderOptimizable,
         boolean isNullValue, SortOrder sortOrder) {
         return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ?
             QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES :
             QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES;
     }
+
+    /**
+     * Return separator bytes depending on the data type.
+     *
+     * @param pDataType Data type used.
+     * @param rowKeyOrderOptimizable Whether the table may optimize descending row keys.
+     * @param isNullValue Whether the value is null.
+     * @param sortOrder Whether the value sorts ascending or descending.
+     * @return The separator byte array.
+     */
+    public static byte[] getSeparatorBytes(final PDataType<?> pDataType,
+        final boolean rowKeyOrderOptimizable,
+        final boolean isNullValue,
+        final SortOrder sortOrder) {
+        if (pDataType == PVarbinaryEncoded.INSTANCE) {
+            return getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable, isNullValue,
+                sortOrder);
+        } else {
+            return new byte[] {getSeparatorByte(rowKeyOrderOptimizable, isNullValue, sortOrder)};
+        }
+    }
+
 
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Field f) {
         return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, f.getSortOrder());

@@ -187,9 +187,11 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                         expressionCount = evalIndex+1;
                         ptrs[evalIndex] = new ImmutableBytesWritable();
                         ptrs[evalIndex].set(ptr.get(), ptr.getOffset(), ptr.getLength());
-                        estimatedByteSize += ptr.getLength()
-                            + (expression.getDataType().isFixedWidth() ? 0
-                            : getSeparatorBytesLen(expression)); // 1 extra for the separator byte.
+                        estimatedByteSize +=
+                            ptr.getLength() + (expression.getDataType().isFixedWidth() ?
+                                0 :
+                                getSeparatorBytesLength(
+                                    expression)); // 1 extra for the separator byte.
                     }
                 } else if (tuple == null || tuple.isImmutable()) {
                     estimatedByteSize += getExpressionByteCount(expression);
@@ -234,13 +236,8 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                         } else {
                             output.write(tempPtr.get(), tempPtr.getOffset(), tempPtr.getLength());
                             if (!childType.isFixedWidth()) {
-                                if (childType != PVarbinaryEncoded.INSTANCE) {
-                                    output.write(SchemaUtil.getSeparatorByte(true, false, child));
-                                } else {
-                                    output.write(
-                                        SchemaUtil.getSeparatorBytesForVarBinaryEncoded(true, false,
-                                            child.getSortOrder()));
-                                }
+                                output.write(SchemaUtil.getSeparatorBytes(childType, true, false,
+                                    child.getSortOrder()));
                             }
                             if (previousCarryOver) {
                                 previousCarryOver = !ByteUtil.previousKey(output.getBuffer(), output.size());
@@ -289,7 +286,7 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
         }
     }
 
-    private static int getSeparatorBytesLen(Expression expression) {
+    private static int getSeparatorBytesLength(Expression expression) {
         return expression.getDataType() != PVarbinaryEncoded.INSTANCE ? 1 : 2;
     }
 

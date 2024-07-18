@@ -42,12 +42,12 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
-public class VarBinary2IT extends ParallelStatsDisabledIT {
+public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
 
   private final boolean columnEncoded;
   private final boolean coveredIndex;
 
-  public VarBinary2IT(boolean columnEncoded, boolean coveredIndex) {
+  public VarBinaryEncoded2IT(boolean columnEncoded, boolean coveredIndex) {
     this.columnEncoded = columnEncoded;
     this.coveredIndex = coveredIndex;
   }

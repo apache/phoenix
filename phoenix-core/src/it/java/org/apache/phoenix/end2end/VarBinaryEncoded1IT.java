@@ -40,11 +40,11 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
-public class VarBinary1IT extends ParallelStatsDisabledIT {
+public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
 
   private final String tableDDLOptions;
 
-  public VarBinary1IT(boolean columnEncoded, String transactionProvider, boolean mutable) {
+  public VarBinaryEncoded1IT(boolean columnEncoded, String transactionProvider, boolean mutable) {
     StringBuilder optionBuilder = new StringBuilder();
     if (!columnEncoded) {
       if (optionBuilder.length() != 0) {

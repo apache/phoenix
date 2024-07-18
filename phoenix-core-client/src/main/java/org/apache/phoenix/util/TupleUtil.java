@@ -155,14 +155,11 @@ public class TupleUtil {
                 }
                 for (int i = 1; i < expressions.size(); i++) {
                     if (!expression.getDataType().isFixedWidth()) {
-                        if(expression.getDataType() != PVarbinaryEncoded.INSTANCE) {
-                            output.write(SchemaUtil.getSeparatorByte(true, value.getLength() == 0,
-                                expression));
-                        } else {
-                            byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(true,
-                                value.getLength() == 0, expression.getSortOrder());
-                            output.write(sepBytes);
-                        }
+                        output.write(SchemaUtil.getSeparatorBytes(
+                            expression.getDataType(),
+                            true,
+                            value.getLength() == 0,
+                            expression.getSortOrder()));
                     }
                     expression = expressions.get(i);
                     if (expression.evaluate(result, value)) {
