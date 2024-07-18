@@ -207,7 +207,7 @@ public class CreateTableCompiler {
                                 viewTypeToBe = setViewTypeToBe(connection, parentToBe,
                                         pkColumnsInWhere, nonPkColumnsInWhere);
                             } catch (IOException e) {
-                                throw new RuntimeException(e);
+                                throw new SQLException(e);
                             }
                         }
                     }
@@ -304,6 +304,7 @@ public class CreateTableCompiler {
         if (!isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(0))) {
             LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
                     "does not start from the first PK column");
+            return ViewType.READ_ONLY;
         }
         if (isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(1))) {
             LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
