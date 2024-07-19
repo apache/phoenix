@@ -176,14 +176,12 @@ public class PhoenixTTLRegionObserver extends BaseScannerRegionObserver implemen
 
         @Override public boolean next(List<Cell> result, ScannerContext scannerContext)
                 throws IOException {
-            throw new IOException(
-                    "next with scannerContext should not be called in Phoenix environment");
+            return next(result);
         }
 
         @Override public boolean nextRaw(List<Cell> result, ScannerContext scannerContext)
                 throws IOException {
-            throw new IOException(
-                    "NextRaw with scannerContext should not be called in Phoenix environment");
+            return nextRaw(result);
         }
 
         @Override public void close() throws IOException {
