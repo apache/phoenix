@@ -133,7 +133,7 @@ as well as each of the subprojects. (not every project has all reports)
 Running tests on local cluster
 -----------------------
 
-Run all IT tests part of a defined execution goal in pom.xml (e.g SignOffTests)  
+Run IT tests part of a defined execution goal in pom.xml (e.g SignOffTests)
 `$ mvn failsafe:integration-test@SignOffTests failsafe:verify@SignOffTests -Dhbase.profile=2.5
 -Dskip.code-coverage -Dmaven.test.failure.ignore=true -Dhbase.test.cluster.distributed=true
 -Dhbase.zookeeper.quorum=localhost -Dhbase.zookeeper.property.clientPort=2181`
