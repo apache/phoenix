@@ -361,14 +361,14 @@ public abstract class ExplainTable {
             int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration()
                     .getInt(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
                             QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
-            if (explainPlanAttributesBuilder != null) {
-                explainPlanAttributesBuilder.setRegionLocations(
-                        Collections.unmodifiableList(regionLocations));
-            }
             if (regionLocations.size() > maxLimitRegionLoc) {
                 int originalSize = regionLocations.size();
                 List<HRegionLocation> trimmedRegionLocations =
                         regionLocations.subList(0, maxLimitRegionLoc);
+                if (explainPlanAttributesBuilder != null) {
+                    explainPlanAttributesBuilder.setRegionLocations(
+                        Collections.unmodifiableList(trimmedRegionLocations));
+                }
                 buf.append(trimmedRegionLocations);
                 buf.append("...total size = ");
                 buf.append(originalSize);
