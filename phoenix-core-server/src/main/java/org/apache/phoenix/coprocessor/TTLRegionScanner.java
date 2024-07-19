@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -41,6 +42,8 @@ import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM;
+import static org.apache.phoenix.coprocessor.BaseScannerRegionObserver.isPhoenixTableTTLEnabled;
 
 /**
  *  TTLRegionScanner masks expired rows using the empty column cell timestamp
@@ -70,13 +73,20 @@ public class TTLRegionScanner extends BaseRegionScanner {
         emptyCF = scan.getAttribute(EMPTY_COLUMN_FAMILY_NAME);
         long currentTime = scan.getTimeRange().getMax() == HConstants.LATEST_TIMESTAMP ?
                 EnvironmentEdgeManager.currentTimeMillis() : scan.getTimeRange().getMax();
-        ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        byte[] isSystemTable = scan.getAttribute(IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM);
+        if (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
+                || !Bytes.toBoolean(isSystemTable))) {
+            ttl = ScanUtil.getTTL(this.scan);
+        } else {
+            ttl = env.getRegion().getTableDescriptor().getColumnFamilies()[0].getTimeToLive();
+        }
         // Regardless if the Phoenix Table TTL feature is disabled cluster wide or the client is
         // an older client and does not supply the empty column parameters, the masking should not
         // be done here. We also disable masking when TTL is HConstants.FOREVER.
         isMaskingEnabled = emptyCF != null && emptyCQ != null && ttl != HConstants.FOREVER
-                && env.getConfiguration().getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
-                        QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+                && (isPhoenixTableTTLEnabled(env.getConfiguration()) && (isSystemTable == null
+                || !Bytes.toBoolean(isSystemTable)));
+
         ttlWindowStart = ttl == HConstants.FOREVER ? 1 : currentTime - ttl * 1000;
         ttl *= 1000;
     }

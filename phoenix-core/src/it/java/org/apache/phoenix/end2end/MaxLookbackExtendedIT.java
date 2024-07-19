@@ -409,8 +409,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             long afterFirstInsertSCN = EnvironmentEdgeManager.currentTimeMillis();
             TableName dataTable = TableName.valueOf(dataTableName);
             TableName indexTable = TableName.valueOf(indexName);
-            assertTableHasTtl(conn, dataTable, ttl);
-            assertTableHasTtl(conn, indexTable, ttl);
+            assertTableHasTtl(conn, dataTable, ttl, true);
+            assertTableHasTtl(conn, indexTable, ttl, true);
             //first make sure we inserted correctly
             String sql = String.format("SELECT val2 FROM %s WHERE id = 'a'", dataTableName);
             String indexSql = String.format("SELECT val2 FROM %s WHERE val1 = 'ab'", dataTableName);
