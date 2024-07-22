@@ -291,30 +291,32 @@ public class CreateTableCompiler {
         }
 
         List<Integer> tablePkPositions = new ArrayList<>();
-        List<Integer> pkPositions = new ArrayList<>();
+        List<Integer> viewPkPositions = new ArrayList<>();
         parentToBe.getPKColumns().forEach(tablePkColumn ->
                 tablePkPositions.add(tablePkColumn.getPosition()));
-        pkColumnsInWhere.forEach(pkColumn -> pkPositions.add(pkColumn.getPosition()));
-        Collections.sort(pkPositions);
+        pkColumnsInWhere.forEach(pkColumn -> viewPkPositions.add(pkColumn.getPosition()));
+        Collections.sort(viewPkPositions);
+        // tablePkStartIdx is used to decide the starting point of tablePkPositions when
+        // comparing with viewPkPositions, which should be increased by 1 if the parent table is
+        // multi-tenant or salted, because in these cases the first PK will be TENANT_ID or _SALTED
+        int tablePkStartIdx = 0;
+        if (parentToBe.isMultiTenant()) {
+            tablePkStartIdx++;
+        }
+        if (parentToBe.getBucketNum() != null) {
+            tablePkStartIdx++;
+        }
 
         // 2. If not multi tenant, view specification WHERE clause should start from the first PK
         // column; otherwise, start from the second PK column
-        boolean isMultiTenant = parentToBe.isMultiTenant();
-        int firstPkPosition = pkPositions.get(0);
-        if (!isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(0))) {
+        if (!Objects.equals(viewPkPositions.get(0), tablePkPositions.get(tablePkStartIdx))) {
             LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
                     "does not start from the first PK column");
             return ViewType.READ_ONLY;
         }
-        if (isMultiTenant && !Objects.equals(firstPkPosition, tablePkPositions.get(1))) {
-            LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
-                    "does not start from the second PK column (the parent table is multi tenant " +
-                    "with the first column TENANT_ID");
-            return ViewType.READ_ONLY;
-        }
 
         // 3. Otherwise, PK column(s) should be in the order they are defined
-        if (!isPkColumnsInOrder(pkPositions, tablePkPositions, isMultiTenant)) {
+        if (!isPkColumnsInOrder(viewPkPositions, tablePkPositions, tablePkStartIdx)) {
             LOGGER.info("Setting the view type as READ_ONLY because the PK columns is not in the " +
                     "order they are defined");
             return ViewType.READ_ONLY;
@@ -335,7 +337,7 @@ public class CreateTableCompiler {
                     ViewUtil.findAllDescendantViews(childLinkTable, config, parentTenantIdInBytes,
                             parentSchemaNameInBytes, parentToBe.getTableName().getBytes(),
                             HConstants.LATEST_TIMESTAMP, true).getFirst();
-            if (legitimateSiblingViewList.size() > 0) {
+            if (!legitimateSiblingViewList.isEmpty()) {
                 PTable siblingView = legitimateSiblingViewList.get(0);
                 Expression siblingViewWhere = getWhereFromView(connection, siblingView);
                 Set<PColumn> siblingViewPkColsInWhere = new HashSet<>();
@@ -380,26 +382,20 @@ public class CreateTableCompiler {
 
     /**
      * Check if the primary key columns are in order (consecutive in position) as they are
-     * defined, providing their positions list.
-     * @param pkPositions A positions list of PK columns to be checked
-     * @param tablePkPositions The positions list of the table's PK columns
-     * @param isMultiTenant Whether the parent table is multi tenant
-     * @return
+     * defined, providing their positions list
+     * @param viewPkPositions A positions list of view PK columns to be checked
+     * @param tablePkPositions The positions list of the table's PK columns to be compared
+     * @param tablePkStartIdx The start index of table PK position, depending on whether the
+     *                        table is multi-tenant and/or salted
+     * @return true if the PK columns are in order, otherwise false
      */
-    private boolean isPkColumnsInOrder(final List<Integer> pkPositions,
+    private boolean isPkColumnsInOrder(final List<Integer> viewPkPositions,
                                        final List<Integer> tablePkPositions,
-                                       boolean isMultiTenant) {
-        if (pkPositions.size() <= 1) {
-            return true;
-        }
-
-        int tablePkIndex = 0;
-        if (isMultiTenant) {
-            tablePkIndex = 1;
-        }
-        for (int i = 1; i < pkPositions.size(); i++) {
-            tablePkIndex++;
-            if (!Objects.equals(pkPositions.get(i), tablePkPositions.get(tablePkIndex))) {
+                                       final int tablePkStartIdx) {
+        for (int i = 1; i < viewPkPositions.size(); i++) {
+            if (!Objects.equals(
+                    viewPkPositions.get(i),
+                    tablePkPositions.get(tablePkStartIdx + i))) {
                 return false;
             }
         }

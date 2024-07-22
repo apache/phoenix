@@ -20,29 +20,40 @@ package org.apache.phoenix.end2end;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ReadOnlyTableException;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 import static org.apache.phoenix.coprocessor.PhoenixMetaDataCoprocessorHost.PHOENIX_META_DATA_COPROCESSOR_CONF_KEY;
-import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_CREATE_INDEX_CHILD_VIEWS_EXTEND_PK;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+/**
+ * Tests for restrictions associated with updatable view.
+ */
+@Category(NeedsOwnMiniClusterTest.class)
 public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
+    private static final Logger LOGGER = LoggerFactory.getLogger(UpdatableViewRestrictionsIT.class);
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -64,19 +75,38 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         }
     }
 
-    private void createTable(Connection conn, String tableName) throws Exception {
-        String ddl = "CREATE TABLE " + tableName
-                + " (k1 INTEGER NOT NULL, k2 DECIMAL, k3 INTEGER NOT NULL, s VARCHAR "
-                + "CONSTRAINT pk PRIMARY KEY (k1, k2, k3))";
-        conn.createStatement().execute(ddl);
+    private void createTable(
+            Connection conn, String tableSQL, Map<String, Object> tableProps) throws Exception {
+        List<String> props = new ArrayList<>();
+        Boolean multitenant = (Boolean) TableProperty.MULTI_TENANT.getValue(tableProps);
+        if (multitenant != null && multitenant) {
+            props.add(TableProperty.MULTI_TENANT.getPropertyName() + "=" + multitenant);
+        }
+        Integer nSaltBuckets = (Integer) TableProperty.SALT_BUCKETS.getValue(tableProps);
+        if (nSaltBuckets != null) {
+            props.add(TableProperty.SALT_BUCKETS.getPropertyName() + "=" + nSaltBuckets);
+        }
+        tableSQL += " " + String.join(", ", props);
+        LOGGER.debug("Creating table with SQL: " + tableSQL);
+        conn.createStatement().execute(tableSQL);
     }
 
-    private void createMultiTenantTable(Connection conn, String tableName) throws Exception {
-        String ddl = "CREATE TABLE " + tableName
-                + " (TENANT_ID VARCHAR NOT NULL, COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT "
-                + "NULL, COL3 VARCHAR, COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(TENANT_ID, "
-                + "COL1, COL2)) MULTI_TENANT = true";
-        conn.createStatement().execute(ddl);
+    private void createTable(Connection conn, String tableName,
+                             boolean multitenant, Integer nSaltBuckets) throws Exception {
+        String table_sql = "CREATE TABLE " + tableName + " ("
+                + (multitenant ? "TENANT_ID VARCHAR NOT NULL, " : "")
+                + "k1 INTEGER NOT NULL, k2 DECIMAL, k3 INTEGER NOT NULL, s VARCHAR "
+                + "CONSTRAINT pk PRIMARY KEY ("
+                + (multitenant ? "TENANT_ID, " : "")
+                + "k1, k2, k3))";
+        createTable(conn, table_sql, new HashMap<String, Object>() {{
+            put(TableProperty.MULTI_TENANT.getPropertyName(), multitenant);
+            put(TableProperty.SALT_BUCKETS.getPropertyName(), nSaltBuckets);
+        }});
+    }
+
+    private void createTable(Connection conn, String tableName) throws Exception {
+        createTable(conn, tableName, false, null);
     }
 
     private Connection getTenantConnection(final String tenantId) throws Exception {
@@ -199,106 +229,105 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
     }
 
     @Test
-    public void testReadOnlyViewWithNonMultiTenantAndNotStartFromFirstPKCol() throws Exception {
-        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+    public void testUpdatableViewOnNonMultitenantNonSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(false, null);
+    }
 
+    @Test
+    public void testUpdatableViewOnMultitenantNonSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(true, null);
+    }
+
+    @Test
+    public void testUpdatableViewOnNonMultitenantSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(false, 3);
+    }
+
+    @Test
+    public void testUpdatableViewOnMultitenantSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(true, 3);
+    }
+
+    private void testUpdatableViewStartFromFirstPK(boolean multitenant, Integer nSaltBuckets) throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTable(conn, fullTableName);
-
-            Statement stmt = conn.createStatement();
-            String viewDDL =
-                    "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName +
-                            " WHERE k2 = 2";
-            stmt.execute(viewDDL);
-            try {
-                stmt.execute("UPSERT INTO " + fullViewName + " VALUES(1, 2, 109, 'a')");
-                fail();
-            } catch (ReadOnlyTableException ignored) {
+            conn.setAutoCommit(true);
+            createTable(conn, fullTableName, multitenant, nSaltBuckets);
+            String tenantId = null;
+            if (multitenant) {
+                tenantId = TENANT1;
+                try (Connection tenantConn = getTenantConnection(tenantId)) {
+                    createAndVerifyUpdatableView(fullTableName, tenantConn, tenantId);
+                }
+            } else {
+                createAndVerifyUpdatableView(fullTableName, conn, null);
             }
+            verifyNumberOfRows(fullTableName, tenantId, 1, conn);
         }
     }
 
+    private void createAndVerifyUpdatableView(
+            String fullTableName, Connection conn, String tenantId) throws Exception {
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        Statement stmt = conn.createStatement();
+
+        stmt.execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName +
+                " WHERE k1 = 1");
+        stmt.execute("UPSERT INTO " + fullViewName + " VALUES(1, 2, 109, 'a')");
+        conn.commit();
+
+        ResultSet rs = stmt.executeQuery("SELECT k1, k2, k3 FROM " + fullViewName);
+
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        assertEquals(109, rs.getInt(3));
+        assertFalse(rs.next());
+    }
+
     @Test
-    public void testUpdatableViewWithNonMultiTenantAndStartFromFirstPKCol() throws Exception {
+    public void testReadOnlyViewOnNonMultitenantNonSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(false, null);
+    }
+
+    @Test
+    public void testReadOnlyViewOnMultitenantNonSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(true, null);
+    }
+
+    @Test
+    public void testReadOnlyViewOnNonMultitenantSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(false, 3);
+    }
+
+    @Test
+    public void testReadOnlyViewOnMultitenantSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(true, 3);
+    }
+
+    private void testReadOnlyViewNotStartFromFirstPK(boolean multitenant, Integer nSaltBuckets) throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-
-        Properties props = new Properties();
-        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
-        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTable(conn, fullTableName);
-
-            Statement stmt = conn.createStatement();
-            String viewDDL =
-                    "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName +
-                            " WHERE k1 = 1";
-            stmt.execute(viewDDL);
-
-            stmt.execute("UPSERT INTO " + fullViewName + " VALUES(1, 2, 109, 'a')");
-            conn.commit();
-
-            ResultSet rs = stmt.executeQuery("SELECT k1, k2, k3 FROM " + fullViewName);
-            assertTrue(rs.next());
-            assertEquals(1, rs.getInt(1));
-            assertEquals(2, rs.getInt(2));
-            assertEquals(109, rs.getInt(3));
-            assertFalse(rs.next());
-        }
-    }
-
-    @Test
-    public void testReadOnlyViewWithMultiTenantAndNotStartFromSecondPKCol() throws Exception {
-        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        String tenantViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String tenantId = TENANT1;
 
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection globalConn = DriverManager.getConnection(getUrl(), props);
              Connection tenantConn = getTenantConnection(tenantId)) {
-            createMultiTenantTable(globalConn, fullTableName);
+            createTable(globalConn, fullTableName, multitenant, nSaltBuckets);
 
-            final Statement tenantStmt = tenantConn.createStatement();
-            tenantStmt.execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " +
-                    fullTableName + " WHERE COL2 = 'col2'");
+            final Statement stmt = multitenant ? tenantConn.createStatement() :
+                    globalConn.createStatement();
+            stmt.execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " +
+                    fullTableName + " WHERE k2 = 2");
             try {
-                tenantStmt.execute(String.format("UPSERT INTO %s VALUES" +
-                        "('col1', 'col2', 'col3', 'col4')", tenantViewName));
+                stmt.execute(String.format("UPSERT INTO %s VALUES" +
+                        "(1, 2, 3, 's')", fullViewName));
                 fail();
             } catch (ReadOnlyTableException ignored) {
             }
-        }
-    }
-
-    @Test
-    public void testUpdatableViewWithMultiTenantAndStartFromSecondPKCol() throws Exception {
-        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        String tenantViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-        String tenantId = TENANT1;
-
-        Properties props = new Properties();
-        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
-        try (Connection globalConn = DriverManager.getConnection(getUrl(), props);
-             Connection tenantConn = getTenantConnection(tenantId)) {
-            createMultiTenantTable(globalConn, fullTableName);
-
-            tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " +
-                    fullTableName + " WHERE COL1 = 'col1'");
-            tenantConn.setAutoCommit(true);
-
-            tenantConn.createStatement().execute(String.format("UPSERT INTO %s VALUES" +
-                    "('col1', 'col2', 'col3', 'col4')", tenantViewName));
-
-            verifyNumberOfRows(fullTableName, tenantId, 1, globalConn);
-            ResultSet rs =
-                    tenantConn.createStatement().executeQuery("SELECT COL1, COL2 FROM " +  tenantViewName);
-            assertTrue(rs.next());
-            assertEquals("col1", rs.getString(1));
-            assertEquals("col2", rs.getString(2));
-            assertFalse(rs.next());
         }
     }
 
