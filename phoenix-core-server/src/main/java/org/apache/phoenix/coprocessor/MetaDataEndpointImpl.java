@@ -3911,7 +3911,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
          * Lock directly on key, though it may be an index table. This will just prevent a table
          * from getting rebuilt too often.
          */
-        boolean wasLocked = (rowLock != null);
+        final boolean wasLocked = (rowLock != null);
         try {
             if (!wasLocked) {
                 rowLock = acquireLock(region, key, null, true);
@@ -3930,11 +3930,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
                 return table;
             }
-            if (!wasLocked && rowLock != null) {
-                // release the read-lock as the PTable could not be formed from the metadata cache
-                rowLock.release();
-                wasLocked = true;
-            }
             // take Phoenix row level write-lock as we need to protect metadata cache update
             // after scanning SYSTEM.CATALOG to retrieve the PTable object
             LockManager.RowLock phoenixRowLock =
@@ -3948,24 +3943,16 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     }
                     return table;
                 }
-
-                // take HBase row level read-lock as we need to scan SYSTEM.CATALOG to retrieve
-                // PTable object before updating the metadata cache
-                RowLock hbaseRowLock = acquireLock(region, key, null, true);
-                try {
-                    // Query for the latest table first, since it's not cached
-                    table = buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP,
-                        clientVersion);
-                    if ((table != null && table.getTimeStamp() <= clientTimeStamp) || (
-                        blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
-                        return table;
-                    }
-                    // Otherwise, query for an older version of the table - it won't be cached
-                    table = buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
+                // Query for the latest table first, since it's not cached
+                table =
+                    buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
+                if ((table != null && table.getTimeStamp() <= clientTimeStamp) || (
+                    blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
                     return table;
-                } finally {
-                    hbaseRowLock.release();
                 }
+                // Otherwise, query for an older version of the table - it won't be cached
+                table = buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
+                return table;
             } finally {
                 phoenixRowLock.release();
             }
