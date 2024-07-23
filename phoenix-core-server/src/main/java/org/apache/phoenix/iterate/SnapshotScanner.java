@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.regionserver.MemStoreLAB;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -143,6 +144,9 @@ public class SnapshotScanner extends AbstractClientScanner {
             String.valueOf(32 * 1024 * 1024L));
     // don't allow L2 bucket cache for non RS process to avoid unexpected disk usage.
     conf.unset(HConstants.BUCKET_CACHE_IOENGINE_KEY);
+    //PHOENIX-7367 - non RS process doesn't have MemstoreLab's ChunkCreator initialized
+    //so we disable it to avoid NPE while closing the memstore as part of region close
+    conf.setBoolean(MemStoreLAB.USEMSLAB_KEY, false);
     region.setBlockCache(BlockCacheFactory.createBlockCache(conf));
     // we won't initialize the MobFileCache when not running in RS process. so provided an
     // initialized cache. Consider the case: an CF was set from an mob to non-mob. if we only
