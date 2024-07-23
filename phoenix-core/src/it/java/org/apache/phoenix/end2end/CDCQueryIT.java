@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
-import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -34,7 +33,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -42,7 +40,6 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.HashMap;
@@ -53,12 +50,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
-import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
-import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
-import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
@@ -275,7 +268,7 @@ public class CDCQueryIT extends CDCBaseIT {
                 tableName = viewName;
             }
             cdcName = generateUniqueName();
-            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
             if (!dataBeforeCDC) {
                 createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
                         indexSaltBuckets);
@@ -344,6 +337,9 @@ public class CDCQueryIT extends CDCBaseIT {
             for (Set<ChangeRow> batch: allBatches.get(tenantId)) {
                 changes.addAll(batch);
             }
+            verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
+                            "SELECT * FROM " + cdcFullName),
+                    datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
                     datatableName, dataColumns, changes, CHANGE_IMG);

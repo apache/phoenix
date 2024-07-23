@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.execute;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_CF;
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.UPSERT_STATUS_CQ;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
@@ -59,6 +61,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -107,9 +110,11 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
@@ -164,6 +169,7 @@ public class MutationState implements SQLCloseable {
 
     private long sizeOffset;
     private int numRows = 0;
+    private int numUpdatedRowsForAutoCommit = 0;
     private long estimatedSize = 0;
     private int[] uncommittedStatementIndexes = EMPTY_STATEMENT_INDEX_ARRAY;
     private boolean isExternalTxContext = false;
@@ -466,6 +472,10 @@ public class MutationState implements SQLCloseable {
 
     public long getUpdateCount() {
         return sizeOffset + numRows;
+    }
+
+    public int getNumUpdatedRowsForAutoCommit() {
+        return numUpdatedRowsForAutoCommit;
     }
 
     public int getNumRows() {
@@ -1451,6 +1461,7 @@ public class MutationState implements SQLCloseable {
                 Table hTable = connection.getQueryServices().getTable(htableName);
                 List<Mutation> currentMutationBatch = null;
                 boolean areAllBatchesSuccessful = false;
+                Object[] resultObjects = null;
 
                 try {
                     if (table.isTransactional()) {
@@ -1475,17 +1486,21 @@ public class MutationState implements SQLCloseable {
                     while (itrListMutation.hasNext()) {
                         final List<Mutation> mutationBatch = itrListMutation.next();
                         currentMutationBatch = mutationBatch;
+                        if (connection.getAutoCommit() && mutationBatch.size() == 1) {
+                            resultObjects = new Object[mutationBatch.size()];
+                        }
                         if (shouldRetryIndexedMutation) {
                             // if there was an index write failure, retry the mutation in a loop
                             final Table finalHTable = hTable;
                             final ImmutableBytesWritable finalindexMetaDataPtr =
                                     indexMetaDataPtr;
                             final PTable finalPTable = table;
+                            final Object[] finalResultObjects = resultObjects;
                             PhoenixIndexFailurePolicyHelper.doBatchWithRetries(new MutateCommand() {
                                 @Override
                                 public void doMutation() throws IOException {
                                     try {
-                                        finalHTable.batch(mutationBatch, null);
+                                        finalHTable.batch(mutationBatch, finalResultObjects);
                                     } catch (InterruptedException e) {
                                         Thread.currentThread().interrupt();
                                         throw new IOException(e);
@@ -1524,8 +1539,22 @@ public class MutationState implements SQLCloseable {
                             }, iwe, connection, connection.getQueryServices().getProps());
                             shouldRetryIndexedMutation = false;
                         } else {
-                            hTable.batch(mutationBatch, null);
+                            hTable.batch(mutationBatch, resultObjects);
                         }
+
+                        if (resultObjects != null) {
+                            Result result = (Result) resultObjects[0];
+                            if (result != null && !result.isEmpty()) {
+                                Cell cell = result.getColumnLatestCell(
+                                        Bytes.toBytes(UPSERT_CF), Bytes.toBytes(UPSERT_STATUS_CQ));
+                                numUpdatedRowsForAutoCommit = PInteger.INSTANCE.getCodec()
+                                        .decodeInt(cell.getValueArray(), cell.getValueOffset(),
+                                                SortOrder.getDefault());
+                            } else {
+                                numUpdatedRowsForAutoCommit = 1;
+                            }
+                        }
+
                         // remove each batch from the list once it gets applied
                         // so when failures happens for any batch we only start
                         // from that batch only instead of doing duplicate reply of already

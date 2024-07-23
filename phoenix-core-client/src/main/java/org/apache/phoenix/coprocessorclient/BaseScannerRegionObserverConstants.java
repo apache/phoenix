@@ -62,6 +62,8 @@ public class BaseScannerRegionObserverConstants {
     public static final String UPSERT_SELECT_EXPRS = "_UpsertSelectExprs";
     public static final String DELETE_CQ = "_DeleteCQ";
     public static final String DELETE_CF = "_DeleteCF";
+    public static final String UPSERT_STATUS_CQ = "_UpsertStatusCQ";
+    public static final String UPSERT_CF = "_UpsertCF";
     public static final String EMPTY_CF = "_EmptyCF";
     public static final String EMPTY_COLUMN_QUALIFIER = "_EmptyColumnQualifier";
     public static final String SPECIFIC_ARRAY_INDEX = "_SpecificArrayIndex";
@@ -115,7 +117,7 @@ public class BaseScannerRegionObserverConstants {
     public static final String RUN_UPDATE_STATS_ASYNC_ATTRIB = "_RunUpdateStatsAsync";
     public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
     public static final String TX_SCN = "_TxScn";
-    public static final String PHOENIX_TTL = "_PhoenixTTL";
+    public static final String TTL = "_TTL";
     public static final String MASK_PHOENIX_TTL_EXPIRED = "_MASK_TTL_EXPIRED";
     public static final String DELETE_PHOENIX_TTL_EXPIRED = "_DELETE_TTL_EXPIRED";
     public static final String PHOENIX_TTL_SCAN_TABLE_NAME = "_PhoenixTTLScanTableName";
@@ -138,6 +140,7 @@ public class BaseScannerRegionObserverConstants {
     public static final String INDEX_ROW_KEY = "_IndexRowKey";
     public static final String READ_REPAIR_TRANSFORMING_TABLE = "_ReadRepairTransformingTable";
     public static final String CDC_DATA_TABLE_DEF = "_CdcDataTableDef";
+    public static final String IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM = "_IsPhoenixScanTableSystem";
 
     public static final String MAX_LOOKBACK_AGE = "MAX_LOOKBACK_AGE";
     /**

@@ -287,11 +287,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         throw new IllegalStateException("No cell found");
     }
 
-    protected static boolean isTimestampBeforeTTL(long tableTTL, long currentTime, long tsToCheck) {
+    protected static boolean isTimestampBeforeTTL(int tableTTL, long currentTime, long tsToCheck) {
         if (tableTTL == HConstants.FOREVER) {
             return false;
         }
-        return tsToCheck < (currentTime - tableTTL * 1000);
+        return tsToCheck < (currentTime - tableTTL * 1000L);
     }
 
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
@@ -1098,7 +1098,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(indexScan);
         SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true, true));
         indexScan.setRaw(true);
         indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
@@ -1481,7 +1481,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
             scanRanges.initializeScan(incrScan);
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            incrScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+            incrScan.setFilter(new SkipScanFilter(skipScanFilter, true, true));
             //putting back the min time to 0 for index and data reads
             incrScan.setTimeRange(0, scan.getTimeRange().getMax());
             scan.setTimeRange(0, scan.getTimeRange().getMax());

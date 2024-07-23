@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static java.util.Collections.singletonList;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -172,10 +173,13 @@ public class InListIT extends ParallelStatsDisabledIT {
     private static String prefix = generateUniqueName();
 
     boolean checkMaxSkipScanCardinality = true;
+    boolean bloomFilter = true;
 
-    public InListIT(boolean param) throws Exception {
+    public InListIT(boolean param1, boolean param2) throws Exception {
         // Setup max skip scan size appropriate for the tests.
-        checkMaxSkipScanCardinality = param;
+        checkMaxSkipScanCardinality = param1;
+        // Run tests with and with bloom filter
+        bloomFilter = param2;
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
             put(QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE, checkMaxSkipScanCardinality ? String.valueOf(15) : String.valueOf(-1));
         }};
@@ -184,10 +188,13 @@ public class InListIT extends ParallelStatsDisabledIT {
 
     }
 
-    @Parameterized.Parameters(name="checkMaxSkipScanCardinality = {0}")
-    public static synchronized Collection<Boolean[]> data() {
-        return Arrays.asList(new Boolean[][] {
-                { false },{ true }
+    @Parameterized.Parameters(name="checkMaxSkipScanCardinality = {0}, bloomFilter = {1}")
+    public static synchronized Collection<Object[]> data() {
+        return Arrays.asList(new Object[][] {
+            {true, true},
+            {true, false},
+            {false, true},
+            {false, false}
         });
     }
 
@@ -272,7 +279,8 @@ public class InListIT extends ParallelStatsDisabledIT {
      * @param isMultiTenant  whether or not the table needs a tenant_id column
      * @return  the final DDL statement
      */
-    private static String createTableDDL(String tableName, PDataType pkType, int saltBuckets, boolean isMultiTenant) {
+    private static String createTableDDL(String tableName, PDataType pkType, int saltBuckets,
+            boolean isMultiTenant, boolean isBloomFilterEnabled) {
         StringBuilder ddlBuilder = new StringBuilder();
         ddlBuilder.append("CREATE TABLE ").append(tableName).append(" ( ");
 
@@ -302,7 +310,12 @@ public class InListIT extends ParallelStatsDisabledIT {
         if(isMultiTenant) {
             ddlBuilder.append("MULTI_TENANT=true");
         }
-
+        if (isBloomFilterEnabled) {
+            if (saltBuckets != 0 || isMultiTenant) {
+                ddlBuilder.append(", ");
+            }
+            ddlBuilder.append("BLOOMFILTER='ROW'");
+        }
         return ddlBuilder.toString();
     }
 
@@ -316,9 +329,12 @@ public class InListIT extends ParallelStatsDisabledIT {
      * @param saltBuckets  the number of salt buckets if the table is salted, otherwise 0
      * @return  the table or view name that should be used to access the created table
      */
-    private static String initializeAndGetTable(Connection baseConn, Connection conn, boolean isMultiTenant, PDataType pkType, int saltBuckets) throws SQLException {
+    private static String initializeAndGetTable(Connection baseConn, Connection conn,
+            boolean isMultiTenant, PDataType pkType, int saltBuckets, boolean isBloomFilterEnabled)
+            throws SQLException {
         String tableName = getTableName(isMultiTenant, pkType, saltBuckets);
-        String tableDDL = createTableDDL(tableName, pkType, saltBuckets, isMultiTenant);
+        String tableDDL = createTableDDL(tableName, pkType, saltBuckets,
+                isMultiTenant, isBloomFilterEnabled);
         baseConn.createStatement().execute(tableDDL);
 
         // if requested, create a tenant specific view and return the view name instead
@@ -440,7 +456,7 @@ public class InListIT extends ParallelStatsDisabledIT {
                         // use a different table with a unique name for each variation
                         String tableName =
                             initializeAndGetTable(baseConn, conn, isMultiTenant, pkType,
-                                saltBuckets);
+                                saltBuckets, bloomFilter);
 
                         // upsert the given data
                         for (String upsertBody : DEFAULT_UPSERT_BODIES) {
