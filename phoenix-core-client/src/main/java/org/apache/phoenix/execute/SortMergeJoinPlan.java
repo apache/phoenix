@@ -940,13 +940,13 @@ public class SortMergeJoinPlan implements QueryPlan {
 
         List<OrderBy> orderBys = new ArrayList<OrderBy>(2);
         List<OrderByExpression> lhsOrderByExpressions =
-                compileOrderByNodes(lhsOrderByNodes, statementContext);
+                compileOutputOrderByExpressions(lhsOrderByNodes, statementContext);
         if(!lhsOrderByExpressions.isEmpty()) {
             orderBys.add(new OrderBy(lhsOrderByExpressions));
         }
 
         List<OrderByExpression> rhsOrderByExpressions =
-                compileOrderByNodes(rhsOrderByNodes, statementContext);
+                compileOutputOrderByExpressions(rhsOrderByNodes, statementContext);
         if(!rhsOrderByExpressions.isEmpty()) {
             orderBys.add(new OrderBy(rhsOrderByExpressions));
         }
@@ -956,7 +956,9 @@ public class SortMergeJoinPlan implements QueryPlan {
         return orderBys;
     }
 
-    private static List<OrderByExpression> compileOrderByNodes(List<OrderByNode> orderByNodes, StatementContext statementContext) throws SQLException {
+    private static List<OrderByExpression> compileOutputOrderByExpressions(
+            List<OrderByNode> orderByNodes,
+            StatementContext statementContext) throws SQLException {
         /**
          * If there is TableNotFoundException or ColumnNotFoundException, it means that the orderByNodes is not referenced by other parts of the sql,
          * so could be ignored.
@@ -976,6 +978,13 @@ public class SortMergeJoinPlan implements QueryPlan {
                 return orderByExpressions;
             }
             assert expression != null;
+            // Note here we don't like OrderByCompiler#compile method to reverse the
+            // OrderByExpression#isAscending if expression#sortOrder is SortOrder.DESC. That's
+            // because we compile it for QueryPlan#getOutputOrderBys and the compiled
+            // OrderByExpression is used for OrderPreservingTracker, not used in
+            // OrderedResultIterator to compare based on binary representation.
+            // TODO: We should make a explicit distinction between OrderByExpression for
+            // OrderPreservingTracker and OrderByExpression for OrderedResultIterator computation.
             orderByExpressions.add(
                     OrderByExpression.createByCheckIfOrderByReverse(
                             expression,
