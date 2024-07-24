@@ -162,7 +162,7 @@
     <skipNeedsOwnMiniClusterTests>false</skipNeedsOwnMiniClusterTests>
     <numForkedUT>8</numForkedUT>
     <numForkedIT>7</numForkedIT>
-    <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
+    <failsafe.failIfNoSpecifiedTests>false</failsafe.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
     <!-- Empty argument when code coverage is deactivated -->
     <jacocoArgLine></jacocoArgLine>
@@ -403,6 +403,17 @@
               <goals>
                  <goal>integration-test</goal>
                  <goal>verify</goal>
+              </goals>
+            </execution>
+            <execution>
+              <id>SignOffTests</id>
+              <configuration>
+                <reuseForks>false</reuseForks>
+                <groups>org.apache.phoenix.end2end.SupportsDistributedClusterTest</groups>
+              </configuration>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
               </goals>
             </execution>
           </executions>
