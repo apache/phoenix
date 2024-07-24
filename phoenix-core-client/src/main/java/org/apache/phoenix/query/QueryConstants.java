@@ -332,6 +332,8 @@ public interface QueryConstants {
 
     // custom TagType
     byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
+    String SPLITS_FILE = "SPLITS_FILE";
+
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
      * {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
