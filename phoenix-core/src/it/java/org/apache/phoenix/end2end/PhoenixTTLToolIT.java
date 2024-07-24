@@ -76,7 +76,7 @@ import org.junit.experimental.categories.Category;
  * TODO:- To enable this test after re-enabling TTL for view for more info check :- PHOENIX-6978
  */
 @Ignore
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class})
 public class PhoenixTTLToolIT extends ParallelStatsDisabledIT {
 
     @BeforeClass

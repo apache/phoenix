@@ -68,7 +68,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class})
 @RunWith(Parameterized.class)
 public class MaxLookbackExtendedIT extends BaseTest {
     private static final int MAX_LOOKBACK_AGE = 15;

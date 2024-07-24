@@ -48,7 +48,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class, SupportsDistributedClusterTest.class})
 public class UpdateCacheAcrossDifferentClientsIT extends BaseTest {
 
     @BeforeClass

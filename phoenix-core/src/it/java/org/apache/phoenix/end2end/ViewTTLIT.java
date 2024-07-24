@@ -87,7 +87,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category({NeedsOwnMiniClusterTest.class})
 public class ViewTTLIT extends BaseViewTTLIT {
 
     public ViewTTLIT(boolean useCondExpression) {
