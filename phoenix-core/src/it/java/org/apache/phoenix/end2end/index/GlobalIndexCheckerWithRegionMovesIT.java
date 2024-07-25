@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionStatesCount;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -176,7 +177,8 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
                                         regionStatesCount.getTotalRegions()) {
                             LOGGER.info("Moving region {} to {}",
                                     regionInfo.getRegionNameAsString(), server2);
-                            admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                            admin.move(regionInfo.getEncodedNameAsBytes(),
+                                Bytes.toBytes(server2.getServerName()));
                             break;
                         } else {
                             LOGGER.info("Table {} has some region(s) in RIT or not online",
@@ -198,9 +200,11 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
                         if (regionStatesCount.getRegionsInTransition() == 0 &&
                                 regionStatesCount.getOpenRegions() ==
                                         regionStatesCount.getTotalRegions()) {
-                            admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                            admin.move(regionInfo.getEncodedNameAsBytes(),
+                                Bytes.toBytes(server1.getServerName()));
                             LOGGER.info("Moving region {} to {}",
-                                    regionInfo.getRegionNameAsString(), server1);
+                                regionInfo.getRegionNameAsString(),
+                                Bytes.toBytes(server1.getServerName()));
                             break;
                         } else {
                             LOGGER.info("Table {} has some region(s) in RIT or not online",

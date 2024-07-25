@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.iterate.ScanningResultPostDummyResultCaller;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -130,7 +131,8 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         regionsOnServer1.forEach(regionInfo -> {
             if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
                 try {
-                    admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                    admin.move(regionInfo.getEncodedNameAsBytes(),
+                        Bytes.toBytes(server2.getServerName()));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -139,7 +141,8 @@ public class ScanUncommittedWithRegionMovesIT extends ParallelStatsDisabledIT {
         regionsOnServer2.forEach(regionInfo -> {
             if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
                 try {
-                    admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                    admin.move(regionInfo.getEncodedNameAsBytes(),
+                        Bytes.toBytes(server1.getServerName()));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }

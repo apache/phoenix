@@ -304,7 +304,8 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         regionsOnServer1.forEach(regionInfo -> {
             if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
                 try {
-                    admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                    admin.move(regionInfo.getEncodedNameAsBytes(),
+                        Bytes.toBytes(server2.getServerName()));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -313,7 +314,8 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         regionsOnServer2.forEach(regionInfo -> {
             if (regionInfo.getTable().equals(TableName.valueOf(tableName))) {
                 try {
-                    admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                    admin.move(regionInfo.getEncodedNameAsBytes(),
+                        Bytes.toBytes(server1.getServerName()));
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -341,14 +343,16 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         }
         regionsOnServer1.forEach(regionInfo -> {
             try {
-                admin.move(regionInfo.getEncodedNameAsBytes(), server2);
+                admin.move(regionInfo.getEncodedNameAsBytes(),
+                    Bytes.toBytes(server2.getServerName()));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         });
         regionsOnServer2.forEach(regionInfo -> {
             try {
-                admin.move(regionInfo.getEncodedNameAsBytes(), server1);
+                admin.move(regionInfo.getEncodedNameAsBytes(),
+                    Bytes.toBytes(server1.getServerName()));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

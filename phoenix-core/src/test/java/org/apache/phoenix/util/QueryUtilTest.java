@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.sql.Types;
 import java.util.Arrays;
@@ -28,7 +29,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.TestZKConnectionRegistry;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.junit.Test;
@@ -37,6 +38,10 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class QueryUtilTest {
+
+    //Copeid from HBase HConstnants, so that the test compiles with HBase 2.1 and 2.2
+    private static final String CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY =
+            "hbase.client.registry.impl";
 
     private static final ColumnInfo ID_COLUMN = new ColumnInfo("ID", Types.BIGINT);
     private static final ColumnInfo NAME_COLUMN = new ColumnInfo("NAME", Types.VARCHAR);
@@ -121,11 +126,12 @@ public class QueryUtilTest {
      */
     @Test
     public void testCreateConnectionFromConfiguration() throws Exception {
+        assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.3") >= 0);
         Properties props = new Properties();
         // standard lookup. this already checks if we set hbase.zookeeper.clientPort
         Configuration conf = new Configuration(false);
         // Need this for HBase 3 where ZK is not the default
-        conf.set(HConstants.CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
+        conf.set(CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY,
             ZKConnectionInfo.ZK_REGISTRY_NAME);
         conf.set(HConstants.ZOOKEEPER_QUORUM, "localhost");
         conf.set(HConstants.ZOOKEEPER_CLIENT_PORT, "2181");
