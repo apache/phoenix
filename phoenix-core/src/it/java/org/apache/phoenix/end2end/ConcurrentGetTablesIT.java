@@ -56,8 +56,15 @@ public class ConcurrentGetTablesIT extends BaseTest {
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(60 * 60 * 1000));
-        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "ALWAYS");
         props.put(QueryServices.METADATA_HANDLER_COUNT_ATTRIB, Integer.toString(numMetaHandlers));
+        // Make sure that not only tables are created with UPDATE_CACHE_FREQUENCY=ALWAYS and
+        // hence queries need to go to regionserver, but also we disable enough of
+        // metadata caching at server side, invalidation as well as last DDL timestamp
+        // validation at client side.
+        // Combine this setup with UPDATE_CACHE_FREQUENCY=ALWAYS and enough RPC calls to
+        // MetaDataEndpointImpl#clearCache to ensure frequently queries need to execute
+        // getTable() at server side by scanning SYSTEM.CATALOG.
+        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "ALWAYS");
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(false));
         props.put(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
