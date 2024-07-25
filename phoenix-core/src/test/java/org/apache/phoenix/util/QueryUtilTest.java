@@ -39,7 +39,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class QueryUtilTest {
 
-    //Copeid from HBase HConstnants, so that the test compiles with HBase 2.1 and 2.2
+    //Copied from HBase HConstnants, so that the test compiles with HBase 2.1 and 2.2
     private static final String CLIENT_CONNECTION_REGISTRY_IMPL_CONF_KEY =
             "hbase.client.registry.impl";
 
