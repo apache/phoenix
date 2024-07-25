@@ -41,6 +41,7 @@ public class ViewTTLWithLongViewIndexEnabledIT extends BaseViewTTLIT {
         Map<String, String> DEFAULT_PROPERTIES = new HashMap<String, String>() {{
             put(QueryServices.PHOENIX_TABLE_TTL_ENABLED, String.valueOf(true));
             put(QueryServices.LONG_VIEW_INDEX_ENABLED_ATTRIB, String.valueOf(true));
+            put("hbase.procedure.remote.dispatcher.delay.msec", "0");
             // no max lookback
             put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(0));
             put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
