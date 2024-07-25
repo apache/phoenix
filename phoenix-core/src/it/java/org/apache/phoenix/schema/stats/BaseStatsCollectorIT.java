@@ -60,7 +60,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.coprocessor.UngroupedAggregateRegionObserver;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.BaseTest;
@@ -76,7 +75,6 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -84,7 +82,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
@@ -581,6 +578,9 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
                         + "(k VARCHAR PRIMARY KEY, a.v INTEGER, b.v INTEGER, c.v INTEGER NULL, d.v INTEGER NULL) "
                         + tableDDLOptions );
         stmt = conn.prepareStatement("UPSERT INTO " + fullTableName + " VALUES(?,?, ?, ?, ?)");
+        int queryTimeout = conn.unwrap(PhoenixConnection.class).getQueryServices().getProps()
+                .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
         byte[] val = new byte[250];
         for (int i = 0; i < nRows; i++) {
             stmt.setString(1, Character.toString((char)('a' + i)) + Bytes.toString(val));
@@ -623,7 +623,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
         assertEquals(physicalTableName, planAttributes.getTableName());
 
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        List<HRegionLocation> regions = services.getAllTableRegions(Bytes.toBytes(physicalTableName));
+        List<HRegionLocation> regions =
+                services.getAllTableRegions(Bytes.toBytes(physicalTableName), queryTimeout);
         assertEquals(1, regions.size());
 
         collectStatistics(conn, fullTableName, Long.toString(1000));

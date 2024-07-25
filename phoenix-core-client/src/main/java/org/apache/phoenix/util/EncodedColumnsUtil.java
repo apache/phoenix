@@ -84,9 +84,7 @@ public class EncodedColumnsUtil {
      *         part is the value to use for it.
      */
     public static Pair<byte[], byte[]> getEmptyKeyValueInfo(PTable table) {
-        return usesEncodedColumnNames(table) ? new Pair<>(QueryConstants.ENCODED_EMPTY_COLUMN_BYTES,
-                QueryConstants.ENCODED_EMPTY_COLUMN_VALUE_BYTES) : new Pair<>(QueryConstants.EMPTY_COLUMN_BYTES,
-                QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        return getEmptyKeyValueInfo(usesEncodedColumnNames(table));
     }
 
     /**
@@ -104,9 +102,7 @@ public class EncodedColumnsUtil {
      *         part is the value to use for it.
      */
     public static Pair<byte[], byte[]> getEmptyKeyValueInfo(QualifierEncodingScheme encodingScheme) {
-        return usesEncodedColumnNames(encodingScheme) ? new Pair<>(QueryConstants.ENCODED_EMPTY_COLUMN_BYTES,
-                QueryConstants.ENCODED_EMPTY_COLUMN_VALUE_BYTES) : new Pair<>(QueryConstants.EMPTY_COLUMN_BYTES,
-                QueryConstants.EMPTY_COLUMN_VALUE_BYTES);
+        return getEmptyKeyValueInfo(usesEncodedColumnNames(encodingScheme));
     }
 
     public static Pair<Integer, Integer> getMinMaxQualifiersFromScan(Scan scan) {

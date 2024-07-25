@@ -28,7 +28,9 @@ public enum PTableType {
     VIEW("v", "VIEW"),
     INDEX("i", "INDEX"),
     PROJECTED("p", "PROJECTED"),
-    SUBQUERY("q", "SUBQUERY"); 
+    CDC("c", "CDC"),
+    SUBQUERY("q", "SUBQUERY"),
+    ;
 
     private final PName value;
     private final String serializedValue;

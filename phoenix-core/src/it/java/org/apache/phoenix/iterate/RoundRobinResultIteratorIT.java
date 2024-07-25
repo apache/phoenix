@@ -49,6 +49,7 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -78,7 +79,10 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
         int numRows = setupTableForSplit(tableName);
         Connection conn = getConnection();
         ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
-        int nRegions = services.getAllTableRegions(tableNameBytes).size();
+        int queryTimeout = services.getProps()
+                .getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                        QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+        int nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
         int nRegionsBeforeSplit = nRegions;
         Admin admin = services.getAdmin();
         try {
@@ -90,7 +94,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
             long waitTimeMillis = 2000;
             while (nRegions == nRegionsBeforeSplit && nTries < 10) {
                 latch.await(waitTimeMillis, TimeUnit.MILLISECONDS);
-                nRegions = services.getAllTableRegions(tableNameBytes).size();
+                nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
                 nTries++;
             }
             
@@ -102,7 +106,7 @@ public class RoundRobinResultIteratorIT extends ParallelStatsDisabledIT {
             while (rs.next()) {
                 numRowsRead++;
             }
-            nRegions = services.getAllTableRegions(tableNameBytes).size();
+            nRegions = services.getAllTableRegions(tableNameBytes, queryTimeout).size();
             // Region cache has been updated, as there are more regions now
             assertNotEquals(nRegions, nRegionsBeforeSplit);
             assertEquals(numRows, numRowsRead);

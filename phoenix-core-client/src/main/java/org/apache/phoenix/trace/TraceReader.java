@@ -18,6 +18,7 @@
 package org.apache.phoenix.trace;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -88,89 +89,88 @@ public class TraceReader {
                         + " ORDER BY " + MetricInfo.TRACE.columnName + " DESC, "
                         + MetricInfo.START.columnName + " ASC" + " LIMIT " + pageSize;
         int resultCount = 0;
-        ResultSet results = conn.prepareStatement(query).executeQuery();
-        TraceHolder trace = null;
-        // the spans that are not the root span, but haven't seen their parent yet
-        List<SpanInfo> orphans = null;
-        while (results.next()) {
-            int index = 1;
-            long traceid = results.getLong(index++);
-            long parent = results.getLong(index++);
-            long span = results.getLong(index++);
-            String desc = results.getString(index++);
-            long start = results.getLong(index++);
-            long end = results.getLong(index++);
-            String host = results.getString(index++);
-            int tagCount = results.getInt(index++);
-            int annotationCount = results.getInt(index++);
-            // we have a new trace
-            if (trace == null || traceid != trace.traceid) {
-                // only increment if we are on a new trace, to ensure we get at least one
-                if (trace != null) {
-                    resultCount++;
-                }
-                // we beyond the limit, so we stop
-                if (resultCount >= limit) {
-                    break;
-                }
-                trace = new TraceHolder();
-                // add the orphans, so we can track them later
-                orphans = new ArrayList<SpanInfo>();
-                trace.orphans = orphans;
-                trace.traceid = traceid;
-                traces.add(trace);
-            }
-
-            // search the spans to determine the if we have a known parent
-            SpanInfo parentSpan = null;
-            if (parent != Span.ROOT_SPAN_ID) {
-                // find the parent
-                for (SpanInfo p : trace.spans) {
-                    if (p.id == parent) {
-                        parentSpan = p;
+        try (PreparedStatement stmt = conn.prepareStatement(query);
+             ResultSet results = stmt.executeQuery()) {
+            TraceHolder trace = null;
+            // the spans that are not the root span, but haven't seen their parent yet
+            List<SpanInfo> orphans = null;
+            while (results.next()) {
+                int index = 1;
+                long traceid = results.getLong(index++);
+                long parent = results.getLong(index++);
+                long span = results.getLong(index++);
+                String desc = results.getString(index++);
+                long start = results.getLong(index++);
+                long end = results.getLong(index++);
+                String host = results.getString(index++);
+                int tagCount = results.getInt(index++);
+                int annotationCount = results.getInt(index++);
+                // we have a new trace
+                if (trace == null || traceid != trace.traceid) {
+                    // only increment if we are on a new trace, to ensure we get at least one
+                    if (trace != null) {
+                        resultCount++;
+                    }
+                    // we beyond the limit, so we stop
+                    if (resultCount >= limit) {
                         break;
                     }
+                    trace = new TraceHolder();
+                    // add the orphans, so we can track them later
+                    orphans = new ArrayList<SpanInfo>();
+                    trace.orphans = orphans;
+                    trace.traceid = traceid;
+                    traces.add(trace);
                 }
-            }
-            SpanInfo spanInfo =
-                    new SpanInfo(parentSpan, parent, span, desc, start, end, host, tagCount,
-                            annotationCount);
-            // search the orphans to see if this is the parent id
 
-            for (int i = 0; i < orphans.size(); i++) {
-                SpanInfo orphan = orphans.get(i);
-                // we found the parent for the orphan
-                if (orphan.parentId == span) {
-                    // update the bi-directional relationship
-                    orphan.parent = spanInfo;
-                    spanInfo.children.add(orphan);
-                    // / its no longer an orphan
-                    LOGGER.trace(addCustomAnnotations("Found parent for span: " + span));
-                    orphans.remove(i--);
+                // search the spans to determine the if we have a known parent
+                SpanInfo parentSpan = null;
+                if (parent != Span.ROOT_SPAN_ID) {
+                    // find the parent
+                    for (SpanInfo p : trace.spans) {
+                        if (p.id == parent) {
+                            parentSpan = p;
+                            break;
+                        }
+                    }
                 }
+                SpanInfo spanInfo =
+                        new SpanInfo(parentSpan, parent, span, desc, start, end, host, tagCount,
+                                annotationCount);
+                // search the orphans to see if this is the parent id
+
+                for (int i = 0; i < orphans.size(); i++) {
+                    SpanInfo orphan = orphans.get(i);
+                    // we found the parent for the orphan
+                    if (orphan.parentId == span) {
+                        // update the bi-directional relationship
+                        orphan.parent = spanInfo;
+                        spanInfo.children.add(orphan);
+                        // / its no longer an orphan
+                        LOGGER.trace(addCustomAnnotations("Found parent for span: " + span));
+                        orphans.remove(i--);
+                    }
+                }
+
+                if (parentSpan != null) {
+                    // add this as a child to the parent span
+                    parentSpan.children.add(spanInfo);
+                } else if (parent != Span.ROOT_SPAN_ID) {
+                    // add the span to the orphan pile to check for the remaining spans we see
+                    LOGGER.info(addCustomAnnotations("No parent span found for span: "
+                            + span + " (root span id: " + Span.ROOT_SPAN_ID + ")"));
+                    orphans.add(spanInfo);
+                }
+
+                // add the span to the full known list
+                trace.spans.add(spanInfo);
+
+                // go back and find the tags for the row
+                spanInfo.tags.addAll(getTags(traceid, parent, span, tagCount));
+
+                spanInfo.annotations.addAll(getAnnotations(traceid, parent, span, annotationCount));
             }
-
-            if (parentSpan != null) {
-                // add this as a child to the parent span
-                parentSpan.children.add(spanInfo);
-            } else if (parent != Span.ROOT_SPAN_ID) {
-                // add the span to the orphan pile to check for the remaining spans we see
-                LOGGER.info(addCustomAnnotations("No parent span found for span: " + span + " (root span id: "
-                        + Span.ROOT_SPAN_ID + ")"));
-                orphans.add(spanInfo);
-            }
-
-            // add the span to the full known list
-            trace.spans.add(spanInfo);
-
-            // go back and find the tags for the row
-            spanInfo.tags.addAll(getTags(traceid, parent, span, tagCount));
-
-            spanInfo.annotations.addAll(getAnnotations(traceid, parent, span, annotationCount));
         }
-
-        // make sure we clean up after ourselves
-        results.close();
 
         return traces;
     }

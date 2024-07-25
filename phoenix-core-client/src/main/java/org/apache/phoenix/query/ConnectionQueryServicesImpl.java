@@ -21,6 +21,7 @@ import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.KEEP_
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.MAX_VERSIONS;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.REPLICATION_SCOPE;
 import static org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder.TTL;
+import static org.apache.hadoop.hbase.ipc.RpcControllerFactory.CUSTOM_CONTROLLER_CONF_KEY;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
@@ -63,6 +64,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME;
@@ -74,6 +76,8 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCC
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
 import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_DROP_METADATA;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RENEW_LEASE_THRESHOLD_MILLISECONDS;
@@ -81,6 +85,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_RUN_RENEW_LE
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TIMEOUT_DURING_UPGRADE_MS;
 import static org.apache.phoenix.util.UpgradeUtil.addParentToChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.addViewIndexToParentLinks;
+import static org.apache.phoenix.util.UpgradeUtil.copyTTLValuesFromPhoenixTTLColumnToTTLColumn;
 import static org.apache.phoenix.util.UpgradeUtil.getSysTableSnapshotName;
 import static org.apache.phoenix.util.UpgradeUtil.moveOrCopyChildLinks;
 import static org.apache.phoenix.util.UpgradeUtil.syncTableAndIndexProperties;
@@ -93,6 +98,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
@@ -109,11 +115,15 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -127,6 +137,7 @@ import java.util.regex.Pattern;
 import javax.annotation.concurrent.GuardedBy;
 
 import com.google.protobuf.RpcController;
+import com.google.protobuf.ServiceException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
@@ -134,6 +145,7 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.NamespaceNotFoundException;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -156,7 +168,9 @@ import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
+import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.ipc.controller.InvalidateMetadataCacheControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.ServerSideRPCControllerFactory;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
@@ -192,6 +206,10 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.GetVersionRespons
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.UpdateIndexStateRequest;
+import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
+import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsMetadataCachingSource;
+import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSourceFactory;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
@@ -261,6 +279,7 @@ import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PUnsignedTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.transaction.PhoenixTransactionClient;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
@@ -381,6 +400,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     private final int loggingIntervalInMins;
 
     private final ConnectionLimiter connectionLimiter;
+
+    // writes guarded by "liveRegionServersLock"
+    private volatile List<ServerName> liveRegionServers;
+    private final Object liveRegionServersLock = new Object();
+    // Writes guarded by invalidateMetadataCacheConnLock
+    private Connection invalidateMetadataCacheConnection = null;
+    private final Object invalidateMetadataCacheConnLock = new Object();
+    private MetricsMetadataCachingSource metricsMetadataCachingSource;
+    public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
+            "Cannot invalidate server metadata cache on a non-server connection";
 
     private static interface FeatureSupported {
         boolean isSupported(ConnectionQueryServices services);
@@ -513,35 +542,61 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 e.printStackTrace();
             }
         }
-
+        nSequenceSaltBuckets = config.getInt(QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
+                QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
+        this.metricsMetadataCachingSource = MetricsPhoenixCoprocessorSourceFactory.getInstance()
+                .getMetadataCachingSource();
     }
 
-    private void openConnection() throws SQLException {
+    private Connection openConnection(Configuration conf) throws SQLException {
+        Connection localConnection;
         try {
-            this.connection = HBaseFactoryProvider.getHConnectionFactory().createConnection(this.config);
+            localConnection = HBaseFactoryProvider.getHConnectionFactory().createConnection(conf);
             GLOBAL_HCONNECTIONS_COUNTER.increment();
             LOGGER.info("HConnection established. Stacktrace for informational purposes: "
-                    + connection + " " +  LogUtil.getCallerStackTrace());
+                    + localConnection + " " +  LogUtil.getCallerStackTrace());
         } catch (IOException e) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
             .setRootCause(e).build().buildException();
         }
-        if (this.connection.isClosed()) { // TODO: why the heck doesn't this throw above?
+        if (localConnection.isClosed()) { // TODO: why the heck doesn't this throw above?
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION).build().buildException();
         }
+        return localConnection;
+    }
+
+    /**
+     *  We create a long-lived hbase connection to run invalidate cache RPCs. We override
+     *  CUSTOM_CONTROLLER_CONF_KEY to instantiate InvalidateMetadataCacheController which has
+     *  a special priority for invalidate metadata cache operations.
+     * @return hbase connection
+     * @throws SQLException SQLException
+     */
+    public Connection getInvalidateMetadataCacheConnection() throws SQLException {
+        if (invalidateMetadataCacheConnection != null) {
+            return invalidateMetadataCacheConnection;
+        }
+
+        synchronized (invalidateMetadataCacheConnLock) {
+            Configuration clonedConfiguration = PropertiesUtil.cloneConfig(this.config);
+            clonedConfiguration.setClass(CUSTOM_CONTROLLER_CONF_KEY,
+                    InvalidateMetadataCacheControllerFactory.class, RpcControllerFactory.class);
+            invalidateMetadataCacheConnection = openConnection(clonedConfiguration);
+        }
+        return invalidateMetadataCacheConnection;
     }
 
     /**
      * Close the HBase connection and decrement the counter.
      * @throws IOException throws IOException
      */
-    private void closeConnection() throws IOException {
+    private void closeConnection(Connection connection) throws IOException {
         if (connection != null) {
             connection.close();
             LOGGER.info("{} HConnection closed. Stacktrace for informational"
                 + " purposes: {}", connection, LogUtil.getCallerStackTrace());
+            GLOBAL_HCONNECTIONS_COUNTER.decrement();
         }
-        GLOBAL_HCONNECTIONS_COUNTER.decrement();
     }
 
     @Override
@@ -650,8 +705,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         latestMetaDataLock.notifyAll();
                     }
                     try {
-                        // close the HBase connection
-                        closeConnection();
+                        // close HBase connections.
+                        closeConnection(this.connection);
+                        closeConnection(this.invalidateMetadataCacheConnection);
                     } finally {
                         if (renewLeaseExecutor != null) {
                             renewLeaseExecutor.shutdownNow();
@@ -714,7 +770,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     }
 
     public byte[] getNextRegionStartKey(HRegionLocation regionLocation, byte[] currentKey,
-        HRegionLocation prevRegionLocation) throws IOException {
+        HRegionLocation prevRegionLocation) {
         // in order to check the overlap/inconsistencies bad region info, we have to make sure
         // the current endKey always increasing(compare the previous endKey)
 
@@ -739,9 +795,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             && !Bytes.equals(regionLocation.getRegion().getEndKey(), HConstants.EMPTY_END_ROW);
         if (conditionOne || conditionTwo) {
             GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.increment();
-            String regionNameString =
-                new String(regionLocation.getRegion().getRegionName(), StandardCharsets.UTF_8);
-            LOGGER.error(
+            LOGGER.warn(
                 "HBase region overlap/inconsistencies on {} , current key: {} , region startKey:"
                     + " {} , region endKey: {} , prev region startKey: {} , prev region endKey: {}",
                 regionLocation,
@@ -752,17 +806,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getStartKey()),
                 prevRegionLocation == null ?
                     "null" : Bytes.toStringBinary(prevRegionLocation.getRegion().getEndKey()));
-            throw new IOException(
-                String.format("HBase region information overlap/inconsistencies on region %s",
-                    regionNameString));
         }
         return regionLocation.getRegion().getEndKey();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
+        int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
         return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
-            HConstants.EMPTY_END_ROW);
+                HConstants.EMPTY_END_ROW, queryTimeout);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW,
+                HConstants.EMPTY_END_ROW, queryTimeout);
     }
 
     /**
@@ -770,7 +836,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+                                                 byte[] endRowKey) throws SQLException{
+        int queryTimeout = this.getProps().getInt(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+        return getTableRegions(tableName, startRowKey, endRowKey, queryTimeout);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(final byte[] tableName, final byte[] startRowKey,
+                                                 final byte[] endRowKey, final int queryTimeout)
+            throws SQLException {
         /*
          * Use HConnection.getRegionLocation as it uses the cache in HConnection, while getting
          * all region locations from the HTable doesn't.
@@ -780,6 +858,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             config.getInt(PHOENIX_GET_REGIONS_RETRIES, DEFAULT_PHOENIX_GET_REGIONS_RETRIES);
         TableName table = TableName.valueOf(tableName);
         byte[] currentKey = null;
+        final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        final long maxQueryEndTime = startTime + queryTimeout;
         while (true) {
             try {
                 // We could surface the package projected HConnectionImplementation.getNumberOfCachedRegionLocations
@@ -800,10 +880,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         && Bytes.compareTo(currentKey, endRowKey) >= 0) {
                         break;
                     }
+                    throwErrorIfQueryTimedOut(startRowKey, endRowKey, maxQueryEndTime,
+                            queryTimeout, table, retryCount, currentKey);
                 } while (!Bytes.equals(currentKey, HConstants.EMPTY_END_ROW));
                 return locations;
             } catch (org.apache.hadoop.hbase.TableNotFoundException e) {
-                throw new TableNotFoundException(table.getNameAsString());
+                TableNotFoundException ex = new TableNotFoundException(table.getNameAsString());
+                e.initCause(ex);
+                throw ex;
             } catch (IOException e) {
                 LOGGER.error("Exception encountered in getAllTableRegions for "
                         + "table: {}, retryCount: {} , currentKey: {} , startRowKey: {} ,"
@@ -821,6 +905,43 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     SQLExceptionCode.GET_TABLE_REGIONS_FAIL).setRootCause(e).build()
                     .buildException();
             }
+        }
+    }
+
+    /**
+     * Throw Error if the metadata lookup takes longer than query timeout configured.
+     *
+     * @param startRowKey Start RowKey to begin the region metadata lookup from.
+     * @param endRowKey End RowKey to end the region metadata lookup at.
+     * @param maxQueryEndTime Max time to execute the metadata lookup.
+     * @param queryTimeout Query timeout.
+     * @param table Table Name.
+     * @param retryCount Retry Count.
+     * @param currentKey Current Key.
+     * @throws SQLException Throw Error if the metadata lookup takes longer than query timeout.
+     */
+    private static void throwErrorIfQueryTimedOut(byte[] startRowKey, byte[] endRowKey,
+                                                  long maxQueryEndTime,
+                                                  int queryTimeout, TableName table, int retryCount,
+                                                  byte[] currentKey) throws SQLException {
+        long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+        if (currentTime >= maxQueryEndTime) {
+            LOGGER.error("getTableRegions has exceeded query timeout {} ms."
+                            + "Table: {}, retryCount: {} , currentKey: {} , "
+                            + "startRowKey: {} , endRowKey: {}",
+                    queryTimeout,
+                    table.getNameAsString(),
+                    retryCount,
+                    Bytes.toStringBinary(currentKey),
+                    Bytes.toStringBinary(startRowKey),
+                    Bytes.toStringBinary(endRowKey)
+            );
+            final String message = "getTableRegions has exceeded query timeout " + queryTimeout
+                    + "ms";
+            IOException e = new IOException(message);
+            throw new SQLTimeoutException(message,
+                    SQLExceptionCode.OPERATION_TIMED_OUT.getSQLState(),
+                    SQLExceptionCode.OPERATION_TIMED_OUT.getErrorCode(), e);
         }
     }
 
@@ -1128,6 +1249,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return false;
     }
 
+    private boolean isPhoenixTTLEnabled() {
+         return config.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
+    }
+
 
     private void addCoprocessors(byte[] tableName, TableDescriptorBuilder builder,
             PTableType tableType, Map<String, Object> tableProps, TableDescriptor existingDesc,
@@ -1379,6 +1505,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                     .build());
                 }
             }
+
             if (Arrays.equals(tableName, SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, props).getName())) {
                 if (!newDesc.hasCoprocessor(QueryConstants.SYSTEM_CATALOG_REGION_OBSERVER_CLASSNAME)) {
                     builder.setCoprocessor(
@@ -2194,8 +2321,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 break;
             }
         }
-        if ((tableType == PTableType.VIEW && physicalTableName != null) ||
-                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))) {
+        if ((tableType != PTableType.CDC) && (
+                (tableType == PTableType.VIEW && physicalTableName != null) ||
+                (tableType != PTableType.VIEW && (physicalTableName == null || localIndexTable))
+        )) {
             // For views this will ensure that metadata already exists
             // For tables and indexes, this will create the metadata if it doesn't already exist
             ensureTableCreated(physicalTableNameBytes, null, tableType, tableProps, families, splits, true,
@@ -2856,6 +2985,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         boolean willBeTransactional = false;
         boolean isOrWillBeTransactional = isTransactional;
         Integer newTTL = null;
+        Integer newPhoenixTTL = null;
         Integer newReplicationScope = null;
         KeepDeletedCells newKeepDeletedCells = null;
         TransactionFactory.Provider txProvider = null;
@@ -2896,10 +3026,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                             .setMessage("Property: " + propName).build()
                                             .buildException();
                                 }
-                                newTTL = ((Number)propValue).intValue();
-                                // Even though TTL is really a HColumnProperty we treat it specially.
-                                // We enforce that all column families have the same TTL.
-                                commonFamilyProps.put(propName, propValue);
+                                //Handle FOREVER and NONE case
+                                propValue = convertForeverAndNoneTTLValue(propValue, isPhoenixTTLEnabled());
+                                //If Phoenix level TTL is enabled we are using TTL as phoenix
+                                //Table level property.
+                                if (!isPhoenixTTLEnabled()) {
+                                    newTTL = ((Number) propValue).intValue();
+                                    //Even though TTL is really a HColumnProperty we treat it
+                                    //specially. We enforce that all CFs have the same TTL.
+                                    commonFamilyProps.put(propName, propValue);
+                                } else {
+                                    //Setting this here just to check if we need to throw Exception
+                                    //for Transaction's SET_TTL Feature.
+                                    newPhoenixTTL = ((Number) propValue).intValue();
+                                }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
                                 tableProps.put(PhoenixTransactionContext.READ_NON_TX_DATA, propValue);
@@ -2950,7 +3090,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         }
                     }
                 }
-                if (isOrWillBeTransactional && newTTL != null) {
+                if (isOrWillBeTransactional && (newTTL != null || newPhoenixTTL != null)) {
                     TransactionFactory.Provider isOrWillBeTransactionProvider = txProvider == null ? table.getTransactionProvider() : txProvider;
                     if (isOrWillBeTransactionProvider.getTransactionProvider().isUnsupported(PhoenixTransactionProvider.Feature.SET_TTL)) {
                         throw new SQLExceptionInfo.Builder(PhoenixTransactionProvider.Feature.SET_TTL.getCode())
@@ -3208,6 +3348,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getTimeToLive();
     }
 
+    public static Object convertForeverAndNoneTTLValue(Object propValue, boolean isPhoenixTTLEnabled) {
+        //Handle FOREVER and NONE value for TTL at HBase level TTL.
+        if (propValue instanceof String) {
+            String strValue = (String) propValue;
+            if ("FOREVER".equalsIgnoreCase(strValue)) {
+                propValue = HConstants.FOREVER;
+            } else if ("NONE".equalsIgnoreCase(strValue)) {
+                propValue = isPhoenixTTLEnabled ? TTL_NOT_DEFINED : HConstants.FOREVER;
+            }
+        }
+        return propValue;
+    }
+
     /**
      * Keep the TTL, KEEP_DELETED_CELLS and REPLICATION_SCOPE properties of new column families
      * in sync with the existing column families. Note that we use the new values for these properties in case they
@@ -3462,6 +3615,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return addColumn(oldMetaConnection, tableName, timestamp, columns, true);
     }
 
+    private void copyDataFromPhoenixTTLtoTTL(PhoenixConnection oldMetaConnection) throws IOException {
+        //If ViewTTL is enabled then only copy values from PHOENIX_TTL Column to TTL Column
+        if (oldMetaConnection.getQueryServices().getConfiguration().getBoolean(PHOENIX_VIEW_TTL_ENABLED,
+                DEFAULT_PHOENIX_VIEW_TTL_ENABLED)) {
+            // Increase the timeouts so that the scan queries during Copy Data do not timeout
+            // on large SYSCAT Tables
+            Map<String, String> options = new HashMap<>();
+            options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+            copyTTLValuesFromPhoenixTTLColumnToTTLColumn(oldMetaConnection, options);
+        }
+
+    }
+
+    private void moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(PhoenixConnection oldMetaConnection) throws IOException {
+        // Increase the timeouts so that the scan queries during Copy Data does not timeout
+        // on large SYSCAT Tables
+        Map<String, String> options = new HashMap<>();
+        options.put(HConstants.HBASE_RPC_TIMEOUT_KEY, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        options.put(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD, Integer.toString(DEFAULT_TIMEOUT_DURING_UPGRADE_MS));
+        UpgradeUtil.moveHBaseLevelTTLToSYSCAT(oldMetaConnection, options);
+    }
+
     // Available for testing
     protected long getSystemTableVersion() {
         return MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
@@ -3559,8 +3735,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         try {
                             GLOBAL_QUERY_SERVICES_COUNTER.increment();
                             LOGGER.info("An instance of ConnectionQueryServices was created.");
-                            openConnection();
+                            connection = openConnection(config);
                             hConnectionEstablished = true;
+                            boolean lastDDLTimestampValidationEnabled
+                                = getProps().getBoolean(
+                                    QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
+                                    QueryServicesOptions.DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED);
+                            if (lastDDLTimestampValidationEnabled) {
+                                refreshLiveRegionServers();
+                            }
                             String skipSystemExistenceCheck =
                                 props.getProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK);
                             if (skipSystemExistenceCheck != null &&
@@ -3569,9 +3752,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 success = true;
                                 return null;
                             }
-                            nSequenceSaltBuckets = ConnectionQueryServicesImpl.this.props.getInt(
-                                    QueryServices.SEQUENCE_SALT_BUCKETS_ATTRIB,
-                                    QueryServicesOptions.DEFAULT_SEQUENCE_TABLE_SALT_BUCKETS);
                             boolean isDoNotUpgradePropSet = UpgradeUtil.isNoUpgradeSet(props);
                             Properties scnProps = PropertiesUtil.deepCopy(props);
                             scnProps.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB,
@@ -3662,7 +3842,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                             }
                             try {
                                 if (!success && hConnectionEstablished) {
-                                    closeConnection();
+                                    closeConnection(connection);
+                                    closeConnection(invalidateMetadataCacheConnection);
                                 }
                             } catch (IOException e) {
                                 SQLException ex = new SQLException(e);
@@ -3719,7 +3900,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             }
         }
     }
-
     /**
      * Check if the SYSTEM MUTEX table exists. If it does, ensure that its TTL is correct and if
      * not, modify its table descriptor
@@ -4185,32 +4365,57 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0) {
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 8,
                     PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 7,
                     PhoenixDatabaseMetaData.SCHEMA_VERSION + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 6,
                     PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
                     PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
             metaConnection =
                 addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
                     PhoenixDatabaseMetaData.INDEX_WHERE + " "
                         + PVarchar.INSTANCE.getSqlTypeName());
-            metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
-                    PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE + " " + PLong.INSTANCE.getSqlTypeName());
+            metaConnection =
+		addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+                    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
+                    PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE + " "
+			+ PLong.INSTANCE.getSqlTypeName());
+            metaConnection =
+		addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+		    MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
+                    PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " "
+			+ PVarchar.INSTANCE.getSqlTypeName());
+
+            /**
+             * TODO: Provide a path to copy existing data from PHOENIX_TTL to TTL column and then
+             * to DROP PHOENIX_TTL Column. See PHOENIX-7023
+             */
+            metaConnection = addColumnsIfNotExists(metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
+                    PhoenixDatabaseMetaData.TTL + " " + PInteger.INSTANCE.getSqlTypeName());
+            metaConnection = addColumnsIfNotExists(metaConnection,
+                    PhoenixDatabaseMetaData.SYSTEM_CATALOG, MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
+                    PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " "
+                            + PVarbinary.INSTANCE.getSqlTypeName());
+            //Values in PHOENIX_TTL column will not be used for further release as PHOENIX_TTL column is being deprecated
+            //and will be removed in later release. To copy copyDataFromPhoenixTTLtoTTL(metaConnection) can be used but
+            //as that feature was not fully built we are not moving old value to new column
+
+            //move TTL values stored in descriptor to SYSCAT TTL column.
+            moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
             UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
         }
         return metaConnection;
@@ -4493,7 +4698,6 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             } else {
                 nSequenceSaltBuckets = getSaltBuckets(e);
             }
-
             updateSystemSequenceWithCacheOnWriteProps(metaConnection);
         }
         return metaConnection;
@@ -5283,6 +5487,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } finally {
             Closeables.closeQuietly(admin);
         }
+    }
+
+    @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        synchronized (liveRegionServersLock) {
+            try (Admin admin = getAdmin()) {
+                this.liveRegionServers = new ArrayList<>(admin.getRegionServers(true));
+            } catch (IOException e) {
+                throw ClientUtil.parseServerException(e);
+            }
+        }
+        LOGGER.info("Refreshed list of live region servers.");
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        return this.liveRegionServers;
     }
 
     @Override
@@ -6248,5 +6469,177 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     @VisibleForTesting
     public List<LinkedBlockingQueue<WeakReference<PhoenixConnection>>> getCachedConnections() {
       return connectionQueues;
+    }
+
+    /**
+     * Invalidate metadata cache from all region servers for the given list of
+     * InvalidateServerMetadataCacheRequest.
+     * @throws Throwable
+     */
+    public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
+            throws Throwable {
+        boolean invalidateCacheEnabled =
+                config.getBoolean(PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED,
+                        DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED);
+        if (!invalidateCacheEnabled) {
+            LOGGER.info("Skip invalidating server metadata cache since conf property"
+                    + " phoenix.metadata.invalidate.cache.enabled is set to false");
+            return;
+        }
+        if (!QueryUtil.isServerConnection(props)) {
+            LOGGER.warn(INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE);
+            throw new Exception(INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE);
+        }
+
+        metricsMetadataCachingSource.incrementMetadataCacheInvalidationOperationsCount();
+        Admin admin = getInvalidateMetadataCacheConnection().getAdmin();
+        // This will incur an extra RPC to the master. This RPC is required since we want to
+        // get current list of regionservers.
+        Collection<ServerName> serverNames = admin.getRegionServers(true);
+        PhoenixStopWatch stopWatch = new PhoenixStopWatch().start();
+        try {
+            invalidateServerMetadataCacheWithRetries(admin, serverNames, requests, false);
+            metricsMetadataCachingSource.incrementMetadataCacheInvalidationSuccessCount();
+        } catch (Throwable t) {
+            metricsMetadataCachingSource.incrementMetadataCacheInvalidationFailureCount();
+            throw t;
+        } finally {
+            metricsMetadataCachingSource
+                    .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+        }
+    }
+
+    /**
+     * Invalidate metadata cache on all regionservers with retries for the given list of
+     * InvalidateServerMetadataCacheRequest. Each InvalidateServerMetadataCacheRequest contains
+     * tenantID, schema name and table name.
+     * We retry once before failing the operation.
+     *
+     * @param admin
+     * @param serverNames
+     * @param invalidateCacheRequests
+     * @param isRetry
+     * @throws Throwable
+     */
+    private void invalidateServerMetadataCacheWithRetries(Admin admin,
+            Collection<ServerName> serverNames,
+            List<InvalidateServerMetadataCacheRequest> invalidateCacheRequests,
+            boolean isRetry) throws Throwable {
+        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest protoRequest =
+                getRequest(invalidateCacheRequests);
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        Map<Future, ServerName> map = new HashMap<>();
+        int poolSize = config.getInt(
+                    PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE,
+                QueryServicesOptions.DEFAULT_PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE);
+        ThreadFactoryBuilder builder = new ThreadFactoryBuilder().setDaemon(true)
+                                        .setNameFormat("metadata-cache-invalidation-pool-%d");
+        ExecutorService executor = Executors.newFixedThreadPool(poolSize, builder.build());
+        for (ServerName serverName : serverNames) {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    PhoenixStopWatch innerWatch = new PhoenixStopWatch().start();
+                    for (InvalidateServerMetadataCacheRequest invalidateCacheRequest
+                            : invalidateCacheRequests) {
+                        LOGGER.info("Sending invalidate metadata cache for {}  to region server:"
+                                + " {}", invalidateCacheRequest.toString(), serverName);
+                    }
+
+                    RegionServerEndpointProtos.RegionServerEndpointService.BlockingInterface
+                            service = RegionServerEndpointProtos.RegionServerEndpointService
+                            .newBlockingStub(admin.coprocessorService(serverName));
+                    // The timeout for this particular request is managed by config parameter:
+                    // hbase.rpc.timeout. Even if the future times out, this runnable can be in
+                    // RUNNING state and will not be interrupted.
+                    // We use the controller set in hbase connection.
+                    service.invalidateServerMetadataCache(null, protoRequest);
+                    long cacheInvalidationTime = innerWatch.stop().elapsedMillis();
+                    LOGGER.info("Invalidating metadata cache"
+                                    + " on region server: {} completed successfully and it took {} ms",
+                            serverName, cacheInvalidationTime);
+                    metricsMetadataCachingSource
+                            .addMetadataCacheInvalidationRpcTime(cacheInvalidationTime);
+                } catch (ServiceException se) {
+                    LOGGER.error("Invalidating metadata cache failed for regionserver {}",
+                            serverName, se);
+                    IOException ioe = ClientUtil.parseServiceException(se);
+                    throw new CompletionException(ioe);
+                }
+            }, executor);
+            futures.add(future);
+            map.put(future, serverName);
+        }
+        // Here we create one master like future which tracks individual future
+        // for each region server.
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.toArray(new CompletableFuture[0]));
+        long metadataCacheInvalidationTimeoutMs = config.getLong(
+                PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS,
+                PHOENIX_METADATA_CACHE_INVALIDATION_TIMEOUT_MS_DEFAULT);
+        try {
+            allFutures.get(metadataCacheInvalidationTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (Throwable t) {
+            List<ServerName> failedServers = getFailedServers(futures, map);
+            LOGGER.error("Invalidating metadata cache for failed for region servers: {}",
+                    failedServers, t);
+            if (isRetry) {
+                // If this is a retry attempt then just fail the operation.
+                if (allFutures.isCompletedExceptionally()) {
+                    if (t instanceof ExecutionException) {
+                        t = t.getCause();
+                    }
+                }
+                throw t;
+            } else {
+                // This is the first attempt, we can retry once.
+                // Indicate that this is a retry attempt.
+                invalidateServerMetadataCacheWithRetries(admin, failedServers,
+                        invalidateCacheRequests, true);
+            }
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    /**
+     *  Get the list of regionservers that failed the invalidateCache rpc.
+     * @param futures futtures
+     * @param map map of future to server names
+     * @return the list of servers that failed the invalidateCache RPC.
+     */
+    private List<ServerName> getFailedServers(List<CompletableFuture<Void>> futures,
+                                              Map<Future, ServerName> map) {
+        List<ServerName> failedServers = new ArrayList<>();
+        for (CompletableFuture completedFuture : futures) {
+            if (!completedFuture.isDone()) {
+                // If this task is still running, cancel it and keep in retry list.
+                ServerName sn = map.get(completedFuture);
+                failedServers.add(sn);
+                // Even though we cancel this future but it doesn't interrupt the executing thread.
+                completedFuture.cancel(true);
+            } else if (completedFuture.isCompletedExceptionally()
+                    || completedFuture.isCancelled()) {
+                // This means task is done but completed with exception
+                // or was canceled. Add it to retry list.
+                ServerName sn = map.get(completedFuture);
+                failedServers.add(sn);
+            }
+        }
+        return failedServers;
+    }
+
+    private RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest getRequest(
+            List<InvalidateServerMetadataCacheRequest> requests) {
+        RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.Builder builder =
+                RegionServerEndpointProtos.InvalidateServerMetadataCacheRequest.newBuilder();
+        for (InvalidateServerMetadataCacheRequest request: requests) {
+            RegionServerEndpointProtos.InvalidateServerMetadataCache.Builder innerBuilder
+                    = RegionServerEndpointProtos.InvalidateServerMetadataCache.newBuilder();
+            innerBuilder.setTenantId(ByteStringer.wrap(request.getTenantId()));
+            innerBuilder.setSchemaName(ByteStringer.wrap(request.getSchemaName()));
+            innerBuilder.setTableName(ByteStringer.wrap(request.getTableName()));
+            builder.addInvalidateServerMetadataCacheRequests(innerBuilder.build());
+        }
+        return builder.build();
     }
 }

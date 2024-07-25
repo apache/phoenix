@@ -86,7 +86,7 @@ public class NamedTableNode extends ConcreteTableNode {
         if (!dynColumns.isEmpty()) {
             buf.append('(');
             for (ColumnDef def : dynColumns) {
-                buf.append(def);
+                buf.append(def.toFullString());
                 buf.append(',');
             }
             buf.setLength(buf.length()-1);

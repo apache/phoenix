@@ -97,6 +97,8 @@ public class CreateTableCompiler {
         String viewStatementToBe = null;
         byte[][] viewColumnConstantsToBe = null;
         BitSet isViewColumnReferencedToBe = null;
+        byte[] rowKeyMatcher = ByteUtil.EMPTY_BYTE_ARRAY;
+
         // Check whether column families having local index column family suffix or not if present
         // don't allow creating table.
         // Also validate the default values expressions.
@@ -137,10 +139,16 @@ public class CreateTableCompiler {
                         .build().buildException();
             }
             viewTypeToBe = parentToBe.getViewType() == ViewType.MAPPED ? ViewType.MAPPED : ViewType.UPDATABLE;
+            Expression where = null;
             if (whereNode == null) {
-                viewStatementToBe = parentToBe.getViewStatement();
                 if (parentToBe.getViewType() == ViewType.READ_ONLY) {
                     viewTypeToBe = ViewType.READ_ONLY;
+                }
+                viewStatementToBe = parentToBe.getViewStatement();
+                if (viewStatementToBe != null) {
+                    SelectStatement select = new SQLParser(viewStatementToBe).parseQuery();
+                    whereNode = select.getWhere();
+                    where = whereNode.accept(expressionCompiler);
                 }
             } else {
                 whereNode = StatementNormalizer.normalize(whereNode, resolver);
@@ -153,7 +161,7 @@ public class CreateTableCompiler {
                     SelectStatement select = new SQLParser(parentToBe.getViewStatement()).parseQuery().combine(whereNode);
                     whereNode = select.getWhere();
                 }
-                Expression where = whereNode.accept(expressionCompiler);
+                where = whereNode.accept(expressionCompiler);
                 if (where != null && !LiteralExpression.isTrue(where)) {
                     TableName baseTableName = create.getBaseTableName();
                     StringBuilder buf = new StringBuilder();
@@ -176,6 +184,9 @@ public class CreateTableCompiler {
                     && parentToBe.getPKColumns().isEmpty()) {
                 validateCreateViewCompilation(connection, parentToBe,
                     columnDefs, pkConstraint);
+            } else if (where != null && viewTypeToBe == ViewType.UPDATABLE) {
+                rowKeyMatcher = WhereOptimizer.getRowKeyMatcher(context, create.getTableName(),
+                        parentToBe, where);
             }
             verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
         }
@@ -206,7 +217,8 @@ public class CreateTableCompiler {
         final PTable parent = parentToBe;
 
         return new CreateTableMutationPlan(context, client, finalCreate, splits, parent,
-            viewStatement, viewType, viewColumnConstants, isViewColumnReferenced, connection);
+                viewStatement, viewType, rowKeyMatcher,
+                viewColumnConstants, isViewColumnReferenced, connection);
     }
 
     /**
@@ -459,12 +471,15 @@ public class CreateTableCompiler {
         private final ViewType viewType;
         private final byte[][] viewColumnConstants;
         private final BitSet isViewColumnReferenced;
+
+        private final byte[] rowKeyMatcher;
         private final PhoenixConnection connection;
 
         private CreateTableMutationPlan(StatementContext context, MetaDataClient client,
                 CreateTableStatement finalCreate, byte[][] splits, PTable parent,
-                String viewStatement, ViewType viewType, byte[][] viewColumnConstants,
-                BitSet isViewColumnReferenced, PhoenixConnection connection) {
+                String viewStatement, ViewType viewType, byte[] rowKeyMatcher,
+                byte[][] viewColumnConstants, BitSet isViewColumnReferenced,
+                PhoenixConnection connection) {
             super(context, CreateTableCompiler.this.operation);
             this.client = client;
             this.finalCreate = finalCreate;
@@ -472,6 +487,7 @@ public class CreateTableCompiler {
             this.parent = parent;
             this.viewStatement = viewStatement;
             this.viewType = viewType;
+            this.rowKeyMatcher = rowKeyMatcher;
             this.viewColumnConstants = viewColumnConstants;
             this.isViewColumnReferenced = isViewColumnReferenced;
             this.connection = connection;
@@ -481,8 +497,8 @@ public class CreateTableCompiler {
         public MutationState execute() throws SQLException {
             try {
                 return client.createTable(finalCreate, splits, parent, viewStatement,
-                    viewType, MetaDataUtil.getViewIndexIdDataType(), viewColumnConstants,
-                    isViewColumnReferenced);
+                        viewType, MetaDataUtil.getViewIndexIdDataType(), rowKeyMatcher,
+                        viewColumnConstants, isViewColumnReferenced);
             } finally {
                 if (client.getConnection() != connection) {
                     client.getConnection().close();

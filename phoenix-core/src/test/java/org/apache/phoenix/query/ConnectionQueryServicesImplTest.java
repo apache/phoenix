@@ -61,6 +61,7 @@ import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -96,10 +97,10 @@ public class ConnectionQueryServicesImplTest {
     private Table mockTable;
 
     public static final TableDescriptorBuilder SYS_TASK_TDB = TableDescriptorBuilder
-        .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
+            .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
     public static final TableDescriptorBuilder SYS_TASK_TDB_SP = TableDescriptorBuilder
-        .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME))
-        .setRegionSplitPolicyClassName("abc");
+            .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME))
+            .setRegionSplitPolicyClassName("abc");
 
 
     @Before
@@ -107,18 +108,18 @@ public class ConnectionQueryServicesImplTest {
             IllegalAccessException, SQLException {
         MockitoAnnotations.initMocks(this);
         Field props = ConnectionQueryServicesImpl.class
-            .getDeclaredField("props");
+                .getDeclaredField("props");
         props.setAccessible(true);
         props.set(mockCqs, readOnlyProps);
         props = ConnectionQueryServicesImpl.class.getDeclaredField("connection");
         props.setAccessible(true);
         props.set(mockCqs, mockConn);
         when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin))
-            .thenCallRealMethod();
+                .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB))
-            .thenCallRealMethod();
+                .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB_SP))
-            .thenCallRealMethod();
+                .thenCallRealMethod();
         when(mockCqs.getSysMutexTable()).thenCallRealMethod();
         when(mockCqs.getAdmin()).thenCallRealMethod();
         when(mockCqs.getTable(Mockito.any())).thenCallRealMethod();
@@ -252,19 +253,11 @@ public class ConnectionQueryServicesImplTest {
     private void testGetNextRegionStartKey(ConnectionQueryServicesImpl mockCqsi,
         HRegionLocation mockRegionLocation, byte[] key, boolean isCorrupted,
         HRegionLocation mockPrevRegionLocation) {
-        try {
-            mockCqsi.getNextRegionStartKey(mockRegionLocation, key, mockPrevRegionLocation);
-            if (isCorrupted) {
-                fail();
-            }
-        } catch (IOException e) {
-            if (!isCorrupted) {
-                fail();
-            }
-        }
+        mockCqsi.getNextRegionStartKey(mockRegionLocation, key, mockPrevRegionLocation);
 
         assertEquals(isCorrupted ? 1 : 0,
-                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric().getValue());
+                GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY.getMetric()
+                        .getValue());
     }
 
     @Test
@@ -318,10 +311,10 @@ public class ConnectionQueryServicesImplTest {
             fail("Split policy for SYSTEM.TASK cannot be updated");
         } catch (SQLException e) {
             assertEquals("ERROR 908 (43M19): REGION SPLIT POLICY is incorrect."
-                + " Region split policy for table TASK is expected to be "
-                + "among: [null, org.apache.phoenix.schema.SystemTaskSplitPolicy]"
-                + " , actual split policy: abc tableName=SYSTEM.TASK",
-                e.getMessage());
+                            + " Region split policy for table TASK is expected to be "
+                            + "among: [null, org.apache.phoenix.schema.SystemTaskSplitPolicy]"
+                            + " , actual split policy: abc tableName=SYSTEM.TASK",
+                    e.getMessage());
         }
     }
 
@@ -330,12 +323,12 @@ public class ConnectionQueryServicesImplTest {
         when(mockAdmin.tableExists(any())).thenReturn(true);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
         when(mockConn.getTable(TableName.valueOf("SYSTEM.MUTEX")))
-            .thenReturn(mockTable);
+                .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-            .getTable(TableName.valueOf("SYSTEM.MUTEX"));
+                .getTable(TableName.valueOf("SYSTEM.MUTEX"));
     }
 
     @Test
@@ -343,11 +336,11 @@ public class ConnectionQueryServicesImplTest {
         when(mockAdmin.tableExists(any())).thenReturn(false);
         when(mockConn.getAdmin()).thenReturn(mockAdmin);
         when(mockConn.getTable(TableName.valueOf("SYSTEM:MUTEX")))
-          .thenReturn(mockTable);
+                .thenReturn(mockTable);
         assertSame(mockCqs.getSysMutexTable(), mockTable);
         verify(mockAdmin, Mockito.times(1)).tableExists(any());
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
-          .getTable(TableName.valueOf("SYSTEM:MUTEX"));
+                .getTable(TableName.valueOf("SYSTEM:MUTEX"));
     }
 }

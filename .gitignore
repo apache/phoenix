@@ -32,3 +32,6 @@ phoenix-hbase-compat-1.3.0/
 phoenix-hbase-compat-1.4.0/
 phoenix-hbase-compat-1.5.0/
 */hbase.log
+
+# Vim swap files
+.*.sw*

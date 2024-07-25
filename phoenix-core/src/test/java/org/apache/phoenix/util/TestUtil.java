@@ -977,7 +977,6 @@ public class TestUtil {
     public static CellCount getCellCount(Table table, boolean isRaw) throws IOException {
         Scan s = new Scan();
         s.setRaw(isRaw);
-        ;
         s.readAllVersions();
 
         CellCount cellCount = new CellCount();
@@ -1338,10 +1337,16 @@ public class TestUtil {
         assertEquals(code.getSQLState(), se.getSQLState());
     }
 
-    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl)
+    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
         throws SQLException, IOException {
-        ColumnFamilyDescriptor cd = getColumnDescriptor(conn, tableName);
-        Assert.assertEquals(ttl, cd.getTimeToLive());
+        long tableTTL = -1;
+        if (phoenixTTLEnabled) {
+            tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
+                    tableName.getNameAsString())).getTTL();
+        } else {
+            tableTTL = getColumnDescriptor(conn, tableName).getTimeToLive();
+        }
+        Assert.assertEquals(ttl, tableTTL);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)
@@ -1364,13 +1369,17 @@ public class TestUtil {
         assertEquals(expectedRowCount, count);
     }
 
-    public static void assertRawCellCount(Connection conn, TableName tableName,
-                                          byte[] row, int expectedCellCount)
-        throws SQLException, IOException {
+    public static int getRawCellCount(Connection conn, TableName tableName, byte[] row)
+            throws SQLException, IOException {
         ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
         Table table = cqs.getTable(tableName.getName());
         CellCount cellCount = getCellCount(table, true);
-        int count = cellCount.getCellCount(Bytes.toString(row));
+        return cellCount.getCellCount(Bytes.toString(row));
+    }
+    public static void assertRawCellCount(Connection conn, TableName tableName,
+                                          byte[] row, int expectedCellCount)
+        throws SQLException, IOException {
+        int count = getRawCellCount(conn, tableName, row);
         assertEquals(expectedCellCount, count);
     }
 

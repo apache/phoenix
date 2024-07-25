@@ -88,23 +88,20 @@ public class SingleCellColumnExpression extends KeyValueColumnExpression {
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
     	if (!super.evaluate(tuple, ptr)) {
             return false;
-        } else if (ptr.getLength() == 0) { 
-        	return true; 
         }
-        // the first position is reserved and we offset maxEncodedColumnQualifier by
-        // ENCODED_CQ_COUNTER_INITIAL_VALUE (which is the minimum encoded column qualifier)
-        int index = decodedColumnQualifier - QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE + 1;
-        // Given a ptr to the entire array, set ptr to point to a particular element
-        // within that array
-    	ColumnValueDecoder encoderDecoder = immutableStorageScheme.getDecoder();
-    	return encoderDecoder.decode(ptr, index);
+        return evaluate(ptr);
     }
 
     @Override
     public boolean evaluateUnsafe(Tuple tuple, ImmutableBytesWritable ptr) {
         if (!super.evaluateUnsafe(tuple, ptr)) {
             return false;
-        } else if (ptr.getLength() == 0) {
+        }
+        return evaluate(ptr);
+    }
+
+    public boolean evaluate(ImmutableBytesWritable ptr) {
+        if (ptr.getLength() == 0) {
             return true;
         }
         // the first position is reserved and we offset maxEncodedColumnQualifier by

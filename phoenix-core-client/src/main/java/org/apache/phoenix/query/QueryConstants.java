@@ -43,6 +43,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BIND_PARAMETERS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BUFFER_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CACHE_SIZE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHAR_OCTET_LENGTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
@@ -115,6 +116,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCAN_METRICS_JSON;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
@@ -163,6 +165,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_START_TS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
@@ -333,6 +336,16 @@ public interface QueryConstants {
 
     // custom TagType
     byte VIEW_MODIFIED_PROPERTY_TAG_TYPE = (byte) 70;
+
+    String CDC_JSON_COL_NAME = "CDC JSON";
+    String CDC_EVENT_TYPE = "event_type";
+    String CDC_PRE_IMAGE = "pre_image";
+    String CDC_POST_IMAGE = "post_image";
+    String CDC_CHANGE_IMAGE = "change_image";
+    String CDC_UPSERT_EVENT_TYPE = "upsert";
+    String CDC_DELETE_EVENT_TYPE = "delete";
+    String SPLITS_FILE = "SPLITS_FILE";
+
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
      * {@link #ENCODED_EMPTY_COLUMN_NAME}. Values 1-10
@@ -374,6 +387,9 @@ public interface QueryConstants {
             STREAMING_TOPIC_NAME + " VARCHAR, \n" +
             INDEX_WHERE + " VARCHAR, \n" +
             MAX_LOOKBACK_AGE + " BIGINT, \n" +
+            CDC_INCLUDE_TABLE + " VARCHAR, \n" +
+            TTL + " VARCHAR, \n" +
+            ROW_KEY_MATCHER + " VARBINARY, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

@@ -318,6 +318,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 ScanUtil.setUncoveredGlobalIndex(scan);
             }
 
+            PTable dataTable = null;
             Set<PColumn> dataColumns = context.getDataColumns();
             // If any data columns to join back from data table are present then we set following attributes
             // 1. data columns to be projected and their key value schema.
@@ -328,13 +329,20 @@ public abstract class BaseQueryPlan implements QueryPlan {
                 // Set data columns to be join back from data table.
                 PTable parentTable = context.getCurrentTable().getTable();
                 String parentSchemaName = parentTable.getParentSchemaName().getString();
-                String parentTableName = parentTable.getParentTableName().getString();
-                final ParseNodeFactory FACTORY = new ParseNodeFactory();
-                TableRef dataTableRef =
-                        FromCompiler.getResolver(
-                            FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
-                            context.getConnection()).resolveTable(parentSchemaName, parentTableName);
-                PTable dataTable = dataTableRef.getTable();
+                if (context.getCDCTableRef() != null) {
+                    dataTable = context.getCDCTableRef().getTable();
+                }
+                else {
+                    String parentTableName = parentTable.getParentTableName().getString();
+                    final ParseNodeFactory FACTORY = new ParseNodeFactory();
+                    TableRef dataTableRef =
+                            FromCompiler.getResolver(
+                                    FACTORY.namedTable(null, TableName.create(parentSchemaName, parentTableName)),
+                                    context.getConnection()).resolveTable(parentSchemaName, parentTableName);
+                    dataTable = dataTableRef.getTable();
+                }
+            }
+            if (! dataColumns.isEmpty()) {
                 // Set data columns to be join back from data table.
                 serializeDataTableColumnsToJoin(scan, dataColumns, dataTable);
                 KeyValueSchema schema = ProjectedColumnExpression.buildSchema(dataColumns);
@@ -373,7 +381,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
         PName name = context.getCurrentTable().getTable().getName();
         List<PTable> indexes = Lists.newArrayListWithExpectedSize(1);
         for (PTable index : dataTable.getIndexes()) {
-            if (index.getName().equals(name) && index.getIndexType() == IndexType.LOCAL) {
+            if (index.getName().equals(name) && (
+                    index.getIndexType() == IndexType.LOCAL
+                            || dataTable.getType() == PTableType.CDC)) {
                 indexes.add(index);
                 break;
             }

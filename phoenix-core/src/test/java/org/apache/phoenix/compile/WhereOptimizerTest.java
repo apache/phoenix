@@ -2530,6 +2530,34 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         }
     }
 
+    @Test
+    public void testScanRangeForPointLookupWithLimit() throws SQLException {
+        String tenantId = "000000000000001";
+        String entityId = "002333333333333";
+        String query = String.format("select * from atable where organization_id='%s' " +
+                        "and entity_id='%s' LIMIT 1", tenantId, entityId);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
+            byte[] stopRow =  ByteUtil.nextKey(startRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+        }
+    }
+
+    @Test
+    public void testScanRangeForPointLookupAggregate() throws SQLException {
+        String tenantId = "000000000000001";
+        String entityId = "002333333333333";
+        String query = String.format("select count(*) from atable where organization_id='%s' " +
+                "and entity_id='%s'", tenantId, entityId);
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            QueryPlan optimizedPlan = TestUtil.getOptimizeQueryPlan(conn, query);
+            byte[] startRow = ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId), PVarchar.INSTANCE.toBytes(entityId));
+            byte[] stopRow =  ByteUtil.nextKey(startRow);
+            validateScanRangesForPointLookup(optimizedPlan, startRow, stopRow);
+        }
+    }
+
     private static void validateScanRangesForPointLookup(QueryPlan optimizedPlan, byte[] startRow, byte[] stopRow) {
         StatementContext context = optimizedPlan.getContext();
         ScanRanges scanRanges = context.getScanRanges();
@@ -2546,10 +2574,18 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         assertEquals(1, scans.size());
         assertEquals(1, scans.get(0).size());
         Scan scanFromIterator = scans.get(0).get(0);
-        // scan from iterator has same start and stop row [start, start] i.e a Get
-        assertTrue(scanFromIterator.isGetScan());
-        assertTrue(scanFromIterator.includeStartRow());
-        assertTrue(scanFromIterator.includeStopRow());
+        if (optimizedPlan.getLimit() == null && !optimizedPlan.getStatement().isAggregate()) {
+            // scan from iterator has same start and stop row [start, start] i.e a Get
+            assertTrue(scanFromIterator.isGetScan());
+            assertTrue(scanFromIterator.includeStartRow());
+            assertTrue(scanFromIterator.includeStopRow());
+        } else {
+            // in case of limit scan range is same as the one in StatementContext
+            assertArrayEquals(startRow, scanFromIterator.getStartRow());
+            assertTrue(scanFromIterator.includeStartRow());
+            assertArrayEquals(stopRow, scanFromIterator.getStopRow());
+            assertFalse(scanFromIterator.includeStopRow());
+        }
     }
 
     private static StatementContext compileStatementTenantSpecific(String tenantId, String query, List<Object> binds) throws Exception {
@@ -3505,6 +3541,49 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
                     testTSVarVarPKTypes[1], sortOrders[index][1],
                     testTSVarVarPKTypes[2], sortOrders[index][2]);
             testTSVarIntAndLargeORs(tenantId, view1Name, sortOrders[index]);
+        }
+    }
+
+    /**
+     * Test that tenantId is present in the scan start row key when using an inherited index on a tenant view.
+     */
+    @Test
+    public void testScanKeyInheritedIndexTenantView() throws Exception {
+        String baseTableName =  generateUniqueName();
+        String globalViewName = generateUniqueName();
+        String globalViewIndexName =  generateUniqueName();
+        String tenantViewName =  generateUniqueName();
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            // create table, view and view index
+            conn.createStatement().execute("CREATE TABLE " + baseTableName +
+                    " (TENANT_ID CHAR(8) NOT NULL, KP CHAR(3) NOT NULL, PK CHAR(3) NOT NULL, KV CHAR(2), KV2 CHAR(2) " +
+                    "CONSTRAINT PK PRIMARY KEY(TENANT_ID, KP, PK)) MULTI_TENANT=true");
+            conn.createStatement().execute("CREATE VIEW " + globalViewName +
+                    " AS SELECT * FROM " + baseTableName + " WHERE  KP = '001'");
+            conn.createStatement().execute("CREATE INDEX " + globalViewIndexName + " on " +
+                    globalViewName + " (KV) " + " INCLUDE (KV2)");
+            //create tenant view
+            String tenantId = "tenantId";
+            Properties tenantProps = new Properties();
+            tenantProps.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+            try (Connection tenantConn = DriverManager.getConnection(getUrl(), tenantProps)) {
+                tenantConn.createStatement().execute("CREATE VIEW " + tenantViewName + " AS SELECT * FROM " + globalViewName);
+                // query on secondary key
+                String query = "SELECT KV2 FROM  " + tenantViewName + " WHERE KV = 'KV'";
+                PhoenixConnection pconn = tenantConn.unwrap(PhoenixConnection.class);
+                PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
+                QueryPlan plan = pstmt.compileQuery();
+                plan = tenantConn.unwrap(PhoenixConnection.class).getQueryServices().getOptimizer().optimize(pstmt, plan);
+                // optimized query plan should use inherited index
+                assertEquals(tenantViewName + "#" + globalViewIndexName, plan.getContext().getCurrentTable().getTable().getName().getString());
+                Scan scan = plan.getContext().getScan();
+                PTable viewIndexPTable = tenantConn.unwrap(PhoenixConnection.class).getTable(globalViewIndexName);
+                // PK of view index [_INDEX_ID, tenant_id, KV, PK]
+                byte[] startRow = ByteUtil.concat(PLong.INSTANCE.toBytes(viewIndexPTable.getViewIndexId()),
+                                                    PChar.INSTANCE.toBytes(tenantId),
+                                                    PChar.INSTANCE.toBytes("KV"));
+                assertArrayEquals(startRow, scan.getStartRow());
+            }
         }
     }
 

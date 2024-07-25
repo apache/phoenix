@@ -47,6 +47,7 @@ import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDateArray;
+import org.apache.phoenix.schema.types.PJson;
 import org.apache.phoenix.schema.types.PNumericType;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimeArray;
@@ -110,6 +111,8 @@ public class CreateIndexCompiler {
             return "ARRAY[" + getValue(PDate.INSTANCE) + "]";
         } else if (type instanceof PArrayDataType) {
             return "ARRAY" + type.getSampleValue().toString();
+        } else if (type instanceof PJson) {
+            return "'{a:1}'";
         } else {
             return "0123";
         }
@@ -224,7 +227,9 @@ public class CreateIndexCompiler {
     }
     public MutationPlan compile(final CreateIndexStatement create) throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
-        final ColumnResolver resolver = FromCompiler.getResolver(create, connection, create.getUdfParseNodes());
+        final ColumnResolver resolver
+                = FromCompiler.getResolverForCreateIndex(
+                        create, connection, create.getUdfParseNodes());
         Scan scan = new Scan();
         final StatementContext context = new StatementContext(statement, resolver, scan, new SequenceManager(statement));
         verifyIndexWhere(create.getWhere(), context, create.getTable().getName());

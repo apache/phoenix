@@ -122,7 +122,8 @@ public class ColumnRef {
                     displayName);
         }
         
-        if (table.getType() == PTableType.PROJECTED || table.getType() == PTableType.SUBQUERY) {
+        if (table.getType() == PTableType.PROJECTED || table.getType() == PTableType.SUBQUERY ||
+                table.getType() == PTableType.CDC) {
         	return new ProjectedColumnExpression(column, table, displayName);
         }
 

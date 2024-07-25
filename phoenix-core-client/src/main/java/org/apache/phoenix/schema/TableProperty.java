@@ -24,13 +24,12 @@ import static org.apache.phoenix.exception.SQLExceptionCode.DEFAULT_COLUMN_FAMIL
 import static org.apache.phoenix.exception.SQLExceptionCode.SALT_ONLY_ON_CREATE_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAMILY_NAME;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 
 import java.sql.SQLException;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -74,13 +73,6 @@ public enum TableProperty {
         @Override
         public Object getPTableValue(PTable table) {
             return table.getDefaultFamilyName();
-        }
-    },
-
-    TTL(ColumnFamilyDescriptorBuilder.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, CANNOT_ALTER_PROPERTY, false, false) {
-        @Override
-        public Object getPTableValue(PTable table) {
-            return null;
         }
     },
 
@@ -256,7 +248,7 @@ public enum TableProperty {
         }
     },
 
-    PHOENIX_TTL(PhoenixDatabaseMetaData.PHOENIX_TTL, true, true, true) {
+    TTL(PhoenixDatabaseMetaData.TTL, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY, true, true, true) {
         /**
          * PHOENIX_TTL can take any values ranging between 0 < PHOENIX_TTL <= HConstants.LATEST_TIMESTAMP.
          * special values :-
@@ -271,21 +263,21 @@ public enum TableProperty {
             if (value instanceof String) {
                 String strValue = (String) value;
                 if ("FOREVER".equalsIgnoreCase(strValue)) {
-                    return HConstants.LATEST_TIMESTAMP;
+                    return HConstants.FOREVER;
                 } else if ("NONE".equalsIgnoreCase(strValue)) {
-                    return PHOENIX_TTL_NOT_DEFINED;
+                    return TTL_NOT_DEFINED;
                 }
             } else if (value != null) {
-                long valueInSeconds = ((Number) value).longValue();
-                // Value is specified in seconds, so convert it to ms.
-                return valueInSeconds * 1000;
+                //Not converting to milli-seconds for better understanding at compaction and masking
+                //stage. As HBase Descriptor level gives this value in seconds.
+                return ((Number) value).intValue();
             }
             return value;
         }
 
         @Override
         public Object getPTableValue(PTable table) {
-            return table.getPhoenixTTL();
+            return table.getTTL();
         }
     },
 
@@ -359,6 +351,14 @@ public enum TableProperty {
         @Override
         public Object getPTableValue(PTable table) {
             return table.getMaxLookbackAge();
+        }
+    },
+
+    INCLUDE(PhoenixDatabaseMetaData.CDC_INCLUDE_NAME, COLUMN_FAMILY_NOT_ALLOWED_FOR_PROPERTY,
+            true, false, false) {
+        @Override
+        public Object getPTableValue(PTable table) {
+            return table.getCDCIncludeScopes();
         }
     };
 

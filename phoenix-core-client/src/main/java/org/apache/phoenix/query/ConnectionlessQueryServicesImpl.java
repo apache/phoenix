@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.MutationPlan;
+import org.apache.phoenix.coprocessorclient.InvalidateServerMetadataCacheRequest;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
@@ -228,9 +229,23 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         throw new UnsupportedOperationException();
     }
 
+    /**
+     * {@inheritDoc}.
+     */
     @Override
     public List<HRegionLocation> getAllTableRegions(byte[] tableName) throws SQLException {
-        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW);
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getAllTableRegions(byte[] tableName, int queryTimeout)
+            throws SQLException {
+        return getTableRegions(tableName, HConstants.EMPTY_START_ROW, HConstants.EMPTY_END_ROW,
+                queryTimeout);
     }
 
     /**
@@ -238,7 +253,18 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
      */
     @Override
     public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
-        byte[] endRowKey) throws SQLException {
+                                                 byte[] endRowKey) throws SQLException {
+        return getTableRegions(tableName, startRowKey, endRowKey,
+                QueryServicesOptions.DEFAULT_THREAD_TIMEOUT_MS);
+    }
+
+    /**
+     * {@inheritDoc}.
+     */
+    @Override
+    public List<HRegionLocation> getTableRegions(byte[] tableName, byte[] startRowKey,
+                                                 byte[] endRowKey, int queryTimeout)
+            throws SQLException {
         List<HRegionLocation> regions = tableSplits.get(Bytes.toString(tableName));
         if (regions != null) {
             return regions;
@@ -479,6 +505,16 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public int getLowestClusterHBaseVersion() {
         return Integer.MAX_VALUE; // Allow everything for connectionless
+    }
+
+    @Override
+    public void refreshLiveRegionServers() throws SQLException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public List<ServerName> getLiveRegionServers() {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -823,5 +859,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
     @Override
     public int getConnectionCount(boolean isInternal) {
         return 0;
+    }
+
+    @Override
+    public void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
+            throws Throwable {
+        // No-op
     }
 }

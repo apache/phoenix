@@ -71,6 +71,7 @@ message IndexMaintainer {
   optional bool isUncovered = 28;
   optional bytes indexWhere = 29;
   repeated ColumnReference indexWhereColumns = 30;
+  optional bool isCDCIndex = 31;
 }
 
 message TransformMaintainer {

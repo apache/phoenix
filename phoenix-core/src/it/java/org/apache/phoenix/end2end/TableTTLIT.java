@@ -52,7 +52,9 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
-@Category({NeedsOwnMiniClusterTest.class})
+import static org.junit.Assert.assertTrue;
+
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TableTTLIT extends BaseTest {
     private static final Logger LOG =
@@ -84,6 +86,8 @@ public class TableTTLIT extends BaseTest {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
+        props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(false));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -131,8 +135,8 @@ public class TableTTLIT extends BaseTest {
                     { true, false, KeepDeletedCells.FALSE, 5, 50, null},
                     { true, false, KeepDeletedCells.TRUE, 1, 25, null},
                     { true, false, KeepDeletedCells.TTL, 5, 100, null},
-                    { false, false, KeepDeletedCells.FALSE, 1, 100, 15},
-                    { false, false, KeepDeletedCells.TRUE, 5, 50, 15},
+                    { false, false, KeepDeletedCells.FALSE, 1, 100, 0},
+                    { false, false, KeepDeletedCells.TRUE, 5, 50, 0},
                     { false, false, KeepDeletedCells.TTL, 1, 25, 15}});
     }
 
@@ -153,38 +157,50 @@ public class TableTTLIT extends BaseTest {
      */
 
     @Test
-    public void testMaskingAndCompaction() throws Exception {
+    public void testMaskingAndMajorCompaction() throws Exception {
         final int maxLookbackAge = tableLevelMaxLooback != null ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
-        final int maxDeleteCounter = maxLookbackAge;
+        final int maxDeleteCounter = maxLookbackAge == 0 ? 1 : maxLookbackAge;
         final int maxCompactionCounter = ttl / 2;
+        final int maxFlushCounter = ttl;
         final int maxMaskingCounter = 2 * ttl;
+        final int maxVerificationCounter = 2 * ttl;
         final byte[] rowKey = Bytes.toBytes("a");
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = " + maxLookbackAge);
+            conn.commit();
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
+            conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.setValue(startTime);
             int deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
             int compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
+            int flushCounter = RAND.nextInt(maxFlushCounter) + 1;
             int maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
-            boolean afterCompaction = false;
-            for (int i = 0; i < 500; i++) {
+            int verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
+            int maxIterationCount = multiCF ? 250 : 500;
+            for (int i = 0; i < maxIterationCount; i++) {
+                if (flushCounter-- == 0) {
+                    injectEdge.incrementValue(1000);
+                    LOG.info("Flush " + i + " current time: " + injectEdge.currentTime());
+                    flush(TableName.valueOf(tableName));
+                    flushCounter = RAND.nextInt(maxFlushCounter) + 1;
+                }
                 if (compactionCounter-- == 0) {
                     injectEdge.incrementValue(1000);
-                    LOG.debug("Compaction " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Compaction " + i + " current time: " + injectEdge.currentTime());
                     flush(TableName.valueOf(tableName));
                     majorCompact(TableName.valueOf(tableName));
                     compactionCounter = RAND.nextInt(maxCompactionCounter) + 1;
-                    afterCompaction = true;
                 }
                 if (maskingCounter-- == 0) {
                     updateRow(conn, tableName, noCompactTableName, "a");
                     injectEdge.incrementValue((ttl + maxLookbackAge + 1) * 1000);
-                    LOG.debug("Masking " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Masking " + i + " current time: " + injectEdge.currentTime());
                     ResultSet rs = conn.createStatement().executeQuery(
                             "SELECT count(*) FROM " + tableName);
                     Assert.assertTrue(rs.next());
@@ -199,20 +215,18 @@ public class TableTTLIT extends BaseTest {
                     maskingCounter = RAND.nextInt(maxMaskingCounter) + 1;
                 }
                 if (deleteCounter-- == 0) {
-                    LOG.debug("Delete " + i + " current time: " + injectEdge.currentTime());
+                    LOG.info("Delete " + i + " current time: " + injectEdge.currentTime());
                     deleteRow(conn, tableName, "a");
                     deleteRow(conn, noCompactTableName, "a");
                     deleteCounter = RAND.nextInt(maxDeleteCounter) + 1;
                     injectEdge.incrementValue(1000);
                 }
+                injectEdge.incrementValue(1000);
                 updateRow(conn, tableName, noCompactTableName, "a");
-                if (!afterCompaction) {
-                    injectEdge.incrementValue(1000);
-                    // We are interested in the correctness of compaction and masking. Thus, we
-                    // only need to do the latest version and scn queries to after compaction.
+                if (verificationCounter-- >  0) {
                     continue;
                 }
-                afterCompaction = false;
+                verificationCounter = RAND.nextInt(maxVerificationCounter) + 1;
                 compareRow(conn, tableName, noCompactTableName, "a", MAX_COLUMN_INDEX);
                 long scn = injectEdge.currentTime() - maxLookbackAge * 1000;
                 long scnEnd = injectEdge.currentTime();
@@ -226,16 +240,56 @@ public class TableTTLIT extends BaseTest {
                                 MAX_COLUMN_INDEX);
                     }
                 }
-                injectEdge.incrementValue(1000);
+            }
+        }
+    }
+
+    @Test
+    public void testFlushesAndMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
+            throws Exception {
+        final int maxLookbackAge = tableLevelMaxLooback != null
+                ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
+        if (maxLookbackAge > 0) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = 0");
+            conn.commit();
+            final int flushCount = 10;
+            byte[] row = Bytes.toBytes("a");
+            for (int i = 0; i < flushCount; i++) {
+                // Generate more row versions than the maximum cell versions for the table
+                int updateCount = RAND.nextInt(10) + versions;
+                for (int j = 0; j < updateCount; j++) {
+                    updateRow(conn, tableName, "a");
+                }
+                flush(TableName.valueOf(tableName));
+                // At every flush, extra cell versions should be removed.
+                // MAX_COLUMN_INDEX table columns and one empty column will be retained for
+                // each row version.
+                assertTrue(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row)
+                        <= (i + 1) * (MAX_COLUMN_INDEX + 1) * versions);
+            }
+            // Run one minor compaction (in case no minor compaction has happened yet)
+            Admin admin = utility.getAdmin();
+            admin.compact(TableName.valueOf(tableName));
+            int waitCount = 0;
+            while (TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
+                    Bytes.toBytes("a")) >= flushCount * (MAX_COLUMN_INDEX + 1) * versions) {
+                // Wait for minor compactions to happen
+                Thread.sleep(1000);
+                waitCount++;
+                if (waitCount > 30) {
+                    Assert.fail();
+                }
             }
         }
     }
 
     @Test
     public void testRowSpansMultipleTTLWindows() throws Exception {
-        if (tableLevelMaxLooback != null) {
-            return;
-        }
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
@@ -303,6 +357,16 @@ public class TableTTLIT extends BaseTest {
         conn.commit();
     }
 
+    private void updateRow(Connection conn, String tableName, String id)
+            throws SQLException {
+
+        for (int i = 1; i <= MAX_COLUMN_INDEX; i++) {
+            String value = Integer.toString(RAND.nextInt(1000));
+            updateColumn(conn, tableName, id, i, value);
+        }
+        conn.commit();
+    }
+
     private void compareRow(Connection conn, String tableName1, String tableName2, String id,
             int maxColumnIndex) throws SQLException, IOException {
         StringBuilder queryBuilder = new StringBuilder("SELECT ");
@@ -351,6 +415,7 @@ public class TableTTLIT extends BaseTest {
                         "val5 varchar, val6 varchar, val7 varchar) " +
                         tableDDLOptions;
             }
+            LOG.debug(String.format("Creating table %s, %s", tableName, createSql));
             conn.createStatement().execute(createSql);
             conn.commit();
         }

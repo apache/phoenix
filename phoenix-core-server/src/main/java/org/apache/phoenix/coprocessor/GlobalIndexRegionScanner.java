@@ -31,20 +31,16 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
-import org.apache.phoenix.filter.PagingFilter;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
-import org.apache.phoenix.filter.AllVersionsIndexRebuildFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.parallel.EarlyExitFailure;
 import org.apache.phoenix.hbase.index.parallel.TaskBatch;
@@ -71,6 +67,7 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -290,11 +287,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         throw new IllegalStateException("No cell found");
     }
 
-    protected static boolean isTimestampBeforeTTL(long tableTTL, long currentTime, long tsToCheck) {
+    protected static boolean isTimestampBeforeTTL(int tableTTL, long currentTime, long tsToCheck) {
         if (tableTTL == HConstants.FOREVER) {
             return false;
         }
-        return tsToCheck < (currentTime - tableTTL * 1000);
+        return tsToCheck < (currentTime - tableTTL * 1000L);
     }
 
     protected static boolean isTimestampBeyondMaxLookBack(long maxLookBackInMills,
@@ -1101,7 +1098,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         indexScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
         scanRanges.initializeScan(indexScan);
         SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+        indexScan.setFilter(new SkipScanFilter(skipScanFilter, true, true));
         indexScan.setRaw(true);
         indexScan.readAllVersions();
         indexScan.setCacheBlocks(false);
@@ -1354,6 +1351,17 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                                 indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                                         IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                         indexMutations.add(del);
+                        if (indexMaintainer.isCDCIndex()) {
+                            // CDC Index needs two delete markers one for deleting the index row,
+                            // and the other for referencing the data table delete mutation with
+                            // the right index row key, that is, the index row key starting with ts
+                            Put cdcDataRowState = new Put(currentDataRowState.getRow());
+                            cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
+                                    indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
+                                    ByteUtil.EMPTY_BYTE_ARRAY);
+                            indexMutations.add(IndexRegionObserver.getDeleteIndexMutation(
+                                    currentDataRowState, indexMaintainer, ts, rowKeyPtr));
+                        }
                     }
                     currentDataRowState = null;
                     indexRowKeyForCurrentDataRow = null;
@@ -1423,37 +1431,6 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
         return indexMutations.size();
     }
 
-    static boolean adjustScanFilter(Scan scan) {
-        // For rebuilds we use count (*) as query for regular tables which ends up setting the FirstKeyOnlyFilter on scan
-        // This filter doesn't give us all columns and skips to the next row as soon as it finds 1 col
-        // For rebuilds we need all columns and all versions
-
-        Filter filter = scan.getFilter();
-        if (filter instanceof PagingFilter) {
-            PagingFilter pageFilter = (PagingFilter) filter;
-            Filter delegateFilter = pageFilter.getDelegateFilter();
-            if (delegateFilter instanceof EmptyColumnOnlyFilter) {
-                pageFilter.setDelegateFilter(null);
-            } else if (delegateFilter instanceof FirstKeyOnlyFilter) {
-                scan.setFilter(null);
-                return true;
-            } else if (delegateFilter != null) {
-                // Override the filter so that we get all versions
-                pageFilter.setDelegateFilter(new AllVersionsIndexRebuildFilter(delegateFilter));
-            }
-        } else if (filter instanceof EmptyColumnOnlyFilter) {
-            scan.setFilter(null);
-            return true;
-        } else if (filter instanceof FirstKeyOnlyFilter) {
-                scan.setFilter(null);
-                return true;
-        } else if (filter != null) {
-            // Override the filter so that we get all versions
-            scan.setFilter(new AllVersionsIndexRebuildFilter(filter));
-        }
-        return false;
-    }
-
     protected RegionScanner getLocalScanner() throws IOException {
         // override the filter to skip scan and open new scanner
         // when lower bound of timerange is passed or newStartKey was populated
@@ -1468,7 +1445,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             for (byte[] family : scan.getFamilyMap().keySet()) {
                 incrScan.addFamily(family);
             }
-            adjustScanFilter(incrScan);
+            ScanUtil.adjustScanFilterForGlobalIndexRegionScanner(incrScan);
             if(nextStartKey != null) {
                 incrScan.withStartRow(nextStartKey);
             }
@@ -1504,7 +1481,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             ScanRanges scanRanges = ScanRanges.createPointLookup(keys);
             scanRanges.initializeScan(incrScan);
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            incrScan.setFilter(new SkipScanFilter(skipScanFilter, true));
+            incrScan.setFilter(new SkipScanFilter(skipScanFilter, true, true));
             //putting back the min time to 0 for index and data reads
             incrScan.setTimeRange(0, scan.getTimeRange().getMax());
             scan.setTimeRange(0, scan.getTimeRange().getMax());

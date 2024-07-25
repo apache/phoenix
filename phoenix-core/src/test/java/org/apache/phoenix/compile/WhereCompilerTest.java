@@ -139,7 +139,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     ImmutableList.of(Arrays.asList(
                         pointRange("i1"),
                         pointRange("i2"))),
-                    SchemaUtil.VAR_BINARY_SCHEMA),
+                    SchemaUtil.VAR_BINARY_SCHEMA, false),
                 singleKVFilter(
                         or(constantComparison(CompareOperator.EQUAL,id,"i1"),
                            and(constantComparison(CompareOperator.EQUAL,id,"i2"),
@@ -682,7 +682,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     pointRange(tenantId1),
                     pointRange(tenantId2),
                     pointRange(tenantId3))),
-                plan.getTableRef().getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema(), false),
             filter);
     }
 
@@ -705,7 +705,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     pointRange(tenantId1),
                     pointRange(tenantId2),
                     pointRange(tenantId3))),
-                plan.getTableRef().getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema(), false),
             filter);
 
         byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId1);
@@ -738,7 +738,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                     Arrays.asList(
                         pointRange(tenantId,entityId1),
                         pointRange(tenantId,entityId2))),
-                SchemaUtil.VAR_BINARY_SCHEMA),
+                SchemaUtil.VAR_BINARY_SCHEMA, false),
             filter);
     }
 
@@ -768,7 +768,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         true,
                         Bytes.toBytes(entityId2),
                         true, SortOrder.ASC))),
-                plan.getTableRef().getTable().getRowKeySchema()),
+                plan.getTableRef().getTable().getRowKeySchema(), false),
             filter);
     }
 
@@ -792,7 +792,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         pointRange(tenantId1, entityId),
                         pointRange(tenantId2, entityId),
                         pointRange(tenantId3, entityId))),
-                SchemaUtil.VAR_BINARY_SCHEMA),
+                SchemaUtil.VAR_BINARY_SCHEMA, false),
             filter);
     }
     @Test
@@ -846,7 +846,7 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                         pointRange(tenantId1, entityId2),
                         pointRange(tenantId2, entityId1),
                         pointRange(tenantId2, entityId2))),
-                SchemaUtil.VAR_BINARY_SCHEMA),
+                SchemaUtil.VAR_BINARY_SCHEMA, false),
             filter);
     }
 
@@ -1043,13 +1043,13 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(),
                 PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         String ddl = "create table myTable(ID varchar primary key, A integer, B varchar, " +
-                "C date, D double, E integer)";
+                "C date, D double, E integer, F json)";
         pconn.createStatement().execute(ddl);
         ddl = "create table myTableDesc(ID varchar primary key DESC, A integer, B varchar, " +
-                "C date, D double, E integer)";
+                "C date, D double, E integer, F json)";
         pconn.createStatement().execute(ddl);
 
-        final int NUM = 15;
+        final int NUM = 20;
         String[] containingQueries = new String[NUM];
         String[] containedQueries = new String[NUM];
 
@@ -1105,6 +1105,22 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
                 "CURRENT_DATE() - PHOENIX_ROW_TIMESTAMP() < 10";
         containedQueries[14] = "select * from myTable where " +
                 " CURRENT_DATE() - PHOENIX_ROW_TIMESTAMP() < 5 ";
+
+        containingQueries[15] = "select * from myTable where ID > 'i3' and A > 1 and JSON_VALUE(F, '$.type') > 'i3'";
+        containedQueries[15] = "select * from myTableDesc where (ID > 'i7' or ID = 'i4') and " +
+                "A > 2 * 10 and (JSON_VALUE(F, '$.type') > 'i7' or JSON_VALUE(F, '$.type') = 'i4')";
+
+        containingQueries[16] = "select * from myTable where JSON_VALUE(F, '$.type') is not null";
+        containedQueries[16] = "select * from myTable where JSON_VALUE(F, '$.type') > 'i3'";
+
+        containingQueries[17] = "select * from myTable where JSON_VALUE(F, '$.type') like '%abc'";
+        containedQueries[17] = "select * from myTable where (JSON_VALUE(F, '$.type') like '%abc' and ID > 'i1')";
+
+        containingQueries[18] = "select * from myTable where JSON_EXISTS(F, '$.type')";
+        containedQueries[18] = "select * from myTable where JSON_EXISTS(F, '$.type') and JSON_VALUE(F, '$.type') > 'i3'";
+
+        containingQueries[19] = "select * from myTable where JSON_VALUE(F, '$.type') IN ('i3', 'i7', 'i1') and A < 10";
+        containedQueries[19] = "select * from myTableDesc where JSON_VALUE(F, '$.type') IN ('i1', 'i7') and A < 10 / 2";
 
         for (int i = 0; i < NUM; i++) {
             Assert.assertTrue(WhereCompiler.contains(getDNF(pconn, containingQueries[i]),

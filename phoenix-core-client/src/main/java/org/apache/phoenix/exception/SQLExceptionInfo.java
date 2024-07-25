@@ -19,6 +19,8 @@ package org.apache.phoenix.exception;
 
 import java.sql.SQLException;
 
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.SchemaUtil;
 
 
@@ -35,6 +37,7 @@ public class SQLExceptionInfo {
      */
     public static final String SCHEMA_NAME = "schemaName";
     public static final String TABLE_NAME = "tableName";
+    public static final String TABLE_TYPE = "tableType";
     public static final String FAMILY_NAME = "familyName";
     public static final String COLUMN_NAME = "columnName";
     public static final String FUNCTION_NAME = "functionName";
@@ -51,6 +54,7 @@ public class SQLExceptionInfo {
     private final String message;
     private final String schemaName;
     private final String tableName;
+    private final PTableType tableType;
     private final String familyName;
     private final String columnName;
     private final String functionName;
@@ -61,6 +65,7 @@ public class SQLExceptionInfo {
     private final int phoenixColumnSizeBytes;
     private final int maxPhoenixColumnSizeBytes;
     private final String haGroupInfo;
+    private final String cdcChangeScope;
 
     public static class Builder {
         private Throwable rootCause;
@@ -78,6 +83,8 @@ public class SQLExceptionInfo {
         private int phoenixColumnSizeBytes;
         private int maxPhoenixColumnSizeBytes;
         private String haGroupInfo;
+        private PTableType tableType;
+        private String cdcChangeScope;
 
         public Builder(SQLExceptionCode code) {
             this.code = code;
@@ -100,6 +107,11 @@ public class SQLExceptionInfo {
 
         public Builder setTableName(String tableName) {
             this.tableName = tableName;
+            return this;
+        }
+
+        public Builder setTableType(PTableType tableType) {
+            this.tableType = tableType;
             return this;
         }
 
@@ -153,6 +165,11 @@ public class SQLExceptionInfo {
             return this;
         }
 
+        public Builder setCdcChangeScope(String cdcChangeScope) {
+            this.cdcChangeScope = cdcChangeScope;
+            return this;
+        }
+
         public SQLExceptionInfo build() {
             return new SQLExceptionInfo(this);
         }
@@ -169,6 +186,7 @@ public class SQLExceptionInfo {
         message = builder.message;
         schemaName = builder.schemaName;
         tableName = builder.tableName;
+        tableType = builder.tableType;
         familyName = builder.familyName;
         columnName = builder.columnName;
         functionName = builder.functionName;
@@ -179,6 +197,7 @@ public class SQLExceptionInfo {
         maxPhoenixColumnSizeBytes = builder.maxPhoenixColumnSizeBytes;
         phoenixColumnSizeBytes = builder.phoenixColumnSizeBytes;
         haGroupInfo = builder.haGroupInfo;
+        cdcChangeScope = builder.cdcChangeScope;
     }
 
     @Override
@@ -206,6 +225,9 @@ public class SQLExceptionInfo {
         } else if (schemaName != null) {
             builder.append(" ").append(SCHEMA_NAME).append("=").append(columnDisplayName);
         }
+        if (tableType != null) {
+            builder.append(" ").append(TABLE_TYPE).append("=").append(tableType);
+        }
         if (maxMutationSize != 0) {
             builder.append(" ").append(MAX_MUTATION_SIZE).append("=").append(maxMutationSize);
             builder.append(" ").append(MUTATION_SIZE).append("=").append(mutationSize);
@@ -220,6 +242,9 @@ public class SQLExceptionInfo {
         }
         if (haGroupInfo != null) {
             builder.append(" ").append(HA_GROUP_INFO).append("=").append(haGroupInfo);
+        }
+        if (cdcChangeScope != null) {
+            builder.append(": ").append(cdcChangeScope);
         }
 
         return builder.toString();
@@ -239,6 +264,10 @@ public class SQLExceptionInfo {
 
     public String getTableName() {
         return tableName;
+    }
+
+    public PTableType getTableType() {
+        return tableType;
     }
 
     public String getFamilyName() {
@@ -287,5 +316,9 @@ public class SQLExceptionInfo {
 
     public String getHaGroupInfo() {
         return haGroupInfo;
+    }
+
+    public String getCdcChangeScope() {
+        return cdcChangeScope;
     }
 }

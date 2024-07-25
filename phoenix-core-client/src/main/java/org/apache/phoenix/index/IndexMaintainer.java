@@ -115,6 +115,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ExpressionUtil;
@@ -141,13 +142,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     private static final int EXPRESSION_NOT_PRESENT = -1;
     private static final int ESTIMATED_EXPRESSION_SIZE = 8;
-    
+
     public static IndexMaintainer create(PTable dataTable, PTable index,
+                                         PhoenixConnection connection) throws SQLException {
+        return create(dataTable, null, index, connection);
+    }
+
+    public static IndexMaintainer create(PTable dataTable, PTable cdcTable, PTable index,
             PhoenixConnection connection) throws SQLException {
         if (dataTable.getType() == PTableType.INDEX || index.getType() != PTableType.INDEX || !dataTable.getIndexes().contains(index)) {
             throw new IllegalArgumentException();
         }
-        IndexMaintainer maintainer = new IndexMaintainer(dataTable, index, connection);
+        IndexMaintainer maintainer = new IndexMaintainer(dataTable, cdcTable, index, connection);
         return maintainer;
     }
     
@@ -435,13 +441,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private boolean isUncovered;
     private Expression indexWhere;
     private Set<ColumnReference> indexWhereColumns;
+    private boolean isCDCIndex;
 
     protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
         this.dataRowKeySchema = dataRowKeySchema;
         this.isDataTableSalted = isDataTableSalted;
     }
-    
+
     private IndexMaintainer(final PTable dataTable, final PTable index,
+                            PhoenixConnection connection) throws SQLException {
+        this(dataTable, null, index, connection);
+    }
+
+    private IndexMaintainer(final PTable dataTable, final PTable cdcTable, final PTable index,
             PhoenixConnection connection) throws SQLException {
         this(dataTable.getRowKeySchema(), dataTable.getBucketNum() != null);
         this.rowKeyOrderOptimizable = index.rowKeyOrderOptimizable();
@@ -451,7 +463,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.isLocalIndex = index.getIndexType() == IndexType.LOCAL;
         this.isUncovered = index.getIndexType() == IndexType.UNCOVERED_GLOBAL;
         this.encodingScheme = index.getEncodingScheme();
-      
+        this.isCDCIndex = CDCUtil.isCDCIndex(index);
+
         // null check for b/w compatibility
         this.encodingScheme = index.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : index.getEncodingScheme();
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
@@ -495,7 +508,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexDataColumnCount = dataPKColumns.size();
         PTable parentTable = dataTable;
         // We need to get the PK column for the table on which the index is created
-        if (!dataTable.getName().equals(index.getParentName())) {
+        if (!dataTable.getName().equals(cdcTable != null
+                ? cdcTable.getParentName() : index.getParentName())) {
             try {
                 String tenantId = (index.getTenantId() != null) ? 
                         index.getTenantId().getString() : null;
@@ -1770,6 +1784,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             maintainer.indexWhere = null;
             maintainer.indexWhereColumns = null;
         }
+        if (proto.hasIsCDCIndex()) {
+            maintainer.isCDCIndex = proto.getIsCDCIndex();
+        } else {
+            maintainer.isCDCIndex = false;
+        }
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1913,6 +1932,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
             }
         }
+        builder.setIsCDCIndex(maintainer.isCDCIndex);
         return builder.build();
     }
 
@@ -2235,6 +2255,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
     public boolean isUncovered() {
         return isUncovered;
+    }
+    public boolean isCDCIndex() {
+        return isCDCIndex;
     }
     
     public boolean isImmutableRows() {

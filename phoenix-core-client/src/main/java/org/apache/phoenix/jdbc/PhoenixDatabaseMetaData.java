@@ -139,6 +139,7 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String TABLE_CAT = "TABLE_CAT";
     public static final String TABLE_CATALOG = "TABLE_CATALOG";
     public static final String TABLE_SCHEM = "TABLE_SCHEM";
+    public static final byte[] TABLE_SCHEM_BYTES = Bytes.toBytes(TABLE_SCHEM);
     public static final String LOGICAL_TABLE_NAME = "LOGICAL_TABLE_NAME";
     public static final String LOGICAL_PARENT_NAME = "LOGICAL_PARENT_NAME";
     public static final String REMARKS = "REMARKS";
@@ -390,13 +391,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String USE_STATS_FOR_PARALLELIZATION = "USE_STATS_FOR_PARALLELIZATION";
     public static final byte[] USE_STATS_FOR_PARALLELIZATION_BYTES = Bytes.toBytes(USE_STATS_FOR_PARALLELIZATION);
 
-    // The PHOENIX_TTL property will hold the duration after which rows will be marked as expired.
-    public static final long PHOENIX_TTL_NOT_DEFINED = 0L;
+    // The TTL property will hold the duration after which rows will be marked as expired and
+    // is stored in column TTL in SYSCAT
+    public static final String TTL = "TTL";
+    public static final byte[] TTL_BYTES = Bytes.toBytes(TTL);
+    public static final int TTL_NOT_DEFINED = 0;
+    public static final int DEFAULT_TTL = HConstants.FOREVER;
     public static final String PHOENIX_TTL = "PHOENIX_TTL";
     public static final byte[] PHOENIX_TTL_BYTES = Bytes.toBytes(PHOENIX_TTL);
-    // The phoenix ttl high watermark if set indicates the timestamp used for determining the expired rows.
-    // otherwise the now() - ttl-duration is the timestamp used.
-    public static final long MIN_PHOENIX_TTL_HWM = 0L;
     public static final String PHOENIX_TTL_HWM = "PHOENIX_TTL_HWM";
     public static final byte[] PHOENIX_TTL_HWM_BYTES = Bytes.toBytes(PHOENIX_TTL_HWM);
 
@@ -415,6 +417,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
 
     public static final String STREAMING_TOPIC_NAME = "STREAMING_TOPIC_NAME";
     public static final byte[] STREAMING_TOPIC_NAME_BYTES = Bytes.toBytes(STREAMING_TOPIC_NAME);
+
+    public static final String ROW_KEY_MATCHER = "ROW_KEY_MATCHER";
+    public static final byte[] ROW_KEY_MATCHER_BYTES = Bytes.toBytes(ROW_KEY_MATCHER);
 
     public static final String INDEX_WHERE = "INDEX_WHERE";
     public static final byte[] INDEX_WHERE_BYTES = Bytes.toBytes(INDEX_WHERE);
@@ -435,6 +440,10 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
     public static final String SYSTEM_TRANSFORM_NAME = SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_TRANSFORM_TABLE);
     public static final String MAX_LOOKBACK_AGE = BaseScannerRegionObserverConstants.MAX_LOOKBACK_AGE;
     public static final byte[] MAX_LOOKBACK_AGE_BYTES = Bytes.toBytes(MAX_LOOKBACK_AGE);
+
+    public static final String CDC_INCLUDE_NAME = "INCLUDE";
+    public static final String CDC_INCLUDE_TABLE = "CDC_INCLUDE";
+    public static final byte[] CDC_INCLUDE_BYTES = Bytes.toBytes(CDC_INCLUDE_TABLE);
 
     //SYSTEM:LOG
     public static final String SYSTEM_LOG_TABLE = "LOG";

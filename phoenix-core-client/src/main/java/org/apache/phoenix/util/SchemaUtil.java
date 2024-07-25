@@ -36,7 +36,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -68,7 +67,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -115,6 +113,7 @@ public class SchemaUtil {
     private static final int VAR_KV_LENGTH_ESTIMATE = 50;
     public static final String ESCAPE_CHARACTER = "\"";
     public static final DataBlockEncoding DEFAULT_DATA_BLOCK_ENCODING = DataBlockEncoding.FAST_DIFF;
+
     public static final PDatum VAR_BINARY_DATUM = new PDatum() {
     
         @Override
@@ -239,7 +238,7 @@ public class SchemaUtil {
     }
 
     /**
-     * Normalizes the fulltableName . Uses {@linkplain normalizeIdentifier}
+     * Normalizes the fulltableName . Uses {@linkplain #normalizeIdentifier}
      * @param fullTableName
      * @return
      */
@@ -526,6 +525,12 @@ public class SchemaUtil {
     public static byte[] getEmptyColumnFamily(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
+    }
+
+    public static byte[] getEmptyColumnQualifier(PTable table) {
+        return table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                QueryConstants.EMPTY_COLUMN_BYTES :
+                table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
     }
 
     public static String getEmptyColumnFamilyAsString(PTable table) {
@@ -1202,24 +1207,6 @@ public class SchemaUtil {
             return String.format("%s.%s", schemaName, tableName);
         } else {
             return tableName;
-        }
-    }
-
-    /**
-     * Pads the data in ptr by the required amount for fixed width data types
-     */
-    public static void padData(String tableName, PColumn column, ImmutableBytesWritable ptr) {
-        PDataType type = column.getDataType();
-        byte[] byteValue = ptr.get();
-        boolean isNull = type.isNull(byteValue);
-        Integer maxLength = column.getMaxLength();
-        if (!isNull && type.isFixedWidth() && maxLength != null) {
-            if (ptr.getLength() < maxLength) {
-                type.pad(ptr, maxLength, column.getSortOrder());
-            } else if (ptr.getLength() > maxLength) {
-                throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
-                        column.getScale(), column.getName().getString());
-            }
         }
     }
 

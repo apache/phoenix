@@ -28,6 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
+import org.apache.phoenix.parse.HintNode;
+import org.apache.phoenix.parse.NamedTableNode;
+import org.apache.phoenix.parse.TerminalParseNode;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -82,6 +88,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
@@ -248,8 +255,41 @@ public class QueryCompiler {
         return plan;
     }
 
+    private QueryPlan getExistingDataPlanForCDC() {
+        if (dataPlans != null) {
+            for (QueryPlan plan : dataPlans.values()) {
+                if (plan.getTableRef().getTable().getType() == PTableType.CDC) {
+                    return plan;
+                }
+            }
+        }
+        return null;
+    }
+
     public QueryPlan compileSelect(SelectStatement select) throws SQLException{
         StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        QueryPlan dataPlanForCDC = getExistingDataPlanForCDC();
+        if (dataPlanForCDC != null) {
+            TableRef cdcTableRef = dataPlanForCDC.getTableRef();
+            PTable cdcTable = cdcTableRef.getTable();
+            NamedTableNode cdcDataTableName = NODE_FACTORY.namedTable(null,
+                    NODE_FACTORY.table(cdcTable.getSchemaName().getString(),
+                            cdcTable.getParentTableName().getString()),
+                    select.getTableSamplingRate());
+            ColumnResolver dataTableResolver = FromCompiler.getResolver(cdcDataTableName,
+                    statement.getConnection());
+            TableRef cdcDataTableRef = dataTableResolver.getTables().get(0);
+            Set<PTable.CDCChangeScope> cdcIncludeScopes =
+                    cdcTable.getCDCIncludeScopes();
+            String cdcHint = select.getHint().getHint(Hint.CDC_INCLUDE);
+            if (cdcHint != null && cdcHint.startsWith(HintNode.PREFIX)) {
+                cdcIncludeScopes = CDCUtil.makeChangeScopeEnumsFromString(cdcHint.substring(1,
+                        cdcHint.length() - 1));
+            }
+            context.setCDCDataTableRef(cdcDataTableRef);
+            context.setCDCTableRef(cdcTableRef);
+            context.setCDCIncludeScopes(cdcIncludeScopes);
+        }
         if (select.isJoin()) {
             JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, joinTable, false, false, null);
@@ -715,6 +755,38 @@ public class QueryCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+
+        if (table.getType() == PTableType.CDC) {
+            List<AliasedNode> selectNodes = select.getSelect();
+            // For CDC queries, if a single wildcard projection is used, automatically insert
+            // PHOENIX_ROW_TIMESTAMP() as a project at the beginning.
+            ParseNode selectNode = selectNodes.size() == 1 ? selectNodes.get(0).getNode() : null;
+            if (selectNode instanceof TerminalParseNode
+                    && ((TerminalParseNode) selectNode).isWildcardNode()) {
+                List<AliasedNode> tmpSelectNodes = Lists.newArrayListWithExpectedSize(
+                        selectNodes.size() + 1);
+                tmpSelectNodes.add(NODE_FACTORY.aliasedNode(null,
+                        NODE_FACTORY.function(PhoenixRowTimestampFunction.NAME,
+                                Collections.emptyList())));
+                tmpSelectNodes.add(NODE_FACTORY.aliasedNode(null,
+                        ((TerminalParseNode) selectNode).getRewritten()));
+                selectNodes = tmpSelectNodes;
+            }
+            List<OrderByNode> orderByNodes = select.getOrderBy();
+            // For CDC queries, if no ORDER BY is specified, add default ordering.
+            if (orderByNodes.size() == 0) {
+                orderByNodes = Lists.newArrayListWithExpectedSize(1);
+                orderByNodes.add(NODE_FACTORY.orderBy(
+                        NODE_FACTORY.function(PhoenixRowTimestampFunction.NAME,
+                                Collections.emptyList()),
+                        false, SortOrder.getDefault() == SortOrder.ASC));
+            }
+            select = NODE_FACTORY.select(select.getFrom(),
+                    select.getHint(), select.isDistinct(), selectNodes, select.getWhere(),
+                    select.getGroupBy(), select.getHaving(), orderByNodes, select.getLimit(),
+                    select.getOffset(), select.getBindCount(), select.isAggregate(),
+                    select.hasSequence(), select.getSelects(), select.getUdfParseNodes());
+        }
 
         ParseNode viewWhere = null;
         if (table.getViewStatement() != null) {

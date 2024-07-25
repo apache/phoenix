@@ -65,7 +65,8 @@ import java.io.FileOutputStream;
  * (or even being committed to the ASF branches)
  */
 
-@Category({NeedsOwnMiniClusterTest.class})
+//TODO:- Snapshot here is storing integers as TTL Value and Phoenix Level TTL is Long, need to work on this.
+@Category(NeedsOwnMiniClusterTest.class)
 public class LoadSystemTableSnapshotIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(

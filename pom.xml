@@ -40,6 +40,7 @@
   </organization>
 
   <modules>
+    <module>phoenix-hbase-compat-2.6.0</module>
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
     <module>phoenix-hbase-compat-2.4.1</module>
@@ -80,11 +81,12 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.4 2.5.0 2.5</hbase.profile.list>
+    <hbase.profile.list>2.4 2.5.0 2.5 2.6</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
-    <hbase-2.4.runtime.version>2.4.17</hbase-2.4.runtime.version>
+    <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.8-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.6.runtime.version>2.6.0-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -100,7 +102,7 @@
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.14.1</jackson-bom.version>
-    <netty-bom.version>4.1.104.Final</netty-bom.version>
+    <netty-bom.version>4.1.108.Final</netty-bom.version>
     <antlr.version>3.5.2</antlr.version>
     <!-- Only used for tests with HBase 2.1-2.4 -->
     <reload4j.version>1.2.19</reload4j.version>
@@ -118,7 +120,7 @@
     <sqlline.version>1.9.0</sqlline.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
-    <snappy.version>0.3</snappy.version>
+    <snappy.version>0.5</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <collections.version>3.2.2</collections.version>
@@ -133,10 +135,19 @@
     <jcodings.version>1.0.55</jcodings.version>
     <jetty.version>9.4.53.v20231009</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
+    <json-path.version>2.9.0</json-path.version>
+    <bson.version>4.4.0</bson.version>
     <!-- Test Dependencies -->
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
+
+    <!-- These are only used for exclusion when shading, and the exact version is completely
+    irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
+    use theses packages, it does not explicitly depend on them, but instead takes the transitve
+    dependencies from the Hadoop/HBase version used for building. -->
+    <commons-configuration2.excludeonly.version>2.10.1</commons-configuration2.excludeonly.version>
+    <hbase-thirdparty.excludeonly.version>4.1.7</hbase-thirdparty.excludeonly.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.10</maven-eclipse-plugin.version>
@@ -730,6 +741,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -741,6 +757,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.6</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -760,6 +781,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -771,6 +797,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.5</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -801,6 +832,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.5.4</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-2.6.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -1709,6 +1745,17 @@
         <artifactId>HdrHistogram</artifactId>
         <version>${hdrhistogram.version}</version>
       </dependency>
+      <dependency>
+        <groupId>com.jayway.jsonpath</groupId>
+        <artifactId>json-path</artifactId>
+        <version>${json-path.version}</version>
+      </dependency>
+      <!-- https://mvnrepository.com/artifact/org.mongodb/bson -->
+      <dependency>
+        <groupId>org.mongodb</groupId>
+        <artifactId>bson</artifactId>
+        <version>${bson.version}</version>
+      </dependency>
 
       <!-- Other test dependencies -->
       <dependency>
@@ -1872,6 +1919,22 @@
         <hbase.compat.version>2.5.0</hbase.compat.version>
         <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
+      </properties>
+    </profile>
+    <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-2.6.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>2.6</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>2.6</hbase.profile>
+        <hbase.compat.version>2.6.0</hbase.compat.version>
+        <hadoop.version>3.3.5</hadoop.version>
+        <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
       </properties>
     </profile>
     <profile>

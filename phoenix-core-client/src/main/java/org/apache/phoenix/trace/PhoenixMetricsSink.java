@@ -199,8 +199,9 @@ public class PhoenixMetricsSink implements MetricsSink {
                         // tables created as transactional tables, make these table non
                         // transactional
                         PhoenixDatabaseMetaData.TRANSACTIONAL + "=" + Boolean.FALSE;
-        PreparedStatement stmt = conn.prepareStatement(ddl);
-        stmt.execute();
+        try (PreparedStatement stmt = conn.prepareStatement(ddl)) {
+            stmt.execute();
+        }
     }
 
     @Override
@@ -288,8 +289,7 @@ public class PhoenixMetricsSink implements MetricsSink {
             LOGGER.trace("Logging metrics to phoenix table via: " + stmt);
             LOGGER.trace("With tags: " + variableValues);
         }
-        try {
-            PreparedStatement ps = conn.prepareStatement(stmt);
+        try (PreparedStatement ps = conn.prepareStatement(stmt)) {
             // add everything that wouldn't/may not parse
             int index = 1;
             for (String tag : variableValues) {

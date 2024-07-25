@@ -35,6 +35,7 @@ import static org.junit.Assert.fail;
 
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.HConstants;
@@ -49,6 +50,7 @@ import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -86,7 +88,8 @@ public class BaseConnectionlessQueryTest extends BaseTest {
         // only load the test driver if we are testing locally - for integration tests, we want to
         // test on a wider scale
         if (PhoenixEmbeddedDriver.isTestUrl(url)) {
-            driver = initDriver(ReadOnlyProps.EMPTY_PROPS);
+            Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+            driver = initDriver(new ReadOnlyProps(props));
             assertTrue(DriverManager.getDriver(url) == driver);
             driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));
         }
