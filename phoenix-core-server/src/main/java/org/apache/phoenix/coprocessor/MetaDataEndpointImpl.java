@@ -617,6 +617,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    private boolean isSystemCatalogSplittable;
+
     protected boolean getMetadataReadLockEnabled;
 
     private MetricsMetadataSource metricsSource;
@@ -666,6 +668,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         this.getMetadataReadLockEnabled
                 = config.getBoolean(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED,
                             QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
+        this.isSystemCatalogSplittable = MetaDataSplitPolicy.isSystemCatalogSplittable(config);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
@@ -1558,11 +1561,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 } else if (linkType == PHYSICAL_TABLE) {
                     // famName contains the logical name of the parent table. We need to get the actual physical name of the table
                     PTable parentTable = null;
-                    if (indexType != IndexType.LOCAL) {
+                    // call getTable() on famName only if it does not start with _IDX_.
+                    // Table name starting with _IDX_ always must refer to HBase table that is
+                    // shared by all view indexes on the given table/view hierarchy.
+                    // _IDX_ is HBase table that does not have corresponding PTable representation
+                    // in Phoenix, hence there is no point of calling getTable().
+                    if (!famName.getString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)
+                        && indexType != IndexType.LOCAL) {
                         parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
                                 SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
-                        if (parentTable == null || isTableDeleted(parentTable)) {
-                            // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
+                        if (isSystemCatalogSplittable
+                            && (parentTable == null || isTableDeleted(parentTable))) {
+                            // parentTable is neither in the cache nor in the local region. Since
+                            // famName is only logical name, we need to find the physical table.
+                            // Hence, it is recommended to scan SYSTEM.CATALOG table again using
+                            // separate CQSI connection as SYSTEM.CATALOG is splittable so the
+                            // PTable with famName might be available on different region.
                             try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                                 parentTable = connection.getTableNoCache(famName.getString());
                             } catch (TableNotFoundException e) {
