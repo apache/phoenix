@@ -489,6 +489,15 @@ public interface QueryServices extends SQLCloseable {
     String PHOENIX_GET_METADATA_READ_LOCK_ENABLED = "phoenix.get.metadata.read.lock.enabled";
 
     /**
+     * If server side metadata cache is empty, take Phoenix writeLock for the given row
+     * and make sure we can acquire the writeLock within the configurable duration.
+     */
+    String PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT =
+        "phoenix.metadata.update.rowlock.timeout";
+
+    long DEFAULT_PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT = 60000;
+
+    /**
      * Get executor service used for parallel scans
      */
     public ThreadPoolExecutor getExecutor();
