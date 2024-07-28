@@ -43,7 +43,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.index.AtomicUpsertHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -883,7 +883,7 @@ public class UpsertCompiler {
                 .build().buildException();
             }
             if (onDupKeyPairs.isEmpty()) { // ON DUPLICATE KEY IGNORE
-                onDupKeyBytesToBe = PhoenixIndexBuilderHelper.serializeOnDupKeyIgnore();
+                onDupKeyBytesToBe = AtomicUpsertHelper.serializeOnDupKeyIgnore();
             } else {                       // ON DUPLICATE KEY UPDATE;
                 onDupKeyBytesToBe = getOnDuplicateKeyBytes(table, context, onDupKeyPairs, resolver);
             }
@@ -959,7 +959,7 @@ public class UpsertCompiler {
         }
         PTable onDupKeyTable = PTableImpl.builderWithColumns(table, updateColumns).build();
         onDupKeyBytesToBe =
-                PhoenixIndexBuilderHelper.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
+                AtomicUpsertHelper.serializeOnDupKeyUpdate(onDupKeyTable, updateExpressions);
         return onDupKeyBytesToBe;
     }
 
