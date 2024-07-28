@@ -168,6 +168,8 @@ public enum MetricType {
     COUNT_ROWS_FILTERED("wf", "Number of rows filtered",LogLevel.DEBUG,PLong.INSTANCE),
     COUNTER_METADATA_INCONSISTENCY("mi", "Number of times the metadata inconsistencies ",
             LogLevel.DEBUG, PLong.INSTANCE),
+    COUNTER_GET_TABLE_REGIONS_FAIL("gtrf", "Number of times get table regions fail ",
+            LogLevel.DEBUG, PLong.INSTANCE),
     NUM_SYSTEM_TABLE_RPC_SUCCESS("nstrs", "Number of successful system table RPC calls",
                                                                         LogLevel.DEBUG,PLong.INSTANCE),
     NUM_SYSTEM_TABLE_RPC_FAILURES("nstcf", "Number of Failed system table RPC calls ",
