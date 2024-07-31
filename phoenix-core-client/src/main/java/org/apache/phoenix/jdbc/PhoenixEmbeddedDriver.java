@@ -65,12 +65,14 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
     private final static DriverPropertyInfo[] EMPTY_INFO = new DriverPropertyInfo[0];
     public final static String MAJOR_VERSION_PROP = "DriverMajorVersion";
     public final static String MINOR_VERSION_PROP = "DriverMinorVersion";
+    public final static String PATCH_VERSION_PROP = "DriverPatchVersion";
     public final static String DRIVER_NAME_PROP = "DriverName";
     
     public static final ReadOnlyProps DEFAULT_PROPS = new ReadOnlyProps(
             ImmutableMap.of(
                     MAJOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MAJOR_VERSION),
                     MINOR_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_MINOR_VERSION),
+                    PATCH_VERSION_PROP, Integer.toString(MetaDataProtocol.PHOENIX_PATCH_NUMBER),
                     DRIVER_NAME_PROP, DRIVER_NAME));
 
     PhoenixEmbeddedDriver() {
