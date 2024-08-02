@@ -85,7 +85,7 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
-    <hbase-2.5.runtime.version>2.5.8-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.10-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.runtime.version>2.6.0-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
@@ -114,7 +114,7 @@
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
     <commons-io.version>2.11.0</commons-io.version>
-    <commons-lang.version>3.8</commons-lang.version>
+    <commons-lang3.version>3.8</commons-lang3.version>
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.26.0</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
@@ -1695,7 +1695,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
-        <version>${commons-lang.version}</version>
+        <version>${commons-lang3.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>

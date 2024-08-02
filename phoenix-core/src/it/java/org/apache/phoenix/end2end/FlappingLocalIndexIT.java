@@ -161,6 +161,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
             
             Admin admin = driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
             int numRegions = admin.getRegions(physicalTableName).size();
+            int trimmedRegionLocations = admin.getConfiguration()
+                .getInt(QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN, -1);
             
             String query = "SELECT * FROM " + tableName +" where v1 like 'a%'";
 
@@ -188,7 +190,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
                 explainPlanAttributes.getServerWhereFilter());
             assertEquals("CLIENT MERGE SORT",
                 explainPlanAttributes.getClientSortAlgo());
-            assertEquals(numRegions, explainPlanAttributes.getRegionLocations().size());
+            assertEquals(trimmedRegionLocations,
+                explainPlanAttributes.getRegionLocations().size());
 
             rs = conn1.createStatement().executeQuery(query);
             assertTrue(rs.next());

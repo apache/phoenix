@@ -155,6 +155,11 @@ public class GroupByCompiler {
             return isUngroupedAggregate;
         }
 
+        /**
+         * This value represents the row key column count corresponding to longest continuous
+         * ordering columns returned by {@link GroupBy#getOrderPreservingTrackInfos}, it may
+         * not equal to the size of {@link GroupBy#getOrderPreservingTrackInfos}.
+         */
         public int getOrderPreservingColumnCount() {
             return orderPreservingColumnCount;
         }
