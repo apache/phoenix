@@ -25,6 +25,10 @@ public class MetaDataSplitPolicy extends SplitOnLeadingVarCharColumnsPolicy {
 
     private boolean allowSystemCatalogToSplit() {
         Configuration conf = getConf();
+        return isSystemCatalogSplittable(conf);
+    }
+
+    public static boolean isSystemCatalogSplittable(Configuration conf) {
         boolean allowSplittableSystemCatalogRollback =
                 conf.getBoolean(QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK,
                     QueryServicesOptions.DEFAULT_ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
