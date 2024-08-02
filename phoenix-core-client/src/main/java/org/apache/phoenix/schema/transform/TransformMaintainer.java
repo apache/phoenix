@@ -210,10 +210,15 @@ public class TransformMaintainer extends IndexMaintainer {
         return result;
     }
 
+    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants) {
+        return this.buildDataRowKey(indexRowKeyPtr, viewConstants, false);
+    }
+
     /*
      * Build the old table row key
      */
-    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants) {
+    public byte[] buildDataRowKey(ImmutableBytesWritable indexRowKeyPtr, byte[][] viewConstants,
+        boolean truncateEndSeparators) {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(estimatedNewTableRowKeyBytes);
         DataOutput output = new DataOutputStream(stream);

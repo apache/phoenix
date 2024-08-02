@@ -71,8 +71,10 @@ public class RowKeyValueAccessorTest  extends BaseConnectionlessQueryTest  {
         
         List<PColumn> pkColumns = table.getPKColumns();
         RowKeyValueAccessor accessor = new RowKeyValueAccessor(pkColumns, 3);
-        int offset = accessor.getOffset(keyValue.getRowArray(), keyValue.getRowOffset());
-        int length = accessor.getLength(keyValue.getRowArray(), offset, keyValue.getOffset()+keyValue.getLength());
+        int offset =
+            accessor.getOffset(keyValue.getRowArray(), keyValue.getRowOffset());
+        int length = accessor.getLength(keyValue.getRowArray(), offset,
+            keyValue.getOffset() + keyValue.getLength(), null, null);
         ImmutableBytesWritable ptr = new ImmutableBytesWritable(keyValue.getRowArray(), offset, length);
         
         PDataType dataType = pkColumns.get(index).getDataType();

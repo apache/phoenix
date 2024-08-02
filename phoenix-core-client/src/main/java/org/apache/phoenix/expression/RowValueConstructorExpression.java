@@ -38,6 +38,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
@@ -155,12 +156,12 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
     }
     
     private static int getExpressionByteCount(Expression e) {
-        PDataType childType = e.getDataType();
+        PDataType<?> childType = e.getDataType();
         if (childType != null && !childType.isFixedWidth()) {
-            return 1;
+            return childType != PVarbinaryEncoded.INSTANCE ? 1 : 2;
         } else {
             // Write at least one null byte in the case of the child being null with a childType of null
-            return childType == null || !childType.isFixedWidth() ? 1 : SchemaUtil.getFixedByteSize(e);
+            return childType == null ? 1 : SchemaUtil.getFixedByteSize(e);
         }
     }
     
@@ -186,7 +187,11 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                         expressionCount = evalIndex+1;
                         ptrs[evalIndex] = new ImmutableBytesWritable();
                         ptrs[evalIndex].set(ptr.get(), ptr.getOffset(), ptr.getLength());
-                        estimatedByteSize += ptr.getLength() + (expression.getDataType().isFixedWidth() ? 0 : 1); // 1 extra for the separator byte.
+                        estimatedByteSize +=
+                            ptr.getLength() + (expression.getDataType().isFixedWidth() ?
+                                0 :
+                                getSeparatorBytesLength(
+                                    expression)); // 1 extra for the separator byte.
                     }
                 } else if (tuple == null || tuple.isImmutable()) {
                     estimatedByteSize += getExpressionByteCount(expression);
@@ -220,14 +225,19 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                             // we'd have an ambiguity if this value happened to be the
                             // min possible value.
                             previousCarryOver = childType == null || childType.isFixedWidth();
-                            int bytesToWrite = getExpressionByteCount(child);
-                            for (int m = 0; m < bytesToWrite; m++) {
-                                output.write(QueryConstants.SEPARATOR_BYTE);
+                            if (childType == PVarbinaryEncoded.INSTANCE) {
+                                output.write(QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES);
+                            } else {
+                                int bytesToWrite = getExpressionByteCount(child);
+                                for (int m = 0; m < bytesToWrite; m++) {
+                                    output.write(QueryConstants.SEPARATOR_BYTE);
+                                }
                             }
                         } else {
                             output.write(tempPtr.get(), tempPtr.getOffset(), tempPtr.getLength());
                             if (!childType.isFixedWidth()) {
-                                output.write(SchemaUtil.getSeparatorByte(true, false, child));
+                                output.write(SchemaUtil.getSeparatorBytes(childType, true, false,
+                                    child.getSortOrder()));
                             }
                             if (previousCarryOver) {
                                 previousCarryOver = !ByteUtil.previousKey(output.getBuffer(), output.size());
@@ -241,12 +251,16 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
                     // Additionally for b/w compat with clients older than 4.14.1 -
                     // If SortOorder.ASC then always strip trailing separator byte (as before)
                     // else only strip for >= 4.14 client (when STRIP_TRAILING_SEPARATOR_BYTE bit is set)
-                    for (int k = expressionCount -1 ; 
-                            k >=0 &&  getChildren().get(k).getDataType() != null 
-                                  && !getChildren().get(k).getDataType().isFixedWidth()
-                                  && outputBytes[outputSize-1] == SchemaUtil.getSeparatorByte(true, false, getChildren().get(k))
-                                  &&  (getChildren().get(k).getSortOrder() == SortOrder.ASC ? true : isStripTrailingSepByte()) ; k--) {
+                    for (int k = expressionCount - 1; k >= 0
+                        && getChildren().get(k).getDataType() != null
+                        && !getChildren().get(k).getDataType().isFixedWidth()
+                        && hasSeparatorBytes(outputBytes, outputSize, k)
+                        && (getChildren().get(k).getSortOrder() == SortOrder.ASC
+                        || isStripTrailingSepByte()); k--) {
                         outputSize--;
+                        if (getChildren().get(k).getDataType() == PVarbinaryEncoded.INSTANCE) {
+                            outputSize--;
+                        }
                     }
                     ptr.set(outputBytes, 0, outputSize);
                     return true;
@@ -259,7 +273,23 @@ public class RowValueConstructorExpression extends BaseCompoundExpression {
             throw new RuntimeException(e); //Impossible.
         }
     }
-    
+
+    private boolean hasSeparatorBytes(byte[] outputBytes, int outputSize, int k) {
+        if (getChildren().get(k).getDataType() != PVarbinaryEncoded.INSTANCE) {
+            return outputBytes[outputSize - 1] == SchemaUtil.getSeparatorByte(true, false,
+                getChildren().get(k));
+        } else {
+            byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(true, false,
+                getChildren().get(k).getSortOrder());
+            return outputSize >= 2 && outputBytes[outputSize - 1] == sepBytes[1]
+                && outputBytes[outputSize - 2] == sepBytes[0];
+        }
+    }
+
+    private static int getSeparatorBytesLength(Expression expression) {
+        return expression.getDataType() != PVarbinaryEncoded.INSTANCE ? 1 : 2;
+    }
+
     @Override
     public final String toString() {
         StringBuilder buf = new StringBuilder("(");

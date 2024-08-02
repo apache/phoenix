@@ -41,7 +41,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PInteger;
-
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 
 /**
  * 
@@ -155,7 +155,11 @@ public class TupleUtil {
                 }
                 for (int i = 1; i < expressions.size(); i++) {
                     if (!expression.getDataType().isFixedWidth()) {
-                        output.write(SchemaUtil.getSeparatorByte(true, value.getLength()==0, expression));
+                        output.write(SchemaUtil.getSeparatorBytes(
+                            expression.getDataType(),
+                            true,
+                            value.getLength() == 0,
+                            expression.getSortOrder()));
                     }
                     expression = expressions.get(i);
                     if (expression.evaluate(result, value)) {
@@ -167,8 +171,19 @@ public class TupleUtil {
                     }
                 }
                 // Write trailing separator if last expression was variable length and descending
-                if (!expression.getDataType().isFixedWidth() && SchemaUtil.getSeparatorByte(true, value.getLength()==0, expression) == QueryConstants.DESC_SEPARATOR_BYTE) {
-                    output.write(QueryConstants.DESC_SEPARATOR_BYTE);
+                if (!expression.getDataType().isFixedWidth()) {
+                    if (expression.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                        if (SchemaUtil.getSeparatorByte(true, value.getLength() == 0, expression)
+                            == QueryConstants.DESC_SEPARATOR_BYTE) {
+                            output.write(QueryConstants.DESC_SEPARATOR_BYTE);
+                        }
+                    } else {
+                        byte[] sepBytes = SchemaUtil.getSeparatorBytesForVarBinaryEncoded(true,
+                            value.getLength() == 0, expression.getSortOrder());
+                        if (sepBytes == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES) {
+                            output.write(QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES);
+                        }
+                    }
                 }
                 byte[] outputBytes = output.getBuffer();
                 value.set(outputBytes, 0, output.size());

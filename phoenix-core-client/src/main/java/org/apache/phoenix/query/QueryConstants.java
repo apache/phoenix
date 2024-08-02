@@ -248,6 +248,13 @@ public interface QueryConstants {
     byte DESC_SEPARATOR_BYTE = SortOrder.invert(SEPARATOR_BYTE);
     byte[] DESC_SEPARATOR_BYTE_ARRAY = new byte[] {DESC_SEPARATOR_BYTE};
 
+    byte[] VARBINARY_ENCODED_SEPARATOR_BYTES = new byte[] {0x00, 0x01};
+    byte[] DESC_VARBINARY_ENCODED_SEPARATOR_BYTES =
+        SortOrder.invert(VARBINARY_ENCODED_SEPARATOR_BYTES, 0, 2);
+
+    byte[] ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR =
+        Bytes.toBytes("_ROW_KEY_VALUE_ACCESSOR_ENCODED_SEPARATOR_");
+
     String DEFAULT_COPROCESS_JAR_NAME = "phoenix-[version]-server.jar";
     
     int MILLIS_IN_DAY = 1000 * 60 * 60 * 24;

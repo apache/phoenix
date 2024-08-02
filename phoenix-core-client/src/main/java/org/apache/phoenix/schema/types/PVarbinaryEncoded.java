@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.schema.types;
 
-import java.sql.Types;
 import java.text.Format;
 import java.util.Base64;
 
@@ -25,24 +24,119 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
-public class PVarbinary extends PBinaryBase {
+public class PVarbinaryEncoded extends PVarbinary {
 
-    public static final PVarbinary INSTANCE = new PVarbinary();
+    public static final PVarbinaryEncoded INSTANCE = new PVarbinaryEncoded();
 
-    private PVarbinary() {
-        super("VARBINARY", Types.VARBINARY, byte[].class, null, 22);
+    private PVarbinaryEncoded() {
+        super("VARBINARY_ENCODED", PDataType.VARBINARY_ENCODED_TYPE, byte[].class, null, 49);
     }
 
-    PVarbinary(String sqlTypeName, int sqlType, Class clazz, PDataCodec codec, int ordinal) {
-        super(sqlTypeName, sqlType, clazz, codec, ordinal);
+    private byte[] encodeBytesAscOrder(byte[] bytes) {
+        int countZeros = 0;
+        for (byte b : bytes) {
+            if (b == (byte) 0x00) {
+                countZeros++;
+            }
+        }
+        if (countZeros == 0) {
+            return bytes;
+        }
+        byte[] encodedBytes = new byte[bytes.length + countZeros];
+        int pos = 0;
+        for (byte b : bytes) {
+            if (b != (byte) 0x00) {
+                encodedBytes[pos++] = b;
+            } else {
+                encodedBytes[pos++] = (byte) 0x00;
+                encodedBytes[pos++] = (byte) 0xFF;
+            }
+        }
+        return encodedBytes;
+    }
+
+    private byte[] decodeBytesAscOrder(byte[] bytes) {
+        int countZeros = 0;
+        for (int i = 0; i < (bytes.length - 1); i++) {
+            if (bytes[i] == (byte) 0x00 && bytes[i + 1] == (byte) 0xFF) {
+                countZeros++;
+            }
+        }
+        if (countZeros == 0) {
+            return bytes;
+        }
+        byte[] decodedBytes = new byte[bytes.length - countZeros];
+        int pos = 0;
+        int i = 0;
+        for (; i < (bytes.length - 1); i++) {
+            if (bytes[i] == (byte) 0x00 && bytes[i + 1] == (byte) 0xFF) {
+                decodedBytes[pos++] = (byte) 0x00;
+                i++;
+            } else {
+                decodedBytes[pos++] = bytes[i];
+            }
+        }
+        if (i == (bytes.length - 1)) {
+            decodedBytes[pos] = bytes[bytes.length - 1];
+        }
+        return decodedBytes;
+    }
+
+    private byte[] encodeBytesDescOrder(byte[] bytes) {
+        int countZeros = 0;
+        for (byte b : bytes) {
+            if (b == SortOrder.invert((byte) 0x00)) {
+                countZeros++;
+            }
+        }
+        if (countZeros == 0) {
+            return bytes;
+        }
+        byte[] encodedBytes = new byte[bytes.length + countZeros];
+        int pos = 0;
+        for (byte b : bytes) {
+            if (b != SortOrder.invert((byte) 0x00)) {
+                encodedBytes[pos++] = b;
+            } else {
+                encodedBytes[pos++] = SortOrder.invert((byte) 0x00);
+                encodedBytes[pos++] = SortOrder.invert((byte) 0xFF);
+            }
+        }
+        return encodedBytes;
+    }
+
+    private byte[] decodeBytesDescOrder(byte[] bytes) {
+        int countZeros = 0;
+        for (int i = 0; i < (bytes.length - 1); i++) {
+            if (bytes[i] == SortOrder.invert((byte) 0x00)
+                && bytes[i + 1] == SortOrder.invert((byte) 0xFF)) {
+                countZeros++;
+            }
+        }
+        if (countZeros == 0) {
+            return bytes;
+        }
+        byte[] decodedBytes = new byte[bytes.length - countZeros];
+        int pos = 0;
+        int i = 0;
+        for (; i < (bytes.length - 1); i++) {
+            if (bytes[i] == SortOrder.invert((byte) 0x00)
+                && bytes[i + 1] == SortOrder.invert((byte) 0xFF)) {
+                decodedBytes[pos++] = SortOrder.invert((byte) 0x00);
+                i++;
+            } else {
+                decodedBytes[pos++] = bytes[i];
+            }
+        }
+        if (i == (bytes.length - 1)) {
+            decodedBytes[pos] = bytes[bytes.length - 1];
+        }
+        return decodedBytes;
     }
 
     @Override
     public byte[] toBytes(Object object) {
-        if (object == null) {
-            return ByteUtil.EMPTY_BYTE_ARRAY;
-        }
-        return (byte[]) object;
+        return encodeBytesAscOrder(super.toBytes(object));
     }
 
     @Override
@@ -51,22 +145,24 @@ public class PVarbinary extends PBinaryBase {
             return 0;
         }
         byte[] o = (byte[]) object;
-        // assumes there's enough room
         System.arraycopy(bytes, offset, o, 0, o.length);
-        return o.length;
+        byte[] result = encodeBytesAscOrder(o);
+        return result.length;
     }
 
-    /**
-     * Override because we must always create a new byte array
-     */
     @Override
     public byte[] toBytes(Object object, SortOrder sortOrder) {
-        byte[] bytes = toBytes(object);
-        // Override because we need to allocate a new buffer in this case
-        if (sortOrder == SortOrder.DESC) {
-            return SortOrder.invert(bytes, 0, new byte[bytes.length], 0, bytes.length);
+        byte[] bytes;
+        if (object == null) {
+            bytes = ByteUtil.EMPTY_BYTE_ARRAY;
+        } else {
+            bytes = (byte[]) object;
         }
-        return bytes;
+        if (sortOrder == SortOrder.DESC) {
+            byte[] result = SortOrder.invert(bytes, 0, new byte[bytes.length], 0, bytes.length);
+            return encodeBytesDescOrder(result);
+        }
+        return encodeBytesAscOrder(bytes);
     }
 
     @Override
@@ -76,15 +172,14 @@ public class PVarbinary extends PBinaryBase {
             return null;
         }
         if (offset == 0 && bytes.length == length && sortOrder == SortOrder.ASC) {
-            return bytes;
+            return decodeBytesAscOrder(bytes);
         }
         byte[] bytesCopy = new byte[length];
         System.arraycopy(bytes, offset, bytesCopy, 0, length);
         if (sortOrder == SortOrder.DESC) {
             bytesCopy = SortOrder.invert(bytes, offset, bytesCopy, 0, length);
-            offset = 0;
         }
-        return bytesCopy;
+        return decodeBytesAscOrder(bytesCopy);
     }
 
     @Override
@@ -110,7 +205,7 @@ public class PVarbinary extends PBinaryBase {
 
     @Override
     public boolean isCoercibleTo(PDataType targetType) {
-        return equalsAny(targetType, this, PBinary.INSTANCE, PVarbinaryEncoded.INSTANCE);
+        return equalsAny(targetType, this, PBinary.INSTANCE, PVarbinary.INSTANCE);
     }
 
     @Override

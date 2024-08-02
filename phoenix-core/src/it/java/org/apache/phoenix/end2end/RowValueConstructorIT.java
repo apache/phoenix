@@ -53,6 +53,8 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -65,7 +67,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
+import org.apache.phoenix.util.TestUtil;
 
 @Category(ParallelStatsDisabledTest.class)
 public class RowValueConstructorIT extends ParallelStatsDisabledIT {
@@ -1504,6 +1506,8 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
         stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES('c', 'b','c','f')");
         stmt.execute();
         conn.commit();
+
+        TestUtil.dumpTable(conn, TableName.valueOf(tableName));
         
         conn = nextConnection(getUrl());
         ResultSet rs;
@@ -1512,6 +1516,195 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
         assertEquals("a", rs.getString(1));
         assertTrue(rs.next());
         assertEquals("c", rs.getString(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testRVCRequiringExtractNodeVarBinary() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE  " + tableName
+            + "  (k1 VARBINARY_ENCODED, k2 VARBINARY_ENCODED, k3 VARBINARY_ENCODED,"
+            + " k4 VARBINARY_ENCODED, CONSTRAINT pk PRIMARY KEY (k1,k2,k3,k4))";
+        conn.createStatement().execute(ddl);
+
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt =
+            conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES(?,?,?,?)");
+        stmt.setBytes(1, Bytes.toBytes('a'));
+        stmt.setBytes(2, Bytes.toBytes('b'));
+        stmt.setBytes(3, Bytes.toBytes('c'));
+        stmt.setBytes(4, Bytes.toBytes('d'));
+        stmt.execute();
+
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES(?,?,?,?)");
+        stmt.setBytes(1, Bytes.toBytes('b'));
+        stmt.setBytes(2, Bytes.toBytes('b'));
+        stmt.setBytes(3, Bytes.toBytes('c'));
+        stmt.setBytes(4, Bytes.toBytes('e'));
+        stmt.execute();
+
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES(?,?,?,?)");
+        stmt.setBytes(1, Bytes.toBytes('c'));
+        stmt.setBytes(2, Bytes.toBytes('b'));
+        stmt.setBytes(3, Bytes.toBytes('c'));
+        stmt.setBytes(4, Bytes.toBytes('f'));
+        stmt.execute();
+
+        conn.commit();
+
+        conn = nextConnection(getUrl());
+
+        ResultSet rs;
+        stmt = conn.prepareStatement("SELECT k1 from  " + tableName
+            + " WHERE k1 IN (?,?) AND (k2,k3) IN ((?,?),(?,?)) AND k4 > ?");
+        stmt.setBytes(1, Bytes.toBytes('a'));
+        stmt.setBytes(2, Bytes.toBytes('c'));
+        stmt.setBytes(3, Bytes.toBytes('b'));
+        stmt.setBytes(4, Bytes.toBytes('c'));
+        stmt.setBytes(5, Bytes.toBytes('f'));
+        stmt.setBytes(6, Bytes.toBytes('g'));
+        stmt.setBytes(7, Bytes.toBytes('c'));
+
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('a'), rs.getBytes(1));
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('c'), rs.getBytes(1));
+        assertFalse(rs.next());
+
+        stmt = conn.prepareStatement("SELECT k1, k2, k3 from  " + tableName
+            + " WHERE ((k1, k2), k3) >= ((?, ?), ?)");
+        stmt.setBytes(1, Bytes.toBytes('b'));
+        stmt.setBytes(2, Bytes.toBytes('b'));
+        stmt.setBytes(3, Bytes.toBytes('b'));
+
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('b'), rs.getBytes(1));
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('c'), rs.getBytes(1));
+        assertFalse(rs.next());
+
+        stmt = conn.prepareStatement("SELECT k1, k2, k3, k4 from  " + tableName
+            + " WHERE (k1, k2, k3) >= (?, ?, ?)");
+        stmt.setBytes(1, Bytes.toBytes('b'));
+        stmt.setBytes(2, Bytes.toBytes('b'));
+        stmt.setBytes(3, Bytes.toBytes('b'));
+
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('b'), rs.getBytes(1));
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('c'), rs.getBytes(1));
+        assertFalse(rs.next());
+
+        stmt = conn.prepareStatement("SELECT k1, k2, k3 from  " + tableName
+            + " WHERE (k1, (k2, k3)) >= (?, (?, ?))");
+        stmt.setBytes(1, Bytes.toBytes('b'));
+        stmt.setBytes(2, Bytes.toBytes('b'));
+        stmt.setBytes(3, Bytes.toBytes('b'));
+
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('b'), rs.getBytes(1));
+        assertTrue(rs.next());
+        assertArrayEquals(Bytes.toBytes('c'), rs.getBytes(1));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testRVCRequiringExtractNodeVarBinary2() throws Exception {
+        Connection conn = nextConnection(getUrl());
+        String tableName = generateUniqueName();
+        String ddl = "CREATE TABLE  " + tableName
+            + "  (k1 VARBINARY_ENCODED, k2 VARBINARY_ENCODED, k3 VARBINARY_ENCODED,"
+            + " k4 VARBINARY_ENCODED CONSTRAINT pk PRIMARY KEY (k1,k2,k3))";
+        conn.createStatement().execute(ddl);
+
+        byte[] b1 = new byte[] {34, 58, 38, 0, 40, -13, 34, 0};
+        byte[] b2 = new byte[] {35, 58, 38, 0, 40, -13, 34, 0};
+        byte[] b3 = new byte[] {36, 58, 38, 0, 40, -13, 34, 0};
+        byte[] b4 = new byte[] {37, 58, 38, 0, 40, -13, 34, 0};
+        byte[] b5 = new byte[] {38, 58, 38, 0, 40, -13, 34, 0};
+        byte[] b6 = new byte[] {39, 58, 38, 0, 40, -13, 34, 0};
+
+        conn = nextConnection(getUrl());
+        PreparedStatement stmt =
+            conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES(?,?,?,?)");
+        stmt.setBytes(1, b1);
+        stmt.setBytes(2, b2);
+        stmt.setBytes(3, b3);
+        stmt.setBytes(4, b4);
+        stmt.execute();
+
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES(?,?,?,?)");
+        stmt.setBytes(1, b2);
+        stmt.setBytes(2, b2);
+        stmt.setBytes(3, b3);
+        stmt.setBytes(4, b5);
+        stmt.execute();
+
+        stmt = conn.prepareStatement("UPSERT INTO  " + tableName + " VALUES(?,?,?,?)");
+        stmt.setBytes(1, b3);
+        stmt.setBytes(2, b2);
+        stmt.setBytes(3, b3);
+        stmt.setBytes(4, b6);
+        stmt.execute();
+
+        conn.commit();
+
+        conn = nextConnection(getUrl());
+
+        stmt = conn.prepareStatement("SELECT k1, k2, k4 from  " + tableName
+            + " WHERE ((k1, k2), k4) >= ((?, ?), ?)");
+        stmt.setBytes(1, b2);
+        stmt.setBytes(2, b2);
+        stmt.setBytes(3, b3);
+
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(b2, rs.getBytes(1));
+        assertArrayEquals(b2, rs.getBytes(2));
+        assertArrayEquals(b5, rs.getBytes(3));
+        assertTrue(rs.next());
+        assertArrayEquals(b3, rs.getBytes(1));
+        assertArrayEquals(b2, rs.getBytes(2));
+        assertArrayEquals(b6, rs.getBytes(3));
+        assertFalse(rs.next());
+
+        stmt = conn.prepareStatement("SELECT k1, k2, k4 from  " + tableName
+            + " WHERE (k1, k2, k4) >= (?, ?, ?)");
+        stmt.setBytes(1, b2);
+        stmt.setBytes(2, b2);
+        stmt.setBytes(3, b3);
+
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(b2, rs.getBytes(1));
+        assertArrayEquals(b2, rs.getBytes(2));
+        assertArrayEquals(b5, rs.getBytes(3));
+        assertTrue(rs.next());
+        assertArrayEquals(b3, rs.getBytes(1));
+        assertArrayEquals(b2, rs.getBytes(2));
+        assertArrayEquals(b6, rs.getBytes(3));
+        assertFalse(rs.next());
+
+        stmt = conn.prepareStatement("SELECT k1, k2, k4 from  " + tableName
+            + " WHERE (k1, (k2, k4)) >= (?, (?, ?))");
+        stmt.setBytes(1, b2);
+        stmt.setBytes(2, b2);
+        stmt.setBytes(3, b4);
+
+        rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertArrayEquals(b2, rs.getBytes(1));
+        assertArrayEquals(b2, rs.getBytes(2));
+        assertArrayEquals(b5, rs.getBytes(3));
+        assertTrue(rs.next());
+        assertArrayEquals(b3, rs.getBytes(1));
+        assertArrayEquals(b2, rs.getBytes(2));
+        assertArrayEquals(b6, rs.getBytes(3));
         assertFalse(rs.next());
     }
 

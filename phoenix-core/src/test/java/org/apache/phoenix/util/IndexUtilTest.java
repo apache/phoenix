@@ -78,6 +78,7 @@ public class IndexUtilTest {
              + "UNSIGNED_TINYINT ARRAY=UNSIGNED_TINYINT ARRAY, "
              + "VARBINARY=VARBINARY, "
              + "VARBINARY ARRAY=VARBINARY ARRAY, "
+             + "VARBINARY_ENCODED=VARBINARY_ENCODED, "
              + "VARCHAR=VARCHAR, "
              + "VARCHAR ARRAY=VARCHAR ARRAY}");
     }
@@ -131,6 +132,7 @@ public class IndexUtilTest {
              + "UNSIGNED_TINYINT ARRAY=UNSIGNED_TINYINT ARRAY, "
              + "VARBINARY=VARBINARY, "
              + "VARBINARY ARRAY=VARBINARY ARRAY, "
+             + "VARBINARY_ENCODED=VARBINARY_ENCODED, "
              + "VARCHAR=VARCHAR, "
              + "VARCHAR ARRAY=VARCHAR ARRAY}");
     }

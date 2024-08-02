@@ -122,7 +122,8 @@ public class CDCUtil {
         if (value != null) {
             // TODO: Need suport for DECIMAL, NUMERIC and array types.
             if (dataType.getSqlType() == Types.BINARY || dataType.getSqlType() == Types.VARBINARY
-                    || dataType.getSqlType() == Types.LONGVARBINARY) {
+                || dataType.getSqlType() == Types.LONGVARBINARY
+                || dataType.getSqlType() == PDataType.VARBINARY_ENCODED_TYPE) {
                 // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
                 // avoid copying bytes.
                 value = Base64.getEncoder().encodeToString((byte[]) value);

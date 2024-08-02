@@ -30,6 +30,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
@@ -145,11 +147,35 @@ public class CoerceExpression extends BaseSingleExpression {
 
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (getChild().evaluate(tuple, ptr)) {
-            getDataType().coerceBytes(ptr, null, getChild().getDataType(),
-                    getChild().getMaxLength(), null, getChild().getSortOrder(), 
-                    maxLength, null, getSortOrder(), rowKeyOrderOptimizable);
-            return true;
+        // For CoerceExpression evaluation, lhs is coerced to rhs literal expression. However,
+        // in case of variable length binary literal expression, literal value by default
+        // gets VARBINARY data type. If lhs expression is of type VARBINARY_ENCODED, we should
+        // encode rhs literal value to VARBINARY_ENCODED type. This makes the eventual coerce
+        // evaluation successful.
+        if (getChild() instanceof LiteralExpression
+            && getChild().getDataType() == PVarbinary.INSTANCE
+            && getDataType() == PVarbinaryEncoded.INSTANCE) {
+            Expression expression;
+            try {
+                expression =
+                    LiteralExpression.newConstant(((LiteralExpression) getChild()).getValue(),
+                        PVarbinaryEncoded.INSTANCE);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            if (expression.evaluate(tuple, ptr)) {
+                getDataType().coerceBytes(ptr, null, expression.getDataType(),
+                    expression.getMaxLength(), null, expression.getSortOrder(), maxLength, null,
+                    getSortOrder(), rowKeyOrderOptimizable);
+                return true;
+            }
+        } else {
+            if (getChild().evaluate(tuple, ptr)) {
+                getDataType().coerceBytes(ptr, null, getChild().getDataType(),
+                    getChild().getMaxLength(), null, getChild().getSortOrder(), maxLength, null,
+                    getSortOrder(), rowKeyOrderOptimizable);
+                return true;
+            }
         }
         return false;
     }

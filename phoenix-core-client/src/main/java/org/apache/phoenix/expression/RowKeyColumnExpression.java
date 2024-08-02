@@ -25,14 +25,10 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
-import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.util.SchemaUtil;
-
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
-
 
 /**
  * 
@@ -112,7 +108,8 @@ public class RowKeyColumnExpression  extends ColumnExpression {
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         tuple.getKey(ptr);
-        int offset = accessor.getOffset(ptr.get(), ptr.getOffset() + this.offset);
+        int offset =
+            accessor.getOffset(ptr.get(), ptr.getOffset() + this.offset);
         // Null is represented in the last expression of a multi-part key 
         // by the bytes not being present.
         int maxOffset = ptr.getOffset() + ptr.getLength();
@@ -125,7 +122,8 @@ public class RowKeyColumnExpression  extends ColumnExpression {
                 byteSize = fromType.getByteSize() == null ? maxLength : fromType.getByteSize();
                 byteSize = byteSize <= maxOffset ? byteSize : 0;
             }
-            int length = byteSize >= 0 ? byteSize  : accessor.getLength(buffer, offset, maxOffset);
+            int length = byteSize >= 0 ? byteSize
+                : accessor.getLength(buffer, offset, maxOffset, type, getSortOrder());
             // In the middle of the key, an empty variable length byte array represents null
             if (length > 0) {
                 ptr.set(buffer,offset,length);
@@ -138,6 +136,41 @@ public class RowKeyColumnExpression  extends ColumnExpression {
         }
         // Always return true because we're always able to evaluate a row key column
         return true;
+    }
+
+    public int evaluateAndGetNextOffset(Tuple tuple, ImmutableBytesWritable ptr, int offset) {
+        tuple.getKey(ptr);
+        int maxOffset = ptr.getOffset() + ptr.getLength();
+        if (offset < maxOffset) {
+            byte[] buffer = ptr.get();
+            int byteSize = -1;
+            // FIXME: fixedByteSize <= maxByteSize ? fixedByteSize : 0 required because HBase passes bogus keys to filter to position scan (HBASE-6562)
+            if (fromType.isFixedWidth()) {
+                Integer maxLength = getMaxLength();
+                byteSize = fromType.getByteSize() == null ? maxLength : fromType.getByteSize();
+                byteSize = byteSize <= maxOffset ? byteSize : 0;
+            }
+            int length = byteSize >= 0 ? byteSize
+                : accessor.getLength(buffer, offset, maxOffset, type, getSortOrder());
+            // In the middle of the key, an empty variable length byte array represents null
+            if (length > 0) {
+                ptr.set(buffer,offset,length);
+                type.coerceBytes(ptr, fromType, getSortOrder(), getSortOrder());
+                if (fromType.isFixedWidth()) {
+                    return offset + length;
+                } else if (fromType == PVarbinaryEncoded.INSTANCE) {
+                    return offset + length + 2;
+                } else {
+                    return offset + length + 1;
+                }
+            } else {
+                ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+                return offset + 1;
+            }
+        } else {
+            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+            return maxOffset;
+        }
     }
 
     @Override
