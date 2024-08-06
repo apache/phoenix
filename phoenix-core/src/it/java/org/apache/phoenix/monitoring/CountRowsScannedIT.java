@@ -34,6 +34,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -41,6 +42,8 @@ import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsEnabledTest.class)
 public class CountRowsScannedIT extends BaseTest {
+
+    private String tableName, tableName2;
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
@@ -54,7 +57,7 @@ public class CountRowsScannedIT extends BaseTest {
     @Test
     public void testSinglePrimaryKey() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
+        tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.execute("CREATE TABLE " + tableName
                 + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
@@ -130,7 +133,7 @@ public class CountRowsScannedIT extends BaseTest {
     @Test
     public void testMultiPrimaryKeys() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
+        tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName
                 + " (A UNSIGNED_LONG NOT NULL, B UNSIGNED_LONG NOT NULL, "
@@ -176,7 +179,7 @@ public class CountRowsScannedIT extends BaseTest {
     @Test
     public void testQueryWithDeleteMarkers() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName = generateUniqueName();
+        tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.execute("CREATE TABLE " + tableName
                 + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
@@ -197,10 +200,10 @@ public class CountRowsScannedIT extends BaseTest {
     @Test
     public void testJoin() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName1 = generateUniqueName();
-        String tableName2 = generateUniqueName();
+        tableName = generateUniqueName();
+        tableName2 = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName1
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName
                 + " (A UNSIGNED_LONG NOT NULL, B UNSIGNED_LONG NOT NULL, "
                 + " Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (A, B))");
         stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName2
@@ -210,7 +213,7 @@ public class CountRowsScannedIT extends BaseTest {
         for (int i = 1; i <= 100; i++) {
             // table1.B in [51, 150], table2.A in [1, 100]
             String sql1 = String
-                    .format("UPSERT INTO %s VALUES (%d, %d, %d)", tableName1, i, i + 50, i);
+                    .format("UPSERT INTO %s VALUES (%d, %d, %d)", tableName, i, i + 50, i);
             stmt.execute(sql1);
             String sql2 = String.format("UPSERT INTO %s VALUES (%d, %d, %d)", tableName2, i, i, i);
             stmt.execute(sql2);
@@ -220,7 +223,7 @@ public class CountRowsScannedIT extends BaseTest {
 
         // table1
         long count1 = countRowsScannedFromSql(stmt,
-                "SELECT * FROM " + tableName1 + " WHERE A >= 40");
+                "SELECT * FROM " + tableName + " WHERE A >= 40");
         assertEquals(61, count1);
 
         // table2, all rows
@@ -229,7 +232,7 @@ public class CountRowsScannedIT extends BaseTest {
         assertEquals(100, count2);
 
         // join
-        String sqlJoin = "SELECT X.K, X.VX, Y.VY FROM ( SELECT B AS K, A AS VX FROM " + tableName1
+        String sqlJoin = "SELECT X.K, X.VX, Y.VY FROM ( SELECT B AS K, A AS VX FROM " + tableName
                 + " WHERE A >= 40) X JOIN (SELECT A AS K, B AS VY FROM " + tableName2
                 + " WHERE B >= 20) Y ON X.K=Y.K";
         long count3 = countRowsScannedFromSql(stmt, sqlJoin);
@@ -239,15 +242,15 @@ public class CountRowsScannedIT extends BaseTest {
     @Test
     public void testUnionAll() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String tableName1 = generateUniqueName();
-        String tableName2 = generateUniqueName();
+        tableName = generateUniqueName();
+        tableName2 = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
-        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName1
+        stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName
                 + " (A UNSIGNED_LONG NOT NULL, Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (A))");
         stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName2
                 + " (B UNSIGNED_LONG NOT NULL, Z UNSIGNED_LONG, CONSTRAINT pk PRIMARY KEY (B))");
         for (int i = 1; i <= 100; i++) {
-            String sql1 = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName1, i, i);
+            String sql1 = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
             stmt.execute(sql1);
             String sql2 = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName2, i, i);
             stmt.execute(sql2);
@@ -257,7 +260,7 @@ public class CountRowsScannedIT extends BaseTest {
 
         // table1
         long count1 = countRowsScannedFromSql(stmt,
-                "SELECT A, Z FROM " + tableName1 + " WHERE A >= 40");
+                "SELECT A, Z FROM " + tableName + " WHERE A >= 40");
         assertEquals(61, count1);
 
         // table2, all rows
@@ -266,13 +269,13 @@ public class CountRowsScannedIT extends BaseTest {
         assertEquals(81, count2);
 
         // union all
-        String sqlUnionAll = "SELECT SUM(Z) FROM ( SELECT Z FROM " + tableName1
+        String sqlUnionAll = "SELECT SUM(Z) FROM ( SELECT Z FROM " + tableName
                 + " WHERE A >= 40 UNION ALL SELECT Z FROM " + tableName2 + " WHERE B >= 20)";
         long count3 = countRowsScannedFromSql(stmt, sqlUnionAll);
         assertEquals(142, count3);
 
         // union all then group by
-        String sqlUnionAllGroupBy = "SELECT K, SUM(Z) FROM ( SELECT A AS K, Z FROM " + tableName1
+        String sqlUnionAllGroupBy = "SELECT K, SUM(Z) FROM ( SELECT A AS K, Z FROM " + tableName
                 + " WHERE A >= 40 UNION ALL SELECT B AS K, Z FROM " + tableName2
                 + " WHERE B >= 20) GROUP BY K";
         long count4 = countRowsScannedFromSql(stmt, sqlUnionAllGroupBy);
@@ -287,18 +290,18 @@ public class CountRowsScannedIT extends BaseTest {
         return getRowsScanned(rs);
     }
 
-    private long getRowsScanned(ResultSet rs) {
+    private long getRowsScanned(ResultSet rs) throws SQLException {
         if (!(rs instanceof PhoenixResultSet)) {
             return -1;
         }
-        PhoenixResultSet phoenixResultSet = (PhoenixResultSet) rs;
-        Map<String, Map<MetricType, Long>> metrics = phoenixResultSet.getReadMetrics();
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
 
         long sum = 0;
         boolean valid = false;
         for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
+            String key = entry.getKey();
             Long val = entry.getValue().get(MetricType.COUNT_ROWS_SCANNED);
-            if (val != null) {
+            if ((key.equals(tableName) || key.equals(tableName2)) && val != null) {
                 sum += val.longValue();
                 valid = true;
             }
