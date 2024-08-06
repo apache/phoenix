@@ -44,17 +44,16 @@ public class CountRowsScannedIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
+        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
+        // force many rpc calls
+        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
         setUpTestDriver(new ReadOnlyProps(props));
     }
 
     @Test
     public void testSinglePrimaryKey() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
-        // force many rpc calls
-        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         String tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.execute("CREATE TABLE " + tableName
@@ -121,15 +120,16 @@ public class CountRowsScannedIT extends BaseTest {
         long count11 = countRowsScannedFromSql(stmt,
                 "SELECT A,Z FROM " + tableName + " WHERE Z >= 7 ORDER BY Z limit 1");
         assertEquals(100, count11);
+
+        // skip scan
+        long count12 = countRowsScannedFromSql(stmt,
+                "SELECT A,Z FROM " + tableName + " WHERE A in (20, 45, 68, 3)");
+        assertEquals(4, count12);
     }
 
     @Test
     public void testMultiPrimaryKeys() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
-        // force many rpc calls
-        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         String tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.executeUpdate("CREATE TABLE IF NOT EXISTS " + tableName
@@ -174,12 +174,29 @@ public class CountRowsScannedIT extends BaseTest {
     }
 
     @Test
+    public void testQueryWithDeleteMarkers() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.execute("CREATE TABLE " + tableName
+                + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
+        for (int i = 1; i <= 100; i++) {
+            String sql = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
+            stmt.execute(sql);
+        }
+        conn.commit();
+        String selectQuery = "SELECT A,Z FROM " + tableName + " LIMIT 1";
+        for (int i=10; i<=100; i=i+10) {
+            stmt.execute("DELETE FROM " + tableName + " WHERE A < " + i);
+            conn.commit();
+            long count = countRowsScannedFromSql(stmt, selectQuery);
+            assertEquals(i, count);
+        }
+    }
+
+    @Test
     public void testJoin() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
-        // force many rpc calls
-        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
@@ -221,11 +238,7 @@ public class CountRowsScannedIT extends BaseTest {
 
     @Test
     public void testUnionAll() throws Exception {
-        Properties props = new Properties();
-        props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
-        // force many rpc calls
-        props.put(QueryServices.SCAN_CACHE_SIZE_ATTRIB, "10");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
+        Connection conn = DriverManager.getConnection(getUrl());
         String tableName1 = generateUniqueName();
         String tableName2 = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
