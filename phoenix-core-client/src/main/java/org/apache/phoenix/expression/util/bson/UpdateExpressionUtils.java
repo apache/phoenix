@@ -109,36 +109,7 @@ public class UpdateExpressionUtils {
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         LOGGER.info("Nothing to be removed as field with key {} does not exist", fieldKey);
       } else {
-        updateNestedFieldEntryByDelete(fieldKey, bsonDocument, newVal);
-      }
-    }
-  }
-
-  private static void updateNestedFieldEntryByDelete(final String fieldKey,
-                                                     final BsonDocument bsonDocument,
-                                                     final BsonValue newVal) {
-    if (fieldKey.contains(".") || fieldKey.contains("[")) {
-      StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          updateNestedFieldByDelete(value, i, fieldKey, newVal);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          updateNestedFieldByDelete(value, i, fieldKey, newVal);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        updateNestedFieldByDelete(bsonDocument, 0, fieldKey, newVal);
       }
     }
   }
@@ -217,10 +188,30 @@ public class UpdateExpressionUtils {
         return;
       }
       updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, newVal);
-      return;
+    } else {
+      StringBuilder sb = new StringBuilder();
+      for (int i = idx; i < fieldKey.length(); i++) {
+        if (fieldKey.charAt(i) == '.') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
+            throw new RuntimeException("Map does not contain key: " + sb);
+          }
+          updateNestedFieldByDelete(topFieldValue, i, fieldKey, newVal);
+          return;
+        } else if (fieldKey.charAt(i) == '[') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
+            throw new RuntimeException("Map does not contain key: " + sb);
+          }
+          updateNestedFieldByDelete(topFieldValue, i, fieldKey, newVal);
+          return;
+        } else {
+          sb.append(fieldKey.charAt(i));
+        }
+      }
     }
-    LOGGER.error("This is erroneous case. updateNestedfieldByDelete should not be used for "
-        + "top level fields");
   }
 
   private static BsonValue modifyFieldValueByDelete(BsonValue currentValue, BsonValue newVal) {
@@ -267,36 +258,7 @@ public class UpdateExpressionUtils {
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         bsonDocument.put(fieldKey, newVal);
       } else {
-        updateNestedFieldEntryByAdd(fieldKey, bsonDocument, newVal);
-      }
-    }
-  }
-
-  private static void updateNestedFieldEntryByAdd(final String fieldKey,
-                                                  final BsonDocument bsonDocument,
-                                                  final BsonValue newVal) {
-    if (fieldKey.contains(".") || fieldKey.contains("[")) {
-      StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
-          }
-          updateNestedFieldByAdd(value, i, fieldKey, newVal);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
-          }
-          updateNestedFieldByAdd(value, i, fieldKey, newVal);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        updateNestedFieldByAdd(bsonDocument, 0, fieldKey, newVal);
       }
     }
   }
@@ -366,10 +328,30 @@ public class UpdateExpressionUtils {
         return;
       }
       updateNestedFieldByAdd(nestedValue, curIdx, fieldKey, newVal);
-      return;
+    } else {
+      StringBuilder sb = new StringBuilder();
+      for (int i = idx; i < fieldKey.length(); i++) {
+        if (fieldKey.charAt(i) == '.') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
+            throw new RuntimeException("Document does not contain key: " + sb);
+          }
+          updateNestedFieldByAdd(topFieldValue, i, fieldKey, newVal);
+          return;
+        } else if (fieldKey.charAt(i) == '[') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
+            throw new RuntimeException("Document does not contain key: " + sb);
+          }
+          updateNestedFieldByAdd(topFieldValue, i, fieldKey, newVal);
+          return;
+        } else {
+          sb.append(fieldKey.charAt(i));
+        }
+      }
     }
-    LOGGER.error("This is erroneous case. updateNestedfieldByAdd should not be used for "
-        + "top level fields");
   }
 
   private static BsonValue modifyFieldValueByAdd(BsonValue currentValue, BsonValue newVal) {
@@ -409,34 +391,7 @@ public class UpdateExpressionUtils {
       if (topLevelValue != null || (!fieldKey.contains(".") && !fieldKey.contains("["))) {
         bsonDocument.remove(fieldKey);
       } else {
-        removeNestedFieldEntry(fieldKey, bsonDocument);
-      }
-    }
-  }
-
-  private static void removeNestedFieldEntry(String fieldKey, BsonDocument bsonDocument) {
-    if (fieldKey.contains(".") || fieldKey.contains("[")) {
-      StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          removeNestedField(value, i, fieldKey);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          removeNestedField(value, i, fieldKey);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        removeNestedField(bsonDocument, 0, fieldKey);
       }
     }
   }
@@ -491,10 +446,30 @@ public class UpdateExpressionUtils {
         return;
       }
       removeNestedField(nestedValue, curIdx, fieldKey);
-      return;
+    } else {
+      StringBuilder sb = new StringBuilder();
+      for (int i = idx; i < fieldKey.length(); i++) {
+        if (fieldKey.charAt(i) == '.') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
+            throw new RuntimeException("Map does not contain key: " + sb);
+          }
+          removeNestedField(topFieldValue, i, fieldKey);
+          return;
+        } else if (fieldKey.charAt(i) == '[') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
+            throw new RuntimeException("Map does not contain key: " + sb);
+          }
+          removeNestedField(topFieldValue, i, fieldKey);
+          return;
+        } else {
+          sb.append(fieldKey.charAt(i));
+        }
+      }
     }
-    LOGGER.error(
-        "This is erroneous case. updateNestedfield should not be used for " + "top level fields");
   }
 
   /**
@@ -516,35 +491,7 @@ public class UpdateExpressionUtils {
       if (topLevelValue != null || (!fieldKey.contains(".") && !fieldKey.contains("["))) {
         bsonDocument.put(fieldKey, newVal);
       } else {
-        updateNestedFieldEntry(fieldKey, bsonDocument, newVal);
-      }
-    }
-  }
-
-  private static void updateNestedFieldEntry(final String fieldKey, final BsonDocument bsonDocument,
-                                             final BsonValue newVal) {
-    if (fieldKey.contains(".") || fieldKey.contains("[")) {
-      StringBuilder sb = new StringBuilder();
-      for (int i = 0; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
-          }
-          updateNestedField(value, i, fieldKey, newVal);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue value = bsonDocument.get(sb.toString());
-          if (value == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
-          }
-          updateNestedField(value, i, fieldKey, newVal);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        updateNestedField(bsonDocument, 0, fieldKey, newVal);
       }
     }
   }
@@ -604,10 +551,30 @@ public class UpdateExpressionUtils {
         return;
       }
       updateNestedField(nestedValue, curIdx, fieldKey, newVal);
-      return;
+    } else {
+      StringBuilder sb = new StringBuilder();
+      for (int i = idx; i < fieldKey.length(); i++) {
+        if (fieldKey.charAt(i) == '.') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
+            throw new RuntimeException("Document does not contain key: " + sb);
+          }
+          updateNestedField(topFieldValue, i, fieldKey, newVal);
+          return;
+        } else if (fieldKey.charAt(i) == '[') {
+          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
+          if (topFieldValue == null) {
+            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
+            throw new RuntimeException("Document does not contain key: " + sb);
+          }
+          updateNestedField(topFieldValue, i, fieldKey, newVal);
+          return;
+        } else {
+          sb.append(fieldKey.charAt(i));
+        }
+      }
     }
-    LOGGER.error(
-        "This is erroneous case. updateNestedfield should not be used for " + "top level fields");
   }
 
   private static BsonValue getNewFieldValue(final BsonValue curValue,
