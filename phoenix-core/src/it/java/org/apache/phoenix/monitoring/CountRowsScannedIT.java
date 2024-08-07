@@ -26,9 +26,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
-import java.util.Properties;
 
-import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
@@ -39,7 +38,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsEnabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class CountRowsScannedIT extends BaseTest {
 
     @BeforeClass
