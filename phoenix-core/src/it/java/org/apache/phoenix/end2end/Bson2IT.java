@@ -170,7 +170,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       //      ]
       //    }
       //  },
-      //  "$DELETE": {
+      //  "$DELETE_FROM_SET": {
       //    "PictureBinarySet": {
       //      "$set": [
       //        {
@@ -279,7 +279,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
               "      ]\n" +
               "    }\n" +
               "  },\n" +
-              "  \"$DELETE\": {\n" +
+              "  \"$DELETE_FROM_SET\": {\n" +
               "    \"PictureBinarySet\": {\n" +
               "      \"$set\": [\n" +
               "        {\n" +

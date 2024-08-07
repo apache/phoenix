@@ -54,6 +54,40 @@ public class UpdateExpressionUtils {
 
   /**
    * Updates the given document based on the update expression.
+   * <p/>
+   * {
+   *    "$SET": { &lt;field1&gt;: &lt;value1>, &lt;field2&gt;: &lt;value2&gt;, .... },
+   *    "$UNSET": { &lt;field1&gt;: null, &lt;field2&gt;: null, ... },
+   *    "$ADD": { &lt;field1&gt;: &lt;value1&gt;, &lt;field2&gt;: &lt;value2&gt;, .... },
+   *    "$DELETE_FROM_SET": { &lt;field1&gt;: &lt;value1&gt;, &lt;field2&gt;: &lt;value2&gt;, .... }
+   * }
+   * <p/>
+   * "$SET": Use the SET action in an update expression to add one or more fields to a BSON
+   * Document. If any of these fields already exists, they are overwritten by the new values.
+   * To perform multiple SET actions, provide multiple fields key-value entries within nested
+   * document under $SET field key.
+   * "$UNSET": Use the REMOVE action in an update expression to remove one or more fields from a
+   * BSON Document. To perform multiple REMOVE actions, provide multiple field key-value entries
+   * within nested document under $UNSET field key.
+   * "$ADD": Use the ADD action in an update expression to add a new field and its values to a
+   * BSON document. If the field already exists, the behavior of ADD depends on the field's
+   * data type:
+   * <p/>
+   * 1. If the field is a number, and the value you are adding is also a number, the value is
+   * mathematically added to the existing field.
+   * <p/>
+   * 2. If the field is a set, and the value you are adding is also a set, the value is appended
+   * to the existing set.
+   * <p/>
+   * "$DELETE_FROM_SET": Use the DELETE action in an update expression to remove one or more
+   * elements from a set. To perform multiple DELETE actions, provide multiple field key-value
+   * entries within nested document under $DELETE_FROM_SET field key.
+   * Definition of path and subset in the context of the expression:
+   * <p/>
+   * 1. The path element is the document path to an field. The field must be a set data type.
+   * 2. The subset is one or more elements that you want to delete from the given path. Subset
+   * must be of set type.
+   * <p/>
    *
    * @param updateExpression Update Expression as a document.
    * @param bsonDocument Document contents to be updated.
@@ -75,8 +109,9 @@ public class UpdateExpressionUtils {
       executeAddExpression((BsonDocument) updateExpression.get("$ADD"), bsonDocument);
     }
 
-    if (updateExpression.containsKey("$DELETE")) {
-      executeDeleteExpression((BsonDocument) updateExpression.get("$DELETE"), bsonDocument);
+    if (updateExpression.containsKey("$DELETE_FROM_SET")) {
+      executeDeleteExpression((BsonDocument) updateExpression.get("$DELETE_FROM_SET"),
+          bsonDocument);
     }
   }
 
@@ -84,6 +119,11 @@ public class UpdateExpressionUtils {
    * Update the given document by performing DELETE operation. This operation is applicable
    * only on Set data structure. The document is updated by removing the given set of elements from
    * the given set of elements.
+   * Let's say if the document field is of string set data type, and the elements are:
+   * {"yellow", "green", "red", "blue"}. The elements to be removed from the set are provided
+   * as {"blue", "yellow"} with the delete expression. The operation is expected to update the
+   * existing field by removing "blue" and "yellow" from the given set and the resultant set is
+   * expected to contain: {"green", "red"}.
    *
    * @param deleteExpr Delete Expression Document with key-value pairs. Key represents field in the
    * given document, on which operation is to be performed. Value represents set of elements to be
@@ -99,6 +139,7 @@ public class UpdateExpressionUtils {
       if (!isBsonSet(newVal)) {
         throw new RuntimeException("Type of new value to be removed should be sets only");
       }
+      // If the top level field exists, perform the operation here and return.
       if (topLevelValue != null) {
         BsonValue value = modifyFieldValueByDelete(topLevelValue, newVal);
         if (value == null) {
@@ -109,13 +150,41 @@ public class UpdateExpressionUtils {
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         LOGGER.info("Nothing to be removed as field with key {} does not exist", fieldKey);
       } else {
+        // If the top level field does not exist and the field key contains "." or "[]" notations
+        // for nested document or nested array, use the self-recursive function to go through
+        // the document tree, one level at a time.
         updateNestedFieldByDelete(bsonDocument, 0, fieldKey, newVal);
       }
     }
   }
 
-  private static void updateNestedFieldByDelete(final BsonValue value, final int idx,
-                                                final String fieldKey, final BsonValue newVal) {
+  /**
+   * Update the nested field with $DELETE_FROM_SET operation. The field key is expected to contain
+   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
+   * keeps recursively calling itself until it reaches the leaf node in the given tree.
+   * For instance, for field key "category.subcategories.brands[5]", first the function
+   * evaluates and retrieves the value for top-level field "category". The value of "category"
+   * is expected to be nested document. First function call has value as full document, it retries
+   * nested document under "category" field and calls the function recursively with index value
+   * same as index value of first "." (dot) in the field key. For field key
+   * "category.subcategories.brands[5]", the index value would be 8. The second function call
+   * retrieves value of field key "subcategories", which is expected to be nested document.
+   * The third function call gets this nested document as BsonValue and index value as 22 as the
+   * field key has second "." (dot) notation at index 22. The third function call searches for
+   * field key "brands" and expects its value as nested array. The forth function call gets
+   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
+   * at index 29. The forth function call retrieves value of nested array element at index 5.
+   * As the function is at leaf node in the tree, now it performs the $DELETE_FROM_SET operation
+   * as per the $DELETE_FROM_SET semantics.
+   *
+   * @param value Bson value at the given level of the document hierarchy.
+   * @param idx The index value for the given field key. The function is expected to retrieve
+   * the value of the nested document or array at the given level of the tree.
+   * @param fieldKey The full field key.
+   * @param setValuesToDelete The set values that need to be removed from the existing set.
+   */
+  private static void updateNestedFieldByDelete(final BsonValue value,
+      final int idx, final String fieldKey, final BsonValue setValuesToDelete) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
       if (value == null || !value.isDocument()) {
@@ -133,7 +202,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Should have found nested document for {}", sb);
             return;
           }
-          updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, newVal);
+          updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, setValuesToDelete);
           return;
         } else {
           sb.append(fieldKey.charAt(curIdx));
@@ -141,7 +210,7 @@ public class UpdateExpressionUtils {
       }
       BsonValue currentValue = nestedMap.get(sb.toString());
       if (currentValue != null) {
-        BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
+        BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, setValuesToDelete);
         if (modifiedVal == null) {
           nestedMap.remove(sb.toString());
         } else {
@@ -169,7 +238,7 @@ public class UpdateExpressionUtils {
         if (arrayIdx < nestedList.size()) {
           BsonValue currentValue = nestedList.get(arrayIdx);
           if (currentValue != null) {
-            BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
+            BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, setValuesToDelete);
             if (modifiedVal == null) {
               nestedList.remove(arrayIdx);
             } else {
@@ -187,7 +256,7 @@ public class UpdateExpressionUtils {
         LOGGER.error("Should have found nested list for index {}", arrayIdx);
         return;
       }
-      updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, newVal);
+      updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, setValuesToDelete);
     } else {
       StringBuilder sb = new StringBuilder();
       for (int i = idx; i < fieldKey.length(); i++) {
@@ -197,7 +266,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
             throw new RuntimeException("Map does not contain key: " + sb);
           }
-          updateNestedFieldByDelete(topFieldValue, i, fieldKey, newVal);
+          updateNestedFieldByDelete(topFieldValue, i, fieldKey, setValuesToDelete);
           return;
         } else if (fieldKey.charAt(i) == '[') {
           BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
@@ -205,7 +274,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
             throw new RuntimeException("Map does not contain key: " + sb);
           }
-          updateNestedFieldByDelete(topFieldValue, i, fieldKey, newVal);
+          updateNestedFieldByDelete(topFieldValue, i, fieldKey, setValuesToDelete);
           return;
         } else {
           sb.append(fieldKey.charAt(i));
@@ -214,12 +283,23 @@ public class UpdateExpressionUtils {
     }
   }
 
-  private static BsonValue modifyFieldValueByDelete(BsonValue currentValue, BsonValue newVal) {
-    if (areBsonSetOfSameType(currentValue, newVal)) {
+  /**
+   * Update the existing set by removing the set values that are present in
+   * {@code setValuesToDelete}. For this operation to be successful, both {@code currentValue} and
+   * {@code setValuesToDelete} must be of same set data type. For instance, both must be either
+   * set of string, set of numbers or set of binary values.
+   *
+   * @param currentValue The value that needs to be updated by performing deletion operation.
+   * @param setValuesToDelete The set values that need to be deleted from the currentValue set.
+   * @return Updated set after performing the set difference operation.
+   */
+  private static BsonValue modifyFieldValueByDelete(final BsonValue currentValue,
+      final BsonValue setValuesToDelete) {
+    if (areBsonSetOfSameType(currentValue, setValuesToDelete)) {
       Set<BsonValue> set1 =
           new HashSet<>(((BsonArray) ((BsonDocument) currentValue).get("$set")).getValues());
       Set<BsonValue> set2 =
-          new HashSet<>(((BsonArray) ((BsonDocument) newVal).get("$set")).getValues());
+          new HashSet<>(((BsonArray) ((BsonDocument) setValuesToDelete).get("$set")).getValues());
       set1.removeAll(set2);
       if (set1.isEmpty()) {
         return null;
@@ -230,7 +310,7 @@ public class UpdateExpressionUtils {
     }
     throw new RuntimeException(
         "Data type for current value " + currentValue + " is not matching with new value "
-            + newVal);
+            + setValuesToDelete);
   }
 
   /**
@@ -239,6 +319,16 @@ public class UpdateExpressionUtils {
    * Decimal. If the field is of type set, the document is updated by adding the given set of
    * elements to the given set of elements. If the field is of type number, the document is updated
    * by adding the numerical value to the given number field value.
+   * </p>
+   * Let's say if the document field is of numeric data type with value "234.5" and the value
+   * to be added is "10", the resultant value is expected to be "244.5". Adding negative value
+   * would result in subtract operation. For example, adding "-10" would result in "224.5".
+   * </p>
+   * On the other hand, if the document field is of string set data type, and the elements are:
+   * {"yellow", "green", "red"}. The elements to be added to the set are provided
+   * as {"blue", "yellow"} with the add expression. The operation is expected to update the
+   * existing field by removing adding unique value "blue" and the resultant set is
+   * expected to contain: {"yellow", "green", "red", "blue"}.
    *
    * @param addExpr Add Expression Document
    * @param bsonDocument Document contents to be updated.
@@ -253,18 +343,49 @@ public class UpdateExpressionUtils {
         throw new RuntimeException(
             "Type of new value to be updated should be either number or sets only");
       }
+      // If the top level field exists, perform the operation here and return.
       if (topLevelValue != null) {
         bsonDocument.put(fieldKey, modifyFieldValueByAdd(topLevelValue, newVal));
       } else if (!fieldKey.contains(".") && !fieldKey.contains("[")) {
         bsonDocument.put(fieldKey, newVal);
       } else {
+        // If the top level field does not exist and the field key contains "." or "[]" notations
+        // for nested document or nested array, use the self-recursive function to go through
+        // the document tree, one level at a time.
         updateNestedFieldByAdd(bsonDocument, 0, fieldKey, newVal);
       }
     }
   }
 
-  private static void updateNestedFieldByAdd(BsonValue value, final int idx, final String fieldKey,
-                                             final BsonValue newVal) {
+  /**
+   * Update the nested field with $ADD operation. The field key is expected to contain
+   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
+   * keeps recursively calling itself until it reaches the leaf node in the given tree.
+   * For instance, for field key "category.subcategories.brands[5]", first the function
+   * evaluates and retrieves the value for top-level field "category". The value of "category"
+   * is expected to be nested document. First function call has value as full document, it retries
+   * nested document under "category" field and calls the function recursively with index value
+   * same as index value of first "." (dot) in the field key. For field key
+   * "category.subcategories.brands[5]", the index value would be 8. The second function call
+   * retrieves value of field key "subcategories", which is expected to be nested document.
+   * The third function call gets this nested document as BsonValue and index value as 22 as the
+   * field key has second "." (dot) notation at index 22. The third function call searches for
+   * field key "brands" and expects its value as nested array. The forth function call gets
+   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
+   * at index 29. The forth function call retrieves value of nested array element at index 5.
+   * As the function is at leaf node in the tree, now it performs the $ADD operation as per the
+   * $ADD semantics.
+   *
+   * @param value Bson value at the given level of the document hierarchy.
+   * @param idx The index value for the given field key. The function is expected to retrieve
+   * the value of the nested document or array at the given level of the tree.
+   * @param fieldKey The full field key.
+   * @param newVal The set values that need to be removed from the existing set.
+   */
+  private static void updateNestedFieldByAdd(final BsonValue value,
+      final int idx,
+      final String fieldKey,
+      final BsonValue newVal) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
       if (value == null || !value.isDocument()) {
@@ -354,7 +475,20 @@ public class UpdateExpressionUtils {
     }
   }
 
-  private static BsonValue modifyFieldValueByAdd(BsonValue currentValue, BsonValue newVal) {
+  /**
+   * Update the existing value {@code currentValue} depending on its data type. If the data type of
+   * {@code currentValue} is numeric, add numeric value represented by {@code newVal}
+   * to it. If the data type of {@code currentValue} is set, add set values represented by
+   * {@code newVal} to it. For this operation to be successful, both {@code currentValue} and
+   * {@code newVal} must be of same set data type. For instance, both must be either
+   * set of string, set of numbers or set of binary values, or both must be of number data type.
+   *
+   * @param currentValue The value that needs to be updated by performing add operation.
+   * @param newVal The numeric or set values that need to be added to the currentValue.
+   * @return Updated value after performing the add operation.
+   */
+  private static BsonValue modifyFieldValueByAdd(final BsonValue currentValue,
+      final BsonValue newVal) {
     if ((currentValue.isNumber() || currentValue.isDecimal128()) && (newVal.isNumber()
         || newVal.isDecimal128())) {
       Number num1 = getNumberFromBsonNumber((BsonNumber) currentValue);
@@ -385,17 +519,45 @@ public class UpdateExpressionUtils {
    */
   private static void executeRemoveExpression(final BsonDocument removeExpr,
       final BsonDocument bsonDocument) {
-    for (Map.Entry<String, BsonValue> removefield : removeExpr.entrySet()) {
-      String fieldKey = removefield.getKey();
+    for (Map.Entry<String, BsonValue> removeField : removeExpr.entrySet()) {
+      String fieldKey = removeField.getKey();
       BsonValue topLevelValue = bsonDocument.get(fieldKey);
+      // If the top level field exists, perform the operation here and return.
       if (topLevelValue != null || (!fieldKey.contains(".") && !fieldKey.contains("["))) {
         bsonDocument.remove(fieldKey);
       } else {
+        // If the top level field does not exist and the field key contains "." or "[]" notations
+        // for nested document or nested array, use the self-recursive function to go through
+        // the document tree, one level at a time.
         removeNestedField(bsonDocument, 0, fieldKey);
       }
     }
   }
 
+  /**
+   * Update the nested field with $UNSET operation. The field key is expected to contain
+   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
+   * keeps recursively calling itself until it reaches the leaf node in the given tree.
+   * For instance, for field key "category.subcategories.brands[5]", first the function
+   * evaluates and retrieves the value for top-level field "category". The value of "category"
+   * is expected to be nested document. First function call has value as full document, it retries
+   * nested document under "category" field and calls the function recursively with index value
+   * same as index value of first "." (dot) in the field key. For field key
+   * "category.subcategories.brands[5]", the index value would be 8. The second function call
+   * retrieves value of field key "subcategories", which is expected to be nested document.
+   * The third function call gets this nested document as BsonValue and index value as 22 as the
+   * field key has second "." (dot) notation at index 22. The third function call searches for
+   * field key "brands" and expects its value as nested array. The forth function call gets
+   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
+   * at index 29. The forth function call retrieves value of nested array element at index 5.
+   * As the function is at leaf node in the tree, now it performs the $UNSET operation as per the
+   * $UNSET semantics by removing the key-value entry for the field key.
+   *
+   * @param value Bson value at the given level of the document hierarchy.
+   * @param idx The index value for the given field key. The function is expected to retrieve
+   * the value of the nested document or array at the given level of the tree.
+   * @param fieldKey The full field key.
+   */
   private static void removeNestedField(BsonValue value, int idx, String fieldKey) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
@@ -488,14 +650,44 @@ public class UpdateExpressionUtils {
       BsonValue fieldVal = setEntry.getValue();
       BsonValue topLevelValue = bsonDocument.get(fieldKey);
       BsonValue newVal = getNewFieldValue(fieldVal, bsonDocument);
+      // If the top level field exists, perform the operation here and return.
       if (topLevelValue != null || (!fieldKey.contains(".") && !fieldKey.contains("["))) {
         bsonDocument.put(fieldKey, newVal);
       } else {
+        // If the top level field does not exist and the field key contains "." or "[]" notations
+        // for nested document or nested array, use the self-recursive function to go through
+        // the document tree, one level at a time.
         updateNestedField(bsonDocument, 0, fieldKey, newVal);
       }
     }
   }
 
+  /**
+   * Update the nested field with $SET operation. The field key is expected to contain
+   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
+   * keeps recursively calling itself until it reaches the leaf node in the given tree.
+   * For instance, for field key "category.subcategories.brands[5]", first the function
+   * evaluates and retrieves the value for top-level field "category". The value of "category"
+   * is expected to be nested document. First function call has value as full document, it retries
+   * nested document under "category" field and calls the function recursively with index value
+   * same as index value of first "." (dot) in the field key. For field key
+   * "category.subcategories.brands[5]", the index value would be 8. The second function call
+   * retrieves value of field key "subcategories", which is expected to be nested document.
+   * The third function call gets this nested document as BsonValue and index value as 22 as the
+   * field key has second "." (dot) notation at index 22. The third function call searches for
+   * field key "brands" and expects its value as nested array. The forth function call gets
+   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
+   * at index 29. The forth function call retrieves value of nested array element at index 5.
+   * As the function is at leaf node in the tree, now it performs the $SET operation as per the
+   * $SET semantics.
+   *
+   * @param value Bson value at the given level of the document hierarchy.
+   * @param idx The index value for the given field key. The function is expected to retrieve
+   * the value of the nested document or array at the given level of the tree.
+   * @param fieldKey The full field key.
+   * @param newVal The new Bson value to be added to the given nested document or a particular
+   * index of the given nested array.
+   */
   private static void updateNestedField(final BsonValue value, final int idx,
                                         final String fieldKey, final BsonValue newVal) {
     int curIdx = idx;

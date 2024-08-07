@@ -47,7 +47,7 @@ public class DocumentComparisonExpressionUtils {
   private static final String GREATER_THAN_OP = "$gt";
   private static final String GREATER_THAN_OR_EQUALS_OP = "$gte";
 
-  public static boolean isConditionExpressionMatching(final BsonDocument document,
+  public static boolean evaluateConditionExpression(final BsonDocument document,
       final BsonDocument conditionExpression) {
     if (document == null || conditionExpression == null) {
       LOGGER.warn(

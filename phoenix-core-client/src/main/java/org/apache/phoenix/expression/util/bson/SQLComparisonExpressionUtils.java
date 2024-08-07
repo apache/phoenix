@@ -103,7 +103,7 @@ public class SQLComparisonExpressionUtils {
     this.comparisonValuesDocument = comparisonValuesDocument;
   }
 
-  public boolean isConditionExpressionMatching(final String conditionExpression) {
+  public boolean evaluateConditionExpression(final String conditionExpression) {
     String expression = convertExpression(conditionExpression);
     LOGGER.trace("Evaluating Expression: {}", expression);
     try {

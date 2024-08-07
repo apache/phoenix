@@ -91,58 +91,58 @@ public class ComparisonExpressionUtilsTest {
     SQLComparisonExpressionUtils SQLComparisonExpressionUtils =
         new SQLComparisonExpressionUtils(rawBsonDocument, compareValues);
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "(field_exists(Id) OR field_not_exists(Title))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "((field_not_exists(Id) AND field_not_exists(Title1)) OR field_exists(ISBN2))"
             + " OR ((Id <> #Title) AND ((InPublication = InPublication) OR ((ISBN = :ISBN)"
             + " AND (Title = #Title))))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "((field_exists(NestedMap1.ISBN) AND field_not_exists(NestedMap1.NList1[3])))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedMap1.Id = $Id AND (NestedMap1.InPublication = InPublication)"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "((NestedMap1.Id = $Id) AND ((NestedMap1.InPublication[0] = InPublication) OR "
             + "((ISBN[0] = :ISBN) AND (Title = #Title))) OR "
             + "(NestedMap1.NList1[0] = #NMap1_NList1))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "((field_not_exists(Id) AND field_not_exists(Title1)) OR field_exists(ISBN2))"
             + " OR ((NestedMap1.Id = $Id) AND ((NestedMap1.InPublication = InPublication) OR "
             + "((ISBN = :ISBN) AND (Title = #Title))))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] <= $NestedList1_485 AND NestedList1[1] > #NestedList1_1 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedList1[2][1].Id < $Id1 AND IdS < $Ids1 AND Id2 > $Id2 AND NestedMap1.NList1[2] > #NestedMap1_NList1_3"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] <= $NestedList1_485 AND NestedList1[1] >= #NestedList1_1 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedList1[2][1].Id <= $Id1 AND IdS <= $Ids1 AND Id2 >= $Id2 AND NestedMap1.NList1[2] >= #NestedMap1_NList1_3"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] < #NestedList1_10 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedList1[2][1].Id > $Id10 AND IdS > $Ids10 AND Id2 < $Id20 AND NestedMap1.NList1[2] < $NestedMap1_NList1_30"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] <= #NestedList1_10 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedList1[2][1].Id >= $Id10 AND IdS >= $Ids10 AND Id2 <= $Id20 AND NestedMap1.NList1[2] <= $NestedMap1_NList1_30 AND "
             + "NestedMap1.NList1[2] <> $NestedMap1_NList1_30"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] <= #NestedList1_10 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedList1[2][1].Id >= $Id10 AND IdS >= $Ids10 AND Id2 <= $Id20 AND NestedMap1.NList1[2] <= $NestedMap1_NList1_30 AND "
             + "(NestedMap1.NList1[2] = $NestedMap1_NList1_30 OR NestedList1[0] BETWEEN $NestedList1_4850 AND $Id2)"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] <= #NestedList1_10 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedMap1.NList1[0] IN ($Id, $Id1, $Id20, #NMap1_NList1) AND NestedMap1.NList1[2] <= $NestedMap1_NList1_30 AND "
             + "(NestedMap1.NList1[2] = $NestedMap1_NList1_30 OR NestedList1[0] BETWEEN $NestedList1_4850 AND $Id2)"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
         "NestedList1[0] >= $NestedList1_4850 AND NestedList1[1] <= #NestedList1_10 AND NestedList1[2][0] >= #NestedList1_xyz0123 AND "
             + "NestedMap1.NList1[0] IN ($Id,  $Id1, $Id20, #NMap1_NList1) AND NestedMap1.NList1[2] <= $NestedMap1_NList1_30 AND "
             + "(NestedMap1.NList1[2] = $NestedMap1_NList1_30 OR NestedList1[0] BETWEEN $NestedList1_4850 AND $Id2)"
@@ -194,35 +194,35 @@ public class ComparisonExpressionUtilsTest {
     SQLComparisonExpressionUtils SQLComparisonExpressionUtils =
             new SQLComparisonExpressionUtils(rawBsonDocument, compareValues);
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "(exists('Id') || !exists('Title'))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "((!exists('Id') && !exists('Title1')) || exists('ISBN2')) || " +
                     "((!isEquals('Id', '#Title'))" +
                     " && ((isEquals('InPublication', 'InPublication'))" +
                     " || ((isEquals('ISBN', ':ISBN')) && (isEquals('Title', '#Title')))))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "((exists('NestedMap1.ISBN') && !exists('NestedMap1.NList1[3]')))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "isEquals('NestedMap1.Id', '$Id')" +
                     " && (isEquals('NestedMap1.InPublication', 'InPublication'))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "((isEquals('NestedMap1.Id', '$Id'))" +
                     " && ((isEquals('NestedMap1.InPublication[0]', 'InPublication'))" +
                     " || ((isEquals('ISBN[0]', ':ISBN')) && (isEquals('Title', '#Title'))))" +
                     " || (isEquals('NestedMap1.NList1[0]', '#NMap1_NList1')))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "((!exists('Id') && !exists('Title1')) || exists('ISBN2')) ||" +
                     " ((isEquals('NestedMap1.Id', '$Id'))" +
                     " && ((isEquals('NestedMap1.InPublication', 'InPublication'))" +
                     " || ((isEquals('ISBN', ':ISBN')) && (isEquals('Title', '#Title')))))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "lessThanOrEquals('NestedList1[0]', '$NestedList1_485')" +
                     " && greaterThan('NestedList1[1]', '#NestedList1_1')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -230,7 +230,7 @@ public class ComparisonExpressionUtilsTest {
                     " && greaterThan('Id2', '$Id2')" +
                     " && greaterThan('NestedMap1.NList1[2]', '#NestedMap1_NList1_3')"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "lessThanOrEquals('NestedList1[0]', '$NestedList1_485')" +
                     " && greaterThanOrEquals('NestedList1[1]', '#NestedList1_1')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -239,7 +239,7 @@ public class ComparisonExpressionUtilsTest {
                     " && greaterThanOrEquals('Id2', '$Id2')" +
                     " && greaterThanOrEquals('NestedMap1.NList1[2]', '#NestedMap1_NList1_3')"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
                     " && lessThan('NestedList1[1]', '#NestedList1_10')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -247,7 +247,7 @@ public class ComparisonExpressionUtilsTest {
                     " && greaterThan('IdS', '$Ids10') && lessThan('Id2', '$Id20')" +
                     " && lessThan('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
                     " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -256,7 +256,7 @@ public class ComparisonExpressionUtilsTest {
                     " && lessThanOrEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
                     " && !isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
                     " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -267,7 +267,7 @@ public class ComparisonExpressionUtilsTest {
                     " && (isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
                     " || between('NestedList1[0]', '$NestedList1_4850', '$Id2'))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
                     " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -276,7 +276,7 @@ public class ComparisonExpressionUtilsTest {
                     " && (isEquals('NestedMap1.NList1[2]', '$NestedMap1_NList1_30')" +
                     " || between('NestedList1[0]', '$NestedList1_4850', '$Id2'))"));
 
-    assertTrue(SQLComparisonExpressionUtils.isConditionExpressionMatching(
+    assertTrue(SQLComparisonExpressionUtils.evaluateConditionExpression(
             "greaterThanOrEquals('NestedList1[0]', '$NestedList1_4850')" +
                     " && lessThanOrEquals('NestedList1[1]', '#NestedList1_10')" +
                     " && greaterThanOrEquals('NestedList1[2][0]', '#NestedList1_xyz0123')" +
@@ -317,7 +317,7 @@ public class ComparisonExpressionUtilsTest {
     //  ]
     //}
 
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -425,7 +425,7 @@ public class ComparisonExpressionUtilsTest {
     //  ]
     //}
 
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -452,7 +452,7 @@ public class ComparisonExpressionUtilsTest {
     //  ]
     //}
 
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -478,7 +478,7 @@ public class ComparisonExpressionUtilsTest {
     //    }
     //  ]
     //}
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -558,7 +558,7 @@ public class ComparisonExpressionUtilsTest {
     //    }
     //  ]
     //}
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -671,7 +671,7 @@ public class ComparisonExpressionUtilsTest {
     //  ]
     //}
 
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -739,7 +739,7 @@ public class ComparisonExpressionUtilsTest {
     //  ]
     //}
 
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -807,7 +807,7 @@ public class ComparisonExpressionUtilsTest {
     //  ]
     //}
 
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -875,7 +875,7 @@ public class ComparisonExpressionUtilsTest {
     //    }
     //  ]
     //}
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
     expressionDocument = new BsonDocument();
@@ -955,7 +955,7 @@ public class ComparisonExpressionUtilsTest {
     //    }
     //  ]
     //}
-    assertTrue(DocumentComparisonExpressionUtils.isConditionExpressionMatching(rawBsonDocument,
+    assertTrue(DocumentComparisonExpressionUtils.evaluateConditionExpression(rawBsonDocument,
         expressionDocument));
 
   }

@@ -179,24 +179,6 @@ public class Bson1IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       conditionExpression =
-          "(field_exists(Id) OR field_exists(attr_3)) ANDERROR";
-
-      conditionDoc = new BsonDocument();
-      conditionDoc.put("$EXPR", new BsonString(conditionExpression));
-      conditionDoc.put("$VAL", compareValuesDocument);
-
-      query = "SELECT * FROM " + tableName + " WHERE BSON_CONDITION_EXPRESSION(COL, '"
-          + conditionDoc.toJson() + "')";
-      rs = conn.createStatement().executeQuery(query);
-
-      try {
-        rs.next();
-        throw new RuntimeException("expression evaluation should have failed");
-      } catch (Exception e) {
-        assertTrue(e.getMessage().contains("Expression could not be evaluated"));
-      }
-
-      conditionExpression =
           "NestedList1[0] <= :NestedList1_485 AND NestedList1[2][0] >= :NestedList1_xyz0123 "
                   + "AND NestedList1[2][1].Id < :Id1 AND IdS < :Ids1 AND Id2 > :Id2";
 

@@ -148,7 +148,7 @@ public class UpdateExpressionUtilsTest {
             "      ]\n" +
             "    }\n" +
             "  },\n" +
-            "  \"$DELETE\": {\n" +
+            "  \"$DELETE_FROM_SET\": {\n" +
             "    \"PictureBinarySet\": {\n" +
             "      \"$set\": [\n" +
             "        {\n" +
@@ -257,7 +257,7 @@ public class UpdateExpressionUtilsTest {
     //      ]
     //    }
     //  },
-    //  "$DELETE": {
+    //  "$DELETE_FROM_SET": {
     //    "PictureBinarySet": {
     //      "$set": [
     //        {
@@ -450,7 +450,7 @@ public class UpdateExpressionUtilsTest {
               + " does not include key value pairs separated by space");
         }
       }
-      bsonDocument.put("$DELETE", delBsonDoc);
+      bsonDocument.put("$DELETE_FROM_SET", delBsonDoc);
     }
     return bsonDocument;
   }

@@ -107,7 +107,7 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
                 SQLComparisonExpressionUtils sqlComparisonExpressionUtils =
                         new SQLComparisonExpressionUtils(rawBsonDocument,
                                 (BsonDocument) exprValues);
-                boolean result = sqlComparisonExpressionUtils.isConditionExpressionMatching(
+                boolean result = sqlComparisonExpressionUtils.evaluateConditionExpression(
                         ((BsonString) conditionExp).getValue());
                 ptr.set(PBoolean.INSTANCE.toBytes(result));
                 return true;
@@ -115,7 +115,7 @@ public class BsonConditionExpressionFunction extends ScalarFunction {
             throw new IllegalArgumentException(
                     "Condition Expression should contain valid expression and values");
         } else {
-            boolean result = DocumentComparisonExpressionUtils.isConditionExpressionMatching(
+            boolean result = DocumentComparisonExpressionUtils.evaluateConditionExpression(
                     rawBsonDocument, conditionExpressionBsonDoc);
             ptr.set(PBoolean.INSTANCE.toBytes(result));
             return true;

@@ -249,7 +249,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       //      ]
       //    }
       //  },
-      //  "$DELETE": {
+      //  "$DELETE_FROM_SET": {
       //    "new_samples": {
       //      "$set": [
       //        {
@@ -347,7 +347,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
                                               new BsonBinary(Bytes.toBytes("Sample13")),
                                               new BsonBinary(Bytes.toBytes("Sample14"))
                                       )))))
-              .append("$DELETE", new BsonDocument()
+              .append("$DELETE_FROM_SET", new BsonDocument()
                       .append("new_samples",
                               new BsonDocument().append("$set",
                                       new BsonArray(Arrays.asList(
@@ -803,7 +803,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       //      ]
       //    }
       //  },
-      //  "$DELETE": {
+      //  "$DELETE_FROM_SET": {
       //    "new_samples": {
       //      "$set": [
       //        {
@@ -901,7 +901,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
                                               new BsonBinary(Bytes.toBytes("Sample13")),
                                               new BsonBinary(Bytes.toBytes("Sample14"))
                                       )))))
-              .append("$DELETE", new BsonDocument()
+              .append("$DELETE_FROM_SET", new BsonDocument()
                       .append("new_samples",
                               new BsonDocument().append("$set",
                                       new BsonArray(Arrays.asList(
@@ -1221,7 +1221,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       //      ]
       //    }
       //  },
-      //  "$DELETE": {
+      //  "$DELETE_FROM_SET": {
       //    "new_samples": {
       //      "$set": [
       //        {
@@ -1319,7 +1319,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
                                               new BsonBinary(Bytes.toBytes("Sample13")),
                                               new BsonBinary(Bytes.toBytes("Sample14"))
                                       )))))
-              .append("$DELETE", new BsonDocument()
+              .append("$DELETE_FROM_SET", new BsonDocument()
                       .append("new_samples",
                               new BsonDocument().append("$set",
                                       new BsonArray(Arrays.asList(
@@ -1607,7 +1607,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
       //      ]
       //    }
       //  },
-      //  "$DELETE": {
+      //  "$DELETE_FROM_SET": {
       //    "new_samples": {
       //      "$set": [
       //        {
@@ -1705,7 +1705,7 @@ public class Bson3IT extends ParallelStatsDisabledIT {
                                               new BsonBinary(Bytes.toBytes("Sample13")),
                                               new BsonBinary(Bytes.toBytes("Sample14"))
                                       )))))
-              .append("$DELETE", new BsonDocument()
+              .append("$DELETE_FROM_SET", new BsonDocument()
                       .append("new_samples",
                               new BsonDocument().append("$set",
                                       new BsonArray(Arrays.asList(
