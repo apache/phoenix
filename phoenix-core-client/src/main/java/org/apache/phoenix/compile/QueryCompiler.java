@@ -139,11 +139,16 @@ public class QueryCompiler {
         this(statement, select, resolver, new BindManager(statement.getParameters()), targetColumns, parallelIteratorFactory, sequenceManager, projectTuples, optimizeSubquery, dataPlans, null);
     }
 
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, BindManager bindManager, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans) throws SQLException {
+        this(statement, select, resolver, bindManager, targetColumns, parallelIteratorFactory, sequenceManager, projectTuples, optimizeSubquery, dataPlans, null);
+    }
+
     public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans, StatementContext parentContext) throws SQLException {
         this(statement, select, resolver, new BindManager(statement.getParameters()), targetColumns, parallelIteratorFactory, sequenceManager, projectTuples, optimizeSubquery, dataPlans, parentContext);
     }
 
-    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, BindManager bindManager, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans, StatementContext parentContext) throws SQLException {   this.statement = statement;
+    public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver, BindManager bindManager, List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory, SequenceManager sequenceManager, boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans, StatementContext parentContext) throws SQLException {
+        this.statement = statement;
         this.select = select;
         this.resolver = resolver;
         this.bindManager = bindManager;
