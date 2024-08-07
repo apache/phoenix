@@ -145,6 +145,75 @@ public class DocumentComparisonExpressionUtils {
   }
 
   /**
+   * Get the document style comparison operator based on the Comparison operator enum value
+   * used to differentiate all comparisons.
+   *
+   * @param compareOp The comparison operator enum.
+   * @return The document style comparison operator constant value.
+   */
+  private static String getCompareOperator(
+      final CommonComparisonExpressionUtils.CompareOp compareOp) {
+    if (compareOp == null) {
+      return null;
+    }
+    switch (compareOp) {
+      case LESS: {
+        return LESS_THAN_OP;
+      }
+      case LESS_OR_EQUAL: {
+        return LESS_THAN_OR_EQUALS_OP;
+      }
+      case GREATER: {
+        return GREATER_THAN_OP;
+      }
+      case GREATER_OR_EQUAL: {
+        return GREATER_THAN_OR_EQUALS_OP;
+      }
+      case EQUALS: {
+        return EQUALS_OP;
+      }
+      case NOT_EQUALS: {
+        return NOT_EQUALS_OP;
+      }
+      default: {
+        return null;
+      }
+    }
+  }
+
+  /**
+   * Common utility for performing comparison with document style comparison expression.
+   *
+   * @param document The document used for comparison.
+   * @param conditionExpression Condition Expression Document.
+   * @param compareOp The comparison operator.
+   * @return True if the field provided in the condition expression has value comparable to
+   * the value provided in the condition expression as per the given comparison operator.
+   */
+  private static boolean compare(final BsonDocument document,
+      final BsonDocument conditionExpression,
+      final CommonComparisonExpressionUtils.CompareOp compareOp) {
+    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
+    Preconditions.checkArgument(entrySet.size() == 1,
+        "Expected entry for the " + compareOp + " operation is 1");
+    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
+      String fieldKey = bsonValueEntry.getKey();
+      BsonValue bsonValue = bsonValueEntry.getValue();
+      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
+          "Expected type for Bson value is Document for " + compareOp + " operation");
+      BsonDocument bsonDocument = (BsonDocument) bsonValue;
+      BsonValue compareValue = bsonDocument.get(getCompareOperator(compareOp));
+      BsonValue topLevelValue = document.get(fieldKey);
+      BsonValue actualValue = topLevelValue != null ?
+          topLevelValue :
+          CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
+      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
+          compareValue, compareOp);
+    }
+    return false;
+  }
+
+  /**
    * Returns true if the field provided in the condition expression has value greater than
    * or equals to the value provided in the condition expression.
    * Condition Expression format:
@@ -161,23 +230,8 @@ public class DocumentComparisonExpressionUtils {
    */
   private static boolean greaterThanOrEquals(final BsonDocument document,
       final BsonDocument conditionExpression) {
-    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
-    Preconditions.checkArgument(entrySet.size() == 1,
-        "Expected entry for the greaterThanOrEquals operation is 1");
-    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
-      String fieldKey = bsonValueEntry.getKey();
-      BsonValue bsonValue = bsonValueEntry.getValue();
-      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
-          "Expected type for Bson value is Document for greaterThanOrEquals operation");
-      BsonDocument bsonDocument = (BsonDocument) bsonValue;
-      BsonValue compareValue = bsonDocument.get(GREATER_THAN_OR_EQUALS_OP);
-      BsonValue topLevelValue = document.get(fieldKey);
-      BsonValue actualValue = topLevelValue != null ? topLevelValue
-          : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
-          compareValue, CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
-    }
-    return false;
+    return compare(document, conditionExpression,
+        CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
   }
 
   /**
@@ -197,23 +251,8 @@ public class DocumentComparisonExpressionUtils {
    */
   private static boolean greaterThan(final BsonDocument document,
       final BsonDocument conditionExpression) {
-    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
-    Preconditions.checkArgument(entrySet.size() == 1, "Expected entry for the greaterThan operation"
-        + " is 1");
-    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
-      String fieldKey = bsonValueEntry.getKey();
-      BsonValue bsonValue = bsonValueEntry.getValue();
-      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
-          "Expected type for Bson value is Document for greaterThan operation");
-      BsonDocument bsonDocument = (BsonDocument) bsonValue;
-      BsonValue compareValue = bsonDocument.get(GREATER_THAN_OP);
-      BsonValue topLevelValue = document.get(fieldKey);
-      BsonValue actualValue = topLevelValue != null ? topLevelValue
-          : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
-          compareValue, CommonComparisonExpressionUtils.CompareOp.GREATER);
-    }
-    return false;
+    return compare(document, conditionExpression,
+        CommonComparisonExpressionUtils.CompareOp.GREATER);
   }
 
   /**
@@ -233,23 +272,8 @@ public class DocumentComparisonExpressionUtils {
    */
   private static boolean lessThanOrEquals(final BsonDocument document,
       final BsonDocument conditionExpression) {
-    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
-    Preconditions.checkArgument(entrySet.size() == 1,
-        "Expected entry for the lessThanOrEquals operation is 1");
-    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
-      String fieldKey = bsonValueEntry.getKey();
-      BsonValue bsonValue = bsonValueEntry.getValue();
-      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
-          "Expected type for Bson value is Document for lessThanOrEquals operation");
-      BsonDocument bsonDocument = (BsonDocument) bsonValue;
-      BsonValue compareValue = bsonDocument.get(LESS_THAN_OR_EQUALS_OP);
-      BsonValue topLevelValue = document.get(fieldKey);
-      BsonValue actualValue = topLevelValue != null ? topLevelValue
-          : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
-          compareValue, CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
-    }
-    return false;
+    return compare(document, conditionExpression,
+        CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
   }
 
   /**
@@ -269,23 +293,8 @@ public class DocumentComparisonExpressionUtils {
    */
   private static boolean lessThan(final BsonDocument document,
       final BsonDocument conditionExpression) {
-    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
-    Preconditions.checkArgument(entrySet.size() == 1, "Expected entry for the lessThan operation"
-        + " is 1");
-    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
-      String fieldKey = bsonValueEntry.getKey();
-      BsonValue bsonValue = bsonValueEntry.getValue();
-      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
-          "Expected type for Bson value is Document for lessThan operation");
-      BsonDocument bsonDocument = (BsonDocument) bsonValue;
-      BsonValue compareValue = bsonDocument.get(LESS_THAN_OP);
-      BsonValue topLevelValue = document.get(fieldKey);
-      BsonValue actualValue = topLevelValue != null ? topLevelValue
-          : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return actualValue != null && CommonComparisonExpressionUtils.compareValues(actualValue,
-          compareValue, CommonComparisonExpressionUtils.CompareOp.LESS);
-    }
-    return false;
+    return compare(document, conditionExpression,
+        CommonComparisonExpressionUtils.CompareOp.LESS);
   }
 
   /**
@@ -305,22 +314,8 @@ public class DocumentComparisonExpressionUtils {
    */
   private static boolean equals(final BsonDocument document,
       final BsonDocument conditionExpression) {
-    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
-    Preconditions.checkArgument(entrySet.size() == 1, "Expected entry for the equals operation"
-        + " is 1");
-    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
-      String fieldKey = bsonValueEntry.getKey();
-      BsonValue bsonValue = bsonValueEntry.getValue();
-      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
-          "Expected type for Bson value is Document for equals operation");
-      BsonDocument bsonDocument = (BsonDocument) bsonValue;
-      BsonValue compareValue = bsonDocument.get(EQUALS_OP);
-      BsonValue topLevelValue = document.get(fieldKey);
-      BsonValue actualValue = topLevelValue != null ? topLevelValue
-          : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return compareValue.equals(actualValue);
-    }
-    return false;
+    return compare(document, conditionExpression,
+        CommonComparisonExpressionUtils.CompareOp.EQUALS);
   }
 
   /**
@@ -340,22 +335,8 @@ public class DocumentComparisonExpressionUtils {
    */
   private static boolean notEquals(final BsonDocument document,
       final BsonDocument conditionExpression) {
-    Set<Map.Entry<String, BsonValue>> entrySet = conditionExpression.entrySet();
-    Preconditions.checkArgument(entrySet.size() == 1, "Expected entry for the notEquals operation"
-        + " is 1");
-    for (Map.Entry<String, BsonValue> bsonValueEntry : entrySet) {
-      String fieldKey = bsonValueEntry.getKey();
-      BsonValue bsonValue = bsonValueEntry.getValue();
-      Preconditions.checkArgument(bsonValue instanceof BsonDocument,
-          "Expected type for Bson value is Document for notEquals operation");
-      BsonDocument bsonDocument = (BsonDocument) bsonValue;
-      BsonValue compareValue = bsonDocument.get(NOT_EQUALS_OP);
-      BsonValue topLevelValue = document.get(fieldKey);
-      BsonValue actualValue = topLevelValue != null ? topLevelValue
-          : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, document);
-      return !compareValue.equals(actualValue);
-    }
-    return false;
+    return compare(document, conditionExpression,
+        CommonComparisonExpressionUtils.CompareOp.NOT_EQUALS);
   }
 
   private static boolean exists(final String documentField, final BsonDocument bsonDocument) {

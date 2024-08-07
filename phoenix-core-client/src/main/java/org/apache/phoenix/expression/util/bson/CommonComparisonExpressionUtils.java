@@ -39,11 +39,16 @@ public class CommonComparisonExpressionUtils {
   private static final Logger LOGGER =
       LoggerFactory.getLogger(CommonComparisonExpressionUtils.class);
 
+  /**
+   * Comparison operators supported for the Document value comparisons.
+   */
   public enum CompareOp {
     LESS,
     LESS_OR_EQUAL,
     GREATER_OR_EQUAL,
-    GREATER
+    GREATER,
+    EQUALS,
+    NOT_EQUALS
   }
 
   /**
@@ -151,12 +156,35 @@ public class CommonComparisonExpressionUtils {
     return null;
   }
 
-  public static boolean compareValues(BsonValue value, BsonValue compareValue, CompareOp op) {
-    Preconditions.checkArgument(op != null, "Comparison operator should not be null");
-    if (value.isString() && compareValue.isString()) {
+  /**
+   * Compare the given Bson values. All values of the CompareOp enum are supported as
+   * comparison operators. For the comparison to be successful, both the value and the
+   * data type of the LHS and RHS operands must be considered.
+   *
+   * @param lhsOperand LHS operand to be compared with RHS operand.
+   * @param rhsOperand RHS operand.
+   * @param operator Comparison operator used to compare LHS and RHS operands.
+   * @return True if the comparison of LHS with RHS is successful.
+   */
+  public static boolean compareValues(final BsonValue lhsOperand, final BsonValue rhsOperand,
+      final CompareOp operator) {
+    Preconditions.checkNotNull(operator, "Comparison operator should not be null");
+    Preconditions.checkNotNull(lhsOperand,
+        "LHS operand for the Comparison operation should not be null");
+
+    if (operator == CompareOp.EQUALS) {
+      return lhsOperand.equals(rhsOperand);
+    } else if (operator == CompareOp.NOT_EQUALS) {
+      return !lhsOperand.equals(rhsOperand);
+    }
+
+    Preconditions.checkNotNull(rhsOperand,
+        "RHS operand for the Comparison operation should not be null");
+
+    if (lhsOperand.isString() && rhsOperand.isString()) {
       int compare =
-              ((BsonString) value).getValue().compareTo(((BsonString) compareValue).getValue());
-      switch (op) {
+          ((BsonString) lhsOperand).getValue().compareTo(((BsonString) rhsOperand).getValue());
+      switch (operator) {
         case LESS:
           return compare < 0;
         case LESS_OR_EQUAL:
@@ -167,24 +195,28 @@ public class CommonComparisonExpressionUtils {
           return compare >= 0;
       }
     }
-    if ((value.isNumber() || value.isDecimal128()) && (compareValue.isNumber()
-            || compareValue.isDecimal128())) {
-      switch (op) {
+    if ((lhsOperand.isNumber() || lhsOperand.isDecimal128()) && (rhsOperand.isNumber()
+        || rhsOperand.isDecimal128())) {
+      switch (operator) {
         case LESS:
-          return ((BsonNumber) value).doubleValue() < ((BsonNumber) compareValue).doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() < ((BsonNumber) rhsOperand)
+              .doubleValue();
         case LESS_OR_EQUAL:
-          return ((BsonNumber) value).doubleValue() <= ((BsonNumber) compareValue).doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() <= ((BsonNumber) rhsOperand)
+              .doubleValue();
         case GREATER:
-          return ((BsonNumber) value).doubleValue() > ((BsonNumber) compareValue).doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() > ((BsonNumber) rhsOperand)
+              .doubleValue();
         case GREATER_OR_EQUAL:
-          return ((BsonNumber) value).doubleValue() >= ((BsonNumber) compareValue).doubleValue();
+          return ((BsonNumber) lhsOperand).doubleValue() >= ((BsonNumber) rhsOperand)
+              .doubleValue();
       }
     }
-    if (value.isBinary() && compareValue.isBinary()
-            && ((BsonBinary) value).getType() == ((BsonBinary) compareValue).getType()) {
-      byte[] b1 = ((BsonBinary) value).getData();
-      byte[] b2 = ((BsonBinary) compareValue).getData();
-      switch (op) {
+    if (lhsOperand.isBinary() && rhsOperand.isBinary()
+        && ((BsonBinary) lhsOperand).getType() == ((BsonBinary) rhsOperand).getType()) {
+      byte[] b1 = ((BsonBinary) lhsOperand).getData();
+      byte[] b2 = ((BsonBinary) rhsOperand).getData();
+      switch (operator) {
         case LESS:
           return Bytes.compareTo(b1, b2) < 0;
         case LESS_OR_EQUAL:
@@ -195,20 +227,25 @@ public class CommonComparisonExpressionUtils {
           return Bytes.compareTo(b1, b2) >= 0;
       }
     }
-    if (value.isDateTime() && compareValue.isDateTime()) {
-      switch (op) {
+    if (lhsOperand.isDateTime() && rhsOperand.isDateTime()) {
+      switch (operator) {
         case LESS:
-          return ((BsonDateTime) value).getValue() < ((BsonDateTime) compareValue).getValue();
+          return ((BsonDateTime) lhsOperand).getValue() < ((BsonDateTime) rhsOperand)
+              .getValue();
         case LESS_OR_EQUAL:
-          return ((BsonDateTime) value).getValue() <= ((BsonDateTime) compareValue).getValue();
+          return ((BsonDateTime) lhsOperand).getValue() <= ((BsonDateTime) rhsOperand)
+              .getValue();
         case GREATER:
-          return ((BsonDateTime) value).getValue() > ((BsonDateTime) compareValue).getValue();
+          return ((BsonDateTime) lhsOperand).getValue() > ((BsonDateTime) rhsOperand)
+              .getValue();
         case GREATER_OR_EQUAL:
-          return ((BsonDateTime) value).getValue() >= ((BsonDateTime) compareValue).getValue();
+          return ((BsonDateTime) lhsOperand).getValue() >= ((BsonDateTime) rhsOperand)
+              .getValue();
       }
     }
-    LOGGER.warn("Expected value comparison for {} is not of type String, Number, Binary"
-            + " or DateTime. Actual value: {} , Expected value: {}", op, value, compareValue);
+    LOGGER.error("Expected comparison for {} is not of type String, Number, Binary"
+            + " or DateTime. LhsOperand: {} , RhsOperand: {}", operator, lhsOperand,
+        rhsOperand);
     return false;
   }
 }

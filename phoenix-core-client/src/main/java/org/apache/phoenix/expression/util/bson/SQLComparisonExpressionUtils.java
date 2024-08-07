@@ -179,6 +179,31 @@ public class SQLComparisonExpressionUtils {
   }
 
   /**
+   * Returns true if the value of the field is comparable to the value represented by
+   * {@code expectedFieldValue} as per the comparison operator represented by {@code compareOp}.
+   * The comparison can happen only if the data type of both values match.
+   *
+   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param expectedFieldValue The literal value to compare against the field value.
+   * @param compareOp The comparison operator.
+   * @return True if the comparison is successful, False otherwise.
+   */
+  private boolean compare(final String fieldKey,
+      final String expectedFieldValue,
+      final CommonComparisonExpressionUtils.CompareOp compareOp) {
+    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
+    BsonValue value = topLevelValue != null ?
+        topLevelValue :
+        CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    if (value != null) {
+      BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
+      return CommonComparisonExpressionUtils.compareValues(
+          value, compareValue, compareOp);
+    }
+    return false;
+  }
+
+  /**
    * Returns true if the given field exists in the document.
    *
    * @param documentField The document field.
@@ -202,15 +227,8 @@ public class SQLComparisonExpressionUtils {
    * @return True if the value of the field is less than expectedFieldValue.
    */
   public boolean lessThan(final String fieldKey, final String expectedFieldValue) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ? topLevelValue
-        : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
-    if (value != null) {
-      BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
-              CommonComparisonExpressionUtils.CompareOp.LESS);
-    }
-    return false;
+    return compare(fieldKey, expectedFieldValue,
+        CommonComparisonExpressionUtils.CompareOp.LESS);
   }
 
   /**
@@ -223,15 +241,8 @@ public class SQLComparisonExpressionUtils {
    * @return True if the value of the field is less than or equal to expectedFieldValue.
    */
   public boolean lessThanOrEquals(final String fieldKey, final String expectedFieldValue) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ? topLevelValue
-        : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
-    if (value != null) {
-      BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
-              CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
-    }
-    return false;
+    return compare(fieldKey, expectedFieldValue,
+        CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
   }
 
   /**
@@ -243,15 +254,8 @@ public class SQLComparisonExpressionUtils {
    * @return True if the value of the field is greater than expectedFieldValue.
    */
   public boolean greaterThan(final String fieldKey, final String expectedFieldValue) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ? topLevelValue
-        : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
-    if (value != null) {
-      BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
-              CommonComparisonExpressionUtils.CompareOp.GREATER);
-    }
-    return false;
+    return compare(fieldKey, expectedFieldValue,
+        CommonComparisonExpressionUtils.CompareOp.GREATER);
   }
 
   /**
@@ -265,15 +269,8 @@ public class SQLComparisonExpressionUtils {
    */
   public boolean greaterThanOrEquals(final String fieldKey,
       final String expectedFieldValue) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ? topLevelValue
-        : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
-    if (value != null) {
-      BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.compareValues(value, compareValue,
-              CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
-    }
-    return false;
+    return compare(fieldKey, expectedFieldValue,
+        CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
   }
 
   /**
@@ -331,14 +328,8 @@ public class SQLComparisonExpressionUtils {
    * @return True if the value of the field is equal to expectedFieldValue.
    */
   public boolean isEquals(final String fieldKey, final String expectedFieldValue) {
-    BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ? topLevelValue
-        : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
-    if (value != null) {
-      BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return value.equals(compareValue);
-    }
-    return false;
+    return compare(fieldKey, expectedFieldValue,
+        CommonComparisonExpressionUtils.CompareOp.EQUALS);
   }
 
 }
