@@ -22,6 +22,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -168,6 +169,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
     private boolean serverSideIterator = false;
     private boolean firstScan = true;
     private boolean skipValidRowsSent = false;
+    private ScannerContext scannerContext;
 
     protected ResultIterator getDelegate() {
         return delegate;
@@ -175,7 +177,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
     
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
             boolean spoolingEnabled, long thresholdBytes, Integer limit, Integer offset) {
-        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, 0, Long.MAX_VALUE);
+        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, 0, Long.MAX_VALUE, null);
     }
 
     public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
@@ -186,7 +188,7 @@ public class OrderedResultIterator implements PeekingResultIterator {
     public OrderedResultIterator(ResultIterator delegate,
                                  List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
                                  long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize) {
-        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, estimatedRowSize, Long.MAX_VALUE);
+        this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset, estimatedRowSize, Long.MAX_VALUE, null);
     }
 
     public OrderedResultIterator(ResultIterator delegate,
@@ -194,9 +196,9 @@ public class OrderedResultIterator implements PeekingResultIterator {
                                  boolean spoolingEnabled,
                                  long thresholdBytes, Integer limit, Integer offset,
                                  int estimatedRowSize, long pageSizeMs, Scan scan,
-                                 RegionInfo regionInfo) {
+                                 RegionInfo regionInfo, ScannerContext scannerContext) {
         this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset,
-                estimatedRowSize, pageSizeMs);
+                estimatedRowSize, pageSizeMs, scannerContext);
         this.scan = scan;
         // If scan start rowkey is empty, use region boundaries. Reverse region boundaries
         // for reverse scan.
@@ -217,7 +219,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
     public OrderedResultIterator(ResultIterator delegate,
             List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
-            long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize, long pageSizeMs) {
+            long thresholdBytes, Integer limit, Integer offset,
+             int estimatedRowSize, long pageSizeMs, ScannerContext scannerContext) {
         checkArgument(!orderByExpressions.isEmpty());
         this.delegate = delegate;
         this.orderByExpressions = orderByExpressions;
@@ -243,6 +246,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
         // Both BufferedSortedQueue and SizeBoundQueue won't allocate more than thresholdBytes.
         this.estimatedByteSize = limit == null ? 0 : Math.min((limit + this.offset) * estimatedEntrySize, thresholdBytes);
         this.pageSizeMs = pageSizeMs;
+        // only called in #NonAggregateRegionScannerFactory.deserializeFromScan
+        this.scannerContext = scannerContext;
     }
 
     public Integer getLimit() {
@@ -480,6 +485,10 @@ public class OrderedResultIterator implements PeekingResultIterator {
         } else {
             dummyTuple = ScanUtil.getDummyTuple(scanStartRowKey);
         }
+    }
+
+    public ScannerContext getRegionScannerContext() {
+        return this.scannerContext;
     }
 
     @Override

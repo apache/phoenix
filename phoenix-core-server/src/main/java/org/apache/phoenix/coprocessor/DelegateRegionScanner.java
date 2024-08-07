@@ -61,7 +61,7 @@ public class DelegateRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
+        return delegate.next(result, scannerContext);
     }
 
     @Override
@@ -71,7 +71,7 @@ public class DelegateRegionScanner implements RegionScanner {
 
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
+        return delegate.nextRaw(result, scannerContext);
     }
 
     @Override

@@ -25,6 +25,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -128,5 +129,9 @@ public class UncoveredLocalIndexRegionScanner extends UncoveredIndexRegionScanne
         boolean hasMore = super.next(result);
         ServerIndexUtil.wrapResultUsingOffset(result, offset);
         return hasMore;
+    }
+
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        return next(result);
     }
 }
