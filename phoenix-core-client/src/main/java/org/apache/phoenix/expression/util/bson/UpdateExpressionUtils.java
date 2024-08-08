@@ -64,11 +64,11 @@ public class UpdateExpressionUtils {
    * <p/>
    * "$SET": Use the SET action in an update expression to add one or more fields to a BSON
    * Document. If any of these fields already exists, they are overwritten by the new values.
-   * To perform multiple SET actions, provide multiple fields key-value entries within nested
+   * To perform multiple SET actions, provide multiple fields key-value entries within the nested
    * document under $SET field key.
-   * "$UNSET": Use the REMOVE action in an update expression to remove one or more fields from a
-   * BSON Document. To perform multiple REMOVE actions, provide multiple field key-value entries
-   * within nested document under $UNSET field key.
+   * "$UNSET": Use the UNSET action in an update expression to unset or remove one or more fields
+   * from a BSON Document. To perform multiple UNSET actions, provide multiple field key-value
+   * entries within the nested document under $UNSET field key.
    * "$ADD": Use the ADD action in an update expression to add a new field and its values to a
    * BSON document. If the field already exists, the behavior of ADD depends on the field's
    * data type:
@@ -81,10 +81,10 @@ public class UpdateExpressionUtils {
    * <p/>
    * "$DELETE_FROM_SET": Use the DELETE action in an update expression to remove one or more
    * elements from a set. To perform multiple DELETE actions, provide multiple field key-value
-   * entries within nested document under $DELETE_FROM_SET field key.
+   * entries within the nested document under $DELETE_FROM_SET field key.
    * Definition of path and subset in the context of the expression:
    * <p/>
-   * 1. The path element is the document path to an field. The field must be a set data type.
+   * 1. The path element is the document path to a field. The field must be a set data type.
    * 2. The subset is one or more elements that you want to delete from the given path. Subset
    * must be of set type.
    * <p/>
@@ -511,15 +511,16 @@ public class UpdateExpressionUtils {
   }
 
   /**
-   * Update the given document by performing REMOVE operation on a given field. This operation is
-   * applicable to any field of the document. If the field exists, it will be deleted.
+   * Update the given document by performing UNSET operation on one or more fields. This operation
+   * is applicable to any field of the document at any level of the hierarchy. If the field exists,
+   * it will be deleted.
    *
-   * @param removeExpr Remove Expression Document.
+   * @param unsetExpr Unset Expression Document.
    * @param bsonDocument Document contents to be updated.
    */
-  private static void executeRemoveExpression(final BsonDocument removeExpr,
+  private static void executeRemoveExpression(final BsonDocument unsetExpr,
       final BsonDocument bsonDocument) {
-    for (Map.Entry<String, BsonValue> removeField : removeExpr.entrySet()) {
+    for (Map.Entry<String, BsonValue> removeField : unsetExpr.entrySet()) {
       String fieldKey = removeField.getKey();
       BsonValue topLevelValue = bsonDocument.get(fieldKey);
       // If the top level field exists, perform the operation here and return.
