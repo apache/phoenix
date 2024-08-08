@@ -53,6 +53,17 @@ public class UpdateExpressionUtils {
   private static final Logger LOGGER = LoggerFactory.getLogger(UpdateExpressionUtils.class);
 
   /**
+   * Update operator enum values. Any new update operator that requires update to deeply nested
+   * structures (nested documents or nested arrays), need to have its own type added here.
+   */
+  private enum UpdateOp {
+    SET,
+    UNSET,
+    ADD,
+    DELETE_FROM_SET
+  }
+
+  /**
    * Updates the given document based on the update expression.
    * <p/>
    * {
@@ -153,132 +164,7 @@ public class UpdateExpressionUtils {
         // If the top level field does not exist and the field key contains "." or "[]" notations
         // for nested document or nested array, use the self-recursive function to go through
         // the document tree, one level at a time.
-        updateNestedFieldByDelete(bsonDocument, 0, fieldKey, newVal);
-      }
-    }
-  }
-
-  /**
-   * Update the nested field with $DELETE_FROM_SET operation. The field key is expected to contain
-   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
-   * keeps recursively calling itself until it reaches the leaf node in the given tree.
-   * For instance, for field key "category.subcategories.brands[5]", first the function
-   * evaluates and retrieves the value for top-level field "category". The value of "category"
-   * is expected to be nested document. First function call has value as full document, it retries
-   * nested document under "category" field and calls the function recursively with index value
-   * same as index value of first "." (dot) in the field key. For field key
-   * "category.subcategories.brands[5]", the index value would be 8. The second function call
-   * retrieves value of field key "subcategories", which is expected to be nested document.
-   * The third function call gets this nested document as BsonValue and index value as 22 as the
-   * field key has second "." (dot) notation at index 22. The third function call searches for
-   * field key "brands" and expects its value as nested array. The forth function call gets
-   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
-   * at index 29. The forth function call retrieves value of nested array element at index 5.
-   * As the function is at leaf node in the tree, now it performs the $DELETE_FROM_SET operation
-   * as per the $DELETE_FROM_SET semantics.
-   *
-   * @param value Bson value at the given level of the document hierarchy.
-   * @param idx The index value for the given field key. The function is expected to retrieve
-   * the value of the nested document or array at the given level of the tree.
-   * @param fieldKey The full field key.
-   * @param setValuesToDelete The set values that need to be removed from the existing set.
-   */
-  private static void updateNestedFieldByDelete(final BsonValue value,
-      final int idx, final String fieldKey, final BsonValue setValuesToDelete) {
-    int curIdx = idx;
-    if (fieldKey.charAt(curIdx) == '.') {
-      if (value == null || !value.isDocument()) {
-        LOGGER.error("Update nested field by DELETE: Value is null or not document. "
-            + "Value: {}, Idx: {}, fieldKey: {}", value, idx, fieldKey);
-        throw new RuntimeException("Value is null or not document.");
-      }
-      BsonDocument nestedMap = (BsonDocument) value;
-      curIdx++;
-      StringBuilder sb = new StringBuilder();
-      for (; curIdx < fieldKey.length(); curIdx++) {
-        if (fieldKey.charAt(curIdx) == '.' || fieldKey.charAt(curIdx) == '[') {
-          BsonValue nestedValue = nestedMap.get(sb.toString());
-          if (nestedValue == null) {
-            LOGGER.error("Should have found nested document for {}", sb);
-            return;
-          }
-          updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, setValuesToDelete);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(curIdx));
-        }
-      }
-      BsonValue currentValue = nestedMap.get(sb.toString());
-      if (currentValue != null) {
-        BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, setValuesToDelete);
-        if (modifiedVal == null) {
-          nestedMap.remove(sb.toString());
-        } else {
-          nestedMap.put(sb.toString(), modifiedVal);
-        }
-      } else {
-        LOGGER.info("Nothing to be removed as field with key {} does not exist", sb);
-      }
-    } else if (fieldKey.charAt(curIdx) == '[') {
-      curIdx++;
-      StringBuilder arrayIdxStr = new StringBuilder();
-      while (fieldKey.charAt(curIdx) != ']') {
-        arrayIdxStr.append(fieldKey.charAt(curIdx));
-        curIdx++;
-      }
-      curIdx++;
-      int arrayIdx = Integer.parseInt(arrayIdxStr.toString());
-      if (value == null || !value.isArray()) {
-        LOGGER.error("Update nested field by DELETE. Value is null or not document. "
-            + "Value: {}, Idx: {}, fieldKey: {}", value, idx, fieldKey);
-        throw new RuntimeException("Value is null or not array.");
-      }
-      BsonArray nestedList = (BsonArray) value;
-      if (curIdx == fieldKey.length()) {
-        if (arrayIdx < nestedList.size()) {
-          BsonValue currentValue = nestedList.get(arrayIdx);
-          if (currentValue != null) {
-            BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, setValuesToDelete);
-            if (modifiedVal == null) {
-              nestedList.remove(arrayIdx);
-            } else {
-              nestedList.set(arrayIdx, modifiedVal);
-            }
-          } else {
-            LOGGER.info("Nothing to be removed as nested list does not have value for field {}",
-                fieldKey);
-          }
-        }
-        return;
-      }
-      BsonValue nestedValue = nestedList.get(arrayIdx);
-      if (nestedValue == null) {
-        LOGGER.error("Should have found nested list for index {}", arrayIdx);
-        return;
-      }
-      updateNestedFieldByDelete(nestedValue, curIdx, fieldKey, setValuesToDelete);
-    } else {
-      StringBuilder sb = new StringBuilder();
-      for (int i = idx; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
-          if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          updateNestedFieldByDelete(topFieldValue, i, fieldKey, setValuesToDelete);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
-          if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          updateNestedFieldByDelete(topFieldValue, i, fieldKey, setValuesToDelete);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        updateNestedField(bsonDocument, 0, fieldKey, newVal, UpdateOp.DELETE_FROM_SET);
       }
     }
   }
@@ -352,125 +238,7 @@ public class UpdateExpressionUtils {
         // If the top level field does not exist and the field key contains "." or "[]" notations
         // for nested document or nested array, use the self-recursive function to go through
         // the document tree, one level at a time.
-        updateNestedFieldByAdd(bsonDocument, 0, fieldKey, newVal);
-      }
-    }
-  }
-
-  /**
-   * Update the nested field with $ADD operation. The field key is expected to contain
-   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
-   * keeps recursively calling itself until it reaches the leaf node in the given tree.
-   * For instance, for field key "category.subcategories.brands[5]", first the function
-   * evaluates and retrieves the value for top-level field "category". The value of "category"
-   * is expected to be nested document. First function call has value as full document, it retries
-   * nested document under "category" field and calls the function recursively with index value
-   * same as index value of first "." (dot) in the field key. For field key
-   * "category.subcategories.brands[5]", the index value would be 8. The second function call
-   * retrieves value of field key "subcategories", which is expected to be nested document.
-   * The third function call gets this nested document as BsonValue and index value as 22 as the
-   * field key has second "." (dot) notation at index 22. The third function call searches for
-   * field key "brands" and expects its value as nested array. The forth function call gets
-   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
-   * at index 29. The forth function call retrieves value of nested array element at index 5.
-   * As the function is at leaf node in the tree, now it performs the $ADD operation as per the
-   * $ADD semantics.
-   *
-   * @param value Bson value at the given level of the document hierarchy.
-   * @param idx The index value for the given field key. The function is expected to retrieve
-   * the value of the nested document or array at the given level of the tree.
-   * @param fieldKey The full field key.
-   * @param newVal The set values that need to be removed from the existing set.
-   */
-  private static void updateNestedFieldByAdd(final BsonValue value,
-      final int idx,
-      final String fieldKey,
-      final BsonValue newVal) {
-    int curIdx = idx;
-    if (fieldKey.charAt(curIdx) == '.') {
-      if (value == null || !value.isDocument()) {
-        LOGGER.error("Update nested field by ADD: Value is null or not document. "
-            + "Value: {}, Idx: {}, fieldKey: {}", value, idx, fieldKey);
-        throw new RuntimeException("Value is null or not document.");
-      }
-      BsonDocument nestedMap = (BsonDocument) value;
-      curIdx++;
-      StringBuilder sb = new StringBuilder();
-      for (; curIdx < fieldKey.length(); curIdx++) {
-        if (fieldKey.charAt(curIdx) == '.' || fieldKey.charAt(curIdx) == '[') {
-          BsonValue nestedValue = nestedMap.get(sb.toString());
-          if (nestedValue == null) {
-            LOGGER.error("Should have found nested map for {}", sb);
-            return;
-          }
-          updateNestedFieldByAdd(nestedValue, curIdx, fieldKey, newVal);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(curIdx));
-        }
-      }
-      BsonValue currentValue = nestedMap.get(sb.toString());
-      if (currentValue != null) {
-        nestedMap.put(sb.toString(), modifyFieldValueByAdd(currentValue, newVal));
-      } else {
-        nestedMap.put(sb.toString(), newVal);
-      }
-    } else if (fieldKey.charAt(curIdx) == '[') {
-      curIdx++;
-      StringBuilder arrayIdxStr = new StringBuilder();
-      while (fieldKey.charAt(curIdx) != ']') {
-        arrayIdxStr.append(fieldKey.charAt(curIdx));
-        curIdx++;
-      }
-      curIdx++;
-      int arrayIdx = Integer.parseInt(arrayIdxStr.toString());
-      if (value == null || !value.isArray()) {
-        LOGGER.error("Remove nested field. Value is null or not document. "
-            + "Value: {}, Idx: {}, fieldKey: {}", value, idx, fieldKey);
-        throw new RuntimeException("Value is null or not array.");
-      }
-      BsonArray nestedList = (BsonArray) value;
-      if (curIdx == fieldKey.length()) {
-        if (arrayIdx < nestedList.size()) {
-          BsonValue currentValue = nestedList.get(arrayIdx);
-          if (currentValue != null) {
-            nestedList.set(arrayIdx, modifyFieldValueByAdd(currentValue, newVal));
-          } else {
-            nestedList.set(arrayIdx, newVal);
-          }
-        } else {
-          nestedList.add(newVal);
-        }
-        return;
-      }
-      BsonValue nestedValue = nestedList.get(arrayIdx);
-      if (nestedValue == null) {
-        LOGGER.error("Should have found nested list for index {}", arrayIdx);
-        return;
-      }
-      updateNestedFieldByAdd(nestedValue, curIdx, fieldKey, newVal);
-    } else {
-      StringBuilder sb = new StringBuilder();
-      for (int i = idx; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
-          if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
-          }
-          updateNestedFieldByAdd(topFieldValue, i, fieldKey, newVal);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
-          if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Document does not contain key: " + sb);
-          }
-          updateNestedFieldByAdd(topFieldValue, i, fieldKey, newVal);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        updateNestedField(bsonDocument, 0, fieldKey, newVal, UpdateOp.ADD);
       }
     }
   }
@@ -530,107 +298,7 @@ public class UpdateExpressionUtils {
         // If the top level field does not exist and the field key contains "." or "[]" notations
         // for nested document or nested array, use the self-recursive function to go through
         // the document tree, one level at a time.
-        removeNestedField(bsonDocument, 0, fieldKey);
-      }
-    }
-  }
-
-  /**
-   * Update the nested field with $UNSET operation. The field key is expected to contain
-   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
-   * keeps recursively calling itself until it reaches the leaf node in the given tree.
-   * For instance, for field key "category.subcategories.brands[5]", first the function
-   * evaluates and retrieves the value for top-level field "category". The value of "category"
-   * is expected to be nested document. First function call has value as full document, it retries
-   * nested document under "category" field and calls the function recursively with index value
-   * same as index value of first "." (dot) in the field key. For field key
-   * "category.subcategories.brands[5]", the index value would be 8. The second function call
-   * retrieves value of field key "subcategories", which is expected to be nested document.
-   * The third function call gets this nested document as BsonValue and index value as 22 as the
-   * field key has second "." (dot) notation at index 22. The third function call searches for
-   * field key "brands" and expects its value as nested array. The forth function call gets
-   * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
-   * at index 29. The forth function call retrieves value of nested array element at index 5.
-   * As the function is at leaf node in the tree, now it performs the $UNSET operation as per the
-   * $UNSET semantics by removing the key-value entry for the field key.
-   *
-   * @param value Bson value at the given level of the document hierarchy.
-   * @param idx The index value for the given field key. The function is expected to retrieve
-   * the value of the nested document or array at the given level of the tree.
-   * @param fieldKey The full field key.
-   */
-  private static void removeNestedField(BsonValue value, int idx, String fieldKey) {
-    int curIdx = idx;
-    if (fieldKey.charAt(curIdx) == '.') {
-      if (value == null || !value.isDocument()) {
-        LOGGER.error("Remove nested field: Value is null or not document. "
-            + "Value: {}, Idx: {}, fieldKey: {}", value, idx, fieldKey);
-        throw new RuntimeException("Value is null or not document.");
-      }
-      BsonDocument nestedMap = (BsonDocument) value;
-      curIdx++;
-      StringBuilder sb = new StringBuilder();
-      for (; curIdx < fieldKey.length(); curIdx++) {
-        if (fieldKey.charAt(curIdx) == '.' || fieldKey.charAt(curIdx) == '[') {
-          BsonValue nestedValue = nestedMap.get(sb.toString());
-          if (nestedValue == null) {
-            LOGGER.error("Should have found nested document for {}", sb);
-            return;
-          }
-          removeNestedField(nestedValue, curIdx, fieldKey);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(curIdx));
-        }
-      }
-      nestedMap.remove(sb.toString());
-    } else if (fieldKey.charAt(curIdx) == '[') {
-      curIdx++;
-      StringBuilder arrayIdxStr = new StringBuilder();
-      while (fieldKey.charAt(curIdx) != ']') {
-        arrayIdxStr.append(fieldKey.charAt(curIdx));
-        curIdx++;
-      }
-      curIdx++;
-      int arrayIdx = Integer.parseInt(arrayIdxStr.toString());
-      if (value == null || !value.isArray()) {
-        LOGGER.error("Remove nested field. Value is null or not document. "
-            + "Value: {}, Idx: {}, fieldKey: {}", value, idx, fieldKey);
-        throw new RuntimeException("Value is null or not array.");
-      }
-      BsonArray nestedList = (BsonArray) value;
-      if (curIdx == fieldKey.length()) {
-        nestedList.remove(arrayIdx);
-        return;
-      }
-      BsonValue nestedValue = nestedList.get(arrayIdx);
-      if (nestedValue == null) {
-        LOGGER.error("Should have found nested list for index {}", arrayIdx);
-        return;
-      }
-      removeNestedField(nestedValue, curIdx, fieldKey);
-    } else {
-      StringBuilder sb = new StringBuilder();
-      for (int i = idx; i < fieldKey.length(); i++) {
-        if (fieldKey.charAt(i) == '.') {
-          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
-          if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          removeNestedField(topFieldValue, i, fieldKey);
-          return;
-        } else if (fieldKey.charAt(i) == '[') {
-          BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
-          if (topFieldValue == null) {
-            LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
-            throw new RuntimeException("Map does not contain key: " + sb);
-          }
-          removeNestedField(topFieldValue, i, fieldKey);
-          return;
-        } else {
-          sb.append(fieldKey.charAt(i));
-        }
+        updateNestedField(bsonDocument, 0, fieldKey, null, UpdateOp.UNSET);
       }
     }
   }
@@ -658,15 +326,17 @@ public class UpdateExpressionUtils {
         // If the top level field does not exist and the field key contains "." or "[]" notations
         // for nested document or nested array, use the self-recursive function to go through
         // the document tree, one level at a time.
-        updateNestedField(bsonDocument, 0, fieldKey, newVal);
+        updateNestedField(bsonDocument, 0, fieldKey, newVal, UpdateOp.SET);
       }
     }
   }
 
   /**
-   * Update the nested field with $SET operation. The field key is expected to contain
-   * "." and/or "[]" notations for nested documents and/or nested array elements. This function
-   * keeps recursively calling itself until it reaches the leaf node in the given tree.
+   * Update the nested field with the given update operation. The update operation is determined
+   * by the enum value {@code updateOp}.
+   * The field key is expected to contain "." and/or "[]" notations for nested documents and/or
+   * nested array elements. This function keeps recursively calling itself until it reaches the
+   * leaf node in the given tree.
    * For instance, for field key "category.subcategories.brands[5]", first the function
    * evaluates and retrieves the value for top-level field "category". The value of "category"
    * is expected to be nested document. First function call has value as full document, it retries
@@ -679,8 +349,8 @@ public class UpdateExpressionUtils {
    * field key "brands" and expects its value as nested array. The forth function call gets
    * this nested array as BsonValue and index 29 as the field key has "[]" array notation starting
    * at index 29. The forth function call retrieves value of nested array element at index 5.
-   * As the function is at leaf node in the tree, now it performs the $SET operation as per the
-   * $SET semantics.
+   * As the function is at leaf node in the tree, now it performs the update operation as per the
+   * given update operator ($SET / $UNSET / $ADD / $DELETE_FROM_SET) semantics.
    *
    * @param value Bson value at the given level of the document hierarchy.
    * @param idx The index value for the given field key. The function is expected to retrieve
@@ -688,15 +358,21 @@ public class UpdateExpressionUtils {
    * @param fieldKey The full field key.
    * @param newVal The new Bson value to be added to the given nested document or a particular
    * index of the given nested array.
+   * @param updateOp The enum value representing the update operation to perform.
    */
-  private static void updateNestedField(final BsonValue value, final int idx,
-                                        final String fieldKey, final BsonValue newVal) {
+  private static void updateNestedField(final BsonValue value,
+      final int idx,
+      final String fieldKey,
+      final BsonValue newVal,
+      final UpdateOp updateOp) {
     int curIdx = idx;
     if (fieldKey.charAt(curIdx) == '.') {
       if (value == null || !value.isDocument()) {
-        LOGGER.error("Value is null or not document. Value: {}, Idx: {}, fieldKey: {}, New val: {}",
-            value, idx, fieldKey, newVal);
-        throw new RuntimeException("Value is null or not document.");
+        LOGGER.error(
+            "Value is null or not document. Value: {}, Idx: {}, fieldKey: {}, New val: {},"
+                + " Update op: {}",
+            value, idx, fieldKey, newVal, updateOp);
+        throw new RuntimeException("Value is null or it is not of type document.");
       }
       BsonDocument nestedMap = (BsonDocument) value;
       curIdx++;
@@ -708,13 +384,15 @@ public class UpdateExpressionUtils {
             LOGGER.error("Should have found nested map for {}", sb);
             return;
           }
-          updateNestedField(nestedValue, curIdx, fieldKey, newVal);
+          updateNestedField(nestedValue, curIdx, fieldKey, newVal, updateOp);
           return;
         } else {
           sb.append(fieldKey.charAt(curIdx));
         }
       }
-      nestedMap.put(sb.toString(), newVal);
+      // reached leaf node of the document tree, update the value as per the update operator
+      // semantics
+      updateValueAtLeafNode(newVal, updateOp, nestedMap, sb);
     } else if (fieldKey.charAt(curIdx) == '[') {
       curIdx++;
       StringBuilder arrayIdxStr = new StringBuilder();
@@ -731,11 +409,9 @@ public class UpdateExpressionUtils {
       }
       BsonArray nestedList = (BsonArray) value;
       if (curIdx == fieldKey.length()) {
-        if (arrayIdx < nestedList.size()) {
-          nestedList.set(arrayIdx, newVal);
-        } else {
-          nestedList.add(newVal);
-        }
+        // reached leaf node of the document tree, update the value as per the update operator
+        // semantics
+        updateValueAtLeafNode(fieldKey, newVal, updateOp, arrayIdx, nestedList);
         return;
       }
       BsonValue nestedValue = nestedList.get(arrayIdx);
@@ -743,7 +419,7 @@ public class UpdateExpressionUtils {
         LOGGER.error("Should have found nested list for index {}", arrayIdx);
         return;
       }
-      updateNestedField(nestedValue, curIdx, fieldKey, newVal);
+      updateNestedField(nestedValue, curIdx, fieldKey, newVal, updateOp);
     } else {
       StringBuilder sb = new StringBuilder();
       for (int i = idx; i < fieldKey.length(); i++) {
@@ -753,7 +429,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested bsonDocument for {}", sb);
             throw new RuntimeException("Document does not contain key: " + sb);
           }
-          updateNestedField(topFieldValue, i, fieldKey, newVal);
+          updateNestedField(topFieldValue, i, fieldKey, newVal, updateOp);
           return;
         } else if (fieldKey.charAt(i) == '[') {
           BsonValue topFieldValue = ((BsonDocument) value).get(sb.toString());
@@ -761,7 +437,7 @@ public class UpdateExpressionUtils {
             LOGGER.error("Incorrect access. Should have found nested list for {}", sb);
             throw new RuntimeException("Document does not contain key: " + sb);
           }
-          updateNestedField(topFieldValue, i, fieldKey, newVal);
+          updateNestedField(topFieldValue, i, fieldKey, newVal, updateOp);
           return;
         } else {
           sb.append(fieldKey.charAt(i));
@@ -770,6 +446,136 @@ public class UpdateExpressionUtils {
     }
   }
 
+  /**
+   * Perform update operation at the leaf node. This method is called only when the leaf
+   * node or the target node for the given field key is encountered while iterating through
+   * the tree structure. This is specifically called when the closest ancestor of the
+   * given node is a nested array.
+   *
+   * @param fieldKey The full field key.
+   * @param newVal New value to be used while performing update operation on the existing node.
+   * @param updateOp Type of the update operation to be performed.
+   * @param arrayIdx The index of the array at which the target node value is to be updated.
+   * @param nestedList The parent or ancestor node, expected to be nested array only.
+   * For example, for "category.subcategories.brands[5]" field key, the nestedList is expected to
+   * be "brands" array and arrayIdx is expected to be 5.
+   */
+  private static void updateValueAtLeafNode(final String fieldKey,
+      final BsonValue newVal,
+      final UpdateOp updateOp,
+      final int arrayIdx,
+      final BsonArray nestedList) {
+    switch (updateOp) {
+      case SET: {
+        if (arrayIdx < nestedList.size()) {
+          nestedList.set(arrayIdx, newVal);
+        } else {
+          nestedList.add(newVal);
+        }
+        break;
+      }
+      case UNSET: {
+        nestedList.remove(arrayIdx);
+        break;
+      }
+      case ADD: {
+        if (arrayIdx < nestedList.size()) {
+          BsonValue currentValue = nestedList.get(arrayIdx);
+          if (currentValue != null) {
+            nestedList.set(arrayIdx, modifyFieldValueByAdd(currentValue, newVal));
+          } else {
+            nestedList.set(arrayIdx, newVal);
+          }
+        } else {
+          nestedList.add(newVal);
+        }
+        break;
+      }
+      case DELETE_FROM_SET: {
+        if (arrayIdx < nestedList.size()) {
+          BsonValue currentValue = nestedList.get(arrayIdx);
+          if (currentValue != null) {
+            BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
+            if (modifiedVal == null) {
+              nestedList.remove(arrayIdx);
+            } else {
+              nestedList.set(arrayIdx, modifiedVal);
+            }
+          } else {
+            LOGGER.info(
+                "Nothing to be removed as nested list does not have value for field {}. "
+                    + "Update operator: {}",
+                fieldKey, updateOp);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Perform update operation at the leaf node. This method is called only when the leaf
+   * node or the target node for the given field key is encountered while iterating through
+   * the tree structure. This is specifically called when the closest ancestor of the
+   * given node is a nested document.
+   *
+   * @param newVal New value to be used while performing update operation on the existing node.
+   * @param updateOp Type of the update operation to be performed.
+   * @param nestedMap The parent or ancestor node, expected to be nested document only.
+   * @param targetNodeFieldKey The target fieldKey value. For example, for "category.subcategories"
+   * field key, the target node field key is expected to be "subcategories" and the nestedMap
+   * is expected to be "category" document.
+   */
+  private static void updateValueAtLeafNode(BsonValue newVal, UpdateOp updateOp,
+      BsonDocument nestedMap, StringBuilder targetNodeFieldKey) {
+    switch (updateOp) {
+      case SET: {
+        nestedMap.put(targetNodeFieldKey.toString(), newVal);
+        break;
+      }
+      case UNSET: {
+        nestedMap.remove(targetNodeFieldKey.toString());
+        break;
+      }
+      case ADD: {
+        BsonValue currentValue = nestedMap.get(targetNodeFieldKey.toString());
+        if (currentValue != null) {
+          nestedMap.put(targetNodeFieldKey.toString(), modifyFieldValueByAdd(currentValue, newVal));
+        } else {
+          nestedMap.put(targetNodeFieldKey.toString(), newVal);
+        }
+        break;
+      }
+      case DELETE_FROM_SET: {
+        BsonValue currentValue = nestedMap.get(targetNodeFieldKey.toString());
+        if (currentValue != null) {
+          BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
+          if (modifiedVal == null) {
+            nestedMap.remove(targetNodeFieldKey.toString());
+          } else {
+            nestedMap.put(targetNodeFieldKey.toString(), modifiedVal);
+          }
+        } else {
+          LOGGER.info(
+              "Nothing to be removed as field with key {} does not exist. Update operator: {}",
+              targetNodeFieldKey, updateOp);
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Retrieve the value to be updated for the given current value. If the current value does not
+   * contain any arithmetic operators, the current value is returned without any modifications.
+   * If the current value contains arithmetic expressions like "a + b" or "a - b", the values of
+   * operands are retrieved from the given document and if the values are numeric, the given
+   * arithmetic operation is performed.
+   *
+   * @param curValue The current value.
+   * @param bsonDocument The document with all field key-value pairs.
+   * @return Updated values to be used by SET operation.
+   */
   private static BsonValue getNewFieldValue(final BsonValue curValue,
                                             final BsonDocument bsonDocument) {
     if (curValue != null && curValue.isString() && (
@@ -820,6 +626,13 @@ public class UpdateExpressionUtils {
     return curValue;
   }
 
+  /**
+   * Performs arithmetic addition operation on the given numeric operands.
+   *
+   * @param num1 First number.
+   * @param num2 Second number.
+   * @return The value as addition of both numbers.
+   */
   private static Number addNum(final Number num1, final Number num2) {
     if (num1 instanceof Double || num2 instanceof Double) {
       return num1.doubleValue() + num2.doubleValue();
@@ -832,6 +645,13 @@ public class UpdateExpressionUtils {
     }
   }
 
+  /**
+   * Performs arithmetic subtraction operation on the given numeric operands.
+   *
+   * @param num1 First number.
+   * @param num2 Second number.
+   * @return The subtracted value as first number minus second number.
+   */
   private static Number subtractNum(final Number num1, final Number num2) {
     if (num1 instanceof Double || num2 instanceof Double) {
       return num1.doubleValue() - num2.doubleValue();
@@ -844,6 +664,12 @@ public class UpdateExpressionUtils {
     }
   }
 
+  /**
+   * Convert the given Number to String.
+   *
+   * @param number The Number object.
+   * @return String represented number value.
+   */
   private static String numberToString(Number number) {
     if (number instanceof Integer || number instanceof Short || number instanceof Byte) {
       return Integer.toString(number.intValue());
@@ -857,6 +683,12 @@ public class UpdateExpressionUtils {
     throw new RuntimeException("Number type is not known for number: " + number);
   }
 
+  /**
+   * Convert the given String to Number.
+   *
+   * @param number The String represented numeric value.
+   * @return The Number object.
+   */
   private static Number stringToNumber(String number) {
     try {
       return Integer.parseInt(number);
@@ -880,6 +712,12 @@ public class UpdateExpressionUtils {
     }
   }
 
+  /**
+   * Convert Number to BsonNumber.
+   *
+   * @param number The Number object.
+   * @return The BsonNumber object.
+   */
   private static BsonNumber getBsonNumberFromNumber(Number number) {
     BsonNumber bsonNumber;
     if (number instanceof Integer || number instanceof Short || number instanceof Byte) {
@@ -896,6 +734,12 @@ public class UpdateExpressionUtils {
     return bsonNumber;
   }
 
+  /**
+   * Convert BsonNumber to Number.
+   *
+   * @param bsonNumber The BsonNumber object.
+   * @return The Number object.
+   */
   public static Number getNumberFromBsonNumber(BsonNumber bsonNumber) {
     if (bsonNumber instanceof BsonInt32) {
       return ((BsonInt32) bsonNumber).getValue();
