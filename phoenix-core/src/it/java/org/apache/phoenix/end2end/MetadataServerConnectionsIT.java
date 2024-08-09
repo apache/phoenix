@@ -50,7 +50,7 @@ import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDA
  * Tests to ensure connection creation by metadata coproc does not need to make
  * RPC call to metada coproc internally.
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class MetadataServerConnectionsIT extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MetadataServerConnectionsIT.class);
@@ -155,6 +155,9 @@ public class MetadataServerConnectionsIT extends BaseTest {
             Assert.assertTrue(rs.next());
             Assert.assertTrue(rs.next());
             Assert.assertFalse(rs.next());
+
+            TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+            TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
         }
     }
 
