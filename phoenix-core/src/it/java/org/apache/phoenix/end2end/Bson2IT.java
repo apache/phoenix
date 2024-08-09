@@ -37,7 +37,6 @@ import org.apache.phoenix.util.bson.TestFieldsMap;
 import org.apache.phoenix.util.bson.TestUtil;
 import org.apache.phoenix.util.bson.TestFieldValue;
 import org.apache.phoenix.util.bson.SerializableBytesPtr;
-import org.apache.phoenix.util.map.UpdateExpressionUtilsTest;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;

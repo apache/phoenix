@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.phoenix.util.map;
+package org.apache.phoenix.util.bson;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -38,10 +38,6 @@ import org.junit.Test;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.util.bson.DocumentComparisonExpressionUtils;
 import org.apache.phoenix.expression.util.bson.SQLComparisonExpressionUtils;
-import org.apache.phoenix.util.bson.TestFieldsMap;
-import org.apache.phoenix.util.bson.TestUtil;
-import org.apache.phoenix.util.bson.TestFieldValue;
-import org.apache.phoenix.util.bson.SerializableBytesPtr;
 
 import static org.junit.Assert.assertTrue;
 

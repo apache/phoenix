@@ -374,12 +374,12 @@ public class UpdateExpressionUtils {
             value, idx, fieldKey, newVal, updateOp);
         throw new RuntimeException("Value is null or it is not of type document.");
       }
-      BsonDocument nestedMap = (BsonDocument) value;
+      BsonDocument nestedDocument = (BsonDocument) value;
       curIdx++;
       StringBuilder sb = new StringBuilder();
       for (; curIdx < fieldKey.length(); curIdx++) {
         if (fieldKey.charAt(curIdx) == '.' || fieldKey.charAt(curIdx) == '[') {
-          BsonValue nestedValue = nestedMap.get(sb.toString());
+          BsonValue nestedValue = nestedDocument.get(sb.toString());
           if (nestedValue == null) {
             LOGGER.error("Should have found nested map for {}", sb);
             return;
@@ -392,7 +392,7 @@ public class UpdateExpressionUtils {
       }
       // reached leaf node of the document tree, update the value as per the update operator
       // semantics
-      updateValueAtLeafNode(newVal, updateOp, nestedMap, sb);
+      updateDocumentAtLeafNode(newVal, updateOp, nestedDocument, sb);
     } else if (fieldKey.charAt(curIdx) == '[') {
       curIdx++;
       StringBuilder arrayIdxStr = new StringBuilder();
@@ -407,14 +407,14 @@ public class UpdateExpressionUtils {
             value, idx, fieldKey, newVal);
         throw new RuntimeException("Value is null or not array.");
       }
-      BsonArray nestedList = (BsonArray) value;
+      BsonArray nestedArray = (BsonArray) value;
       if (curIdx == fieldKey.length()) {
         // reached leaf node of the document tree, update the value as per the update operator
         // semantics
-        updateValueAtLeafNode(fieldKey, newVal, updateOp, arrayIdx, nestedList);
+        updateArrayAtLeafNode(fieldKey, newVal, updateOp, arrayIdx, nestedArray);
         return;
       }
-      BsonValue nestedValue = nestedList.get(arrayIdx);
+      BsonValue nestedValue = nestedArray.get(arrayIdx);
       if (nestedValue == null) {
         LOGGER.error("Should have found nested list for index {}", arrayIdx);
         return;
@@ -450,56 +450,58 @@ public class UpdateExpressionUtils {
    * Perform update operation at the leaf node. This method is called only when the leaf
    * node or the target node for the given field key is encountered while iterating through
    * the tree structure. This is specifically called when the closest ancestor of the
-   * given node is a nested array.
+   * given node is a nested array. The leaf node is for the field key. For example, for
+   * "category.subcategories", the leaf node is "subcategories" whereas for
+   * "category.subcategories.brands[2]", the leaf node is "brands".
    *
    * @param fieldKey The full field key.
    * @param newVal New value to be used while performing update operation on the existing node.
    * @param updateOp Type of the update operation to be performed.
    * @param arrayIdx The index of the array at which the target node value is to be updated.
-   * @param nestedList The parent or ancestor node, expected to be nested array only.
-   * For example, for "category.subcategories.brands[5]" field key, the nestedList is expected to
+   * @param nestedArray The parent or ancestor node, expected to be nested array only.
+   * For example, for "category.subcategories.brands[5]" field key, the nestedArray is expected to
    * be "brands" array and arrayIdx is expected to be 5.
    */
-  private static void updateValueAtLeafNode(final String fieldKey,
+  private static void updateArrayAtLeafNode(final String fieldKey,
       final BsonValue newVal,
       final UpdateOp updateOp,
       final int arrayIdx,
-      final BsonArray nestedList) {
+      final BsonArray nestedArray) {
     switch (updateOp) {
       case SET: {
-        if (arrayIdx < nestedList.size()) {
-          nestedList.set(arrayIdx, newVal);
+        if (arrayIdx < nestedArray.size()) {
+          nestedArray.set(arrayIdx, newVal);
         } else {
-          nestedList.add(newVal);
+          nestedArray.add(newVal);
         }
         break;
       }
       case UNSET: {
-        nestedList.remove(arrayIdx);
+        nestedArray.remove(arrayIdx);
         break;
       }
       case ADD: {
-        if (arrayIdx < nestedList.size()) {
-          BsonValue currentValue = nestedList.get(arrayIdx);
+        if (arrayIdx < nestedArray.size()) {
+          BsonValue currentValue = nestedArray.get(arrayIdx);
           if (currentValue != null) {
-            nestedList.set(arrayIdx, modifyFieldValueByAdd(currentValue, newVal));
+            nestedArray.set(arrayIdx, modifyFieldValueByAdd(currentValue, newVal));
           } else {
-            nestedList.set(arrayIdx, newVal);
+            nestedArray.set(arrayIdx, newVal);
           }
         } else {
-          nestedList.add(newVal);
+          nestedArray.add(newVal);
         }
         break;
       }
       case DELETE_FROM_SET: {
-        if (arrayIdx < nestedList.size()) {
-          BsonValue currentValue = nestedList.get(arrayIdx);
+        if (arrayIdx < nestedArray.size()) {
+          BsonValue currentValue = nestedArray.get(arrayIdx);
           if (currentValue != null) {
             BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
             if (modifiedVal == null) {
-              nestedList.remove(arrayIdx);
+              nestedArray.remove(arrayIdx);
             } else {
-              nestedList.set(arrayIdx, modifiedVal);
+              nestedArray.set(arrayIdx, modifiedVal);
             }
           } else {
             LOGGER.info(
@@ -517,43 +519,45 @@ public class UpdateExpressionUtils {
    * Perform update operation at the leaf node. This method is called only when the leaf
    * node or the target node for the given field key is encountered while iterating through
    * the tree structure. This is specifically called when the closest ancestor of the
-   * given node is a nested document.
+   * given node is a nested document. The leaf node is for the field key. For example, for
+   * "category.subcategories", the leaf node is "subcategories" whereas for
+   * "category.subcategories.brands[2]", the leaf node is "brands".
    *
    * @param newVal New value to be used while performing update operation on the existing node.
    * @param updateOp Type of the update operation to be performed.
-   * @param nestedMap The parent or ancestor node, expected to be nested document only.
+   * @param nestedDocument The parent or ancestor node, expected to be nested document only.
    * @param targetNodeFieldKey The target fieldKey value. For example, for "category.subcategories"
-   * field key, the target node field key is expected to be "subcategories" and the nestedMap
+   * field key, the target node field key is expected to be "subcategories" and the nestedDocument
    * is expected to be "category" document.
    */
-  private static void updateValueAtLeafNode(BsonValue newVal, UpdateOp updateOp,
-      BsonDocument nestedMap, StringBuilder targetNodeFieldKey) {
+  private static void updateDocumentAtLeafNode(BsonValue newVal, UpdateOp updateOp,
+      BsonDocument nestedDocument, StringBuilder targetNodeFieldKey) {
     switch (updateOp) {
       case SET: {
-        nestedMap.put(targetNodeFieldKey.toString(), newVal);
+        nestedDocument.put(targetNodeFieldKey.toString(), newVal);
         break;
       }
       case UNSET: {
-        nestedMap.remove(targetNodeFieldKey.toString());
+        nestedDocument.remove(targetNodeFieldKey.toString());
         break;
       }
       case ADD: {
-        BsonValue currentValue = nestedMap.get(targetNodeFieldKey.toString());
+        BsonValue currentValue = nestedDocument.get(targetNodeFieldKey.toString());
         if (currentValue != null) {
-          nestedMap.put(targetNodeFieldKey.toString(), modifyFieldValueByAdd(currentValue, newVal));
+          nestedDocument.put(targetNodeFieldKey.toString(), modifyFieldValueByAdd(currentValue, newVal));
         } else {
-          nestedMap.put(targetNodeFieldKey.toString(), newVal);
+          nestedDocument.put(targetNodeFieldKey.toString(), newVal);
         }
         break;
       }
       case DELETE_FROM_SET: {
-        BsonValue currentValue = nestedMap.get(targetNodeFieldKey.toString());
+        BsonValue currentValue = nestedDocument.get(targetNodeFieldKey.toString());
         if (currentValue != null) {
           BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
           if (modifiedVal == null) {
-            nestedMap.remove(targetNodeFieldKey.toString());
+            nestedDocument.remove(targetNodeFieldKey.toString());
           } else {
-            nestedMap.put(targetNodeFieldKey.toString(), modifiedVal);
+            nestedDocument.put(targetNodeFieldKey.toString(), modifiedVal);
           }
         } else {
           LOGGER.info(

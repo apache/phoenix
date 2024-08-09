@@ -106,8 +106,9 @@ public class CommonComparisonExpressionUtils {
     }
     int curIdx = idx;
     if (documentFieldKey.charAt(curIdx) == '.') {
-      BsonDocument nestedMap = value != null && value.isDocument() ? (BsonDocument) value : null;
-      if (nestedMap == null) {
+      BsonDocument nestedDocument =
+          value != null && value.isDocument() ? (BsonDocument) value : null;
+      if (nestedDocument == null) {
         LOGGER.warn("Incorrect access. Should have found nested map for value: {}", value);
         return null;
       }
@@ -115,7 +116,7 @@ public class CommonComparisonExpressionUtils {
       StringBuilder sb = new StringBuilder();
       for (; curIdx < documentFieldKey.length(); curIdx++) {
         if (documentFieldKey.charAt(curIdx) == '.' || documentFieldKey.charAt(curIdx) == '[') {
-          BsonValue nestedValue = nestedMap.get(sb.toString());
+          BsonValue nestedValue = nestedDocument.get(sb.toString());
           if (nestedValue == null) {
             return null;
           }
@@ -124,7 +125,7 @@ public class CommonComparisonExpressionUtils {
           sb.append(documentFieldKey.charAt(curIdx));
         }
       }
-      return nestedMap.get(sb.toString());
+      return nestedDocument.get(sb.toString());
     } else if (documentFieldKey.charAt(curIdx) == '[') {
       curIdx++;
       StringBuilder arrayIdxStr = new StringBuilder();
@@ -134,18 +135,18 @@ public class CommonComparisonExpressionUtils {
       }
       curIdx++;
       int arrayIdx = Integer.parseInt(arrayIdxStr.toString());
-      BsonArray nestedList = value != null && value.isArray() ? (BsonArray) value : null;
-      if (nestedList == null) {
+      BsonArray nestedArray = value != null && value.isArray() ? (BsonArray) value : null;
+      if (nestedArray == null) {
         LOGGER.warn("Incorrect access. Should have found nested list for value: {}", value);
         return null;
       }
-      if (arrayIdx >= nestedList.size()) {
+      if (arrayIdx >= nestedArray.size()) {
         LOGGER.warn(
             "Incorrect access. Nested list size {} is less than attempted index access at {}",
-            nestedList.size(), arrayIdx);
+            nestedArray.size(), arrayIdx);
         return null;
       }
-      BsonValue valueAtIdx = nestedList.get(arrayIdx);
+      BsonValue valueAtIdx = nestedArray.get(arrayIdx);
       if (curIdx == documentFieldKey.length()) {
         return valueAtIdx;
       }
