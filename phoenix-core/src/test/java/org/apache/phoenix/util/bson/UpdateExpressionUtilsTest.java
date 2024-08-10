@@ -109,7 +109,9 @@ public class UpdateExpressionUtilsTest {
             "    \"Id2\": null,\n" +
             "    \"NestedMap1.Title\": null,\n" +
             "    \"NestedMap1.NestedMap2.InPublication\": null,\n" +
-            "    \"NestedList1[2][1].TitleSet1\": null\n" +
+            "    \"NestedList1[2][1].TitleSet1\": null,\n" +
+            "    \"NestedList1[2][10]\": null,\n" +
+            "    \"NestedMap1.NList1[2]\": null\n" +
             "  },\n" +
             "  \"$ADD\": {\n" +
             "    \"AddedId\": 10,\n" +
@@ -135,6 +137,14 @@ public class UpdateExpressionUtilsTest {
             "            \"subType\": \"00\"\n" +
             "          }\n" +
             "        }\n" +
+            "      ]\n" +
+            "    },\n" +
+            "    \"NestedList12[2][2]\": {\n" +
+            "      \"$set\": [\n" +
+            "        -234.56,\n" +
+            "        123,\n" +
+            "        93756.93475960549,\n" +
+            "        293755723028458.6\n" +
             "      ]\n" +
             "    },\n" +
             "    \"Pictures\": {\n" +
@@ -218,7 +228,9 @@ public class UpdateExpressionUtilsTest {
     //    "Id2": null,
     //    "NestedMap1.Title": null,
     //    "NestedMap1.NestedMap2.InPublication": null,
-    //    "NestedList1[2][1].TitleSet1": null
+    //    "NestedList1[2][1].TitleSet1": null,
+    //    "NestedList1[2][10]": null,
+    //    "NestedMap1.NList1[2]": null
     //  },
     //  "$ADD": {
     //    "AddedId": 10,
@@ -244,6 +256,14 @@ public class UpdateExpressionUtilsTest {
     //            "subType": "00"
     //          }
     //        }
+    //      ]
+    //    },
+    //    "NestedList12[2][2]": {
+    //      "$set": [
+    //        -234.56,
+    //        123,
+    //        93756.93475960549,
+    //        293755723028458.6
     //      ]
     //    },
     //    "Pictures": {
@@ -304,6 +324,16 @@ public class UpdateExpressionUtilsTest {
     //    "NestedList1[4]": true,
     //    "attr_5[0]": "attr_5[0] - 10",
     //    "Id1": "12345"
+    //  },
+    //  "$DELETE_FROM_SET": {
+    //    "NestedList12[2][2]": {
+    //      "$set": [
+    //        -234.56,
+    //        123,
+    //        93756.93475960549,
+    //        293755723028458.6
+    //      ]
+    //    }
     //  }
     //}
 
@@ -314,6 +344,16 @@ public class UpdateExpressionUtilsTest {
             "    \"NestedList1[4]\": true,\n" +
             "    \"attr_5[0]\": \"attr_5[0] - 10\",\n" +
             "    \"Id1\": \"12345\"\n" +
+            "  },\n" +
+            "  \"$DELETE_FROM_SET\": {\n" +
+            "    \"NestedList12[2][2]\": {\n" +
+            "      \"$set\": [\n" +
+            "        -234.56,\n" +
+            "        123,\n" +
+            "        93756.93475960549,\n" +
+            "        293755723028458.6\n" +
+            "      ]\n" +
+            "    }\n" +
             "  }\n" +
             "}";
 
@@ -575,7 +615,8 @@ public class UpdateExpressionUtilsTest {
     nestedMap1.put("InPublication", new TestFieldValue().withBOOL(false));
     nestedMap1.put("NList1",
         new TestFieldValue().withL(new TestFieldValue().withS("NListVal01"),
-            new TestFieldValue().withN(-0.00234)));
+            new TestFieldValue().withN(-0.00234),
+            new TestFieldValue().withB(new SerializableBytesPtr(Bytes.toBytes("to_be_removed")))));
     Map<String, TestFieldValue> nestedMap2 = new HashMap<>();
     nestedMap2.put("Id", new TestFieldValue().withN(101.22));
     nestedMap2.put("Title", new TestFieldValue().withS("Book 10122 Title"));
@@ -617,7 +658,8 @@ public class UpdateExpressionUtilsTest {
     map.put("NestedList12",
         new TestFieldValue().withL(new TestFieldValue().withN(-485.34),
             new TestFieldValue().withS("1234abcd"),
-            new TestFieldValue().withL(new TestFieldValue().withSS("xyz0123"),
+            new TestFieldValue().withL(
+                new TestFieldValue().withSS("xyz0123"),
                 new TestFieldValue().withBS(
                     new SerializableBytesPtr(Bytes.toBytes("val01")),
                     new SerializableBytesPtr(Bytes.toBytes("val02")),
@@ -730,7 +772,12 @@ public class UpdateExpressionUtilsTest {
                     new SerializableBytesPtr(Bytes.toBytes("val01")),
                     new SerializableBytesPtr(Bytes.toBytes("val02")),
                     new SerializableBytesPtr(Bytes.toBytes("val03")),
-                    new SerializableBytesPtr(Bytes.toBytes("val04"))))));
+                    new SerializableBytesPtr(Bytes.toBytes("val04"))),
+                new TestFieldValue().withNS(
+                    -234.56,
+                    123,
+                    93756.93475960549,
+                    293755723028458.6))));
     testFieldsMap.setMap(map);
     return testFieldsMap;
   }

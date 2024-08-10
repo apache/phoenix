@@ -152,7 +152,7 @@ public class UpdateExpressionUtils {
       }
       // If the top level field exists, perform the operation here and return.
       if (topLevelValue != null) {
-        BsonValue value = modifyFieldValueByDelete(topLevelValue, newVal);
+        BsonValue value = modifyFieldValueByDeleteFromSet(topLevelValue, newVal);
         if (value == null) {
           bsonDocument.remove(fieldKey);
         } else {
@@ -179,7 +179,7 @@ public class UpdateExpressionUtils {
    * @param setValuesToDelete The set values that need to be deleted from the currentValue set.
    * @return Updated set after performing the set difference operation.
    */
-  private static BsonValue modifyFieldValueByDelete(final BsonValue currentValue,
+  private static BsonValue modifyFieldValueByDeleteFromSet(final BsonValue currentValue,
       final BsonValue setValuesToDelete) {
     if (areBsonSetOfSameType(currentValue, setValuesToDelete)) {
       Set<BsonValue> set1 =
@@ -477,7 +477,9 @@ public class UpdateExpressionUtils {
         break;
       }
       case UNSET: {
-        nestedArray.remove(arrayIdx);
+        if (arrayIdx < nestedArray.size()) {
+          nestedArray.remove(arrayIdx);
+        }
         break;
       }
       case ADD: {
@@ -497,7 +499,7 @@ public class UpdateExpressionUtils {
         if (arrayIdx < nestedArray.size()) {
           BsonValue currentValue = nestedArray.get(arrayIdx);
           if (currentValue != null) {
-            BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
+            BsonValue modifiedVal = modifyFieldValueByDeleteFromSet(currentValue, newVal);
             if (modifiedVal == null) {
               nestedArray.remove(arrayIdx);
             } else {
@@ -553,7 +555,7 @@ public class UpdateExpressionUtils {
       case DELETE_FROM_SET: {
         BsonValue currentValue = nestedDocument.get(targetNodeFieldKey.toString());
         if (currentValue != null) {
-          BsonValue modifiedVal = modifyFieldValueByDelete(currentValue, newVal);
+          BsonValue modifiedVal = modifyFieldValueByDeleteFromSet(currentValue, newVal);
           if (modifiedVal == null) {
             nestedDocument.remove(targetNodeFieldKey.toString());
           } else {
