@@ -324,6 +324,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                 + tableName + "(v1)" + (uncovered ? "" :  "INCLUDE(v2, v3)"));
         final CountDownLatch doneSignal = new CountDownLatch(nThreads);
         Runnable[] runnables = new Runnable[nThreads];
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         for (int i = 0; i < nThreads; i++) {
             runnables[i] = new Runnable() {
 
@@ -357,6 +358,8 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         }
 
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
+        System.out.println("Total upsert time in ms : "
+                + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
         long actualRowCount = verifyIndexTable(tableName, indexName, conn);
         assertEquals(nRows, actualRowCount);
     }
