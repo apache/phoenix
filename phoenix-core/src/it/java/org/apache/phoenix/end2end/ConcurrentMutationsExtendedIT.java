@@ -19,7 +19,6 @@ package org.apache.phoenix.end2end;
 
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
-import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseIOException;
@@ -42,6 +41,8 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -68,12 +69,15 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
-
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(ConcurrentMutationsExtendedIT.class);
     private final boolean uncovered;
     private static final Random RAND = new Random(5);
     private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";
@@ -111,7 +115,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         // This checks the state of every raw index row without rebuilding any row
         IndexTool indexTool = IndexToolIT.runIndexTool(false, "", tableName,
                 indexName, null, 0, IndexTool.IndexVerifyType.ONLY);
-        System.out.println(indexTool.getJob().getCounters());
+        LOGGER.info(indexTool.getJob().getCounters().toString());
         TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
         assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
@@ -126,7 +130,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         // We want to check the index rows again as they may be modified by the read repair
         indexTool = IndexToolIT.runIndexTool(false, "", tableName, indexName,
                 null, 0, IndexTool.IndexVerifyType.ONLY);
-        System.out.println(indexTool.getJob().getCounters());
+        LOGGER.info(indexTool.getJob().getCounters().toString());
 
         assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
         assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
@@ -344,7 +348,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
                         }
                         conn.commit();
                     } catch (SQLException e) {
-                        System.out.println(e);
+                        LOGGER.warn("Exception during upsert : " + e);
                     } finally {
                         doneSignal.countDown();
                     }
@@ -358,7 +362,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
         }
 
         assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
-        System.out.println("Total upsert time in ms : "
+        LOGGER.info("Total upsert time in ms : "
                 + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
         long actualRowCount = verifyIndexTable(tableName, indexName, conn);
         assertEquals(nRows, actualRowCount);
