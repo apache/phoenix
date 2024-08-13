@@ -29,7 +29,7 @@ public class PVarbinaryEncoded extends PVarbinary {
     public static final PVarbinaryEncoded INSTANCE = new PVarbinaryEncoded();
 
     private PVarbinaryEncoded() {
-        super("VARBINARY_ENCODED", PDataType.VARBINARY_ENCODED_TYPE, byte[].class, null, 49);
+        super("VARBINARY_ENCODED", PDataType.VARBINARY_ENCODED_TYPE, byte[].class, null, 50);
     }
 
     private byte[] encodeBytesAscOrder(byte[] bytes) {

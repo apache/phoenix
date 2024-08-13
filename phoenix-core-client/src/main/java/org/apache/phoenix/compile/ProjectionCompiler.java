@@ -88,6 +88,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -782,7 +783,7 @@ public class ProjectionCompiler {
 
         private static boolean parseOnServer(Expression expression) {
             return expression.getDataType().isArrayType() || expression.getDataType()
-                    .equals(PJson.INSTANCE);
+                    .equals(PJson.INSTANCE) || expression.getDataType().equals(PBson.INSTANCE);
         }
 
         @Override
@@ -817,7 +818,8 @@ public class ProjectionCompiler {
                     @Override
                     public Void visit(ProjectedColumnExpression expression) {
                         if (expression.getDataType().isArrayType() || expression.getDataType()
-                                .equals(PJson.INSTANCE)) {
+                            .equals(PJson.INSTANCE) || expression.getDataType()
+                            .equals(PBson.INSTANCE)) {
                             indexProjectedColumns.add(expression);
                             PColumn col = expression.getColumn();
                             // hack'ish... For covered columns with local indexes we defer to the server.

@@ -17,30 +17,31 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.function.FunctionExpression;
-import org.apache.phoenix.expression.function.JsonValueFunction;
-import org.apache.phoenix.schema.types.PBson;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PJson;
-
 import java.sql.SQLException;
 import java.util.List;
 
-public class JsonValueParseNode extends FunctionParseNode {
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.BsonUpdateExpressionFunction;
+import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.schema.types.PBson;
+import org.apache.phoenix.schema.types.PDataType;
 
-    public JsonValueParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+public class BsonUpdateExpressionParseNode extends FunctionParseNode {
+
+    public BsonUpdateExpressionParseNode(String name, List<ParseNode> children,
+        BuiltInFunctionInfo info) {
         super(name, children, info);
     }
 
     @Override
     public FunctionExpression create(List<Expression> children, StatementContext context)
             throws SQLException {
-        PDataType dataType = children.get(0).getDataType();
-        if (!dataType.isCoercibleTo(PJson.INSTANCE) && !dataType.isCoercibleTo(PBson.INSTANCE)) {
-            throw new SQLException(dataType + " type is unsupported for JSON_VALUE().");
+        PDataType<?> dataType = children.get(0).getDataType();
+        if (!dataType.isCoercibleTo(PBson.INSTANCE)) {
+            throw new SQLException(
+                dataType + " type is unsupported for BSON_CONDITION_EXPRESSION().");
         }
-        return new JsonValueFunction(children);
+        return new BsonUpdateExpressionFunction(children);
     }
 }
