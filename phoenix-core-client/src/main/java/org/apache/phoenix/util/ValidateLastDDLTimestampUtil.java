@@ -249,7 +249,9 @@ public class ValidateLastDDLTimestampUtil {
             return tableUCF > 0 && tableUCF < Long.MAX_VALUE
                     && conn.getMetaDataCache().getAge(ptr) < table.getUpdateCacheFrequency();
         } catch (TableNotFoundException e) {
-            return true;
+            //should not happen since this is called after query compilation and optimizer
+            //so the table would be in the cache
+            return false;
         }
     }
 }
