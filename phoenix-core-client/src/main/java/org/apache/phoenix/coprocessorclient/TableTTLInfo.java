@@ -24,7 +24,7 @@ import java.util.Arrays;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.TTLExpression;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Simple POJO class to hold TTL info
