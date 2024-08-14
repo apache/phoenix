@@ -206,6 +206,11 @@ public class CreateTableCompiler {
                             try {
                                 viewTypeToBe = setViewTypeToBe(connection, parentToBe,
                                         pkColumnsInWhere, nonPkColumnsInWhere);
+                                LOGGER.info("VIEW type is set to {}. View Statement: {}, " +
+                                                "View Name: {}, " +
+                                                "Parent Table/View Name: {}",
+                                        viewTypeToBe, viewStatementToBe,
+                                        create.getTableName(), parentToBe.getName());
                             } catch (IOException e) {
                                 throw new SQLException(e);
                             }
@@ -261,12 +266,12 @@ public class CreateTableCompiler {
     }
 
     /**
-     * Restrict view to be UPDATABLE if the view specification (view statement):
-     * 1. uses only the PK columns
-     * 2. starts from the first PK column if the parent table is not multi tenant; otherwise,
-     * starts from the second PK column (the first column will be TENANT_ID)
-     * 3. PK columns should be in the order they are defined
-     * 4. uses the same set of PK columns as its sibling views' specification
+     * Restrict view to be UPDATABLE if the view specification:
+     * 1. uses only the PK columns;
+     * 2. starts from the first PK column (ignore the prefix PK columns, TENANT_ID and/or
+     * _SALTED, if the parent table is multi-tenant and/or salted);
+     * 3. PK columns should be in the order they are defined;
+     * 4. uses the same set of PK columns as its sibling views' specification;
      * Otherwise, mark the view as READ_ONLY.
      *
      * @param connection The client connection
@@ -282,23 +287,23 @@ public class CreateTableCompiler {
             throws IOException, SQLException {
         // 1. Check the view specification WHERE clause uses only the PK columns
         if (!nonPkColumnsInWhere.isEmpty()) {
-            LOGGER.info("Setting the view type as READ_ONLY because the statement contains non-PK" +
-                    " columns");
+            LOGGER.info("Setting the view type as READ_ONLY because the view statement contains " +
+                    "non-PK columns: {}", nonPkColumnsInWhere);
             return ViewType.READ_ONLY;
         }
         if (pkColumnsInWhere.isEmpty()) {
             return ViewType.UPDATABLE;
         }
 
+        // 2. Check the WHERE clause starts from the first PK column (ignore the prefix PK
+        // columns, TENANT_ID and/or _SALTED, if the parent table is multi-tenant and/or salted)
         List<Integer> tablePkPositions = new ArrayList<>();
         List<Integer> viewPkPositions = new ArrayList<>();
-        parentToBe.getPKColumns().forEach(tablePkColumn ->
+        List<PColumn> tablePkColumns = parentToBe.getPKColumns();
+        tablePkColumns.forEach(tablePkColumn ->
                 tablePkPositions.add(tablePkColumn.getPosition()));
         pkColumnsInWhere.forEach(pkColumn -> viewPkPositions.add(pkColumn.getPosition()));
         Collections.sort(viewPkPositions);
-        // tablePkStartIdx is used to decide the starting point of tablePkPositions when
-        // comparing with viewPkPositions, which should be increased by 1 if the parent table is
-        // multi-tenant or salted, because in these cases the first PK will be TENANT_ID or _SALTED
         int tablePkStartIdx = 0;
         if (parentToBe.isMultiTenant()) {
             tablePkStartIdx++;
@@ -306,23 +311,23 @@ public class CreateTableCompiler {
         if (parentToBe.getBucketNum() != null) {
             tablePkStartIdx++;
         }
-
-        // 2. If not multi tenant, view specification WHERE clause should start from the first PK
-        // column; otherwise, start from the second PK column
         if (!Objects.equals(viewPkPositions.get(0), tablePkPositions.get(tablePkStartIdx))) {
-            LOGGER.info("Setting the view type as READ_ONLY because the statement WHERE clause " +
-                    "does not start from the first PK column");
+            LOGGER.info("Setting the view type as READ_ONLY because the view statement WHERE " +
+                    "clause does not start from the first PK column (ignore the prefix PKs " +
+                    "if the parent table is multi-tenant and/or salted). View PK Columns: " +
+                    "{}, Table PK Columns: {}", pkColumnsInWhere, tablePkColumns);
             return ViewType.READ_ONLY;
         }
 
-        // 3. Otherwise, PK column(s) should be in the order they are defined
+        // 3. Check PK columns are in the order they are defined
         if (!isPkColumnsInOrder(viewPkPositions, tablePkPositions, tablePkStartIdx)) {
             LOGGER.info("Setting the view type as READ_ONLY because the PK columns is not in the " +
-                    "order they are defined");
+                    "order they are defined. View PK Columns: {}, Table PK Columns: {}",
+                    pkColumnsInWhere, tablePkColumns);
             return ViewType.READ_ONLY;
         }
 
-        // 4. Check it uses the same set of PK column(s) as its sibling views' specification
+        // 4. Check the view specification has the same set of PK column(s) as its sibling view
         byte[] parentTenantIdInBytes = parentToBe.getTenantId() != null
                 ? parentToBe.getTenantId().getBytes() : null;
         byte[] parentSchemaNameInBytes = parentToBe.getSchemaName() != null
@@ -344,12 +349,14 @@ public class CreateTableCompiler {
                 if (siblingViewWhere != null) {
                     ViewWhereExpressionValidatorVisitor siblingViewValidatorVisitor =
                             new ViewWhereExpressionValidatorVisitor(parentToBe,
-                                    siblingViewPkColsInWhere, new HashSet<>());
+                                    siblingViewPkColsInWhere, null);
                     siblingViewWhere.accept(siblingViewValidatorVisitor);
                 }
                 if (!pkColumnsInWhere.equals(siblingViewPkColsInWhere)) {
-                    LOGGER.info("Setting the view type as READ_ONLY because the set of PK columns" +
-                            " are different from its sibling views'");
+                    LOGGER.info("Setting the view type as READ_ONLY because its set of PK " +
+                                    "columns is different from its sibling view {}'s. View PK " +
+                                    "Columns: {}, Sibling View PK Columns: {}",
+                            siblingView.getName(), pkColumnsInWhere, siblingViewPkColsInWhere);
                     return ViewType.READ_ONLY;
                 }
             }
@@ -682,16 +689,18 @@ public class CreateTableCompiler {
 
         @Override
         public Boolean visit(RowKeyColumnExpression node) {
-            this.pkColumns.add(table.getPKColumns().get(node.getPosition()));
+            pkColumns.add(table.getPKColumns().get(node.getPosition()));
             return Boolean.TRUE;
         }
 
         @Override
         public Boolean visit(KeyValueColumnExpression node) {
             try {
-                this.nonPKColumns.add(
-                        table.getColumnFamily(node.getColumnFamily())
-                                .getPColumnForColumnQualifier(node.getColumnQualifier()));
+                if (nonPKColumns != null) {
+                    nonPKColumns.add(
+                            table.getColumnFamily(node.getColumnFamily())
+                                    .getPColumnForColumnQualifier(node.getColumnQualifier()));
+                }
             } catch (SQLException e) {
                 throw new RuntimeException(e); // Impossible
             }

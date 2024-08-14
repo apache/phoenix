@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.TableProperty;
@@ -34,7 +33,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -93,13 +91,13 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
 
     private void createTable(Connection conn, String tableName,
                              boolean multitenant, Integer nSaltBuckets) throws Exception {
-        String table_sql = "CREATE TABLE " + tableName + " ("
+        String tableSQL = "CREATE TABLE " + tableName + " ("
                 + (multitenant ? "TENANT_ID VARCHAR NOT NULL, " : "")
                 + "k1 INTEGER NOT NULL, k2 DECIMAL, k3 INTEGER NOT NULL, s VARCHAR "
                 + "CONSTRAINT pk PRIMARY KEY ("
                 + (multitenant ? "TENANT_ID, " : "")
                 + "k1, k2, k3))";
-        createTable(conn, table_sql, new HashMap<String, Object>() {{
+        createTable(conn, tableSQL, new HashMap<String, Object>() {{
             put(TableProperty.MULTI_TENANT.getPropertyName(), multitenant);
             put(TableProperty.SALT_BUCKETS.getPropertyName(), nSaltBuckets);
         }});
@@ -129,6 +127,9 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         }
     }
 
+    /**
+     * Test that the view type is READ_ONLY if there are non-PK columns in the WHERE clause.
+     */
     @Test
     public void testReadOnlyViewWithNonPkInWhere() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -137,6 +138,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
             createTable(conn, fullTableName);
 
             Statement stmt = conn.createStatement();
@@ -151,6 +153,10 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         }
     }
 
+    /**
+     * Test that the view type is READ_ONLY if PK columns in the WHERE clause are not in the order
+     * they are defined: primary key k2 is missing in this case.
+     */
     @Test
     public void testReadOnlyViewWithPkNotInOrderInWhere1() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -159,6 +165,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
             createTable(conn, fullTableName);
 
             Statement stmt = conn.createStatement();
@@ -173,6 +180,10 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         }
     }
 
+    /**
+     * Test that the view type is READ_ONLY if PK columns in the WHERE clause are not in the order
+     * they are defined: primary key k3 is missing in this case.
+     */
     @Test
     public void testReadOnlyViewWithPkNotInOrderInWhere2() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
@@ -181,7 +192,10 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-            createTable(conn, fullTableName);
+            conn.setAutoCommit(true);
+            conn.createStatement().execute("CREATE TABLE " + fullTableName
+                    + " (k1 INTEGER NOT NULL, k2 DECIMAL, k3 INTEGER NOT NULL, s VARCHAR "
+                    + "CONSTRAINT pk PRIMARY KEY (k1, k2, k3, s))");
 
             Statement stmt = conn.createStatement();
             String viewDDL = "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName +
@@ -195,8 +209,12 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         }
     }
 
+    /**
+     * Test that the view type is READ_ONLY if the set of PK columns in the WHERE clause are not
+     * same as its sibling view's: primary key k3 is redundant in this case.
+     */
     @Test
-    public void testReadOnlyViewWithPkNotSameInWhere() throws Exception {
+    public void testReadOnlyViewWithPkNotSameInWhere1() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullGlobalViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
@@ -205,6 +223,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
             createTable(conn, fullTableName);
 
             Statement stmt = conn.createStatement();
@@ -228,26 +247,53 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         }
     }
 
+    /**
+     * Test that the view type is READ_ONLY if the set of PK columns in the WHERE clause are not
+     * same as its sibling view's: primary key k3 is missing in this case.
+     */
     @Test
-    public void testUpdatableViewOnNonMultitenantNonSaltedTableStartFromFirstPK() throws Exception {
-        testUpdatableViewStartFromFirstPK(false, null);
+    public void testReadOnlyViewWithPkNotSameInWhere2() throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullGlobalViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+        String fullSiblingViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            createTable(conn, fullTableName);
+
+            Statement stmt = conn.createStatement();
+            String globalViewDDL =
+                    "CREATE VIEW " + fullGlobalViewName + " AS SELECT * FROM " + fullTableName +
+                            " WHERE k1 = 1";
+            stmt.execute(globalViewDDL);
+
+            String siblingViewDDL = "CREATE VIEW " + fullSiblingViewName + " AS SELECT * FROM " +
+                    fullGlobalViewName + " WHERE k2 = 1 AND k3 = 109";
+            stmt.execute(siblingViewDDL);
+            String viewDDL =
+                    "CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullGlobalViewName
+                            + " WHERE k2 = 2";
+            stmt.execute(viewDDL);
+            try {
+                stmt.execute("UPSERT INTO " + fullViewName + " VALUES(1, 2, 109, 'a')");
+                fail();
+            } catch (ReadOnlyTableException ignored) {
+            }
+        }
     }
 
-    @Test
-    public void testUpdatableViewOnMultitenantNonSaltedTableStartFromFirstPK() throws Exception {
-        testUpdatableViewStartFromFirstPK(true, null);
-    }
-
-    @Test
-    public void testUpdatableViewOnNonMultitenantSaltedTableStartFromFirstPK() throws Exception {
-        testUpdatableViewStartFromFirstPK(false, 3);
-    }
-
-    @Test
-    public void testUpdatableViewOnMultitenantSaltedTableStartFromFirstPK() throws Exception {
-        testUpdatableViewStartFromFirstPK(true, 3);
-    }
-
+    /**
+     * Test that the view type is UPDATABLE if the view statement WHERE clause
+     * starts from the first PK column (ignore the prefix PK columns, TENANT_ID and/or _SALTED,
+     * if the parent table is multi-tenant and/or salted),
+     * and satisfies all other criteria.
+     * @param multitenant Whether the parent table is multi-tenant
+     * @param nSaltBuckets Number of salt buckets
+     * @throws Exception
+     */
     private void testUpdatableViewStartFromFirstPK(boolean multitenant, Integer nSaltBuckets) throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         Properties props = new Properties();
@@ -259,17 +305,134 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
             if (multitenant) {
                 tenantId = TENANT1;
                 try (Connection tenantConn = getTenantConnection(tenantId)) {
-                    createAndVerifyUpdatableView(fullTableName, tenantConn, tenantId);
+                    createAndVerifyUpdatableView(fullTableName, tenantConn);
                 }
             } else {
-                createAndVerifyUpdatableView(fullTableName, conn, null);
+                createAndVerifyUpdatableView(fullTableName, conn);
             }
             verifyNumberOfRows(fullTableName, tenantId, 1, conn);
         }
     }
 
+    /**
+     * Test that the view type is READ_ONLY if the view statement WHERE clause
+     * does not start from the first PK column (ignore the prefix PK columns, TENANT_ID and/or
+     * _SALTED, if the parent table is multi-tenant and/or salted).
+     * @param multitenant Whether the parent table is multi-tenant
+     * @param nSaltBuckets Number of salt buckets
+     * @throws Exception
+     */
+    private void testReadOnlyViewNotStartFromFirstPK(boolean multitenant, Integer nSaltBuckets) throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String tenantId = TENANT1;
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
+        try (Connection globalConn = DriverManager.getConnection(getUrl(), props);
+             Connection tenantConn = getTenantConnection(tenantId)) {
+            globalConn.setAutoCommit(true);
+            tenantConn.setAutoCommit(true);
+
+            createTable(globalConn, fullTableName, multitenant, nSaltBuckets);
+
+            final Statement stmt = multitenant ? tenantConn.createStatement() :
+                    globalConn.createStatement();
+            stmt.execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " +
+                    fullTableName + " WHERE k2 = 2");
+            try {
+                stmt.execute(String.format("UPSERT INTO %s VALUES" +
+                        "(1, 2, 3, 's')", fullViewName));
+                fail();
+            } catch (ReadOnlyTableException ignored) {
+            }
+        }
+    }
+
+    /**
+     * Test that the view type is READ_ONLY if the view statement WHERE clause does not start
+     * from the first PK column when the parent table is neither multi-tenant nor salted.
+     */
+    @Test
+    public void testReadOnlyViewOnNonMultitenantNonSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(false, null);
+    }
+
+    /**
+     * Test that the view type is READ_ONLY if the view statement WHERE clause does not start
+     * from the first PK column when the parent table is multi-tenant and not salted (ignore the
+     * prefix PK column TENANT_ID).
+     */
+    @Test
+    public void testReadOnlyViewOnMultitenantNonSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(true, null);
+    }
+
+    /**
+     * Test that the view type is READ_ONLY if the view statement WHERE clause does not start
+     * from the first PK column when the parent table is not multi-tenant but salted (ignore
+     * the prefix PK column _SALTED).
+     */
+    @Test
+    public void testReadOnlyViewOnNonMultitenantSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(false, 3);
+    }
+
+    /**
+     * Test that the view type is READ_ONLY if the view statement WHERE clause does not start
+     * from the first PK column when the parent table is both multi-tenant and salted (ignore
+     * the prefix PK columns TENANT_ID and _SALTED).
+     */
+    @Test
+    public void testReadOnlyViewOnMultitenantSaltedTableNotStartFromFirstPK() throws Exception {
+        testReadOnlyViewNotStartFromFirstPK(true, 3);
+    }
+
+    /**
+     * Test that the view type is UPDATABLE if the view statement WHERE clause
+     * starts from the first PK column when the parent table is neither multi-tenant nor salted,
+     * and satisfies all other criteria.
+     */
+    @Test
+    public void testUpdatableViewOnNonMultitenantNonSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(false, null);
+    }
+
+    /**
+     * Test that the view type is UPDATABLE if the view statement WHERE clause
+     * starts from the first PK column when the parent table is multi-tenant and not salted
+     * (ignore the prefix PK column TENANT_ID),
+     * and satisfies all other criteria.
+     */
+    @Test
+    public void testUpdatableViewOnMultitenantNonSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(true, null);
+    }
+
+    /**
+     * Test that the view type is UPDATABLE if the view statement WHERE clause
+     * starts from the first PK column when the parent table is not multi-tenant but salted
+     * (ignore the prefix PK column _SALTED),
+     * and satisfies all other criteria.
+     */
+    @Test
+    public void testUpdatableViewOnNonMultitenantSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(false, 3);
+    }
+
+    /**
+     * Test that the view type is UPDATABLE if the view statement WHERE clause
+     * starts from the first PK column when the parent table is both multi-tenant and salted
+     * (ignore the prefix PK columns TENANT_ID and _SALTED),
+     * and satisfies all other criteria.
+     */
+    @Test
+    public void testUpdatableViewOnMultitenantSaltedTableStartFromFirstPK() throws Exception {
+        testUpdatableViewStartFromFirstPK(true, 3);
+    }
+
     private void createAndVerifyUpdatableView(
-            String fullTableName, Connection conn, String tenantId) throws Exception {
+            String fullTableName, Connection conn) throws Exception {
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         Statement stmt = conn.createStatement();
 
@@ -287,52 +450,107 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
         assertFalse(rs.next());
     }
 
+    /**
+     * Test that the view type is READ_ONLY when it's created on an updatable view and PK columns
+     * in the WHERE clause are not in the order they are defined.
+     */
     @Test
-    public void testReadOnlyViewOnNonMultitenantNonSaltedTableNotStartFromFirstPK() throws Exception {
-        testReadOnlyViewNotStartFromFirstPK(false, null);
-    }
-
-    @Test
-    public void testReadOnlyViewOnMultitenantNonSaltedTableNotStartFromFirstPK() throws Exception {
-        testReadOnlyViewNotStartFromFirstPK(true, null);
-    }
-
-    @Test
-    public void testReadOnlyViewOnNonMultitenantSaltedTableNotStartFromFirstPK() throws Exception {
-        testReadOnlyViewNotStartFromFirstPK(false, 3);
-    }
-
-    @Test
-    public void testReadOnlyViewOnMultitenantSaltedTableNotStartFromFirstPK() throws Exception {
-        testReadOnlyViewNotStartFromFirstPK(true, 3);
-    }
-
-    private void testReadOnlyViewNotStartFromFirstPK(boolean multitenant, Integer nSaltBuckets) throws Exception {
+    public void testReadOnlyViewOnUpdatableView1() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-        String tenantId = TENANT1;
+        String fullChildViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
 
         Properties props = new Properties();
         props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
-        try (Connection globalConn = DriverManager.getConnection(getUrl(), props);
-             Connection tenantConn = getTenantConnection(tenantId)) {
-            createTable(globalConn, fullTableName, multitenant, nSaltBuckets);
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
 
-            final Statement stmt = multitenant ? tenantConn.createStatement() :
-                    globalConn.createStatement();
-            stmt.execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " +
-                    fullTableName + " WHERE k2 = 2");
-            try {
-                stmt.execute(String.format("UPSERT INTO %s VALUES" +
-                        "(1, 2, 3, 's')", fullViewName));
-                fail();
-            } catch (ReadOnlyTableException ignored) {
-            }
+        createTable(conn, fullTableName);
+        Statement stmt = conn.createStatement();
+
+        String viewDDL = "CREATE VIEW " + fullViewName +
+                " AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
+        stmt.execute(viewDDL);
+
+        String childViewDDL = "CREATE VIEW " + fullChildViewName +
+                " AS SELECT * FROM " + fullViewName + " WHERE k3 = 3";
+        stmt.execute(childViewDDL);
+
+        try {
+            stmt.execute("UPSERT INTO " + fullChildViewName + " VALUES(1, 2, 3, 'a')");
+            fail();
+        } catch (ReadOnlyTableException ignored) {
+        }
+    }
+
+    /**
+     * Test that the view type is READ_ONLY when it's created on an updatable view and there are
+     * non-PK columns in the WHERE clause.
+     */
+    @Test
+    public void testReadOnlyViewOnUpdatableView2() throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullChildViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+
+        createTable(conn, fullTableName);
+        Statement stmt = conn.createStatement();
+
+        String viewDDL = "CREATE VIEW " + fullViewName +
+                " AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
+        stmt.execute(viewDDL);
+
+        String childViewDDL = "CREATE VIEW " + fullChildViewName +
+                " AS SELECT * FROM " + fullViewName + " WHERE k2 = 2 AND k3 = 3 AND s = 'a'";
+        stmt.execute(childViewDDL);
+
+        try {
+            stmt.execute("UPSERT INTO " + fullChildViewName + " VALUES(1, 2, 3, 'a')");
+            fail();
+        } catch (ReadOnlyTableException ignored) {
         }
     }
 
     @Test
-    public void testUpdatableViewOnView() throws Exception {
+    public void testUpdatableViewOnUpdatableView() throws Exception {
+        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
+        String fullViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
+        String fullChildViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        conn.setAutoCommit(true);
+
+        createTable(conn, fullTableName);
+        Statement stmt = conn.createStatement();
+
+        String viewDDL = "CREATE VIEW " + fullViewName +
+                " AS SELECT * FROM " + fullTableName + " WHERE k1 = 1";
+        stmt.execute(viewDDL);
+
+        String childViewDDL = "CREATE VIEW " + fullChildViewName +
+                " AS SELECT * FROM " + fullViewName + " WHERE k2 = 2 AND k3 = 3";
+        stmt.execute(childViewDDL);
+
+        stmt.execute("UPSERT INTO " + fullChildViewName + " VALUES(1, 2, 3, 'a')");
+
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + fullChildViewName);
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+        assertEquals(2, rs.getInt(2));
+        assertEquals(3, rs.getInt(3));
+        assertEquals("a", rs.getString(4));
+        assertFalse(rs.next());
+    }
+
+    @Test
+    public void testSiblingsUpdatableOnUpdatableView() throws Exception {
         String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
         String fullGlobalViewName = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
         String fullViewName = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
@@ -388,51 +606,18 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
             assertEquals(1, rs.getInt(2));
             assertEquals(105, rs.getInt(3));
             assertFalse(rs.next());
-        }
-    }
 
-    @Test
-    public void testReadOnlyViewOnUpdatableView() throws Exception {
-        String fullTableName = SchemaUtil.getTableName(SCHEMA1, generateUniqueName());
-        String fullViewName1 = SchemaUtil.getTableName(SCHEMA2, generateUniqueName());
-        String fullViewName2 = SchemaUtil.getTableName(SCHEMA3, generateUniqueName());
-        String ddl = "CREATE VIEW " + fullViewName2 + " AS SELECT * FROM " + fullViewName1 +
-                " WHERE k2 = 101";
-        ViewIT.testUpdatableView(
-                fullTableName, fullViewName1, fullViewName2, ddl, null, "");
-
-        Properties props = new Properties();
-        props.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
-        Connection conn = DriverManager.getConnection(getUrl(), props);
-        ResultSet rs = conn.createStatement().executeQuery("SELECT k1, k2, k3 FROM " + fullViewName2);
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        assertEquals(101, rs.getInt(2));
-        assertEquals(1, rs.getInt(3));
-        assertFalse(rs.next());
-
-        conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k3) VALUES(10)");
-        conn.commit();
-        rs = conn.createStatement().executeQuery("SELECT k1, k2, k3 FROM " + fullViewName2 + " " +
-                "WHERE k3 >= 10");
-        assertTrue(rs.next());
-        assertEquals(1, rs.getInt(1));
-        assertEquals(101, rs.getInt(2));
-        assertEquals(10, rs.getInt(3));
-        assertFalse(rs.next());
-
-        try {
-            conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k2,k3) VALUES(123,3)");
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
-        }
-
-        try {
-            conn.createStatement().execute("UPSERT INTO " + fullViewName2 + "(k2,k3) select 102, k3 from " + fullViewName1);
-            fail();
-        } catch (SQLException e) {
-            assertEquals(SQLExceptionCode.CANNOT_UPDATE_VIEW_COLUMN.getErrorCode(), e.getErrorCode());
+            stmt.execute("UPSERT INTO " + fullLeafViewName1 + " VALUES(1, 1, 101, 'leaf1')");
+            stmt.execute("UPSERT INTO " + fullLeafViewName2 + " VALUES(1, 1, 105, 'leaf2')");
+            conn.commit();
+            rs = stmt.executeQuery("SELECT s FROM " + fullLeafViewName1);
+            assertTrue(rs.next());
+            assertEquals("leaf1", rs.getString(1));
+            assertFalse(rs.next());
+            rs = stmt.executeQuery("SELECT s FROM " + fullLeafViewName2);
+            assertTrue(rs.next());
+            assertEquals("leaf2", rs.getString(1));
+            assertFalse(rs.next());
         }
     }
 
@@ -455,6 +640,7 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
                     + "COL1, COL2)) MULTI_TENANT = true");
 
             try (Connection tenantConn = getTenantConnection(TENANT1)) {
+                tenantConn.setAutoCommit(true);
                 final Statement tenantStmt = tenantConn.createStatement();
 
                 stmt.execute("CREATE VIEW " + view01
@@ -465,7 +651,6 @@ public class UpdatableViewRestrictionsIT extends SplitSystemCatalogIT {
                 tenantStmt.execute("CREATE VIEW " + view03 + " AS SELECT * FROM " + view02
                         + " WHERE VCOL1 = 'vcol1'");
 
-                tenantConn.setAutoCommit(true);
                 tenantStmt.execute(String.format("UPSERT INTO %s (VCOL1,COL3,COL4,COL5)" +
                         " VALUES('vcol2', 'col3', 'col4', 'col5')", view02));
                 tenantStmt.execute(String.format("UPSERT INTO %s (COL3,COL4,COL5)" +
