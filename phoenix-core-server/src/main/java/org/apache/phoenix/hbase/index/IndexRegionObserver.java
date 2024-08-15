@@ -58,7 +58,6 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HConstants.OperationStatusCode;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -366,7 +365,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
   private boolean isNamespaceEnabled = false;
   private boolean useBloomFilter = false;
-
+  private long lastTimestamp = 0;
+  private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
 
@@ -1044,7 +1044,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
      * either set to "verified" or the row is deleted.
      */
     private void preparePreIndexMutations(BatchMutateContext context,
-                                          long now,
+                                          long batchTimestamp,
                                           PhoenixIndexMetaData indexMetaData) throws Throwable {
         List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
         // get the current span, or just use a null-span to avoid a bunch of if statements
@@ -1056,7 +1056,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             current.addTimelineAnnotation("Built index updates, doing preStep");
             // The rest of this method is for handling global index updates
             context.indexUpdates = ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>>create();
-            prepareIndexMutations(context, maintainers, now);
+            prepareIndexMutations(context, maintainers, batchTimestamp);
 
             context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
             int updateCount = 0;
@@ -1076,7 +1076,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         // Set the status of the index row to "unverified"
                         Put unverifiedPut = new Put(m.getRow());
                         unverifiedPut.addColumn(
-                            emptyCF, emptyCQ, now, QueryConstants.UNVERIFIED_BYTES);
+                            emptyCF, emptyCQ, batchTimestamp, QueryConstants.UNVERIFIED_BYTES);
                         // This will be done before the data table row is updated (i.e., in the first write phase)
                         context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
                     }
@@ -1100,7 +1100,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     private void preparePostIndexMutations(BatchMutateContext context,
-                                           long now,
+                                           long batchTimestamp,
                                            PhoenixIndexMetaData indexMetaData) {
         context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation>create();
         List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
@@ -1116,7 +1116,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     if (!indexMaintainer.isUncovered()) {
                         Put verifiedPut = new Put(m.getRow());
                         // Set the status of the index row to "verified"
-                        verifiedPut.addColumn(emptyCF, emptyCQ, now, QueryConstants.VERIFIED_BYTES);
+                        verifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp,
+                                QueryConstants.VERIFIED_BYTES);
                         context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
                     }
                 } else {
@@ -1211,6 +1212,53 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
     }
 
+    private boolean shouldSleep(BatchMutateContext context) {
+        for (ImmutableBytesPtr ptr : context.rowsToLock) {
+            for (Set set : batchesWithLastTimestamp) {
+                if (set.contains(ptr)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    private long getBatchTimestamp(BatchMutateContext context, TableName table)
+            throws InterruptedException {
+        synchronized (this) {
+            long ts = EnvironmentEdgeManager.currentTimeMillis();
+            if (ts != lastTimestamp) {
+                // The timestamp for this batch will be different from the last batch processed.
+                lastTimestamp = ts;
+                batchesWithLastTimestamp.clear();
+                batchesWithLastTimestamp.add(context.rowsToLock);
+                return ts;
+            } else {
+                if (!shouldSleep(context)) {
+                    // There is no need to sleep as the last batches with the same timestamp
+                    // do not have a common row this batch
+                    batchesWithLastTimestamp.add(context.rowsToLock);
+                    return ts;
+                }
+            }
+        }
+        // Sleep for one millisecond. The sleep is necessary to get different timestamps
+        // for concurrent batches that share common rows.
+        Thread.sleep(1);
+        LOG.debug("slept 1ms for " + table.getNameAsString());
+        synchronized (this) {
+            long ts = EnvironmentEdgeManager.currentTimeMillis();
+            if (ts != lastTimestamp) {
+                // The timestamp for this batch will be different from the last batch processed.
+                lastTimestamp = ts;
+                batchesWithLastTimestamp.clear();
+            }
+            // We do not have to check again if we need to sleep again since we got the next
+            // timestamp while holding the row locks. This mean there cannot be a new
+            // mutation with the same row attempting get the same timestamp
+            batchesWithLastTimestamp.add(context.rowsToLock);
+            return ts;
+        }
+    }
     public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
                                              MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
         PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
@@ -1226,7 +1274,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             ServerIndexUtil.setDeleteAttributes(miniBatchOp);
         }
 
-        // Exclusively lock all rows to do consistent writes over multiple tables (i.e., the data and its index tables)
+        // Exclusively lock all rows to do consistent writes over multiple tables
+        // (i.e., the data and its index tables)
         populateRowsToLock(miniBatchOp, context);
         // early exit if it turns out we don't have any update for indexes
         if (context.rowsToLock.isEmpty()) {
@@ -1265,27 +1314,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
         }
 
-        long now = EnvironmentEdgeManager.currentTimeMillis();
-        // Update the timestamps of the data table mutations to prevent overlapping timestamps (which prevents index
-        // inconsistencies as this case isn't handled correctly currently).
-        setTimestamps(miniBatchOp, builder, now);
-
         TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+        long batchTimestamp = getBatchTimestamp(context, table);
+        // Update the timestamps of the data table mutations to prevent overlapping timestamps
+        // (which prevents index inconsistencies as this case is not handled).
+        setTimestamps(miniBatchOp, builder, batchTimestamp);
         if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
             // Prepare next data rows states for pending mutations (for global indexes)
-            prepareDataRowStates(c, miniBatchOp, context, now);
+            prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
             // early exit if it turns out we don't have any edits
             long start = EnvironmentEdgeManager.currentTimeMillis();
-            preparePreIndexMutations(context, now, indexMetaData);
+            preparePreIndexMutations(context, batchTimestamp, indexMetaData);
             metricSource.updateIndexPrepareTime(dataTableName,
                 EnvironmentEdgeManager.currentTimeMillis() - start);
-            // Sleep for one millisecond if we have prepared the index updates in less than 1 ms. The sleep is necessary to
-            // get different timestamps for concurrent batches that share common rows. It is very rare that the index updates
-            // can be prepared in less than one millisecond
-            if (!context.rowLocks.isEmpty() && now == EnvironmentEdgeManager.currentTimeMillis()) {
-                Thread.sleep(1);
-                LOG.debug("slept 1ms for " + table.getNameAsString());
-            }
             // Release the locks before making RPC calls for index updates
             unlockRows(context);
             // Do the first phase index updates
@@ -1295,7 +1336,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             if (context.lastConcurrentBatchContext != null) {
                 waitForPreviousConcurrentBatch(table, context);
             }
-            preparePostIndexMutations(context, now, indexMetaData);
+            preparePostIndexMutations(context, batchTimestamp, indexMetaData);
         }
         if (context.hasLocalIndex) {
             // Group all the updates for a single row into a single update to be processed (for local indexes)
