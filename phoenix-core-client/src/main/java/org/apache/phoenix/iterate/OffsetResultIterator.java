@@ -22,7 +22,6 @@ import java.util.List;
 
 import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
-import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -38,7 +37,6 @@ public class OffsetResultIterator extends DelegateResultIterator {
     private Tuple lastScannedTuple;
     private long pageSizeMs = Long.MAX_VALUE;
     private boolean isIncompatibleClient = false;
-    private ScannerContext scannerContext;
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset) {
         super(delegate);
@@ -47,11 +45,10 @@ public class OffsetResultIterator extends DelegateResultIterator {
     }
 
     public OffsetResultIterator(ResultIterator delegate, Integer offset, long pageSizeMs,
-                                boolean isIncompatibleClient, ScannerContext scannerContext) {
+                                boolean isIncompatibleClient) {
         this(delegate, offset);
         this.pageSizeMs = pageSizeMs;
         this.isIncompatibleClient = isIncompatibleClient;
-        this.scannerContext =  scannerContext;
     }
 
     @Override
@@ -114,9 +111,5 @@ public class OffsetResultIterator extends DelegateResultIterator {
 
     public void setRowCountToOffset() {
         this.rowCount = this.offset;
-    }
-
-    public ScannerContext getRegionScannerContext() {
-        return scannerContext;
     }
 }
