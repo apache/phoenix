@@ -785,8 +785,12 @@ public class MetaDataClient {
             final long effectiveUpdateCacheFreq;
             final String ucfInfoForLogging; // Only used for logging purposes
 
-            boolean overrideUcfToDefault =
-                PIndexState.PENDING_DISABLE.equals(table.getIndexState());
+            boolean overrideUcfToDefault = false;
+            if (table.getType() == INDEX) {
+                overrideUcfToDefault =
+                        PIndexState.PENDING_DISABLE.equals(table.getIndexState()) ||
+                                !IndexMaintainer.sendIndexMaintainer(table);
+            }
             if (!overrideUcfToDefault && !table.getIndexes().isEmpty()) {
                 List<PTable> indexes = table.getIndexes();
                 List<PTable> maintainedIndexes =

@@ -22,11 +22,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.util.Map;
 
-//@Category(NeedsOwnMiniClusterTest.class)
-// Uncomment as part of PHOENIX-7381
+@Category(NeedsOwnMiniClusterTest.class)
 public class UpdateCacheFreqWithDDLValidationIT extends UpdateCacheFreqIT {
 
     private static void initCluster() throws Exception {
@@ -44,6 +45,18 @@ public class UpdateCacheFreqWithDDLValidationIT extends UpdateCacheFreqIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         initCluster();
+    }
+
+    @Test
+    public void testUcfWithNoGetTableCalls() throws Throwable {
+        // Uncomment with PHOENIX-7381
+        //super.testUcfWithNoGetTableCalls();
+    }
+
+    @Test
+    public void testUcfWithDisabledIndex() throws Throwable {
+        // Uncomment with PHOENIX-7381
+        //super.testUcfWithDisabledIndex();
     }
 
 }

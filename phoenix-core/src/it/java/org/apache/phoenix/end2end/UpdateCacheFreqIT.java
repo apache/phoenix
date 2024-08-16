@@ -110,7 +110,7 @@ public class UpdateCacheFreqIT extends BaseTest {
             stmt.execute("CREATE TABLE " + tableName
                     + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
                     + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))"
-                    + " UPDATE_CACHE_FREQUENCY=10000");
+                    + " UPDATE_CACHE_FREQUENCY=20000");
             stmt.execute("CREATE INDEX " + indexName
                     + " ON " + tableName + " (COL3) INCLUDE (COL4)");
             stmt.execute("CREATE VIEW " + view01
