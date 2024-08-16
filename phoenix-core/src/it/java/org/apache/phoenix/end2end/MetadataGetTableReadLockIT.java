@@ -41,7 +41,7 @@ import java.util.concurrent.CountDownLatch;
 /**
  * Class which tests whether non-exclusive locking on metadata read path (getTable) works as expected.
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class MetadataGetTableReadLockIT extends BaseTest {
 
     @BeforeClass
@@ -123,16 +123,17 @@ public class MetadataGetTableReadLockIT extends BaseTest {
 
         @Override
         protected Region.RowLock acquireLock(Region region, byte[] lockKey, List<Region.RowLock> locks, boolean readLock) throws IOException {
+            long tmpSleepDuration = sleepDuration;
             Region.RowLock rowLock = region.getRowLock(lockKey, this.getMetadataReadLockEnabled && readLock);
             if (rowLock == null) {
                 throw new IOException("Failed to acquire lock on " + Bytes.toStringBinary(lockKey));
             }
-            sleepSignal.countDown();
             if (locks != null) {
                 locks.add(rowLock);
             }
+            sleepSignal.countDown();
             try {
-                Thread.sleep(sleepDuration);
+                Thread.sleep(tmpSleepDuration);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
