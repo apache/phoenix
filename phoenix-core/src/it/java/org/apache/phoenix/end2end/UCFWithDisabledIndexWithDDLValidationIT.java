@@ -65,4 +65,10 @@ public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledInde
         //super.testUcfWithDisabledIndex2();
     }
 
+    @Test
+    public void testUcfWithDisabledIndex3() throws Throwable {
+        // Uncomment with PHOENIX-7381
+        //super.testUcfWithDisabledIndex3();
+    }
+
 }

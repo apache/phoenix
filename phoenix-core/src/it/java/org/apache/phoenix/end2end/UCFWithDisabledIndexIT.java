@@ -27,11 +27,14 @@ import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.PhoenixIOException;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -49,6 +52,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
+import java.util.Properties;
 
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 
@@ -191,7 +195,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            final Statement stmt = processIndexDisableWithUpdatedCoproc(conn, tableName, indexName);
+            final Statement stmt = createIndexAndUpdateCoproc(conn, tableName, indexName, true);
 
             stmt.execute("UPSERT INTO " + tableName
                     + " (col1, col2, col3, col4) values ('c011', "
@@ -209,9 +213,10 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         }
     }
 
-    private static Statement processIndexDisableWithUpdatedCoproc(Connection conn,
-                                                                  String tableName,
-                                                                  String indexName)
+    private static Statement createIndexAndUpdateCoproc(Connection conn,
+                                                        String tableName,
+                                                        String indexName,
+                                                        boolean alterIndexState)
             throws Exception {
         final Statement stmt = conn.createStatement();
 
@@ -222,14 +227,39 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         stmt.execute("CREATE INDEX " + indexName
                 + " ON " + tableName + " (COL3) INCLUDE (COL4)");
 
-        stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " DISABLE");
+        if (alterIndexState) {
+            stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " DISABLE");
+        }
+
+        // attach coproc that does not allow getTable RPC call
+        TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+        TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+
+        stmt.execute("UPSERT INTO " + tableName
+                + " (col1, col2, col3, col4) values ('c000', "
+                + "'c002', 'c003', 'c004')");
+        // not expected to call getTable
+        conn.commit();
+
+        // re-attach original coproc
+        TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+        TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
 
         Thread.sleep(11000);
         stmt.execute("UPSERT INTO " + tableName
                 + " (col1, col2, col3, col4) values ('c001', "
                 + "'c002', 'c003', 'c004')");
+        // expected to call getTable
         conn.commit();
 
+        PTable indexTable = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+        if (alterIndexState) {
+            Assert.assertEquals(PIndexState.DISABLE, indexTable.getIndexState());
+        } else {
+            Assert.assertEquals(PIndexState.CREATE_DISABLE, indexTable.getIndexState());
+        }
+
+        // attach coproc that does not allow getTable RPC call
         TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
         TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
         return stmt;
@@ -242,9 +272,38 @@ public class UCFWithDisabledIndexIT extends BaseTest {
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            final Statement stmt = processIndexDisableWithUpdatedCoproc(conn, tableName, indexName);
+            final Statement stmt = createIndexAndUpdateCoproc(conn, tableName, indexName, true);
 
             stmt.execute("SELECT * FROM " + indexName);
+            throw new RuntimeException("Should not reach here");
+        } catch (PhoenixIOException e) {
+            LOGGER.error("Error thrown. ", e);
+            Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
+            Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+        } finally {
+            TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+            TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+            conn.close();
+        }
+    }
+
+    @Test
+    public void testUcfWithDisabledIndex3() throws Throwable {
+        final String tableName = generateUniqueName();
+        final String indexName = "IDX_" + tableName;
+
+        Properties props = new Properties();
+        props.setProperty(QueryServices.INDEX_CREATE_DEFAULT_STATE,
+                PIndexState.CREATE_DISABLE.toString());
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+        try {
+            final Statement stmt = createIndexAndUpdateCoproc(conn, tableName,
+                    indexName, false);
+
+            stmt.execute("UPSERT INTO " + tableName
+                    + " (col1, col2, col3, col4) values ('c011', "
+                    + "'c012', 'c013', 'c014')");
+            conn.commit();
             throw new RuntimeException("Should not reach here");
         } catch (PhoenixIOException e) {
             LOGGER.error("Error thrown. ", e);
