@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
@@ -214,8 +215,65 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+            verifyTableAndIndexRows(conn, tableName, indexName, false);
             conn.close();
         }
+    }
+
+    private static void verifyTableAndIndexRows(Connection conn,
+                                                String tableName,
+                                                String indexName,
+                                                boolean isCreateDisableCase)
+            throws SQLException {
+        ResultSet rs1 = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+        ResultSet rs2 = conn.createStatement().executeQuery("SELECT * FROM " + indexName);
+        if (!isCreateDisableCase) {
+            Assert.assertTrue(rs1.next());
+            Assert.assertEquals("c000", rs1.getString(1));
+            Assert.assertEquals("c002", rs1.getString(2));
+            Assert.assertEquals("c003", rs1.getString(3));
+            Assert.assertEquals("c004", rs1.getString(4));
+            Assert.assertTrue(rs1.next());
+            Assert.assertEquals("c001", rs1.getString(1));
+            Assert.assertEquals("c002", rs1.getString(2));
+            Assert.assertEquals("c003", rs1.getString(3));
+            Assert.assertEquals("c004", rs1.getString(4));
+        }
+        Assert.assertTrue(rs1.next());
+        Assert.assertEquals("c011", rs1.getString(1));
+        Assert.assertEquals("c012", rs1.getString(2));
+        Assert.assertEquals("c013", rs1.getString(3));
+        Assert.assertEquals("c014", rs1.getString(4));
+        Assert.assertTrue(rs1.next());
+        Assert.assertEquals("c0112", rs1.getString(1));
+        Assert.assertEquals("c012", rs1.getString(2));
+        Assert.assertEquals("c013", rs1.getString(3));
+        Assert.assertEquals("c014", rs1.getString(4));
+        Assert.assertFalse(rs1.next());
+
+        if (!isCreateDisableCase) {
+            Assert.assertTrue(rs2.next());
+            Assert.assertEquals("c003", rs2.getString(1));
+            Assert.assertEquals("c000", rs2.getString(2));
+            Assert.assertEquals("c002", rs2.getString(3));
+            Assert.assertEquals("c004", rs2.getString(4));
+            Assert.assertTrue(rs2.next());
+            Assert.assertEquals("c003", rs2.getString(1));
+            Assert.assertEquals("c001", rs2.getString(2));
+            Assert.assertEquals("c002", rs2.getString(3));
+            Assert.assertEquals("c004", rs2.getString(4));
+        }
+        Assert.assertTrue(rs2.next());
+        Assert.assertEquals("c013", rs2.getString(1));
+        Assert.assertEquals("c011", rs2.getString(2));
+        Assert.assertEquals("c012", rs2.getString(3));
+        Assert.assertEquals("c014", rs2.getString(4));
+        Assert.assertTrue(rs2.next());
+        Assert.assertEquals("c013", rs2.getString(1));
+        Assert.assertEquals("c0112", rs2.getString(2));
+        Assert.assertEquals("c012", rs2.getString(3));
+        Assert.assertEquals("c014", rs2.getString(4));
+        Assert.assertFalse(rs2.next());
     }
 
     private static void updateIndexToRebuild(Connection conn, String tableName, String indexName)
@@ -265,6 +323,10 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " DISABLE");
         }
 
+        // expected to call getTable
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
+        Assert.assertFalse(rs.next());
+
         // attach coproc that does not allow getTable RPC call
         TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
         TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
@@ -272,7 +334,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
         stmt.execute("UPSERT INTO " + tableName
                 + " (col1, col2, col3, col4) values ('c000', "
                 + "'c002', 'c003', 'c004')");
-        // not expected to call getTable
+        // not expected to call getTable unless index is created in CREATE_DISABLE state
         conn.commit();
 
         // re-attach original coproc
@@ -318,6 +380,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+            verifyTableAndIndexRows(conn, tableName, indexName, false);
             conn.close();
         }
     }
@@ -348,6 +411,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+            verifyTableAndIndexRows(conn, tableName, indexName, true);
             conn.close();
         }
     }
