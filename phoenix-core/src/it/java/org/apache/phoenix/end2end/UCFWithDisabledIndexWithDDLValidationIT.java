@@ -27,6 +27,12 @@ import org.junit.experimental.categories.Category;
 
 import java.util.Map;
 
+/**
+ * Tests that use UPDATE_CACHE_FREQUENCY with some of the disabled index states that require
+ * clients to override UPDATE_CACHE_FREQUENCY and perform metadata calls to retrieve PTable.
+ * The cluster is brought up with required configs at client and server side to enable
+ * metadata caching redesign.
+ */
 @Category(NeedsOwnMiniClusterTest.class)
 public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledIndexIT {
 

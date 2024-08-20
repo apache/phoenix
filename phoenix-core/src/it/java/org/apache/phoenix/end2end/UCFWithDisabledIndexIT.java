@@ -56,6 +56,10 @@ import java.util.Properties;
 
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 
+/**
+ * Tests that use UPDATE_CACHE_FREQUENCY with some of the disabled index states that require
+ * clients to override UPDATE_CACHE_FREQUENCY and perform metadata calls to retrieve PTable.
+ */
 @Category(NeedsOwnMiniClusterTest.class)
 public class UCFWithDisabledIndexIT extends BaseTest {
 
@@ -207,10 +211,40 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
             Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
         } finally {
+            updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
             conn.close();
         }
+    }
+
+    private static void updateIndexToRebuild(Connection conn, String tableName, String indexName)
+            throws Exception {
+        // re-attach original coproc
+        TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+        TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+
+        final Statement stmt = conn.createStatement();
+        stmt.execute("UPSERT INTO " + tableName
+                + " (col1, col2, col3, col4) values ('c011', "
+                + "'c012', 'c013', 'c014')");
+        // expected to call getTable
+        conn.commit();
+
+        stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+
+        PTable indexTable = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+        Assert.assertEquals(PIndexState.ACTIVE, indexTable.getIndexState());
+
+        // attach coproc that does not allow getTable RPC call
+        TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+        TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+
+        stmt.execute("UPSERT INTO " + tableName
+                + " (col1, col2, col3, col4) values ('c0112', "
+                + "'c012', 'c013', 'c014')");
+        // not expected to call getTable
+        conn.commit();
     }
 
     private static Statement createIndexAndUpdateCoproc(Connection conn,
@@ -281,6 +315,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
             Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
         } finally {
+            updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
             conn.close();
@@ -310,6 +345,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
             Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
             Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
         } finally {
+            updateIndexToRebuild(conn, tableName, indexName);
             TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
             TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
             conn.close();
