@@ -33,6 +33,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -286,12 +287,11 @@ public class CountRowsScannedIT extends BaseTest {
         return getRowsScanned(rs);
     }
 
-    private long getRowsScanned(ResultSet rs) {
+    private long getRowsScanned(ResultSet rs) throws SQLException {
         if (!(rs instanceof PhoenixResultSet)) {
             return -1;
         }
-        PhoenixResultSet phoenixResultSet = (PhoenixResultSet) rs;
-        Map<String, Map<MetricType, Long>> metrics = phoenixResultSet.getReadMetrics();
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
 
         long sum = 0;
         boolean valid = false;
