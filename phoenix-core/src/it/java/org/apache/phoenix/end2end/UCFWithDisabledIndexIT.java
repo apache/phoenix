@@ -53,9 +53,9 @@ import java.util.Map;
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class UpdateCacheFreqIT extends BaseTest {
+public class UCFWithDisabledIndexIT extends BaseTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(UpdateCacheFreqIT.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UCFWithDisabledIndexIT.class);
 
     private static void initCluster() throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
@@ -185,36 +185,66 @@ public class UpdateCacheFreqIT extends BaseTest {
     }
 
     @Test
-    public void testUcfWithDisabledIndex() throws Throwable {
+    public void testUcfWithDisabledIndex1() throws Throwable {
         final String tableName = generateUniqueName();
         final String indexName = "IDX_" + tableName;
 
         Connection conn = DriverManager.getConnection(getUrl());
         try {
-            final Statement stmt = conn.createStatement();
-
-            stmt.execute("CREATE TABLE " + tableName
-                    + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-                    + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))"
-                    + " UPDATE_CACHE_FREQUENCY=10000");
-            stmt.execute("CREATE INDEX " + indexName
-                    + " ON " + tableName + " (COL3) INCLUDE (COL4)");
-
-            stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " DISABLE");
-
-            Thread.sleep(11000);
-            stmt.execute("UPSERT INTO " + tableName
-                    + " (col1, col2, col3, col4) values ('c001', "
-                    + "'c002', 'c003', 'c004')");
-            conn.commit();
-
-            TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
-            TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+            final Statement stmt = processIndexDisableWithUpdatedCoproc(conn, tableName, indexName);
 
             stmt.execute("UPSERT INTO " + tableName
                     + " (col1, col2, col3, col4) values ('c011', "
                     + "'c012', 'c013', 'c014')");
             conn.commit();
+            throw new RuntimeException("Should not reach here");
+        } catch (PhoenixIOException e) {
+            LOGGER.error("Error thrown. ", e);
+            Assert.assertTrue(e.getCause() instanceof DoNotRetryIOException);
+            Assert.assertTrue(e.getCause().getMessage().contains("Not allowed"));
+        } finally {
+            TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+            TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+            conn.close();
+        }
+    }
+
+    private static Statement processIndexDisableWithUpdatedCoproc(Connection conn,
+                                                                  String tableName,
+                                                                  String indexName)
+            throws Exception {
+        final Statement stmt = conn.createStatement();
+
+        stmt.execute("CREATE TABLE " + tableName
+                + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
+                + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))"
+                + " UPDATE_CACHE_FREQUENCY=10000");
+        stmt.execute("CREATE INDEX " + indexName
+                + " ON " + tableName + " (COL3) INCLUDE (COL4)");
+
+        stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " DISABLE");
+
+        Thread.sleep(11000);
+        stmt.execute("UPSERT INTO " + tableName
+                + " (col1, col2, col3, col4) values ('c001', "
+                + "'c002', 'c003', 'c004')");
+        conn.commit();
+
+        TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+        TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+        return stmt;
+    }
+
+    @Test
+    public void testUcfWithDisabledIndex2() throws Throwable {
+        final String tableName = generateUniqueName();
+        final String indexName = "IDX_" + tableName;
+
+        Connection conn = DriverManager.getConnection(getUrl());
+        try {
+            final Statement stmt = processIndexDisableWithUpdatedCoproc(conn, tableName, indexName);
+
+            stmt.execute("SELECT * FROM " + indexName);
             throw new RuntimeException("Should not reach here");
         } catch (PhoenixIOException e) {
             LOGGER.error("Error thrown. ", e);

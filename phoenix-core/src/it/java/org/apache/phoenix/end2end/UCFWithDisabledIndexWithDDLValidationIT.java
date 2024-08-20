@@ -28,7 +28,7 @@ import org.junit.experimental.categories.Category;
 import java.util.Map;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class UpdateCacheFreqWithDDLValidationIT extends UpdateCacheFreqIT {
+public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledIndexIT {
 
     private static void initCluster() throws Exception {
         Map<String, String> props = Maps.newConcurrentMap();
@@ -54,9 +54,15 @@ public class UpdateCacheFreqWithDDLValidationIT extends UpdateCacheFreqIT {
     }
 
     @Test
-    public void testUcfWithDisabledIndex() throws Throwable {
+    public void testUcfWithDisabledIndex1() throws Throwable {
         // Uncomment with PHOENIX-7381
-        //super.testUcfWithDisabledIndex();
+        //super.testUcfWithDisabledIndex1();
+    }
+
+    @Test
+    public void testUcfWithDisabledIndex2() throws Throwable {
+        // Uncomment with PHOENIX-7381
+        //super.testUcfWithDisabledIndex2();
     }
 
 }
