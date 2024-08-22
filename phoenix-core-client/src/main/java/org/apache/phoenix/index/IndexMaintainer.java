@@ -150,8 +150,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         IndexMaintainer maintainer = new IndexMaintainer(dataTable, index, connection);
         return maintainer;
     }
-    
-    private static boolean sendIndexMaintainer(PTable index) {
+
+    /**
+     * Determines whether the client should send IndexMaintainer for the given Index table.
+     *
+     * @param index PTable for the index table.
+     * @return True if the client needs to send IndexMaintainer for the given Index.
+     */
+    public static boolean sendIndexMaintainer(PTable index) {
         PIndexState indexState = index.getIndexState();
         return ! ( indexState.isDisabled() || PIndexState.PENDING_ACTIVE == indexState );
     }
