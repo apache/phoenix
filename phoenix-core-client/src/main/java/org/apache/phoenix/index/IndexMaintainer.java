@@ -920,11 +920,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 length--;
                 trailingVariableWidthColumnNum--;
             }
-            // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
-            // we store this in nIndexSaltBuckets, as we only use this function for local indexes
-            // in which case nIndexSaltBuckets would never be used. Note that when we do add this
-            // to be serialized, we have to add it at the end and allow for the value not being
-            // there to maintain compatibility between an old client and a new server.
             if (isDataTableSalted) {
                 // Set salt byte
                 byte saltByte = SaltingUtil.getSaltingByte(dataRowKey,

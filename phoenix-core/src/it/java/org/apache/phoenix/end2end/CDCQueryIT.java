@@ -92,7 +92,7 @@ public class CDCQueryIT extends CDCBaseIT {
     }
 
     @Parameterized.Parameters(name = "forView={0} dataBeforeCDC={1}, encodingScheme={2}, " +
-            "multitenant={3}, indexSaltBuckets={4}, tableSaltBuckets={5} withSchemaName=${6}")
+            "multitenant={3}, indexSaltBuckets={4}, tableSaltBuckets={5} withSchemaName={6}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
                 { Boolean.FALSE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
@@ -101,8 +101,7 @@ public class CDCQueryIT extends CDCBaseIT {
                         Boolean.TRUE },
                 { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 1, 1,
                         Boolean.FALSE },
-                // Once PHOENIX-7239, change this to have different salt buckets for data and index.
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 3, 5,
+                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 1, 2,
                         Boolean.TRUE },
                 { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null,
                         Boolean.FALSE },
@@ -170,6 +169,17 @@ public class CDCQueryIT extends CDCBaseIT {
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
+            // For debug: uncomment to see the exact results logged to console.
+            //try (Statement stmt = conn.createStatement()) {
+            //    try (ResultSet rs = stmt.executeQuery(
+            //            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
+            //                    "\"CDC JSON\" FROM " + cdcFullName)) {
+            //        while (rs.next()) {
+            //            System.out.println("----- " + rs.getString(1) + " " +
+            //                    rs.getInt(2) + " " + rs.getString(3));
+            //        }
+            //    }
+            //}
 
             // Existence of CDC shouldn't cause the regular query path to fail.
             String uncovered_sql = "SELECT " + " /*+ INDEX(" + tableName + " " +
@@ -416,16 +426,27 @@ public class CDCQueryIT extends CDCBaseIT {
             put("V1", "INTEGER");
             put("V2", "INTEGER");
         }};
+
+        // For debug: uncomment to see the exact HBase cells.
+        //LOGGER.debug("----- DUMP data table: " + datatableName + " -----");
+        //SingleCellIndexIT.dumpTable(datatableName);
+        //LOGGER.debug("----- DUMP index table: " + CDCUtil.getCDCIndexName(cdcName) + " -----");
+        //SingleCellIndexIT.dumpTable(SchemaUtil.getTableName(schemaName,
+        //        CDCUtil.getCDCIndexName(cdcName)));
+        //LOGGER.debug("----- -----");
+
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
             //try (Statement stmt = conn.createStatement()) {
             //    try (ResultSet rs = stmt.executeQuery(
             //            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
             //                    "\"CDC JSON\" FROM " + cdcFullName)) {
+            //        LOGGER.debug("----- DUMP of CDC query  -----");
             //        while (rs.next()) {
             //            System.out.println("----- " + rs.getString(1) + " " +
             //                    rs.getInt(2) + " " + rs.getString(3));
             //        }
+            //        LOGGER.debug("----- -----");
             //    }
             //}
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(

@@ -1360,7 +1360,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                                     indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
                                     ByteUtil.EMPTY_BYTE_ARRAY);
                             indexMutations.add(IndexRegionObserver.getDeleteIndexMutation(
-                                    currentDataRowState, indexMaintainer, ts, rowKeyPtr));
+                                    cdcDataRowState, indexMaintainer, ts, rowKeyPtr));
                         }
                     }
                     currentDataRowState = null;

@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableProperty;
@@ -64,6 +65,7 @@ import java.util.stream.Stream;
 import static java.util.stream.Collectors.*;
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
+import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
@@ -515,6 +517,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
         }
         committer.reset();
+        // For debug logging, uncomment this code to see the list of changes.
+        //for (int i = 0; i < changes.size(); ++i) {
+        //    System.out.println("----- generated change: " + i +
+        //            " tenantId:" + changes.get(i).tenantId +
+        //            " changeTS: " + changes.get(i).changeTS +
+        //            " pks: " + changes.get(i).pks +
+        //            " change: " + changes.get(i).change);
+        //}
         return changes;
     }
 
@@ -524,10 +534,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         Set<Map<String, Object>> deletedRows = new HashSet<>();
         for (int i = 0, changenr = 0; i < changes.size(); ++i) {
             ChangeRow changeRow = changes.get(i);
-            if (changeRow.getTenantID() != null && changeRow.getTenantID() != tenantId) {
+            if (tenantId != null && changeRow.getTenantID() != tenantId) {
                 continue;
             }
             if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
+                // FIXME: Check if this can cause a flapper as we are not incrementing changenr.
                 // Consecutive delete operations don't appear as separate events.
                 if (deletedRows.contains(changeRow.pks)) {
                     continue;
@@ -537,13 +548,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             else {
                 deletedRows.remove(changeRow.pks);
             }
-            String changeDesc = "Change " + (changenr+1) + ": " + changeRow;
+            String changeDesc = "Change " + changenr + ": " + changeRow;
             assertTrue(changeDesc, rs.next());
             for (Map.Entry<String, Object> pkCol: changeRow.pks.entrySet()) {
                 assertEquals(changeDesc, pkCol.getValue(), rs.getObject(pkCol.getKey()));
             }
             Map<String, Object> cdcObj = mapper.reader(HashMap.class).readValue(
                     rs.getString(changeRow.pks.size()+2));
+            assertEquals(changeDesc, changeRow.getChangeType(), cdcObj.get(CDC_EVENT_TYPE));
             if (cdcObj.containsKey(CDC_PRE_IMAGE)
                     && ! ((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
                     && changeScopes.contains(PTable.CDCChangeScope.PRE)) {
@@ -708,6 +720,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
         }
         committer.reset();
+        // For debug logging, uncomment this code to see the list of changes.
+        //for (int i = 0; i < changes.size(); ++i) {
+        //    System.out.println("----- generated change: " + i +
+        //            " tenantId:" + changes.get(i).tenantId +
+        //            " changeTS: " + changes.get(i).changeTS +
+        //            " pks: " + changes.get(i).pks +
+        //            " change: " + changes.get(i).change);
+        //}
         return changes;
     }
 
@@ -720,13 +740,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     )
     protected class ChangeRow implements Comparable<ChangeRow> {
         @JsonProperty
-        private final String tenantId;
+        protected final String tenantId;
         @JsonProperty
-        private final long changeTS;
+        protected final long changeTS;
         @JsonProperty
-        private final Map<String, Object> pks;
+        protected final Map<String, Object> pks;
         @JsonProperty
-        private final Map<String, Object> change;
+        protected final Map<String, Object> change;
 
         public String getTenantID() {
             return tenantId;
