@@ -759,10 +759,39 @@ public class MetaDataClient {
             final long effectiveUpdateCacheFreq;
             final String ucfInfoForLogging; // Only used for logging purposes
 
+            boolean overrideUcfToDefault = false;
+            if (table.getType() == PTableType.INDEX) {
+                overrideUcfToDefault =
+                        PIndexState.PENDING_DISABLE.equals(table.getIndexState()) ||
+                                !IndexMaintainer.sendIndexMaintainer(table);
+            }
+            if (!overrideUcfToDefault && !table.getIndexes().isEmpty()) {
+                List<PTable> indexes = table.getIndexes();
+                List<PTable> maintainedIndexes =
+                        Lists.newArrayList(IndexMaintainer.maintainedIndexes(indexes.iterator()));
+                // The maintainedIndexes contain only the indexes that are used by clients
+                // while generating the mutations. If all the indexes are usable by clients,
+                // we don't need to override UPDATE_CACHE_FREQUENCY. However, if any index is
+                // not in usable state by the client mutations, we should override
+                // UPDATE_CACHE_FREQUENCY to default value so that we make getTable() RPC calls
+                // until all index states change to ACTIVE, BUILDING or other usable states.
+                overrideUcfToDefault = indexes.size() != maintainedIndexes.size();
+            }
+
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
             // i.e. explicitly set to 0. We should ideally be checking for something like
             // hasUpdateCacheFrequency().
-            if (table.getUpdateCacheFrequency() != 0L) {
+
+            //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
+            //QueryOptimizer needs that to decide whether the index can be used
+            if (overrideUcfToDefault) {
+                effectiveUpdateCacheFreq =
+                    (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                        connection.getQueryServices().getProps()
+                            .get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+                ucfInfoForLogging = "connection-level-default";
+            } else if (table.getUpdateCacheFrequency()
+                    != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
                 ucfInfoForLogging = "table-level";
             } else {
