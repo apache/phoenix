@@ -37,10 +37,10 @@ public class MaxPhoenixColumnSizeExceededException extends SQLException  {
         super(new SQLExceptionInfo.Builder(code).build().toString(), code.getSQLState(), code.getErrorCode(), null);
     }
 
-    public MaxPhoenixColumnSizeExceededException(String rowkeyAndColumnInfo, int maxMutationCellSizeBytes,
+    public MaxPhoenixColumnSizeExceededException(String columnInfo, int maxMutationCellSizeBytes,
                                                  int mutationCellSizeBytes) {
         super(new SQLExceptionInfo.Builder(code).setMaxPhoenixColumnSizeBytes(maxMutationCellSizeBytes)
-                        .setPhoenixColumnSizeBytes(mutationCellSizeBytes).build().toString() + ". " + rowkeyAndColumnInfo,
+                        .setPhoenixColumnSizeBytes(mutationCellSizeBytes).build().toString() + ". " + columnInfo,
                 code.getSQLState(), code.getErrorCode(), null);
     }
 }

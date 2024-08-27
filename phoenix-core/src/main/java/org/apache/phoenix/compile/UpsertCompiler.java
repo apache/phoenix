@@ -145,9 +145,8 @@ public class UpsertCompiler {
             PColumn column = table.getColumns().get(columnIndexes[i]);
             if (value.length >= maxHBaseClientKeyValueSize &&
                     table.getImmutableStorageScheme() == PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN) {
-                String rowkeyAndColumnInfo = getExceedMaxHBaseClientKeyValueAllowanceRowkeyAndColumnInfo(
-                        values, columnIndexes, table, numSplColumns, column.getName().getString());
-                throw new MaxPhoenixColumnSizeExceededException(rowkeyAndColumnInfo, maxHBaseClientKeyValueSize, value.length);
+                String columnInfo = getExceedMaxHBaseClientKeyValueAllowanceColumnInfo(table, column.getName().getString());
+                throw new MaxPhoenixColumnSizeExceededException(columnInfo, maxHBaseClientKeyValueSize, value.length);
             }
 
             if (SchemaUtil.isPKColumn(column)) {
@@ -186,24 +185,10 @@ public class UpsertCompiler {
         mutation.put(ptr, new RowMutationState(columnValues, columnValueSize, statement.getConnection().getStatementExecutionCounter(), rowTsColInfo, onDupKeyBytes));
     }
 
-    public static String getExceedMaxHBaseClientKeyValueAllowanceRowkeyAndColumnInfo(
-            byte[][] values, int[] columnIndexes, PTable table, int numSplColumns, String columnName) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0, j = numSplColumns; j < values.length; j++, i++) {
-            byte[] value = values[j];
-            PColumn column = table.getColumns().get(columnIndexes[i]);
-            if (SchemaUtil.isPKColumn(column)) {
-                if (sb.length() != 0) {
-                    sb.append(" AND ");
-                }
-                sb.append(column.getName().toString() + "=" + Bytes.toString(value));
-            }
-        }
-        return String.format("Upsert data to table %s on Column %s exceed max HBase client keyvalue size allowance, " +
-                        "the rowkey is %s",
+    public static String getExceedMaxHBaseClientKeyValueAllowanceColumnInfo(PTable table, String columnName) {
+        return String.format("Upsert data to table %s on Column %s exceed max HBase client keyvalue size allowance",
                 SchemaUtil.getTableName(table.getSchemaName().toString(), table.getTableName().toString()),
-                columnName,
-                sb.toString());
+                columnName);
     }
 
     public static MutationState upsertSelect(StatementContext childContext, TableRef tableRef,
