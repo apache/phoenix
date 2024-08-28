@@ -56,6 +56,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.BsonValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.function.ScalarFunction;
@@ -231,6 +232,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     deserializeServerParsedPositionalExpressionInfoFromScan(scan,
                             BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION, serverParsedKVRefs);
         }
+        if (scan.getAttribute(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION) != null) {
+            serverParsedJsonValueFuncRefs =
+                deserializeServerParsedPositionalExpressionInfoFromScan(scan,
+                    BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION, serverParsedKVRefs);
+        }
         if (serverParsedJsonValueFuncRefs != null) {
             Collections.addAll(resultList, serverParsedJsonValueFuncRefs);
         }
@@ -325,6 +331,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     func = new JsonValueFunction();
                 } else if (scanAttribute.equals(BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION))  {
                     func = new JsonQueryFunction();
+                } else if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION)) {
+                    func = new BsonValueFunction();
                 }
                 if (func != null) {
                     func.readFields(input);
