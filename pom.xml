@@ -1667,6 +1667,12 @@
         <artifactId>commons-collections</artifactId>
         <version>${collections.version}</version>
       </dependency>
+      <!-- Update transitive dependency to a one without CVEs -->
+      <dependency>
+          <groupId>com.fasterxml.woodstox</groupId>
+          <artifactId>woodstox-core</artifactId>
+          <version>5.4.0</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-csv</artifactId>
