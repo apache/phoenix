@@ -80,12 +80,6 @@ public class UnionCompiler {
     public static TableRef contructSchemaTable(PhoenixStatement statement, List<QueryPlan> plans,
             List<AliasedNode> selectNodes) throws SQLException {
         List<TargetDataExpression> targetTypes = checkProjectionNumAndExpressions(plans);
-        for (int i = 0; i < plans.size(); i++) {
-            QueryPlan subPlan = plans.get(i);
-            TupleProjector projector = getTupleProjector(subPlan.getProjector(), targetTypes);
-            subPlan = new TupleProjectionPlan(subPlan, projector, null, null);
-            plans.set(i, subPlan);
-        }
         QueryPlan plan = plans.get(0);
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         for (int i = 0; i < plan.getProjector().getColumnCount(); i++) {
@@ -161,13 +155,13 @@ public class UnionCompiler {
     }
 
     private static TupleProjector getTupleProjector(RowProjector rowProj,
-            List<TargetDataExpression> targetTypes) throws SQLException {
-        Expression[] exprs = new Expression[targetTypes.size()];
+            List<PColumn> columns) throws SQLException {
+        Expression[] exprs = new Expression[columns.size()];
         int i = 0;
         for (ColumnProjector colProj : rowProj.getColumnProjectors()) {
             exprs[i] = CoerceExpression.create(colProj.getExpression(),
-                targetTypes.get(i).getType(), targetTypes.get(i).getSortOrder(),
-                targetTypes.get(i).getMaxLength());
+                    columns.get(i).getDataType(), columns.get(i).getSortOrder(),
+                    columns.get(i).getMaxLength());
             i++;
         }
         return new TupleProjector(exprs);
@@ -217,5 +211,17 @@ public class UnionCompiler {
         public void setSortOrder(SortOrder sortOrder) {
             this.sortOrder = sortOrder;
         }
+    }
+
+    static List<QueryPlan> convertToTupleProjectionPlan(
+            List<QueryPlan> plans, TableRef tableRef, StatementContext statementContext) throws SQLException {
+        List<PColumn> columns =  tableRef.getTable().getColumns();
+        for (int i = 0; i < plans.size(); i++) {
+            QueryPlan subPlan = plans.get(i);
+            TupleProjector projector = getTupleProjector(subPlan.getProjector(), columns);
+            subPlan = new TupleProjectionPlan(subPlan, projector, statementContext, null);
+            plans.set(i, subPlan);
+        }
+        return plans;
     }
 }

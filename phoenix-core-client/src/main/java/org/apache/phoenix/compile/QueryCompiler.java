@@ -42,7 +42,6 @@ import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -237,10 +236,12 @@ public class QueryCompiler {
             QueryPlan subPlan = compileSubquery(subSelect, true);
             plans.add(subPlan);
         }
+
         TableRef tableRef = UnionCompiler.contructSchemaTable(statement, plans,
             select.hasWildcard() ? null : select.getSelect());
         ColumnResolver resolver = FromCompiler.getResolver(tableRef);
         StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        plans = UnionCompiler.convertToTupleProjectionPlan(plans, tableRef, context);
         QueryPlan plan = compileSingleFlatQuery(
                 context,
                 select,
@@ -267,7 +268,7 @@ public class QueryCompiler {
     }
 
     public QueryPlan compileSelect(SelectStatement select) throws SQLException{
-        StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        StatementContext context = createStatementContext();
         QueryPlan dataPlanForCDC = getExistingDataPlanForCDC();
         if (dataPlanForCDC != null) {
             TableRef cdcTableRef = dataPlanForCDC.getTableRef();
@@ -296,6 +297,10 @@ public class QueryCompiler {
         } else {
             return compileSingleQuery(context, select, false, true);
         }
+    }
+
+    private StatementContext createStatementContext() {
+       return new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
     }
 
     /**
@@ -721,6 +726,10 @@ public class QueryCompiler {
         }
 
         QueryPlan innerPlan = compileSubquery(innerSelect, false);
+        if (innerPlan instanceof UnionPlan) {
+            optimizeUnionOrderByIfPossible((UnionPlan)innerPlan, select);
+        }
+
         RowProjector innerQueryPlanRowProjector = innerPlan.getProjector();
         TupleProjector tupleProjector = new TupleProjector(innerQueryPlanRowProjector);
 
@@ -733,6 +742,79 @@ public class QueryCompiler {
         innerPlan = new TupleProjectionPlan(innerPlan, tupleProjector, context, null);
 
         return compileSingleFlatQuery(context, select, asSubquery, allowPageFilter, innerPlan, false, false);
+    }
+
+    /**
+     * If every subquery in {@link UnionPlan} is ordered, and {@link QueryPlan#getOutputOrderBys}
+     * of each subquery are equal(absolute equality or the same column name is unnecessary, just
+     * column types are compatible and columns count is same), and at the same time the outer
+     * query of {@link UnionPlan} has group by or order by, we would further examine whether
+     * maintaining this order for the entire {@link UnionPlan} can compile out the outer query's
+     * group by or order by. If it is sure, then {@link UnionPlan} just to perform a simple
+     * merge on the output of each subquery to ensure the overall order of the union all;
+     * otherwise, {@link UnionPlan} would not perform any special processing on the output
+     * of the subqueries.
+     */
+    private void optimizeUnionOrderByIfPossible(UnionPlan innerUnionPlan, SelectStatement outerSelectStatement) throws SQLException {
+        innerUnionPlan.enableCheckSupportOrderByOptimize();
+        if (!innerUnionPlan.isSupportOrderByOptimize()) {
+            return;
+        }
+
+        if (!isOptimizeUnionOrderByDeserved(innerUnionPlan, outerSelectStatement)) {
+            // If maintain the order for the entire UnionPlan(by merge on the output of each
+            // subquery) could not compile out the outer query's group by or order by, we would
+            // not perform any special processing on the output of the subqueries.
+            innerUnionPlan.disableSupportOrderByOptimize();
+        }
+    }
+
+    /**
+     * If group by or order by in outerSelectStatement could be compiled out, this optimization is deserved.
+     */
+    private boolean isOptimizeUnionOrderByDeserved(UnionPlan innerUnionPlan, SelectStatement outerSelectStatement) throws SQLException {
+        if (!outerSelectStatement.haveGroupBy() && !outerSelectStatement.haveOrderBy()) {
+            return false;
+        }
+
+        // Just to avoid additional ProjectionCompiler.compile, make the compilation of order by
+        // as simple as possible.
+        if (!outerSelectStatement.haveGroupBy() &&
+                outerSelectStatement.getOrderBy().stream().anyMatch(OrderByNode::isLiteral)) {
+            return false;
+        }
+        StatementContext statementContext = createStatementContext();
+        ColumnResolver columResover = innerUnionPlan.getContext().getResolver();
+        TableRef tableRef = innerUnionPlan.getTableRef();
+        statementContext.setResolver(columResover);
+        statementContext.setCurrentTable(tableRef);
+
+        Expression where = WhereCompiler.compile(
+                statementContext,
+                outerSelectStatement,
+                null,
+                null,
+                CompiledOffset.EMPTY_COMPILED_OFFSET.getByteOffset());
+        if (outerSelectStatement.haveGroupBy()) {
+            // For outer query has group by, we check whether groupBy.isOrderPreserving is true.
+            GroupBy groupBy = GroupByCompiler.compile(statementContext, outerSelectStatement);
+            outerSelectStatement = HavingCompiler.rewrite(statementContext, outerSelectStatement, groupBy);
+            groupBy = groupBy.compile(statementContext, innerUnionPlan, where);
+            return groupBy.isOrderPreserving();
+        }
+
+        assert outerSelectStatement.haveOrderBy();
+        // For outer query has order by, we check whether orderBy is OrderBy.FWD_ROW_KEY_ORDER_BY.
+        OrderBy orderBy = OrderByCompiler.compile(
+                statementContext,
+                outerSelectStatement,
+                GroupBy.EMPTY_GROUP_BY,
+                null,
+                CompiledOffset.EMPTY_COMPILED_OFFSET,
+                null,
+                innerUnionPlan,
+                where);
+        return orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY;
     }
 
     protected QueryPlan compileSingleFlatQuery(

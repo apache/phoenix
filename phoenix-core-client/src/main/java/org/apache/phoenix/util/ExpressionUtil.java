@@ -244,7 +244,7 @@ public class ExpressionUtil {
 
     /**
      * <pre>
-     * Infer OrderBys from the rowkey columns of {@link PTable},for projected table may be there is no rowkey columns,
+     * Infer OrderBys from the rowkey columns of {@link PTable}, for projected table may be no rowkey columns,
      * so we should move forward to inspect {@link ProjectedColumn} by {@link #getOrderByFromProjectedTable}.
      * The second part of the return pair is the rowkey column offset we must skip when we create OrderBys, because for table with salted/multiTenant/viewIndexId,
      * some leading rowkey columns should be skipped.
@@ -302,7 +302,7 @@ public class ExpressionUtil {
     }
 
     /**
-     * For projected table may be there is no rowkey columns,
+     * For projected table may be no rowkey columns,
      * so we should move forward to inspect {@link ProjectedColumn} to check if the source column is rowkey column.
      * The second part of the return pair is the rowkey column offset we must skip when we create OrderBys, because for table with salted/multiTenant/viewIndexId,
      * some leading rowkey columns should be skipped.
