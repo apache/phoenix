@@ -38,15 +38,13 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TTLExpression;
-import org.apache.phoenix.schema.TTLLiteralExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -432,7 +430,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
             assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_BLOCKSIZE, columnFamilies[1].getBlocksize());
             assertEquals(Boolean.toString(false), tableDesc.getValue(TableDescriptorBuilder.COMPACTION_ENABLED));
             //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
-            assertEquals(new TTLLiteralExpression(1000), conn.unwrap(PhoenixConnection.class).getTable(
+            assertEquals(new LiteralTTLExpression(1000), conn.unwrap(PhoenixConnection.class).getTable(
                     new PTableKey(null, dataTableFullName)).getTTL());
         }
     }
@@ -795,7 +793,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
                 assertEquals(86400, columnFamilies[0].getTimeToLive());
                 //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-                assertEquals(new TTLLiteralExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
+                assertEquals(new LiteralTTLExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
                         new PTableKey(null, dataTableFullName)).getTTL());
             }
             ddl = "ALTER TABLE " + dataTableFullName + " SET TTL=30";
@@ -808,7 +806,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals(30, columnFamilies[0].getTimeToLive());
                 assertEquals("XYZ", columnFamilies[0].getNameAsString());
                 //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
-                assertEquals(new TTLLiteralExpression(30), conn.unwrap(PhoenixConnection.class).getTable(
+                assertEquals(new LiteralTTLExpression(30), conn.unwrap(PhoenixConnection.class).getTable(
                         new PTableKey(null, dataTableFullName)).getTTL());
             }
         } finally {
@@ -998,7 +996,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals(false, columnFamilies[1].isInMemory());
                 assertEquals(86400, columnFamilies[1].getTimeToLive());
                 //Check if TTL is stored in SYSCAT as well and we are getting ttl from get api in PTable
-                assertEquals(new TTLLiteralExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
+                assertEquals(new LiteralTTLExpression(86400), conn.unwrap(PhoenixConnection.class).getTable(
                         new PTableKey(null, dataTableFullName)).getTTL());
             }
 
@@ -1016,7 +1014,7 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
                 assertEquals(false, columnFamilies[1].isInMemory());
                 assertEquals(1000, columnFamilies[1].getTimeToLive());
                 //Check if Alter Table TTL also changes TTL stored in SYSCAT with phoenix.table.ttl disabled
-                assertEquals(new TTLLiteralExpression(1000), conn.unwrap(PhoenixConnection.class).getTable(
+                assertEquals(new LiteralTTLExpression(1000), conn.unwrap(PhoenixConnection.class).getTable(
                         new PTableKey(null, dataTableFullName)).getTTL());
             }
 

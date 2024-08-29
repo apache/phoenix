@@ -35,7 +35,7 @@ import java.util.Set;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.schema.TTLLiteralExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
@@ -346,7 +346,7 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
         if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
             return pSourceTable.getTTL() == TTL_EXPRESSION_NOT_DEFINED ? DEFAULT_TTL
-                    : ((TTLLiteralExpression) pSourceTable.getTTL()).getTTLValue(); // TODO
+                    : ((LiteralTTLExpression) pSourceTable.getTTL()).getTTLValue(); // TODO
         } else {
             TableDescriptor tableDesc;
             try (Admin admin = cqsi.getAdmin()) {

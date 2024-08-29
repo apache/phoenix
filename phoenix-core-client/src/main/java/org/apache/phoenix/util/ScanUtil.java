@@ -102,7 +102,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpression;
-import org.apache.phoenix.schema.TTLLiteralExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
@@ -111,7 +111,6 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.slf4j.Logger;
@@ -1090,7 +1089,7 @@ public class ScanUtil {
             return DEFAULT_TTL;
         }
         String ttlStr = (String) PVarchar.INSTANCE.toObject(phoenixTTL);
-        TTLLiteralExpression literal = (TTLLiteralExpression) TTLExpression.create(ttlStr);
+        LiteralTTLExpression literal = (LiteralTTLExpression) TTLExpression.create(ttlStr);
         return literal.getTTLValue();
     }
 

@@ -26,10 +26,10 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
-public class TTLLiteralExpression extends TTLExpression {
+public class LiteralTTLExpression extends TTLExpression {
     private final int ttlValue;
 
-    public TTLLiteralExpression(int ttl) {
+    public LiteralTTLExpression(int ttl) {
         Preconditions.checkArgument(ttl >= 0);
         this.ttlValue = ttl;
     }
@@ -38,7 +38,7 @@ public class TTLLiteralExpression extends TTLExpression {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        TTLLiteralExpression that = (TTLLiteralExpression) o;
+        LiteralTTLExpression that = (LiteralTTLExpression) o;
         return ttlValue == that.ttlValue;
     }
 

@@ -266,7 +266,7 @@ import org.apache.phoenix.schema.SequenceAllocation;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpression;
-import org.apache.phoenix.schema.TTLLiteralExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableProperty;
@@ -3034,8 +3034,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 //Table level property.
                                 if (!isPhoenixTTLEnabled()) {
                                     // only literal TTL expression
-                                    TTLLiteralExpression ttlExpr =
-                                            (TTLLiteralExpression) TableProperty.TTL.getValue(propValue);
+                                    LiteralTTLExpression ttlExpr =
+                                            (LiteralTTLExpression) TableProperty.TTL.getValue(propValue);
                                     newTTL = ttlExpr != null ? ttlExpr.getTTLValue() : null;
                                     //Even though TTL is really a HColumnProperty we treat it
                                     //specially. We enforce that all CFs have the same TTL.

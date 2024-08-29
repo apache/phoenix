@@ -12,7 +12,7 @@ public class TTLExpressionTest {
     @Test
     public void testLiteralExpression() {
         int ttl = 100;
-        TTLLiteralExpression literal = new TTLLiteralExpression(ttl);
+        LiteralTTLExpression literal = new LiteralTTLExpression(ttl);
         assertEquals(literal, TTLExpression.create(ttl));
         assertEquals(literal, TTLExpression.create(String.valueOf(ttl)));
     }
@@ -42,7 +42,7 @@ public class TTLExpressionTest {
     @Test
     public void testConditionalExpression() {
         String ttl = "PK1 = 5 AND COL1 > 'abc'";
-        TTLConditionExpression expected = new TTLConditionExpression(ttl);
+        ConditionTTLExpression expected = new ConditionTTLExpression(ttl);
         TTLExpression actual = TTLExpression.create(ttl);
         assertEquals(expected, actual);
         assertEquals(ttl, expected.getTTLExpression());

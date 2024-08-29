@@ -42,10 +42,10 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 
-public class TTLConditionExpression extends TTLExpression {
+public class ConditionTTLExpression extends TTLExpression {
     private final String ttlExpr;
 
-    public TTLConditionExpression(String ttlExpr) {
+    public ConditionTTLExpression(String ttlExpr) {
         this.ttlExpr = ttlExpr;
     }
 
@@ -53,7 +53,7 @@ public class TTLConditionExpression extends TTLExpression {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        TTLConditionExpression that = (TTLConditionExpression) o;
+        ConditionTTLExpression that = (ConditionTTLExpression) o;
         return ttlExpr.equals(that.ttlExpr);
     }
 

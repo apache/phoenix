@@ -29,9 +29,9 @@ import org.apache.phoenix.parse.CreateTableStatement;
 public abstract class TTLExpression {
 
     public static final TTLExpression TTL_EXPRESSION_FORVER =
-            new TTLLiteralExpression(HConstants.FOREVER);
+            new LiteralTTLExpression(HConstants.FOREVER);
     public static final TTLExpression TTL_EXPRESSION_NOT_DEFINED =
-            new TTLLiteralExpression(PhoenixDatabaseMetaData.TTL_NOT_DEFINED);
+            new LiteralTTLExpression(PhoenixDatabaseMetaData.TTL_NOT_DEFINED);
 
     public static TTLExpression create(String ttlExpr) {
         if (PhoenixDatabaseMetaData.NONE_TTL.equalsIgnoreCase(ttlExpr)) {
@@ -43,7 +43,7 @@ public abstract class TTLExpression {
                 int ttlValue = Integer.parseInt(ttlExpr);
                 return create(ttlValue);
             } catch (NumberFormatException e) {
-                return new TTLConditionExpression(ttlExpr);
+                return new ConditionTTLExpression(ttlExpr);
             }
         }
     }
@@ -54,7 +54,7 @@ public abstract class TTLExpression {
         } else if (ttlValue == HConstants.FOREVER) {
             return TTL_EXPRESSION_FORVER;
         } else {
-            return new TTLLiteralExpression(ttlValue);
+            return new LiteralTTLExpression(ttlValue);
         }
     }
 
