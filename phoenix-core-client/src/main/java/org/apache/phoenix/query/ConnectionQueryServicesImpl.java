@@ -3034,7 +3034,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 //Table level property.
                                 if (!isPhoenixTTLEnabled()) {
                                     // only literal TTL expression
-                                    TTLLiteralExpression ttlExpr = (TTLLiteralExpression)propValue;
+                                    TTLLiteralExpression ttlExpr =
+                                            (TTLLiteralExpression)TableProperty.TTL.getValue(propValue);
                                     newTTL = ttlExpr != null ? ttlExpr.getTTLValue() : null;
                                     //Even though TTL is really a HColumnProperty we treat it
                                     //specially. We enforce that all CFs have the same TTL.
@@ -3042,7 +3043,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 } else {
                                     //Setting this here just to check if we need to throw Exception
                                     //for Transaction's SET_TTL Feature.
-                                    newPhoenixTTL = ((TTLExpression) propValue);
+                                    newPhoenixTTL = (TTLExpression)TableProperty.TTL.getValue(propValue);
                                 }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;
@@ -3355,10 +3356,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
     public static Object convertForeverAndNoneTTLValue(Object propValue, boolean isPhoenixTTLEnabled) {
         //Handle FOREVER and NONE value for TTL at HBase level TTL.
         if (propValue instanceof String) {
-            return TTLExpression.create((String)propValue);
-        } else if (propValue != null) {
-            int ttlValue = ((Number) propValue).intValue();
-            return TTLExpression.create(ttlValue);
+            String strValue = (String) propValue;
+            if ("FOREVER".equalsIgnoreCase(strValue)) {
+                propValue = HConstants.FOREVER;
+            } else if ("NONE".equalsIgnoreCase(strValue)) {
+                propValue = isPhoenixTTLEnabled ? TTL_NOT_DEFINED : HConstants.FOREVER;
+            }
         }
         return propValue;
     }

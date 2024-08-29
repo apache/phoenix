@@ -356,7 +356,7 @@ public class PTableImpl implements PTable {
         private String indexWhere;
         private Long maxLookbackAge;
         private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
-        private TTLExpression ttl;
+        private TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         private byte[] rowKeyMatcher;
 
         // Used to denote which properties a view has explicitly modified
