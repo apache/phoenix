@@ -3035,7 +3035,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 if (!isPhoenixTTLEnabled()) {
                                     // only literal TTL expression
                                     TTLLiteralExpression ttlExpr =
-                                            (TTLLiteralExpression)TableProperty.TTL.getValue(propValue);
+                                            (TTLLiteralExpression) TableProperty.TTL.getValue(propValue);
                                     newTTL = ttlExpr != null ? ttlExpr.getTTLValue() : null;
                                     //Even though TTL is really a HColumnProperty we treat it
                                     //specially. We enforce that all CFs have the same TTL.
@@ -3043,7 +3043,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 } else {
                                     //Setting this here just to check if we need to throw Exception
                                     //for Transaction's SET_TTL Feature.
-                                    newPhoenixTTL = (TTLExpression)TableProperty.TTL.getValue(propValue);
+                                    newPhoenixTTL = (TTLExpression) TableProperty.TTL.getValue(propValue);
                                 }
                             } else if (propName.equals(PhoenixDatabaseMetaData.TRANSACTIONAL) && Boolean.TRUE.equals(propValue)) {
                                 willBeTransactional = isOrWillBeTransactional = true;

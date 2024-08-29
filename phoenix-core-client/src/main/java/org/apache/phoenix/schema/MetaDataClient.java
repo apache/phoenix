@@ -3522,7 +3522,7 @@ public class MetaDataClient {
             } else {
                 tableUpsert.setString(33, streamingTopicName);
             }
-            
+
             if (tableType == INDEX && statement.getWhereClause() != null) {
                 tableUpsert.setString(34, statement.getWhereClause().toString());
             } else {
