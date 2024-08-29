@@ -32,8 +32,10 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TTLExpression;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -366,6 +368,30 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
                     viewName, ttl));
             expected = TTLExpression.create(ttl);
             assertTTLValue(conn.unwrap(PhoenixConnection.class), expected, viewName);
+        }
+    }
+
+    @Test
+    public void testBooleanWhere() throws Exception {
+        if (!useExpression) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            String sql = "CREATE TABLE %s (ID1 VARCHAR PRIMARY KEY, VAL1 VARCHAR, VAL2 VARCHAR) TTL = 'VAL1'";
+            try {
+                conn.createStatement().execute(String.format(sql, tableName));
+                fail("Should have thrown TypeMismatchException");
+            } catch (TypeMismatchException e) {
+            }
+
+            tableName = generateUniqueName();
+            sql = "CREATE TABLE %s (ID1 VARCHAR PRIMARY KEY, VAL1 VARCHAR, VAL2 VARCHAR) TTL = 'VAL1 > 5'";
+            try {
+                conn.createStatement().execute(String.format(sql, tableName));
+                fail("Should have thrown TypeMismatchException");
+            } catch (TypeMismatchException e) {
+            }
         }
     }
 

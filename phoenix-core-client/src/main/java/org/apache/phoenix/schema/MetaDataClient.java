@@ -6044,7 +6044,7 @@ public class MetaDataClient {
             }
             if (metaProperties.getTTL() != table.getTTL()) {
                 TTLExpression newTTL = metaProperties.getTTL();
-                newTTL.validateTTLOnAlter(table);
+                newTTL.validateTTLOnAlter(connection, table);
                 metaPropertiesEvaluated.setTTL(metaProperties.getTTL());
                 changingPhoenixTableProperty = true;
             }

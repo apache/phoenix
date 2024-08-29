@@ -24,16 +24,23 @@ import java.util.List;
 import java.util.Objects;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
+import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PDataType;
 
 public class TTLConditionExpression extends TTLExpression {
     private final String ttlExpr;
@@ -77,18 +84,27 @@ public class TTLConditionExpression extends TTLExpression {
     }
 
     @Override
-    public void validateTTLOnCreation(PhoenixConnection conn,
-                            CreateTableStatement create) throws SQLException {
+    public void validateTTLOnCreation(PhoenixConnection conn, CreateTableStatement create) throws SQLException {
         ParseNode ttlCondition = SQLParser.parseCondition(this.ttlExpr);
-        CreateConditionTTLParseNodeVisitor condTTLVisitor = new CreateConditionTTLParseNodeVisitor(conn, create);
-        ttlCondition.accept(condTTLVisitor);
+        VerifyCreateConditionalTTLExpression condTTLVisitor = new VerifyCreateConditionalTTLExpression(conn, create);
+        Expression ttlExpression = ttlCondition.accept(condTTLVisitor);
+        if (ttlExpression.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(PBoolean.INSTANCE,
+                    ttlExpression.getDataType(), ttlExpression.toString());
+        }
     }
 
     @Override
-    public void validateTTLOnAlter(PTable table) throws SQLException {
+    public void validateTTLOnAlter(PhoenixConnection conn, PTable table) throws SQLException {
         ParseNode ttlCondition = SQLParser.parseCondition(this.ttlExpr);
-        AlterConditionTTLParseNodeVisitor condTTLVisitor = new AlterConditionTTLParseNodeVisitor(table);
-        ttlCondition.accept(condTTLVisitor);
+        ColumnResolver resolver = FromCompiler.getResolver(new TableRef(table));
+        StatementContext context = new StatementContext(new PhoenixStatement(conn), resolver);
+        ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
+        Expression ttlExpression = ttlCondition.accept(expressionCompiler);
+        if (ttlExpression.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(PBoolean.INSTANCE,
+                    ttlExpression.getDataType(), ttlExpression.toString());
+        }
     }
 
     @Override
@@ -102,12 +118,13 @@ public class TTLConditionExpression extends TTLExpression {
      * Validates that all the columns used in the conditional TTL expression are present in the table
      * or its parent table in case of view
      */
-    private static class CreateConditionTTLParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
+    private static class VerifyCreateConditionalTTLExpression extends ExpressionCompiler {
         private final CreateTableStatement create;
         private final ColumnResolver baseTableResolver;
 
-        private CreateConditionTTLParseNodeVisitor(PhoenixConnection conn,
+        private VerifyCreateConditionalTTLExpression(PhoenixConnection conn,
                                                    CreateTableStatement create) throws SQLException {
+            super(new StatementContext(new PhoenixStatement(conn)));
             this.create = create;
             // Returns the resolver for base table if base table is not null (in case of views)
             // Else, returns FromCompiler#EMPTY_TABLE_RESOLVER which is a no-op resolver
@@ -115,32 +132,42 @@ public class TTLConditionExpression extends TTLExpression {
         }
 
         @Override
-        public Void visit(ColumnParseNode node) throws SQLException {
+        public Expression visit(ColumnParseNode node) throws SQLException {
             // First check current table
             for (ColumnDef columnDef : create.getColumnDefs()) {
                 ColumnName columnName = columnDef.getColumnDefName();
                 // Takes family name into account
                 if (columnName.toString().equals(node.getFullName())) {
-                    return null;
+                    String cf = columnName.getFamilyName();
+                    String cq = columnName.getColumnName();
+                    return new KeyValueColumnExpression( new PDatum() {
+                        @Override
+                        public boolean isNullable() {
+                            return columnDef.isNull();
+                        }
+                        @Override
+                        public PDataType getDataType() {
+                            return columnDef.getDataType();
+                        }
+                        @Override
+                        public Integer getMaxLength() {
+                            return columnDef.getMaxLength();
+                        }
+                        @Override
+                        public Integer getScale() {
+                            return columnDef.getScale();
+                        }
+                        @Override
+                        public SortOrder getSortOrder() {
+                            return columnDef.getSortOrder();
+                        }
+                    }, cf != null ? Bytes.toBytes(cf) : null, Bytes.toBytes(cq));
                 }
             }
             // Column used in TTL expression not found in current, check the parent
-            baseTableResolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
-            return null;
-        }
-    }
-
-    private static class AlterConditionTTLParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
-        private final ColumnResolver tableColumnResolver;
-
-        private AlterConditionTTLParseNodeVisitor(PTable table) throws SQLException {
-            this.tableColumnResolver = FromCompiler.getResolver(new TableRef(table));
-        }
-
-        @Override
-        public Void visit(ColumnParseNode node) throws SQLException {
-            tableColumnResolver.resolveColumn(node.getSchemaName(), node.getTableName(), node.getName());
-            return null;
+            ColumnRef columnRef = baseTableResolver.resolveColumn(
+                    node.getSchemaName(), node.getTableName(), node.getName());
+            return columnRef.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
         }
     }
 }

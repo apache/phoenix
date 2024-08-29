@@ -67,7 +67,7 @@ public abstract class TTLExpression {
     abstract public void validateTTLOnCreation(PhoenixConnection conn,
                                                CreateTableStatement create) throws SQLException;
 
-    abstract public void validateTTLOnAlter(PTable table) throws SQLException;
+    abstract public void validateTTLOnAlter(PhoenixConnection connection, PTable table) throws SQLException;
 
     abstract public String getTTLForScanAttribute();
 

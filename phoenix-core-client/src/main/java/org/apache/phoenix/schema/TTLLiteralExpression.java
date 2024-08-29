@@ -69,7 +69,7 @@ public class TTLLiteralExpression extends TTLExpression {
     }
 
     @Override
-    public void validateTTLOnAlter(PTable table) throws SQLException {
+    public void validateTTLOnAlter(PhoenixConnection connection, PTable table) throws SQLException {
 
     }
 
