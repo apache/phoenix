@@ -22,7 +22,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -157,20 +156,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(table_sql);
     }
 
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
-                                    String cdc_sql) throws Exception {
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null);
+    protected void createCDC(Connection conn, String cdc_sql) throws Exception {
+        createCDC(conn, cdc_sql, null, null);
     }
 
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
-                                    String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
-                                    Integer nSaltBuckets) throws Exception {
+    protected void createCDC(Connection conn, String cdc_sql,
+            PTable.QualifierEncodingScheme encodingScheme, Integer nSaltBuckets) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
         createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, false, null);
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
-        tableName = SchemaUtil.getTableNameFromFullName(tableName);
-        IndexToolIT.runIndexTool(false, schemaName, tableName,
-                "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
     }
 
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,
@@ -409,12 +402,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     //  - with a null
     //  - missing columns
     protected List<ChangeRow> generateChanges(long startTS, String[] tenantids, String tableName,
-                                              String datatableNameForDDL, CommitAdapter committer)
+            String datatableNameForDDL, CommitAdapter committer, String columnToDrop)
                             throws Exception {
         List<ChangeRow> changes = new ArrayList<>();
         EnvironmentEdgeManager.injectEdge(injectEdge);
         injectEdge.setValue(startTS);
-        boolean dropV3Done = false;
+        boolean dropColumnDone = false;
         committer.init();
         Map<String, Object> rowid1 = new HashMap() {{ put("K", 1); }};
         Map<String, Object> rowid2 = new HashMap() {{ put("K", 2); }};
@@ -452,12 +445,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
             }
-            if (datatableNameForDDL != null && !dropV3Done) {
+            if (datatableNameForDDL != null && !dropColumnDone && columnToDrop != null) {
                 try (Connection conn = newConnection()) {
                     conn.createStatement().execute("ALTER TABLE " + datatableNameForDDL +
                             " DROP COLUMN v3");
                 }
-                dropV3Done = true;
+                dropColumnDone = true;
             }
             try (Connection conn = newConnection(tid)) {
                 changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
@@ -734,6 +727,10 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
         public String getChangeType() {
             return change == null ? CDC_DELETE_EVENT_TYPE : CDC_UPSERT_EVENT_TYPE;
+        }
+
+        public long getTimestamp() {
+            return changeTS;
         }
 
         ChangeRow(String tenantid, long changeTS, Map<String, Object> pks, Map<String, Object> change) {

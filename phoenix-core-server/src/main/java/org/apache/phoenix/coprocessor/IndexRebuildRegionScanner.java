@@ -348,6 +348,10 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
                         Put put = null;
                         Delete del = null;
                         for (Cell cell : row) {
+                            if (cell.getTimestamp() < minTimestamp
+                                    && indexMaintainer.isCDCIndex()) {
+                                continue;
+                            }
                             if (cell.getType().equals(Cell.Type.Put)) {
                                 if (familyMap != null && !isColumnIncluded(cell)) {
                                     continue;

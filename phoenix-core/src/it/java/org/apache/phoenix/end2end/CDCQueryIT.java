@@ -18,13 +18,24 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
-import org.apache.phoenix.end2end.index.SingleCellIndexIT;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
+import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -36,7 +47,6 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,8 +60,14 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_OLD_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
-import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
@@ -68,22 +84,21 @@ import static org.junit.Assert.assertTrue;
 @Category(ParallelStatsDisabledTest.class)
 public class CDCQueryIT extends CDCBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCQueryIT.class);
+    private static final int MAX_LOOKBACK_AGE = 3; // seconds
 
     // Offset of the first column, depending on whether PHOENIX_ROW_TIMESTAMP() is in the schema
     // or not.
     private final boolean forView;
-    private final boolean dataBeforeCDC;
     private final PTable.QualifierEncodingScheme encodingScheme;
     private final boolean multitenant;
     private final Integer indexSaltBuckets;
     private final Integer tableSaltBuckets;
     private final boolean withSchemaName;
 
-    public CDCQueryIT(Boolean forView, Boolean dataBeforeCDC,
+    public CDCQueryIT(Boolean forView,
                       PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
                       Integer indexSaltBuckets, Integer tableSaltBuckets, boolean withSchemaName) {
         this.forView = forView;
-        this.dataBeforeCDC = dataBeforeCDC;
         this.encodingScheme = encodingScheme;
         this.multitenant = multitenant;
         this.indexSaltBuckets = indexSaltBuckets;
@@ -91,26 +106,26 @@ public class CDCQueryIT extends CDCBaseIT {
         this.withSchemaName = withSchemaName;
     }
 
-    @Parameterized.Parameters(name = "forView={0} dataBeforeCDC={1}, encodingScheme={2}, " +
-            "multitenant={3}, indexSaltBuckets={4}, tableSaltBuckets={5} withSchemaName=${6}")
+    @Parameterized.Parameters(name = "forView={0}, encodingScheme={1}, " +
+            "multitenant={2}, indexSaltBuckets={3}, tableSaltBuckets={4} withSchemaName=${5}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { Boolean.FALSE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
-                        Boolean.FALSE },
-                { Boolean.FALSE, Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
-                        Boolean.TRUE },
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 1, 1,
-                        Boolean.FALSE },
+                { Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null, Boolean.FALSE },
+                { Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null, Boolean.TRUE },
+                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 1, 1, Boolean.FALSE },
                 // Once PHOENIX-7239, change this to have different salt buckets for data and index.
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 1, 1,
-                        Boolean.TRUE },
-                { Boolean.FALSE, Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null,
-                        Boolean.FALSE },
-                { Boolean.TRUE, Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null,
-                        Boolean.FALSE },
+                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 1, 1, Boolean.TRUE },
+                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null, Boolean.FALSE },
+                { Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null, Boolean.FALSE },
         });
     }
 
+    @BeforeClass
+    public static synchronized void doSetup() throws Exception {
+        Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+    }
     @Before
     public void beforeTest(){
         EnvironmentEdgeManager.reset();
@@ -118,6 +133,13 @@ public class CDCQueryIT extends CDCBaseIT {
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
     }
 
+    private void cdcIndexShouldNotBeUsedForDataTableQueries(Connection conn, String dataTableName,
+            String cdcName) throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + dataTableName
+                + " WHERE PHOENIX_ROW_TIMESTAMP() < CURRENT_TIME()");
+        String explainPlan = QueryUtil.getExplainPlan(rs);
+        assertFalse(explainPlan.contains(cdcName));
+    }
     @Test
     public void testSelectCDC() throws Exception {
         String cdcName, cdc_sql;
@@ -138,10 +160,8 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            if (!dataBeforeCDC) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
+            createCDC(conn, cdc_sql, encodingScheme,
                         indexSaltBuckets);
-            }
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -152,18 +172,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, null,
-                COMMIT_SUCCESS);
-
-        if (dataBeforeCDC) {
-            try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-            // Testing with flushed data adds more coverage.
-            getUtility().getAdmin().flush(TableName.valueOf(datatableName));
-            getUtility().getAdmin().flush(TableName.valueOf(SchemaUtil.getTableName(schemaName,
-                    CDCUtil.getCDCIndexName(cdcName))));
-        }
+                COMMIT_SUCCESS, "v3");
 
         //SingleCellIndexIT.dumpTable(tableName);
         //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
@@ -234,6 +243,7 @@ public class CDCQueryIT extends CDCBaseIT {
                     assertEquals(false, rs.next());
                 }
             }
+            cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
     }
 
@@ -269,10 +279,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
-            if (!dataBeforeCDC) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -304,17 +311,6 @@ public class CDCQueryIT extends CDCBaseIT {
         //LOGGER.debug("----- DUMP index table: " + CDCUtil.getCDCIndexName(cdcName) + " -----");
         //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
         //LOGGER.debug("----------");
-
-        if (dataBeforeCDC) {
-            try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-            // Testing with flushed data adds more coverage.
-            getUtility().getAdmin().flush(TableName.valueOf(datatableName));
-            getUtility().getAdmin().flush(TableName.valueOf(SchemaUtil.getTableName(schemaName,
-                    CDCUtil.getCDCIndexName(cdcName))));
-        }
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
@@ -349,6 +345,7 @@ public class CDCQueryIT extends CDCBaseIT {
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName),
                     datatableName, dataColumns, changes, ALL_IMG);
+            cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
     }
 
@@ -384,10 +381,8 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            if (!dataBeforeCDC) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
+
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -399,17 +394,6 @@ public class CDCQueryIT extends CDCBaseIT {
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChangesImmutableTable(startTS, tenantids, tableName,
                 COMMIT_SUCCESS);
-
-        if (dataBeforeCDC) {
-            try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-            // Testing with flushed data adds more coverage.
-            getUtility().getAdmin().flush(TableName.valueOf(datatableName));
-            getUtility().getAdmin().flush(TableName.valueOf(SchemaUtil.getTableName(schemaName,
-                    CDCUtil.getCDCIndexName(cdcName))));
-        }
 
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         Map<String, String> dataColumns = new TreeMap<String, String>() {{
@@ -437,6 +421,7 @@ public class CDCQueryIT extends CDCBaseIT {
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
                             "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
                     datatableName, dataColumns, changes, CHANGE_IMG);
+            cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
     }
 
@@ -469,10 +454,8 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            if (!dataBeforeCDC) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName,cdcName);
         }
 
         EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -537,13 +520,6 @@ public class CDCQueryIT extends CDCBaseIT {
         cal.add(Calendar.MILLISECOND, 200 + 100 * tenantids.length);
         Timestamp ts4 = new Timestamp(cal.getTime().getTime());
         EnvironmentEdgeManager.reset();
-
-        if (dataBeforeCDC) {
-            try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-        }
 
         //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
 
@@ -621,10 +597,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            if (!dataBeforeCDC) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
             conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
         }
 
@@ -636,18 +609,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, datatableName,
-                COMMIT_SUCCESS);
-
-        if (dataBeforeCDC) {
-            try (Connection conn = newConnection()) {
-                createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
-            }
-            // Testing with flushed data adds more coverage.
-            getUtility().getAdmin().flush(TableName.valueOf(datatableName));
-            getUtility().getAdmin().flush(TableName.valueOf(SchemaUtil.getTableName(schemaName,
-                    CDCUtil.getCDCIndexName(cdcName))));
-        }
+                COMMIT_SUCCESS, "v3");
 
         Map<String, String> dataColumns = new TreeMap<String, String>() {{
             put("V0", "INTEGER");
@@ -662,16 +624,12 @@ public class CDCQueryIT extends CDCBaseIT {
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + SchemaUtil.getTableName(
                                     schemaName, cdcName)),
                     datatableName, dataColumns, changes, CHANGE_IMG);
+            cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
     }
 
     @Test
     public void testSelectCDCFailDataTableUpdate() throws Exception {
-        if (dataBeforeCDC == true) {
-            // In this case, index will not exist at the time of upsert, so we can't simulate the
-            // index failure.
-            return;
-        }
         String schemaName = withSchemaName ? generateUniqueName() : null;
         String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
         String cdcName, cdc_sql;
@@ -690,7 +648,8 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDCAndWait(conn, tableName, cdcName, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -701,12 +660,143 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         generateChanges(startTS, tenantids, tableName, null,
-                COMMIT_FAILURE_EXPECTED);
+                COMMIT_FAILURE_EXPECTED, "v3");
 
         try (Connection conn = newConnection(tenantId)) {
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " +
                     SchemaUtil.getTableName(schemaName, cdcName));
             assertEquals(false, rs.next());
+
+        }
+    }
+
+    @Test
+    public void testCDCIndexBuildAndVerification() throws Exception {
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = generateUniqueName();
+        String tableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        String cdcName, cdc_sql;
+        try (Connection conn = newConnection()) {
+            // Create a table and add some rows
+            createTable(conn, "CREATE TABLE  " + tableFullName + " (" + (multitenant ?
+                    "TENANT_ID CHAR(5) NOT NULL, " :
+                    "")
+                    + "k INTEGER NOT NULL, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, B.vb INTEGER, "
+                    + "v3 INTEGER, CONSTRAINT PK PRIMARY KEY " + (multitenant ?
+                    "(TENANT_ID, k) " :
+                    "(k)") + ")", encodingScheme, multitenant, tableSaltBuckets, false, null);
+            if (forView) {
+                String viewName = generateUniqueName();
+                String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+                createTable(conn, "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + tableFullName,
+                        encodingScheme);
+                tableName = viewName;
+                tableFullName = viewFullName;
+            }
+
+            String tenantId = multitenant ? "1000" : null;
+            String[] tenantids = { tenantId };
+            if (multitenant) {
+                tenantids = new String[] { tenantId, "2000" };
+            }
+
+            long startTS = System.currentTimeMillis();
+            generateChanges(startTS, tenantids, tableFullName, tableFullName, COMMIT_SUCCESS, null);
+            EnvironmentEdgeManager.reset();
+            // Create a CDC table
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableFullName;
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            // Check CDC index is active but empty
+            String indexTableFullName = SchemaUtil.getTableName(schemaName,
+                    CDCUtil.getCDCIndexName(cdcName));
+            PTable indexTable = ((PhoenixConnection) conn).getTableNoCache(indexTableFullName);
+            assertEquals(indexTable.getIndexState(), PIndexState.ACTIVE);
+            TestUtil.assertRawRowCount(conn,
+                    TableName.valueOf(indexTable.getPhysicalName().getString()),0);
+            // Rebuild the index and verify that it is still empty
+            IndexToolIT.runIndexTool(false, schemaName, tableName,
+                    CDCUtil.getCDCIndexName(cdcName));
+            TestUtil.assertRawRowCount(conn,
+                    TableName.valueOf(indexTable.getPhysicalName().getString()),0);
+            // Add more rows
+            startTS = System.currentTimeMillis();
+            generateChanges(startTS, tenantids, tableFullName, tableFullName, COMMIT_SUCCESS, null);
+            // Verify CDC index verification pass
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName,
+                    CDCUtil.getCDCIndexName(cdcName), null, 0, IndexTool.IndexVerifyType.ONLY);
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(REBUILT_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+            assertEquals(0, indexTool.getJob().getCounters().findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
+
+        }
+    }
+
+    @Test
+    public void testCDCIndexTTLEqualsToMaxLookbackAge() throws Exception {
+        if (forView) {
+            // Except for views
+            return;
+        }
+        String schemaName = withSchemaName ? generateUniqueName() : null;
+        String tableName = generateUniqueName();
+        String tableFullName = SchemaUtil.getTableName(schemaName, tableName);
+        String cdcName, cdc_sql;
+        try (Connection conn = newConnection()) {
+            // Create a table
+            createTable(conn, "CREATE TABLE  " + tableFullName + " (" + (multitenant ?
+                    "TENANT_ID CHAR(5) NOT NULL, " :
+                    "")
+                    + "k INTEGER NOT NULL, v1 INTEGER, v1v2 INTEGER, v2 INTEGER, B.vb INTEGER, "
+                    + "v3 INTEGER, CONSTRAINT PK PRIMARY KEY " + (multitenant ?
+                    "(TENANT_ID, k) " :
+                    "(k)") + ")", encodingScheme, multitenant, tableSaltBuckets, false, null);
+            if (forView) {
+                String viewName = generateUniqueName();
+                String viewFullName = SchemaUtil.getTableName(schemaName, viewName);
+                createTable(conn, "CREATE VIEW " + viewFullName + " AS SELECT * FROM " + tableFullName,
+                        encodingScheme);
+                tableName = viewName;
+                tableFullName = viewFullName;
+            }
+
+            String tenantId = multitenant ? "1000" : null;
+            String[] tenantids = { tenantId };
+            if (multitenant) {
+                tenantids = new String[] { tenantId, "2000" };
+            }
+
+            // Create a CDC table
+            cdcName = generateUniqueName();
+            cdc_sql = "CREATE CDC " + cdcName + " ON " + tableFullName;
+            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            // Add rows
+            long startTS = System.currentTimeMillis();
+            List<ChangeRow> changes = generateChanges(startTS, tenantids, tableFullName,
+                    tableFullName, COMMIT_SUCCESS, null);
+            // Advance time by the max lookback age. This will cause all rows to expire
+            Thread.sleep( changes.get(changes.size() - 1).getTimestamp() -
+                    System.currentTimeMillis() + MAX_LOOKBACK_AGE * 1000);
+            // Major compact the CDC index which remove all expired rows
+            String indexTableFullName = SchemaUtil.getTableName(schemaName,
+                    CDCUtil.getCDCIndexName(cdcName));
+            PTable indexTable = ((PhoenixConnection) conn).getTableNoCache(indexTableFullName);
+            String indexTablePhysicalName = indexTable.getPhysicalName().toString();
+            Admin admin = getUtility().getAdmin();
+            admin.flush(TableName.valueOf(indexTablePhysicalName));
+            TestUtil.majorCompact(getUtility(), TableName.valueOf(indexTablePhysicalName));
+            // Check CDC index is empty
+            TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),0);
+            EnvironmentEdgeManager.reset();
+            // Rebuild the index and verify that it is still empty
+            IndexToolIT.runIndexTool(false, schemaName, tableName,
+                    CDCUtil.getCDCIndexName(cdcName));
+            TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),0);
+
         }
     }
 }

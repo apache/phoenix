@@ -69,6 +69,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.coprocessorclient.RowKeyMatcher;
 import org.apache.phoenix.coprocessorclient.TableTTLInfoCache;
@@ -1221,6 +1222,11 @@ public class CompactionScanner implements InternalScanner {
                 ttl = cfd.getTimeToLive();
             } else {
                 ttl = pTable.getTTL() != TTL_NOT_DEFINED ? pTable.getTTL() : DEFAULT_TTL;
+            }
+            if (CDCUtil.isCDCIndex(pTable)) {
+                // Setting ttl to 0 is for making sure that all rows outside the max lookback window
+                // will be purged
+                ttl = 0;
             }
             LOGGER.info(String.format(
                     "NonPartitionedTableTTLTracker params:- " +

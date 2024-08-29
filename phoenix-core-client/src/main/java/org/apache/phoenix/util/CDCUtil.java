@@ -39,7 +39,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.bson.RawBsonDocument;
 
 public class CDCUtil {
-    public static final String CDC_INDEX_PREFIX = "__CDC__";
+    public static final String CDC_INDEX_PREFIX = "PHOENIX_CDC_INDEX";
 
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope
