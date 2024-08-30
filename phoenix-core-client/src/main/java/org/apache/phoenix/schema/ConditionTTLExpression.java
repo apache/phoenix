@@ -18,8 +18,11 @@
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
+import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -39,8 +42,11 @@ import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 
 public class ConditionTTLExpression extends TTLExpression {
     private final String ttlExpr;
@@ -86,7 +92,12 @@ public class ConditionTTLExpression extends TTLExpression {
     @Override
     public void validateTTLOnCreation(PhoenixConnection conn, CreateTableStatement create) throws SQLException {
         ParseNode ttlCondition = SQLParser.parseCondition(this.ttlExpr);
-        VerifyCreateConditionalTTLExpression condTTLVisitor = new VerifyCreateConditionalTTLExpression(conn, create);
+        StatementContext ttlValidationContext = new StatementContext(new PhoenixStatement(conn));
+        // Construct a PTable with just enough information to be able to compile the TTL expression
+        PTable newTable = createTempPTable(conn, create);
+        ttlValidationContext.setCurrentTable(new TableRef(newTable));
+        VerifyCreateConditionalTTLExpression condTTLVisitor =
+                new VerifyCreateConditionalTTLExpression(conn, ttlValidationContext, create);
         Expression ttlExpression = ttlCondition.accept(condTTLVisitor);
         if (ttlExpression.getDataType() != PBoolean.INSTANCE) {
             throw TypeMismatchException.newException(PBoolean.INSTANCE,
@@ -123,8 +134,9 @@ public class ConditionTTLExpression extends TTLExpression {
         private final ColumnResolver baseTableResolver;
 
         private VerifyCreateConditionalTTLExpression(PhoenixConnection conn,
-                                                   CreateTableStatement create) throws SQLException {
-            super(new StatementContext(new PhoenixStatement(conn)));
+                                                     StatementContext ttlExprValidationContext,
+                                                     CreateTableStatement create) throws SQLException {
+            super(ttlExprValidationContext);
             this.create = create;
             // Returns the resolver for base table if base table is not null (in case of views)
             // Else, returns FromCompiler#EMPTY_TABLE_RESOLVER which is a no-op resolver
@@ -169,5 +181,34 @@ public class ConditionTTLExpression extends TTLExpression {
                     node.getSchemaName(), node.getTableName(), node.getName());
             return columnRef.newColumnExpression(node.isTableNameCaseSensitive(), node.isCaseSensitive());
         }
+    }
+
+    /**
+     * We are still in the middle of executing the CreateTable statement, so we don't have
+     * the PTable yet, but we need one for compiling the conditional TTL expression so let's
+     * build the PTable object with just enough information to be able to compile the Conditional
+     * TTL expression statement.
+     * @param statement
+     * @return
+     * @throws SQLException
+     */
+    private PTable createTempPTable(PhoenixConnection conn, CreateTableStatement statement) throws SQLException {
+        final TableName tableNameNode = statement.getTableName();
+        final PName schemaName = PNameFactory.newName(tableNameNode.getSchemaName());
+        final PName tableName = PNameFactory.newName(tableNameNode.getTableName());
+        PName fullName = SchemaUtil.getTableName(schemaName, tableName);
+        final PName tenantId = conn.getTenantId();
+        return new PTableImpl.Builder()
+                .setName(fullName)
+                .setKey(new PTableKey(tenantId, fullName.getString()))
+                .setTenantId(tenantId)
+                .setSchemaName(schemaName)
+                .setTableName(tableName)
+                .setType(statement.getTableType())
+                .setImmutableStorageScheme(ONE_CELL_PER_COLUMN)
+                .setQualifierEncodingScheme(NON_ENCODED_QUALIFIERS)
+                .setFamilies(Collections.EMPTY_LIST)
+                .setIndexes(Collections.EMPTY_LIST)
+                .build();
     }
 }

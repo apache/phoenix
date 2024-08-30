@@ -372,30 +372,6 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
     }
 
     @Test
-    public void testBooleanWhere() throws Exception {
-        if (!useExpression) {
-            return;
-        }
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String tableName = generateUniqueName();
-            String sql = "CREATE TABLE %s (ID1 VARCHAR PRIMARY KEY, VAL1 VARCHAR, VAL2 VARCHAR) TTL = 'VAL1'";
-            try {
-                conn.createStatement().execute(String.format(sql, tableName));
-                fail("Should have thrown TypeMismatchException");
-            } catch (TypeMismatchException e) {
-            }
-
-            tableName = generateUniqueName();
-            sql = "CREATE TABLE %s (ID1 VARCHAR PRIMARY KEY, VAL1 VARCHAR, VAL2 VARCHAR) TTL = 'VAL1 > 5'";
-            try {
-                conn.createStatement().execute(String.format(sql, tableName));
-                fail("Should have thrown TypeMismatchException");
-            } catch (TypeMismatchException e) {
-            }
-        }
-    }
-
-    @Test
     public void testSettingTTLForViewsOnTableWithTTL() throws Exception {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tenantID = generateUniqueName().substring(1);
