@@ -558,10 +558,16 @@ public class PhoenixRuntime {
         Set<String> unresolvedColumnNames = new TreeSet<String>();
         if (columns == null || columns.isEmpty()) {
             // use all columns in the table
-        	int offset = (table.getBucketNum() == null ? 0 : 1);
-        	for (int i = offset; i < table.getColumns().size(); i++) {
-        	   PColumn pColumn = table.getColumns().get(i);
-               columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn)); 
+            int offset = 0;
+            if (table.getBucketNum() != null) {
+                offset++;
+            }
+            if (table.getTenantId() != null) {
+                offset++;
+            }
+            for (int i = offset; i < table.getColumns().size(); i++) {
+                PColumn pColumn = table.getColumns().get(i);
+                columnInfoList.add(PhoenixRuntime.getColumnInfo(pColumn));
             }
         } else {
             // Leave "null" as indication to skip b/c it doesn't exist
