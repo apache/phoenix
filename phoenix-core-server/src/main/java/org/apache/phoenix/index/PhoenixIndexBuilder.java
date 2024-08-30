@@ -102,7 +102,8 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     
     @Override
     public boolean isAtomicOp(Mutation m) {
-        return m.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null;
+        return m.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null ||
+                m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT) != null;
     }
 
     private static void transferCells(Mutation source, Mutation target) {
@@ -274,5 +275,9 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     public ReplayWrite getReplayWrite(Mutation m) {
         return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
-    
+
+    @Override
+    public boolean returnResult(Mutation m) {
+        return m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT) != null;
+    }
 }

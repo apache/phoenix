@@ -72,6 +72,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
@@ -107,6 +108,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.execute.MutationState.ReturnResult;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
@@ -576,11 +578,22 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
 
-    protected int executeMutation(final CompilableStatement stmt, final AuditQueryLogger queryLogger) throws SQLException {
-        return executeMutation(stmt, true, queryLogger);
+    protected int executeMutation(final CompilableStatement stmt,
+                                  final AuditQueryLogger queryLogger) throws SQLException {
+        return executeMutation(stmt, true, queryLogger, null).getFirst();
     }
 
-    private int executeMutation(final CompilableStatement stmt, final boolean doRetryOnMetaNotFoundError, final AuditQueryLogger queryLogger) throws SQLException {
+    Pair<Integer, Result> executeMutation(final CompilableStatement stmt,
+                                   final AuditQueryLogger queryLogger,
+                                   final ReturnResult returnResult) throws SQLException {
+        return executeMutation(stmt, true, queryLogger, returnResult);
+    }
+
+    private Pair<Integer, Result> executeMutation(final CompilableStatement stmt,
+                                                  final boolean doRetryOnMetaNotFoundError,
+                                                  final AuditQueryLogger queryLogger,
+                                                  final ReturnResult returnResult)
+            throws SQLException {
         if (connection.isReadOnly()) {
             throw new SQLExceptionInfo.Builder(
                 SQLExceptionCode.READ_ONLY_CONNECTION).
@@ -590,9 +603,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         try {
             return CallRunner
                    .run(
-                        new CallRunner.CallableThrowable<Integer, SQLException>() {
+                        new CallRunner.CallableThrowable<Pair<Integer, Result>, SQLException>() {
                         @Override
-                            public Integer call() throws SQLException {
+                            public Pair<Integer, Result> call() throws SQLException {
                             boolean success = false;
                             String tableName = null;
                             boolean isUpsert = false;
@@ -631,12 +644,15 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 // just max out at Integer.MAX_VALUE
                                 int lastUpdateCount = (int) Math.min(Integer.MAX_VALUE,
                                         lastState.getUpdateCount());
+                                Result result = null;
                                 if (connection.getAutoCommit()) {
+                                    state.setReturnResult(returnResult);
                                     connection.commit();
                                     if (isAtomicUpsert) {
                                         lastUpdateCount = connection.getMutationState()
                                                 .getNumUpdatedRowsForAutoCommit();
                                     }
+                                    result = connection.getMutationState().getResult();
                                 }
                                 setLastQueryPlan(null);
                                 setLastUpdateCount(lastUpdateCount);
@@ -651,7 +667,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
 
                                 success = true;
-                                return lastUpdateCount;
+                                return new Pair<>(lastUpdateCount, result);
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
@@ -661,7 +677,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     }
                                     if (new MetaDataClient(connection).updateCache(connection.getTenantId(),
                                         e.getSchemaName(), e.getTableName(), true).wasUpdated()) {
-                                        return executeMutation(stmt, false, queryLogger);
+                                        return executeMutation(stmt, false, queryLogger,
+                                                returnResult);
                                     }
                                 }
                                 throw e;
@@ -2376,17 +2393,42 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     @Override
     public int executeUpdate(String sql) throws SQLException {
+        CompilableStatement stmt = preExecuteUpdate(sql);
+        int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
+        flushIfNecessary();
+        return updateCount;
+    }
+
+    /**
+     * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
+     * updated or non-updated row as Result object back to the client. This must be used with
+     * auto-commit Connection. This makes the operation atomic.
+     * If the row is successfully updated, return the updated row, otherwise if the row
+     * cannot be updated, return non-updated row.
+     *
+     * @param sql The SQL DML statement, UPSERT or DELETE for Phoenix.
+     * @return The pair of int and Result, where int represents value 1 for successful row update
+     * and 0 for non-successful row update, and Result represents the state of the row.
+     * @throws SQLException If the statement cannot be executed.
+     */
+    public Pair<Integer, Result> executeUpdateReturnRow(String sql) throws SQLException {
+        CompilableStatement stmt = preExecuteUpdate(sql);
+        Pair<Integer, Result> result =
+                executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);
+        flushIfNecessary();
+        return result;
+    }
+
+    private CompilableStatement preExecuteUpdate(String sql) throws SQLException {
         CompilableStatement stmt = parseStatement(sql);
         if (!stmt.getOperation().isMutation) {
             throw new ExecuteUpdateNotApplicableException(sql);
         }
         if (!batch.isEmpty()) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
-            .build().buildException();
+                    .build().buildException();
         }
-        int updateCount = executeMutation(stmt, createAuditQueryLogger(stmt, sql));
-        flushIfNecessary();
-        return updateCount;
+        return stmt;
     }
 
     private void flushIfNecessary() throws SQLException {
