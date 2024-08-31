@@ -360,6 +360,9 @@ public class UnionPlan implements QueryPlan {
         }
     }
 
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings(
+            value="EI_EXPOSE_REP",
+            justification="getOutputOrderBys designed to work this way.")
     @Override
     public List<OrderBy> getOutputOrderBys() {
         if (this.outputOrderBys != null) {
