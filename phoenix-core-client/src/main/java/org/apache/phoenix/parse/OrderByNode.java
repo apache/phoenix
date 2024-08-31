@@ -87,14 +87,14 @@ public final class OrderByNode {
     }
 
     public boolean isLiteral() {
-        return child instanceof LiteralParseNode &&
-                ((LiteralParseNode)child).getType() == PInteger.INSTANCE;
+        return child instanceof LiteralParseNode
+                && ((LiteralParseNode) child).getType() == PInteger.INSTANCE;
     }
 
     public Integer getIntValueIfLiteral() {
         if (!isLiteral()) {
             return null;
         }
-        return (Integer)((LiteralParseNode)child).getValue();
+        return (Integer) ((LiteralParseNode) child).getValue();
     }
 }

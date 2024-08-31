@@ -214,7 +214,9 @@ public class UnionCompiler {
     }
 
     static List<QueryPlan> convertToTupleProjectionPlan(
-            List<QueryPlan> plans, TableRef tableRef, StatementContext statementContext) throws SQLException {
+            List<QueryPlan> plans,
+            TableRef tableRef,
+            StatementContext statementContext) throws SQLException {
         List<PColumn> columns =  tableRef.getTable().getColumns();
         for (int i = 0; i < plans.size(); i++) {
             QueryPlan subPlan = plans.get(i);

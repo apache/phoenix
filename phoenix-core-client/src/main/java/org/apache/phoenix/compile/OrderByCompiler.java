@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -32,16 +33,13 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
-import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotAllowedInQueryException;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
-import org.apache.phoenix.schema.types.PInteger;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -155,9 +153,10 @@ public class OrderByCompiler {
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             Expression expression = null;
-            if (node.isLiteral()){
+            if (node.isLiteral()) {
                 if (rowProjector == null) {
-                    throw new IllegalStateException("rowProjector is null when there is LiteralParseNode in orderByNodes.");
+                    throw new IllegalStateException(
+                            "rowProjector is null when there is LiteralParseNode in orderByNodes");
                 }
                 Integer index = node.getIntValueIfLiteral();
                 assert index != null;

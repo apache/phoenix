@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes
@@ -218,7 +219,8 @@ public class UnionPlan implements QueryPlan {
             scanner = new MergeSortTopNResultIterator(iterators, limit, offset, orderBy.getOrderByExpressions());
         } else if (this.supportOrderByOptimize) {
             //Every subquery is ordered
-            scanner = new MergeSortTopNResultIterator(iterators, limit, offset, getOrderByExpressionsWhenSupportOrderByOptimize());
+            scanner = new MergeSortTopNResultIterator(
+                    iterators, limit, offset, getOrderByExpressionsWhenSupportOrderByOptimize());
         } else {
             scanner = new ConcatResultIterator(iterators);
             if (offset != null) {

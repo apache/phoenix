@@ -385,8 +385,11 @@ public class SelectStatement implements FilterableStatement {
     }
 
     public boolean haveGroupBy() {
-        return (this.getGroupBy() != null && this.getGroupBy().size() > 0) ||
-                (!this.isAggregate()&& this.isDistinct() && this.getSelect() != null && this.getSelect().size() > 0);
+        return this.getGroupBy() != null && this.getGroupBy().size() > 0
+                || !this.isAggregate()
+                        && this.isDistinct()
+                        && this.getSelect() != null
+                        && this.getSelect().size() > 0;
     }
 
     public boolean haveOrderBy() {
