@@ -24,7 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Supplier;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
+
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -52,6 +52,8 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.SchemaUtil;
+
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class UnionCompiler {
     private static final PName UNION_FAMILY_NAME = PNameFactory.newName("unionFamilyName");
