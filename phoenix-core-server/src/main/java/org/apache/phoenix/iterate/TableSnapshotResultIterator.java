@@ -176,13 +176,19 @@ public class TableSnapshotResultIterator implements ResultIterator {
     while (true) {
       if (!initSnapshotScanner())
         return null;
-      lastTuple = scanIterator.next();
-      if (lastTuple != null) {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        lastTuple.getKey(ptr);
-        return lastTuple;
+      try {
+        lastTuple = scanIterator.next();
+        if (lastTuple != null) {
+          ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+          lastTuple.getKey(ptr);
+          return lastTuple;
+        }
+      } finally {
+        if (lastTuple == null) {
+          scanIterator.close();
+          scanIterator = UNINITIALIZED_SCANNER;
+        }
       }
-      //We are done, scanIterator would be explicitly closed by the record reader
     }
   }
 
