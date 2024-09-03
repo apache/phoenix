@@ -75,6 +75,10 @@
           <artifactId>avro</artifactId>
         </exclusion>
         <exclusion>
+          <groupId>org.codehaus.jettison</groupId>
+          <artifactId>jettison</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>org.slf4j</groupId>
           <artifactId>slf4j-reload4j</artifactId>
         </exclusion>
