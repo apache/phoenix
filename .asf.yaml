@@ -23,7 +23,7 @@
 
 github:
   description: "Apache Phoenix"
-  homepage: https://hbase.apache.org/
+  homepage: https://phoenix.apache.org/
   labels:
     - database
     - sql
