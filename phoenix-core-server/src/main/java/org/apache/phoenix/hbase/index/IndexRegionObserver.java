@@ -44,7 +44,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
-import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.index.AtomicUpsertHelper;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
@@ -140,7 +140,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.applyNew;
 import static org.apache.phoenix.coprocessor.IndexRebuildRegionScanner.removeColumn;
-import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
+import static org.apache.phoenix.index.AtomicUpsertHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 /**
@@ -1605,7 +1605,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Pair<Put, Put> dataRowState = context.dataRowStates.get(rowKeyPtr);
       Put currentDataRowState = dataRowState != null ? dataRowState.getFirst() : null;
 
-      if (PhoenixIndexBuilderHelper.isDupKeyIgnore(opBytes)) {
+      if (AtomicUpsertHelper.isDupKeyIgnore(opBytes)) {
           if (currentDataRowState == null) {
               // new row
               mutations.add(atomicPut);
