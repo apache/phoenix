@@ -115,14 +115,14 @@ public class SnapshotScanner extends AbstractClientScanner {
   @Override
   public Result next() throws IOException {
     values.clear();
-    scanner.nextRaw(values);
+    boolean hasMore = scanner.nextRaw(values);
     statisticsCollector.collectStatistics(values);
-    if (values.isEmpty()) {
+    if (hasMore || !values.isEmpty()) {
+      return Result.create(values);
+    } else {
       //we are done
       return null;
     }
-
-    return Result.create(values);
   }
 
   @Override
