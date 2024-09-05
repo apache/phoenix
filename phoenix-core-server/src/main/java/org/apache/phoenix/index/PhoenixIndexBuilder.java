@@ -102,8 +102,7 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     
     @Override
     public boolean isAtomicOp(Mutation m) {
-        return m.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null ||
-                m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT) != null;
+        return m.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB) != null;
     }
 
     private static void transferCells(Mutation source, Mutation target) {

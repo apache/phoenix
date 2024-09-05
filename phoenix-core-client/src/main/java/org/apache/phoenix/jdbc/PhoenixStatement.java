@@ -2413,6 +2413,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * @throws SQLException If the statement cannot be executed.
      */
     public Pair<Integer, Tuple> executeUpdateReturnRow(String sql) throws SQLException {
+        if (!connection.getAutoCommit()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
+                    .buildException();
+        }
         CompilableStatement stmt = preExecuteUpdate(sql);
         Pair<Integer, Tuple> result =
                 executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);

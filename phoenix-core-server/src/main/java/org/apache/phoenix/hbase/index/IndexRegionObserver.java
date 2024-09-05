@@ -525,23 +525,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private void ignoreAtomicOperations (MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-      for (int i = 0; i < miniBatchOp.size(); i++) {
-          Mutation m = miniBatchOp.getOperation(i);
-          if (this.builder.isAtomicOp(m)) {
-              miniBatchOp.setOperationStatus(i, IGNORE);
-          }
-      }
-  }
-
   private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp,
           BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
-          if (this.builder.isAtomicOp(m) || this.builder.isEnabled(m)) {
+          if (this.builder.isAtomicOp(m) || this.builder.returnResult(m) ||
+                  this.builder.isEnabled(m)) {
               ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
               context.rowsToLock.add(row);
-
           }
       }
   }
@@ -581,7 +572,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                         BatchMutateContext context) throws IOException {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
-          if (this.builder.isAtomicOp(m) && m instanceof Put) {
+          if ((this.builder.isAtomicOp(m) || this.builder.returnResult(m)) && m instanceof Put) {
               List<Mutation> mutations = generateOnDupMutations(context, (Put)m, miniBatchOp);
               if (!mutations.isEmpty()) {
                   addOnDupMutationsToBatch(miniBatchOp, i, mutations);
@@ -664,7 +655,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // skip this mutation if we aren't enabling indexing or not an atomic op
             // or if it is an atomic op and its timestamp is already set(not LATEST)
             if (!builder.isEnabled(m) &&
-                !(builder.isAtomicOp(m) && IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)) {
+                    !((builder.isAtomicOp(m) || builder.returnResult(m)) &&
+                            IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)) {
                 continue;
             }
             setTimestampOnMutation(m, ts);
@@ -1166,7 +1158,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             if (this.builder.returnResult(m)) {
                 context.returnResult = true;
             }
-            if (this.builder.isAtomicOp(m)) {
+            if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
                 context.hasAtomic = true;
                 if (context.hasDelete) {
                     return;
@@ -1174,7 +1166,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             } else if (m instanceof Delete) {
                 context.hasDelete = true;
             }
-            if (context.hasAtomic) {
+            if (context.hasAtomic || context.returnResult) {
                 return;
             }
         }
@@ -1305,20 +1297,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         lockRows(context);
         long onDupCheckTime = 0;
 
-        if (context.hasAtomic || context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
+        if (context.hasAtomic || context.returnResult || context.hasGlobalIndex ||
+                context.hasUncoveredIndex || context.hasTransform) {
             // Retrieve the current row states from the data table while holding the lock.
             // This is needed for both atomic mutations and global indexes
             long start = EnvironmentEdgeManager.currentTimeMillis();
             context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
             if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic ||
-                    context.hasDelete ||  (context.hasUncoveredIndex &&
+                    context.returnResult || context.hasDelete || (context.hasUncoveredIndex &&
                     isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))) {
                 getCurrentRowStates(c, context);
             }
             onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
         }
 
-        if (context.hasAtomic) {
+        if (context.hasAtomic || context.returnResult) {
             long start = EnvironmentEdgeManager.currentTimeMillis();
             // add the mutations for conditional updates to the mini batch
             addOnDupMutationsToBatch(miniBatchOp, context);
@@ -1380,7 +1373,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                 continue;
             }
             Mutation m = miniBatchOp.getOperation(i);
-            if (!this.builder.isAtomicOp(m)) {
+            if (!this.builder.isAtomicOp(m) && !this.builder.returnResult(m)) {
                 continue;
             }
             ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
@@ -1461,7 +1454,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       try {
           if (success) {
               context.currentPhase = BatchMutatePhase.POST;
-              if(context.hasAtomic && miniBatchOp.size() == 1) {
+              if ((context.hasAtomic || context.returnResult) && miniBatchOp.size() == 1) {
                   if (!isAtomicOperationComplete(miniBatchOp.getOperationStatus(0))) {
                       byte[] retVal = PInteger.INSTANCE.toBytes(1);
                       Cell cell = PhoenixKeyValueUtil.newKeyValue(

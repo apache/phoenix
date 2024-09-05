@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -67,6 +68,7 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.bson.BsonDocument;
 import org.bson.RawBsonDocument;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -276,6 +278,35 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                             cell.getValueLength()));
         } else {
             assertNull(cell);
+        }
+    }
+
+    @Test
+    public void testReturnRowResultWithoutAutoCommit() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                    + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                    "IGNORE";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                    bsonDocument1, bsonDocument1, 123);
+            throw new RuntimeException("Should not reach here");
+        } catch (SQLException e) {
+            Assert.assertEquals(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED.getErrorCode(),
+                    e.getErrorCode());
         }
     }
 

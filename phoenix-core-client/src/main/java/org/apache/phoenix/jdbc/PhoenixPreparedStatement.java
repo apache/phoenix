@@ -227,6 +227,10 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * @throws SQLException If the statement cannot be executed.
      */
     public Pair<Integer, Tuple> executeUpdateReturnRow() throws SQLException {
+        if (!connection.getAutoCommit()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
+                    .buildException();
+        }
         preExecuteUpdate();
         return executeMutation(statement, createAuditQueryLogger(statement, query),
                 MutationState.ReturnResult.ROW);

@@ -632,6 +632,8 @@ public enum SQLExceptionCode {
     STALE_METADATA_CACHE_EXCEPTION(915, "43M26", "Stale metadata cache exception",
         info -> new StaleMetadataCacheException(info.getMessage())),
 
+    AUTO_COMMIT_NOT_ENABLED(916, "43M27", "Connection does not have auto-commit enabled"),
+
     //SQLCode for testing exceptions
     FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");
 
