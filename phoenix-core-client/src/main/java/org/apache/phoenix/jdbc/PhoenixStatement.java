@@ -211,6 +211,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -583,13 +584,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         return executeMutation(stmt, true, queryLogger, null).getFirst();
     }
 
-    Pair<Integer, Result> executeMutation(final CompilableStatement stmt,
+    Pair<Integer, Tuple> executeMutation(final CompilableStatement stmt,
                                    final AuditQueryLogger queryLogger,
                                    final ReturnResult returnResult) throws SQLException {
         return executeMutation(stmt, true, queryLogger, returnResult);
     }
 
-    private Pair<Integer, Result> executeMutation(final CompilableStatement stmt,
+    private Pair<Integer, Tuple> executeMutation(final CompilableStatement stmt,
                                                   final boolean doRetryOnMetaNotFoundError,
                                                   final AuditQueryLogger queryLogger,
                                                   final ReturnResult returnResult)
@@ -603,9 +604,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         try {
             return CallRunner
                    .run(
-                        new CallRunner.CallableThrowable<Pair<Integer, Result>, SQLException>() {
+                           new CallRunner.CallableThrowable<Pair<Integer, Tuple>, SQLException>() {
                         @Override
-                            public Pair<Integer, Result> call() throws SQLException {
+                            public Pair<Integer, Tuple> call() throws SQLException {
                             boolean success = false;
                             String tableName = null;
                             boolean isUpsert = false;
@@ -667,7 +668,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                 }
 
                                 success = true;
-                                return new Pair<>(lastUpdateCount, result);
+                                return new Pair<>(lastUpdateCount, new ResultTuple(result));
                             }
                             //Force update cache and retry if meta not found error occurs
                             catch (MetaDataEntityNotFoundException e) {
@@ -2407,13 +2408,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
      * cannot be updated, return non-updated row.
      *
      * @param sql The SQL DML statement, UPSERT or DELETE for Phoenix.
-     * @return The pair of int and Result, where int represents value 1 for successful row update
-     * and 0 for non-successful row update, and Result represents the state of the row.
+     * @return The pair of int and Tuple, where int represents value 1 for successful row
+     * update and 0 for non-successful row update, and Tuple represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
-    public Pair<Integer, Result> executeUpdateReturnRow(String sql) throws SQLException {
+    public Pair<Integer, Tuple> executeUpdateReturnRow(String sql) throws SQLException {
         CompilableStatement stmt = preExecuteUpdate(sql);
-        Pair<Integer, Result> result =
+        Pair<Integer, Tuple> result =
                 executeMutation(stmt, createAuditQueryLogger(stmt, sql), ReturnResult.ROW);
         flushIfNecessary();
         return result;

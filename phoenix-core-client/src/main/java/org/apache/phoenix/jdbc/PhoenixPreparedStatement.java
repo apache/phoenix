@@ -46,7 +46,6 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.MutationPlan;
@@ -58,6 +57,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
@@ -222,11 +222,11 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
      * If the row is successfully updated, return the updated row, otherwise if the row
      * cannot be updated, return non-updated row.
      *
-     * @return The pair of int and Result, where int represents value 1 for successful row update
-     * and 0 for non-successful row update, and Result represents the state of the row.
+     * @return The pair of int and Tuple, where int represents value 1 for successful row update
+     * and 0 for non-successful row update, and Tuple represents the state of the row.
      * @throws SQLException If the statement cannot be executed.
      */
-    public Pair<Integer, Result> executeUpdateReturnRow() throws SQLException {
+    public Pair<Integer, Tuple> executeUpdateReturnRow() throws SQLException {
         preExecuteUpdate();
         return executeMutation(statement, createAuditQueryLogger(statement, query),
                 MutationState.ReturnResult.ROW);

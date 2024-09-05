@@ -48,6 +48,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -55,6 +56,8 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
@@ -147,31 +150,35 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.setAutoCommit(true);
             String tableName = generateUniqueName();
-            String ddl = " create table " + tableName +
-                    "(PK VARCHAR PRIMARY KEY, COUNTER1 DOUBLE, COUNTER2 VARCHAR, COL3 BSON, COL4 " +
-                    "INTEGER)";
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
-            String upsertSql = "UPSERT INTO " + tableName + " (PK, COUNTER1, COL3, COL4) VALUES(" +
-                    "'pk000', 1011.202, ?, 123) ON DUPLICATE KEY IGNORE";
+            String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                    + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                    "IGNORE";
             validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
                     bsonDocument1, bsonDocument1, 123);
 
             upsertSql =
-                    "UPSERT INTO " + tableName + " (PK, COUNTER1) VALUES('pk000', 0) ON DUPLICATE"
+                    "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
+                            + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE"
                             + " KEY IGNORE";
             validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
                     null, bsonDocument1, 123);
 
             upsertSql =
-                    "UPSERT INTO " + tableName +
-                            " (PK, COUNTER1, COUNTER2) VALUES('pk000', 234, 'col2_000')";
+                    "UPSERT INTO " + tableName
+                            + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
+                            + "'pk003', 234, 'col2_000')";
             validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
                     null, null, null);
 
             upsertSql = "UPSERT INTO " + tableName
-                    + " (PK) VALUES('pk000') ON DUPLICATE KEY UPDATE "
+                    + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
                     + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
                     + " END, "
                     + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
@@ -182,7 +189,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                     bsonDocument2, bsonDocument2, 234);
 
             upsertSql = "UPSERT INTO " + tableName
-                    + " (PK) VALUES('pk000') ON DUPLICATE KEY UPDATE "
+                    + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
                     + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
                     + " END,"
                     + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
@@ -202,7 +209,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
-        final Pair<Integer, Result> resultPair;
+        final Pair<Integer, Tuple> resultPair;
         if (inputDoc != null) {
             PhoenixPreparedStatement ps =
                     conn.prepareStatement(upsertSql).unwrap(PhoenixPreparedStatement.class);
@@ -213,16 +220,34 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                     .executeUpdateReturnRow(upsertSql);
         }
         assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-        Result result = resultPair.getSecond();
+        ResultTuple result = (ResultTuple) resultPair.getSecond();
         PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
 
-        Cell cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                table.getColumns().get(1).getColumnQualifierBytes());
+        Cell cell =
+                result.getResult()
+                        .getColumnLatestCell(table.getColumns().get(3).getFamilyName().getBytes(),
+                                table.getColumns().get(3).getColumnQualifierBytes());
+        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 1);
+        assertEquals("pk000",
+                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 2);
+        assertEquals(-123.98,
+                PDouble.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 3);
+        assertEquals("pk003",
+                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
         assertEquals(col1,
                 PDouble.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
                         cell.getValueLength()));
-        cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                table.getColumns().get(2).getColumnQualifierBytes());
+        cell = result.getResult()
+                .getColumnLatestCell(table.getColumns().get(4).getFamilyName().getBytes(),
+                        table.getColumns().get(4).getColumnQualifierBytes());
         if (col2 != null) {
             assertEquals(col2,
                     PVarchar.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
@@ -231,8 +256,9 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             assertNull(cell);
         }
 
-        cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                table.getColumns().get(3).getColumnQualifierBytes());
+        cell = result.getResult()
+                .getColumnLatestCell(table.getColumns().get(5).getFamilyName().getBytes(),
+                        table.getColumns().get(5).getColumnQualifierBytes());
         if (expectedDoc != null) {
             assertEquals(expectedDoc,
                     PBson.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
@@ -241,8 +267,9 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             assertNull(cell);
         }
 
-        cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                table.getColumns().get(4).getColumnQualifierBytes());
+        cell = result.getResult()
+                .getColumnLatestCell(table.getColumns().get(6).getFamilyName().getBytes(),
+                        table.getColumns().get(6).getColumnQualifierBytes());
         if (col4 != null) {
             assertEquals(col4,
                     PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),

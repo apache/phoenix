@@ -32,11 +32,11 @@ import java.util.Collection;
 import java.util.Properties;
 
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDouble;
 import org.bson.BsonArray;
@@ -494,13 +494,13 @@ public class Bson4IT extends ParallelStatsDisabledIT {
                                               String jsonPath,
                                               boolean success)
           throws SQLException, IOException {
-    Pair<Integer, Result> resultPair =
+    Pair<Integer, Tuple> resultPair =
             stmt.unwrap(PhoenixPreparedStatement.class).executeUpdateReturnRow();
     assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
-    Result result = resultPair.getSecond();
+    Tuple result = resultPair.getSecond();
     PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
 
-    Cell cell = result.getColumnLatestCell(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+    Cell cell = result.getValue(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
             table.getColumns().get(2).getColumnQualifierBytes());
     assertEquals(RawBsonDocument.parse(getJsonString(jsonPath)),
             PBson.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
