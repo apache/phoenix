@@ -18,8 +18,10 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -46,6 +48,7 @@ import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
+import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.htrace.Span;
@@ -67,6 +70,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -539,13 +543,22 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    private static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
+    protected static PTable getPTable(ObserverContext<RegionCoprocessorEnvironment> c) {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        String fullTableName = tableName.getNameAsString();
+        boolean isMultiTenantIndexTable = false;
+        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
+            isMultiTenantIndexTable = true;
+        }
+        final String fullTableName = isMultiTenantIndexTable ?
+                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(),
+                        MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
+                tableName.getNameAsString();
         Configuration conf = c.getEnvironment().getConfiguration();
-        PTable table;
-        try(PhoenixConnection conn = QueryUtil.getConnectionOnServer(
-                conf).unwrap(PhoenixConnection.class)) {
+        PTable table = null;
+        Properties props = new Properties();
+        props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "3");
+        try(PhoenixConnection conn = QueryUtil.getConnectionOnServerWithCustomUrl(
+                props, conf, "MEMSTOREFLUSHER").unwrap(PhoenixConnection.class)) {
             table = conn.getTableNoCache(fullTableName);
         }
         catch (SQLException e) {
@@ -553,11 +566,21 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 LOGGER.debug("Ignoring HBase table that is not a Phoenix table: {}", fullTableName);
                 // non-Phoenix HBase tables won't be found, do nothing
             } else {
-                LOGGER.error("Unable to fetch table level max lookback age for {}", fullTableName, e);
+                LOGGER.warn("Failed to retrieve PTable for: {}", fullTableName, e);
             }
+        }
+        return table;
+    }
+
+    protected static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
+        Configuration conf = c.getEnvironment().getConfiguration();
+        PTable table = getPTable(c);
+        if (table != null) {
+            return MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
+        }
+        else {
             return MetaDataUtil.getMaxLookbackAge(conf, null);
         }
-        return MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {

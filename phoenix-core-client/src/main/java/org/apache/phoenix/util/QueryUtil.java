@@ -414,8 +414,13 @@ public final class QueryUtil {
 
     public static Connection getConnectionOnServerWithCustomUrl(Properties props, String principal)
             throws SQLException {
+        return getConnectionOnServerWithCustomUrl(props, null, principal);
+    }
+
+    public static Connection getConnectionOnServerWithCustomUrl(Properties props, Configuration conf, String principal)
+            throws SQLException {
         setServerConnection(props);
-        String url = getConnectionUrl(props, null, principal);
+        String url = getConnectionUrl(props, conf, principal);
         LOGGER.info("Creating connection with the jdbc url: " + url);
         return DriverManager.getConnection(url, props);
     }

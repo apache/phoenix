@@ -179,25 +179,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
 
-    private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
-
-    public static void setMaxLookbackInMillis(String tableName, long maxLookbackInMillis) {
-        if (tableName == null) {
-            return;
-        }
-        maxLookbackMap.put(tableName,
-                maxLookbackInMillis);
-    }
-
-    public static long getMaxLookbackInMillis(String tableName, long maxLookbackInMillis) {
-        if (tableName == null) {
-            return maxLookbackInMillis;
-        }
-        Long value = maxLookbackMap.get(tableName);
-        return value == null
-                ? maxLookbackInMillis
-                : maxLookbackMap.get(tableName);
-    }
     @Override
     public Optional<RegionObserver> getRegionObserver() {
         return Optional.of(this);
@@ -608,17 +589,18 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         } else {
             return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
                 @Override public InternalScanner run() throws Exception {
+                    Configuration conf = c.getEnvironment().getConfiguration();
                     String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable()
                             .getNameAsString();
-                    long maxLookbackInMillis =
-                            UngroupedAggregateRegionObserver.getMaxLookbackInMillis(
-                                    tableName,
-                                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
-                                            c.getEnvironment().getConfiguration()));
+                    PTable table = getPTable(c);
+                    if (table == null) {
+                        return scanner;
+                    }
+                    long maxLookbackInMillis = MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
                     maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
                             store.getColumnFamilyName(), maxLookbackInMillis);
                     return new CompactionScanner(c.getEnvironment(), store, scanner,
-                            maxLookbackInMillis, false, true, null);
+                            maxLookbackInMillis, false, true, table);
                 }
             });
         }
@@ -653,11 +635,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         compactionConfig).unwrap(PhoenixConnection.class)) {
                     table = conn.getTableNoCache(fullTableName);
                     maxLookbackAge = table.getMaxLookbackAge();
-                    UngroupedAggregateRegionObserver.setMaxLookbackInMillis(
-                            tableName.getNameAsString(),
-                            MetaDataUtil.getMaxLookbackAge(
-                                    c.getEnvironment().getConfiguration(),
-                                    maxLookbackAge));
                 } catch (Exception e) {
                     if (e instanceof TableNotFoundException) {
                         LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "

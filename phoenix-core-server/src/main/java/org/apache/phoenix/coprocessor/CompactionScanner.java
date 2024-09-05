@@ -166,13 +166,13 @@ public class CompactionScanner implements InternalScanner {
         this.region = env.getRegion();
         this.store = store;
         this.env = env;
-        this.emptyCF = major && table != null ? SchemaUtil.getEmptyColumnFamily(table) : EMPTY_BYTE_ARRAY;
-        this.emptyCQ = major && table != null ? SchemaUtil.getEmptyColumnQualifier(table) : EMPTY_BYTE_ARRAY;
+        this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
+        this.emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
         columnFamilyName = store.getColumnFamilyName();
         storeColumnFamily = columnFamilyName.getBytes();
         tableName = region.getRegionInfo().getTable().getNameAsString();
-        String dataTableName = major && table != null ? table.getName().toString() : "";
+        String dataTableName = table.getName().toString();
         Long overriddenMaxLookback = maxLookbackMap.get(tableName + SEPARATOR + columnFamilyName);
         this.maxLookbackInMillis = overriddenMaxLookback == null ?
                 maxLookbackAgeInMillis : Math.max(maxLookbackAgeInMillis, overriddenMaxLookback);
@@ -187,20 +187,15 @@ public class CompactionScanner implements InternalScanner {
         this.keepDeletedCells = keepDeleted ? KeepDeletedCells.TTL : cfd.getKeepDeletedCells();
         familyCount = region.getTableDescriptor().getColumnFamilies().length;
         localIndex = columnFamilyName.startsWith(LOCAL_INDEX_COLUMN_FAMILY_PREFIX);
-        emptyCFStore = major
-                ? familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
-                        || localIndex
-                : true; // we do not need to identify emptyCFStore for minor compaction or flushes
+        emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
+                        || localIndex; // we do not need to identify emptyCFStore for minor compaction or flushes
 
         // Initialize the tracker that computes the TTL for the compacting table.
         // The TTL tracker can be
         // simple (one single TTL for the table) when the compacting table is not Partitioned
         // complex when the TTL can vary per row when the compacting table is Partitioned.
         TTLTracker
-                ttlTracker =
-                major ?
-                        createTTLTrackerFor(env, store, table) :
-                        new TableTTLTrackerForFlushesAndMinor(tableName) ;
+                ttlTracker = createTTLTrackerFor(env, store, table);
 
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor(ttlTracker);
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor(ttlTracker);
@@ -2206,12 +2201,8 @@ public class CompactionScanner implements InternalScanner {
                             lastRowVersion.add(cell);
                         }
                     }
-                    if (major && ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ)) {
-                        isEmptyColumn = true;
-                    } else {
-                        isEmptyColumn = false;
-                    }
-                } else if (major && isEmptyColumn) {
+                    isEmptyColumn = ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ);
+                } else if (isEmptyColumn) {
                     // We only need to keep one cell for every column for the last row version.
                     // So here we just form the empty column beyond the last row version
                     emptyColumn.add(cell);
@@ -2234,7 +2225,7 @@ public class CompactionScanner implements InternalScanner {
                     previous++;
                     continue;
                 }
-                if (previous == -1) {
+                if (previous == -1 && max - ts > ttl) {
                     break;
                 }
                 if (max - ts > ttl) {
@@ -2246,6 +2237,9 @@ public class CompactionScanner implements InternalScanner {
                     return;
                 }
                 previous++;
+            }
+            if (previous > -1 && max - min > ttl) {
+                output.add(input.remove(previous));
             }
         }
 
@@ -2392,7 +2386,7 @@ public class CompactionScanner implements InternalScanner {
                     }
                     lastRowVersion = trimmedRow;
                     trimmedEmptyColumn.clear();;
-                    for (Cell cell : lastRowVersion) {
+                    for (Cell cell : emptyColumn) {
                         if (cell.getTimestamp() >= minTimestamp) {
                             trimmedEmptyColumn.add(cell);
                         }
