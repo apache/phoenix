@@ -17,45 +17,48 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-
-
-import java.io.File;
-import java.io.IOException;
-
-import java.net.URL;
-
-import java.util.HashMap;
-
-import java.util.Map;
-import java.util.Map.Entry;
-
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-
-import org.apache.hadoop.hbase.snapshot.ExportSnapshot;
-import org.apache.hadoop.hbase.util.CommonFSUtils;
-
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.BeforeClass;
-
-import org.junit.Test;
-import org.junit.experimental.categories.Category;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.utils.IOUtils;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
+import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.CheckAndMutate;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.snapshot.ExportSnapshot;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.hbase.util.CommonFSUtils;
+import org.apache.phoenix.exception.UpgradeBlockedException;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+import org.apache.phoenix.util.ClientUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Map.Entry;
+
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
+import static org.junit.Assert.*;
 
 /**
  * This is a not a standard IT.
@@ -66,17 +69,17 @@ import java.io.FileOutputStream;
  */
 
 //TODO:- Snapshot here is storing integers as TTL Value and Phoenix Level TTL is Long, need to work on this.
-@Category(NeedsOwnMiniClusterTest.class)
-public class LoadSystemTableSnapshotIT extends BaseTest {
+public abstract class LoadSystemTableSnapshotBase extends BaseTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(
-            LoadSystemTableSnapshotIT.class);
+            LoadSystemTableSnapshotBase.class);
 
     public static final String SNAPSHOT_DIR = "snapshots4_7/";
     public static String rootDir;
 
     private static final HashMap<String, String> SNAPSHOTS_TO_LOAD;
-//    private static final HashMap<String, String> SNAPSHOTS_TO_RESTORE;
+
+    public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
 
     static {
         SNAPSHOTS_TO_LOAD = new HashMap<>();
@@ -105,8 +108,7 @@ public class LoadSystemTableSnapshotIT extends BaseTest {
         }
     }
 
-    @BeforeClass
-    public static synchronized void doSetup() throws Exception {
+    public static synchronized void setupCluster(boolean createBlockUpgradeMutex) throws Exception {
         Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
         serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
         serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
@@ -116,11 +118,10 @@ public class LoadSystemTableSnapshotIT extends BaseTest {
         //Start minicluster without Phoenix first
         checkClusterInitialized(new ReadOnlyProps(serverProps.entrySet().iterator()));
 
-        URL folderUrl = LoadSystemTableSnapshotIT.class.getClassLoader()
+        URL folderUrl = LoadSystemTableSnapshotBase.class.getClassLoader()
                 .getResource(SNAPSHOT_DIR);
 
         // extract the tar
-
         File archive = new File(folderUrl.getFile() + "snapshots47.tar.gz");
         File destination = new File(folderUrl.getFile());
 
@@ -132,6 +133,49 @@ public class LoadSystemTableSnapshotIT extends BaseTest {
         for (Entry<String, String> snapshot : SNAPSHOTS_TO_LOAD.entrySet()) {
             String snapshotLoc = new File(folderUrl.getFile()).getAbsolutePath() + "/" + snapshot.getKey();
             importSnapshot(snapshot.getKey(), snapshot.getValue(), snapshotLoc);
+        }
+
+        if (createBlockUpgradeMutex) {
+            try {
+
+                Admin admin = utility.getAdmin();
+                TableName mutexTableName = null;
+                try {
+                    mutexTableName = SchemaUtil.getPhysicalTableName(
+                            SYSTEM_MUTEX_NAME, new ReadOnlyProps(serverProps.entrySet().iterator()));
+
+                    TableDescriptor tableDesc = TableDescriptorBuilder.newBuilder(mutexTableName)
+                            .setColumnFamily(ColumnFamilyDescriptorBuilder
+                                    .newBuilder(PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES)
+                                    .setTimeToLive(TTL_FOR_MUTEX).build())
+                            .build();
+                    admin.createTable(tableDesc);
+                }
+                catch (IOException e) {
+                    throw e;
+                }
+
+                org.apache.hadoop.hbase.client.Connection hbaseConn = ConnectionFactory.createConnection(getUtility().getConfiguration());
+                Table sysMutexTable = hbaseConn.getTable(mutexTableName);
+
+                final byte[] rowKey = Bytes.toBytes("BLOCK_UPGRADE");
+
+                byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
+                byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
+                Put put = new Put(rowKey);
+                put.addColumn(family, qualifier, MUTEX_LOCKED);
+                CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(rowKey)
+                        .ifNotExists(family, qualifier)
+                        .build(put);
+
+                boolean checkAndPut = sysMutexTable.checkAndMutate(checkAndMutate).isSuccess();
+
+                if (!checkAndPut) {
+                    throw new UpgradeBlockedException();
+                }
+            } catch (IOException e) {
+                throw ClientUtil.parseServerException(e);
+            }
         }
     }
 
@@ -159,20 +203,6 @@ public class LoadSystemTableSnapshotIT extends BaseTest {
 
         //load the snapshot
         utility.getAdmin().restoreSnapshot(key);
-    }
-
-    @Test
-    public void testPhoenixUpgrade() throws Exception {
-        Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
-        serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
-        serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-        Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
-        clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, "true");
-
-        //Now we can start Phoenix
-        setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()), new ReadOnlyProps(clientProps.entrySet()
-                .iterator()));
-        assertTrue(true);
     }
 
 }
