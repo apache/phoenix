@@ -58,6 +58,15 @@ public class RowKeyValueAccessor implements Writable {
     public RowKeyValueAccessor() {
     }
 
+    /**
+     * The class used to keep list of booleans representing whether the data type of the given
+     * field is of type VARBINARY_ENCODED. For example, let's say we have variable length
+     * data types in the order (VARCHAR, VARBINARY_ENCODED, VARCHAR). The corresponding object
+     * of this class will have binaryEncodedDataTypes list with values (false, true, false).
+     * The array of this class is serialized and deserialized together with other fields of
+     * RowKeyValueAccessor. The value of the list determines which separator bytes need to be
+     * used while iterating through the rowkey bytes.
+     */
     static class BinaryEncodedTypesLists {
         private final List<Boolean> binaryEncodedDataTypes = new ArrayList<>();
 
@@ -70,6 +79,14 @@ public class RowKeyValueAccessor implements Writable {
         }
     }
 
+    /**
+     * The class used to keep list of booleans representing whether the order of the given
+     * field is Ascending. For example, let's say we have rowkey with pk columns
+     * (A ASC, B DESC, C ASC). The corresponding object of this class will have sortOrderAsc list
+     * with values (true, false, true). The array of this class is serialized and deserialized
+     * together with other fields of RowKeyValueAccessor. The value of the list determines which
+     * separator bytes need to be used while iterating through the rowkey bytes.
+     */
     static class SortOrderLists {
         private final List<Boolean> sortOrderAsc = new ArrayList<>();
 
@@ -102,6 +119,8 @@ public class RowKeyValueAccessor implements Writable {
         while (pos < index) {
             int offset = 0;
             if (datum.getDataType().isFixedWidth()) {
+                // For continuous fixed width data type columns, accumulate how many
+                // of them contains ASC and DESC order types.
                 BinaryEncodedTypesLists encodedTypesLists = new BinaryEncodedTypesLists();
                 SortOrderLists sortOrders = new SortOrderLists();
                 do {
@@ -119,6 +138,11 @@ public class RowKeyValueAccessor implements Writable {
                 binaryEncodedTypesLists[nOffsets] = encodedTypesLists;
                 sortOrderLists[nOffsets++] = sortOrders;
             } else {
+                // For continuous variable length data type columns, accumulate how many
+                // of them contains ASC and DESC order types. And how many of them contains
+                // VARBINARY_ENCODED and other variable length types. This information is
+                // crucial to figure out which separator bytes to use while going through each
+                // column value.
                 BinaryEncodedTypesLists encodedTypesLists = new BinaryEncodedTypesLists();
                 SortOrderLists sortOrders = new SortOrderLists();
                 do {
@@ -156,7 +180,32 @@ public class RowKeyValueAccessor implements Writable {
 
     private int index = -1; // Only available on client side
     private int[] offsets;
+    /**
+     * An array of BinaryEncodedTypesLists. Each element of BinaryEncodedTypesLists consists of
+     * list of booleans representing whether the given column is of type VARBINARY_ENCODED or other
+     * variable length data type. All the continuous fixed length as well as variable length
+     * data type columns are clubbed together. For example, let's say we have columns
+     * (A INTEGER, B FLOAT, C DOUBLE, D VARCHAR, E VARBINARY_ENCODED, F VARCHAR). Here, we have
+     * three continuous fixed-length columns and three continuous variable length columns. Hence,
+     * binaryEncodedTypesLists array consists of only two elements. binaryEncodedTypesLists[0]
+     * consists of List<Boolean> as [false, false, false] because INTEGER, FLOAT and DOUBLE are of
+     * fixed length data type. Whereas binaryEncodedTypesLists[1] consists of List<Boolean> as
+     * [false, true, false] because D and F are not VARBINARY_ENCODED whereas E is
+     * VARBINARY_ENCODED.
+     */
     private BinaryEncodedTypesLists[] binaryEncodedTypesLists;
+    /**
+     * An array of SortOrderLists. Each element of SortOrderLists consists of list of booleans
+     * representing whether the given column is ASC of DESC order. All the continuous fixed length
+     * as well as variable length data type columns are clubbed together. For example, let's say
+     * we have columns
+     * (A INTEGER, B FLOAT DESC, C DOUBLE, D VARCHAR DESC, E VARBINARY_ENCODED, F VARCHAR).
+     * Here, we have three continuous fixed-length columns and three continuous variable length
+     * columns. Hence, sortOrderLists array consists of only two elements. sortOrderLists[0]
+     * consists of List<Boolean> as [true, false, true] because A and C are ASC whereas B is DESC
+     * ordered column. sortOrderLists[1] consists of List<Boolean> as [false, true, true] because
+     * D is DESC whereas E and F are ASC ordered columns.
+     */
     private SortOrderLists[] sortOrderLists;
     private boolean isFixedLength;
     private boolean hasSeparator;
@@ -203,6 +252,22 @@ public class RowKeyValueAccessor implements Writable {
 
         this.binaryEncodedTypesLists = null;
         this.sortOrderLists = null;
+
+        // New client that supports new structure of RowKeyValueAccessor with additional fields
+        // need to differentiate serialization from old client that does not support additional
+        // fields of RowKeyValueAccessor. This is specifically required because multiple
+        // Expressions are serialized and deserialized together.
+        // We expect to use DataInputBuffer or DataInputStream only. Both of them support
+        // reading bytes from the byte stream without moving the cursor. While DataInputBuffer
+        // provides access to the underlying byte buffer, DataInputStream supports mark and reset
+        // functions to read the bytes and re-adjust the cursor back to original position.
+        // If mark is not supported, we should not risk reading additional bytes as it can
+        // move the cursor forward and the deserialization of other Expressions can fail.
+        // It is very important to read the separator bytes
+        // ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR without moving the pointer forward. If the
+        // pointer is moved forward, old client that does not support new fields of
+        // RowKeyValueAccessor would likely fail while running against new server that supports
+        // new fields of RowKeyValueAccessor.
         if (input instanceof DataInputBuffer) {
             DataInputBuffer dataInputBuffer = (DataInputBuffer) input;
             int offset = dataInputBuffer.getPosition();
@@ -232,6 +297,8 @@ public class RowKeyValueAccessor implements Writable {
                         return;
                     }
                 } catch (IOException e) {
+                    // This can happen if EOF is reached while reading the data i.e. the stream
+                    // does not have ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR.length num of bytes.
                     dataInputStream.reset();
                     return;
                 }
@@ -247,6 +314,12 @@ public class RowKeyValueAccessor implements Writable {
                 LOGGER.warn("DataInputStream {} does not support mark.", dataInputStream);
                 return;
             }
+        } else {
+            LOGGER.error("Type of DataInput is neither DataInputBuffer nor DataInputStream. "
+                + "This is not expected. Do not attempt deserialization of "
+                + "binaryEncodedTypesLists and sortOrderLists for compatibility purpose."
+                + " input: {}", input);
+            return;
         }
 
         byte[] bytes = new byte[QueryConstants.ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR.length];
@@ -281,6 +354,12 @@ public class RowKeyValueAccessor implements Writable {
         length |= (hasSeparator ? 1 << 1 : 0) | (isFixedLength ? 1 : 0);
         ByteUtil.serializeVIntArray(output, offsets, length);
 
+        // New client that supports new structure of RowKeyValueAccessor with additional fields
+        // need to differentiate serialization from old client that does not support additional
+        // fields of RowKeyValueAccessor. This is specifically required because multiple
+        // Expressions are serialized and deserialized together.
+        // So, let's write separator bytes as ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR, followed
+        // by serialization of new fields (binaryEncodedTypesLists and sortOrderLists).
         output.write(QueryConstants.ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR);
         if (this.binaryEncodedTypesLists.length == 0) {
             WritableUtils.writeVInt(output, 0);
