@@ -587,7 +587,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   cells.add(PhoenixKeyValueUtil.newKeyValue(m.getRow(), Bytes.toBytes(UPSERT_CF),
                           Bytes.toBytes(UPSERT_STATUS_CQ), 0, retVal, 0, retVal.length));
 
-                  if (miniBatchOp.size() == 1 && context.returnResult) {
+                  if (context.returnResult) {
                       context.currColumnCellExprMap.forEach(
                               (key, value) -> cells.add(value.getFirst()));
                       cells.sort(CellComparator.getInstance());
@@ -1155,7 +1155,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                               BatchMutateContext context) {
         for (int i = 0; i < miniBatchOp.size(); i++) {
             Mutation m = miniBatchOp.getOperation(i);
-            if (this.builder.returnResult(m)) {
+            if (this.builder.returnResult(m) && miniBatchOp.size() == 1) {
                 context.returnResult = true;
             }
             if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
@@ -1700,7 +1700,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (opBytes == null) {
             mutations.add(atomicPut);
             updateCurrColumnCellExpr(atomicPut, currColumnCellExprMap);
-            if (miniBatchOp.size() == 1 && context.returnResult) {
+            if (context.returnResult) {
                 context.currColumnCellExprMap = currColumnCellExprMap;
             }
             return mutations;
@@ -1714,7 +1714,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           } else {
               updateCurrColumnCellExpr(currentDataRowState, currColumnCellExprMap);
           }
-          if (miniBatchOp.size() == 1 && context.returnResult) {
+          if (context.returnResult) {
               context.currColumnCellExprMap = currColumnCellExprMap;
           }
           return mutations;
@@ -1746,7 +1746,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   // clause which is ignored because the row doesn't exist so
                   // simply use the values in UPSERT VALUES
                   mutations.add(atomicPut);
-                  if (miniBatchOp.size() == 1 && context.returnResult) {
+                  if (context.returnResult) {
                       context.currColumnCellExprMap = currColumnCellExprMap;
                   }
                   return mutations;
@@ -1764,7 +1764,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           updateCurrColumnCellExpr(currentDataRowState, currColumnCellExprMap);
       }
 
-        if (miniBatchOp.size() == 1 && context.returnResult) {
+        if (context.returnResult) {
             context.currColumnCellExprMap = currColumnCellExprMap;
         }
 
