@@ -24,6 +24,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
+import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -68,6 +69,18 @@ public class ConditionalTTLExpressionDDLTest extends BaseConnectionlessQueryTest
         String ddlTemplate = "create table %s (k1 bigint not null, k2 bigint not null, col1 varchar, col2 date " +
                 "constraint pk primary key (k1,k2 desc)) TTL = '%s'";
         String ttl = "k1 = ''abc''";
+        String tableName = generateUniqueName();
+        String ddl = String.format(ddlTemplate, tableName, ttl);
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            conn.createStatement().execute(ddl);
+        }
+    }
+
+    @Test(expected = PhoenixParserException.class)
+    public void testParsingError() throws SQLException {
+        String ddlTemplate = "create table %s (k1 bigint not null, k2 bigint not null, col1 varchar, col2 date " +
+                "constraint pk primary key (k1,k2 desc)) TTL = '%s'";
+        String ttl = "k2 == 23";
         String tableName = generateUniqueName();
         String ddl = String.format(ddlTemplate, tableName, ttl);
         try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
@@ -124,6 +137,20 @@ public class ConditionalTTLExpressionDDLTest extends BaseConnectionlessQueryTest
         try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             assertConditonTTL(conn, tableName, ttl);
+        }
+    }
+
+    @Test
+    public void testBooleanCaseExpression() throws SQLException {
+        String ddlTemplate = "create table %s (k1 bigint not null, k2 bigint not null, col1 varchar, status char(1) " +
+                "constraint pk primary key (k1,k2 desc)) TTL = '%s'";
+        String ttl = "CASE WHEN status = ''E'' THEN TRUE ELSE FALSE END";
+        String expectedTTLExpr = "CASE WHEN status = 'E' THEN TRUE ELSE FALSE END";
+        String tableName = generateUniqueName();
+        String ddl = String.format(ddlTemplate, tableName, ttl);
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            conn.createStatement().execute(ddl);
+            assertConditonTTL(conn, tableName, expectedTTLExpr);
         }
     }
 }
