@@ -594,6 +594,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                             .getNameAsString();
                     PTable table = getPTable(c);
                     if (table == null) {
+                        // If retrieval of PTable object failed then flush all the cells and extra
+                        // cells will be removed in next compaction.
+                        LOGGER.warn("Flushing all the cells for table: {} " +
+                                "as failed to retrieve PTable object", tableName);
                         return scanner;
                     }
                     long maxLookbackInMillis = MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
@@ -681,6 +685,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     request.isMajor() || request.isAllFiles(),
                                     keepDeleted, table
                             );
+                }
+                else if (isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                    LOGGER.warn("Skipping compaction for table: {} " +
+                            "as failed to retrieve PTable object", fullTableName);
                 }
                 if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
                     try {

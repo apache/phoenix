@@ -63,11 +63,9 @@ import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertRowHasExpectedValueAtSCN;
 import static org.apache.phoenix.util.TestUtil.assertTableHasTtl;
 import static org.apache.phoenix.util.TestUtil.assertTableHasVersions;
-import static org.apache.phoenix.util.TestUtil.in;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -649,10 +647,13 @@ public class MaxLookbackExtendedIT extends BaseTest {
             conn.commit();
             injectEdge.incrementValue(1);
             TableName dataTableName = TableName.valueOf(tableName);
+            TestUtil.dumpTable(conn, dataTableName);
             flush(dataTableName);
             injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTableName);
             majorCompact(dataTableName);
             injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTableName);
             ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
             while(rs.next()) {
                 assertNotNull(rs.getString(3));

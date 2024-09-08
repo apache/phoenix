@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
@@ -48,7 +47,6 @@ import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.compactions.CompactionRequest;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.htrace.Span;
@@ -75,6 +73,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
+import static org.apache.phoenix.query.QueryConstants.COPROC_PHOENIX_CONNECTION_PRINCIPAL;
+import static org.apache.phoenix.query.QueryConstants.COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES;
 
 abstract public class BaseScannerRegionObserver implements RegionObserver {
 
@@ -543,6 +543,16 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
+    /**
+     * To retrieve PTable object from co-proc hook. For some co-proc hooks it is not always guaranteed that
+     * PTable object can be retrieved and this method returns null in those cases.
+     * Ex- during region flush we try to get PTable to pass onto {@link CompactionScanner} and if SYSCAT is
+     * offline or all RS are going down then this method will return null.
+     *
+     * The caller is expected to handle the case of null PTable object being returned even if an entry for table
+     * exists in SYSCAT.
+     * @return Retrieved PTable object or null.
+     */
     protected static PTable getPTable(ObserverContext<RegionCoprocessorEnvironment> c) {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
         boolean isMultiTenantIndexTable = false;
@@ -556,9 +566,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         Configuration conf = c.getEnvironment().getConfiguration();
         PTable table = null;
         Properties props = new Properties();
-        props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER, "3");
+        // Using a separate connection profile to initiate a new HConnection with lesser number of
+        // HBase client retries so that connection creation or PTable retrieval fail fast.
+        props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER, COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES);
         try(PhoenixConnection conn = QueryUtil.getConnectionOnServerWithCustomUrl(
-                props, conf, "MEMSTOREFLUSHER").unwrap(PhoenixConnection.class)) {
+                props, conf, COPROC_PHOENIX_CONNECTION_PRINCIPAL).unwrap(PhoenixConnection.class)) {
             table = conn.getTableNoCache(fullTableName);
         }
         catch (SQLException e) {
@@ -572,6 +584,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return table;
     }
 
+    /**
+     * Retrieves table level max lookback age from inside co-proc hooks. If table level max lookback age is
+     * not set or there is failure to retrieve that then cluster level max lookback age is returned.
+     * @return Retrieved table level max lookback age or cluster level max lookback age
+     */
     protected static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
         Configuration conf = c.getEnvironment().getConfiguration();
         PTable table = getPTable(c);

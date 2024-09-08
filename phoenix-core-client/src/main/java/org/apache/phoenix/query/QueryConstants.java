@@ -345,6 +345,8 @@ public interface QueryConstants {
     String CDC_UPSERT_EVENT_TYPE = "upsert";
     String CDC_DELETE_EVENT_TYPE = "delete";
     String SPLITS_FILE = "SPLITS_FILE";
+    String COPROC_PHOENIX_CONNECTION_PRINCIPAL = "PHOENIX_CONNECTION_FROM_COPROC";
+    String COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES = "3";
 
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
