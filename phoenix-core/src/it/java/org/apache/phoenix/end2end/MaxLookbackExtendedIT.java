@@ -617,7 +617,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
         }
     }
 
-    @Test
+    @Test(timeout=60000)
     public void testRetainingLastRowVersion() throws Exception {
         if(hasTableLevelMaxLookback) {
             optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
@@ -656,6 +656,40 @@ public class MaxLookbackExtendedIT extends BaseTest {
             TestUtil.dumpTable(conn, dataTableName);
             ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
             while(rs.next()) {
+                assertNotNull(rs.getString(3));
+                assertNotNull(rs.getString(4));
+            }
+        }
+    }
+
+    @Test(timeout=60000)
+    public void testRetainingCellsAtMaxLookbackStartWindow() throws Exception {
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            tableDDLOptions = optionBuilder.toString();
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long maxLookbackAge = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK_AGE : MAX_LOOKBACK_AGE;
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.incrementValue(1);
+            Statement stmt = conn.createStatement();
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            injectEdge.incrementValue(maxLookbackAge * 1000);
+            TableName dataTableName = TableName.valueOf(tableName);
+            TestUtil.dumpTable(conn, dataTableName);
+            flush(dataTableName);
+            injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTableName);
+            majorCompact(dataTableName);
+            injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTableName);
+            ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
+            while(rs.next()) {
+                assertNotNull(rs.getString(2));
                 assertNotNull(rs.getString(3));
                 assertNotNull(rs.getString(4));
             }

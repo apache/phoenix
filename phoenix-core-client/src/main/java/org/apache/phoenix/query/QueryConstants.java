@@ -345,8 +345,13 @@ public interface QueryConstants {
     String CDC_UPSERT_EVENT_TYPE = "upsert";
     String CDC_DELETE_EVENT_TYPE = "delete";
     String SPLITS_FILE = "SPLITS_FILE";
+    // Server side connection profile to be used to create Phoenix connection from inside the co-proc hook
+    // where the connection creation itself or API calls over the connection can fail due to transient issues.
     String COPROC_PHOENIX_CONNECTION_PRINCIPAL = "PHOENIX_CONNECTION_FROM_COPROC";
-    String COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES = "3";
+    // We can do at least 1 retry and one retry should be sufficient as this is used with
+    // COPROC_PHOENIX_CONNECTION_PRINCIPAL connection profile and user of this connection profile
+    // should handle transient failure scenarios while using the connection like SYSCAT being offline.
+    String COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES = "1";
 
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by

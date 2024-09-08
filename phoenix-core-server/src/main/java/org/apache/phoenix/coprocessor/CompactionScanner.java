@@ -2181,7 +2181,7 @@ public class CompactionScanner implements InternalScanner {
             Cell cellAtMaxLookbackWindowStart = null;
             for (Cell cell : result) {
                 long maxLookbackWindowStart = rowTracker.getRowContext().getMaxLookbackWindowStart();
-                if (cell.getTimestamp() > maxLookbackWindowStart) {
+                if (cell.getTimestamp() >= maxLookbackWindowStart) {
                     retainedCells.add(cell);
                     if (cell.getTimestamp() == maxLookbackWindowStart) {
                         cellAtMaxLookbackWindowStart = cell;
