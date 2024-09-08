@@ -621,9 +621,6 @@ public class MaxLookbackExtendedIT extends BaseTest {
 
     @Test
     public void testRetainingLastRowVersion() throws Exception {
-        if (multiCF) {
-            return;
-        }
         if(hasTableLevelMaxLookback) {
             optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
             tableDDLOptions = optionBuilder.toString();
@@ -631,35 +628,32 @@ public class MaxLookbackExtendedIT extends BaseTest {
         try(Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
+            long timeIntervalBetweenTwoUpserts = (ttl / 2) + 1;
             injectEdge.setValue(System.currentTimeMillis());
             EnvironmentEdgeManager.injectEdge(injectEdge);
             injectEdge.incrementValue(1);
             Statement stmt = conn.createStatement();
             stmt.execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
             conn.commit();
-            injectEdge.incrementValue(16 * 1000);
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
             stmt.execute("upsert into " + tableName + " values ('a', 'ab1')");
             conn.commit();
-            injectEdge.incrementValue(16 * 1000);
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
             stmt.execute("upsert into " + tableName + " values ('a', 'ab2')");
             conn.commit();
-            injectEdge.incrementValue(16 * 1000);
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
             stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
             conn.commit();
-            injectEdge.incrementValue(11 * 1000);
+            injectEdge.incrementValue((TABLE_LEVEL_MAX_LOOKBACK_AGE + 1) * 1000);
             stmt.execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
             conn.commit();
             injectEdge.incrementValue(1);
             TableName dataTableName = TableName.valueOf(tableName);
-            TestUtil.dumpTable(conn, dataTableName);
             flush(dataTableName);
             injectEdge.incrementValue(1);
-            TestUtil.dumpTable(conn, dataTableName);
             majorCompact(dataTableName);
-            TestUtil.dumpTable(conn, dataTableName);
             injectEdge.incrementValue(1);
             ResultSet rs = stmt.executeQuery("select * from " + dataTableName + " where id = 'a'");
-            //TestUtil.printResultSet(rs);
             while(rs.next()) {
                 assertNotNull(rs.getString(3));
                 assertNotNull(rs.getString(4));

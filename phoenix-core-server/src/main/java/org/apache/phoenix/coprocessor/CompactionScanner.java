@@ -2176,7 +2176,8 @@ public class CompactionScanner implements InternalScanner {
             boolean isEmptyColumn = false;
             Cell cellAtMaxLookbackWindowStart = null;
             for (Cell cell : result) {
-                if (cell.getTimestamp() > rowTracker.getRowContext().getMaxLookbackWindowStart()) {
+                long maxLookbackWindowStart = rowTracker.getRowContext().getMaxLookbackWindowStart();
+                if (cell.getTimestamp() > maxLookbackWindowStart) {
                     retainedCells.add(cell);
                     if (cell.getTimestamp() == maxLookbackWindowStart) {
                         cellAtMaxLookbackWindowStart = cell;
@@ -2265,7 +2266,7 @@ public class CompactionScanner implements InternalScanner {
                 }
             }
 
-            if (compactionTime - rowContext.maxTimestamp > maxLookbackInMillis + ttl) {
+            if (major && compactionTime - rowContext.maxTimestamp > maxLookbackInMillis + ttl) {
                 // The row version should not be visible via the max lookback window. Nothing to do
                 return;
             }
@@ -2419,7 +2420,10 @@ public class CompactionScanner implements InternalScanner {
             }
             phoenixResult.clear();
             rowTracker.setTTL(result.get(0));
-            if (!retainCellsForMaxLookback(result, regionLevel, phoenixResult)) {
+            if (familyCount > 1 && ! localIndex && emptyCFStore && ! regionLevel) {
+                compactRegionLevel(result, phoenixResult);
+            }
+            else if (!retainCellsForMaxLookback(result, regionLevel, phoenixResult)) {
                 if (familyCount == 1 || regionLevel) {
                     throw new RuntimeException("UNEXPECTED");
                 }
