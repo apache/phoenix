@@ -20,11 +20,13 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -54,6 +56,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -92,6 +95,7 @@ public class MaxLookbackExtendedIT extends BaseTest {
         props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
         props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
+        props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
@@ -696,6 +700,60 @@ public class MaxLookbackExtendedIT extends BaseTest {
         }
     }
 
+    @Test(timeout=60000)
+    public void testAllCellsAreFlushedOnFailureToRetrievePTable() throws Exception {
+        if(hasTableLevelMaxLookback) {
+            optionBuilder.append(", MAX_LOOKBACK_AGE=" + TABLE_LEVEL_MAX_LOOKBACK_AGE * 1000);
+            tableDDLOptions = optionBuilder.toString();
+        }
+        RegionInfo regionUnassigned = null;
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long timeIntervalBetweenTwoUpserts = (ttl / 2) + 1;
+            long maxLookbackAge = hasTableLevelMaxLookback ? TABLE_LEVEL_MAX_LOOKBACK_AGE : MAX_LOOKBACK_AGE;
+            injectEdge.setValue(System.currentTimeMillis());
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.incrementValue(1);
+            Statement stmt = conn.createStatement();
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab', 'abc', 'abcd')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab1')");
+            conn.commit();
+            injectEdge.incrementValue((maxLookbackAge + 1) * 1000);
+            TableName dataTable = TableName.valueOf(tableName);
+            TestUtil.dumpTable(conn, dataTable);
+            regionUnassigned = unAssignAndReturnFirstRegion(TableName.valueOf("SYSTEM.CATALOG"));
+            flush(dataTable);
+            injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTable);
+            // 4 value cells + 2 empty cells
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 6);
+            assignRegion(regionUnassigned);
+            regionUnassigned = null;
+            injectEdge.incrementValue(1);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab2')");
+            conn.commit();
+            injectEdge.incrementValue(timeIntervalBetweenTwoUpserts * 1000);
+            stmt.execute("upsert into " + tableName + " values ('a', 'ab3')");
+            conn.commit();
+            injectEdge.incrementValue((maxLookbackAge + 1) * 1000);
+            TestUtil.dumpTable(conn, dataTable);
+            flush(dataTable);
+            injectEdge.incrementValue(1);
+            TestUtil.dumpTable(conn, dataTable);
+            // Already existing in HFile: 4 value cells + 2 empty cells
+            // New cells from flush: 1 value cell + 2 empty cells
+            // (value cells for ab2 is not flushed as PTable was retrieved successfully)
+            assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 9);
+        }
+        finally {
+            if (regionUnassigned != null) {
+                assignRegion(regionUnassigned);
+            }
+        }
+    }
 
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
@@ -765,6 +823,19 @@ public class MaxLookbackExtendedIT extends BaseTest {
         ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
         String actualExplainPlan = QueryUtil.getExplainPlan(rs);
         IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
+    }
+
+    private RegionInfo unAssignAndReturnFirstRegion(TableName tableName) throws IOException {
+        Admin admin = getUtility().getAdmin();
+        List<RegionInfo> regionInfoList = admin.getRegions(tableName);
+        RegionInfo firstRegion = regionInfoList.get(0);
+        admin.unassign(firstRegion.getEncodedNameAsBytes());
+        return firstRegion;
+    }
+
+    private void assignRegion(RegionInfo regionInfo) throws IOException {
+        Admin admin = getUtility().getAdmin();
+        admin.assign(regionInfo.getEncodedNameAsBytes());
     }
 
 }

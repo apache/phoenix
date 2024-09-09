@@ -194,12 +194,15 @@ public class CompactionScanner implements InternalScanner {
         emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
                         || localIndex;
 
-        // Initialize the tracker that computes the TTL for the compacting or to be flushed table.
+        // Initialize the tracker that computes the TTL for the compacting table.
         // The TTL tracker can be
         // simple (one single TTL for the table) when the compacting table is not Partitioned
         // complex when the TTL can vary per row when the compacting table is Partitioned.
         TTLTracker
-                ttlTracker = createTTLTrackerFor(env, store, table);
+                ttlTracker =
+                major ?
+                        createTTLTrackerFor(env, store, table):
+                        new TableTTLTrackerForFlushesAndMinor(tableName);
 
         phoenixLevelRowCompactor = new PhoenixLevelRowCompactor(ttlTracker);
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor(ttlTracker);
@@ -2290,9 +2293,9 @@ public class CompactionScanner implements InternalScanner {
             // mutation will be considered expired and masked. If the length of the time range of
             // a row version is not more than ttl, then we know the cells covered by the row
             // version are not apart from each other more than ttl and will not be masked.
-            if ((familyCount == 1 || major) && rowContext.maxTimestamp - rowContext.minTimestamp <= ttl) {
-                // Skip this check for minor compactions and flushes for multi-CF case as empty cells will be
-                // retained to avoid doing region level scan to prevent partial row expiry.
+            if (major && rowContext.maxTimestamp - rowContext.minTimestamp <= ttl) {
+                // Skip this check for minor compactions and flushes as we don't compute actual TTL for
+                // flushes and minor compactions and don't expire cells.
                 return;
             }
             // The quick time range check did not pass. We need get at least one empty cell to cover
@@ -2302,9 +2305,11 @@ public class CompactionScanner implements InternalScanner {
                 // flushing/compacting is not an empty store then we will always hit this condition.
                 return;
             }
-            else if (! major && familyCount > 1) {
-                // Retain all empty cells for flushes and minor compactions to prevent partial
-                // row expiry and limit region level scan to only major compactions.
+            else if (! major) {
+                // Retain all empty cells for flushes and minor compactions to retain minimal needed
+                // we need to know the actual TTL which is not known during flushes and minor compactions
+                // For multi-CF case, to retain minimal empty cells, region level scan is needed thus,
+                // to keep flushes and minor compactions lightweight its optimal to retain all empty cells.
                 retainedCells.addAll(emptyColumn);
                 return;
             }
