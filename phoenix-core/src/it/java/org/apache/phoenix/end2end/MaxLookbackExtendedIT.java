@@ -744,8 +744,8 @@ public class MaxLookbackExtendedIT extends BaseTest {
             injectEdge.incrementValue(1);
             TestUtil.dumpTable(conn, dataTable);
             // Already existing in HFile: 4 value cells + 2 empty cells
-            // New cells from flush: 1 value cell + 2 empty cells
-            // (value cells for ab2 is not flushed as PTable was retrieved successfully)
+            // New cells from memstore: 1 value cell + 2 empty cells
+            // (value cell for ab2 is not flushed as PTable was retrieved successfully)
             assertRawCellCount(conn, dataTable, Bytes.toBytes("a"), 9);
         }
         finally {
