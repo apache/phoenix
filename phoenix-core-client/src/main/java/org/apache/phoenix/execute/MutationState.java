@@ -187,6 +187,12 @@ public class MutationState implements SQLCloseable {
 
     private final boolean indexRegionObserverEnabledAllTables;
 
+    /**
+     * Return result back to client. To be used when client needs to read the whole row
+     * or some specific attributes of the row back. As of PHOENIX-7398, returning whole
+     * row is supported. This is used to allow client to set Mutation attribute that is read
+     * by server for it to atomically read the row and return it back.
+     */
     private ReturnResult returnResult;
     private Result result;
 
@@ -2027,6 +2033,7 @@ public class MutationState implements SQLCloseable {
         estimatedSize = 0;
         this.mutationsMap.clear();
         phoenixTransactionContext = PhoenixTransactionContext.NULL_CONTEXT;
+        this.returnResult = null;
     }
 
     private void resetTransactionalState() {

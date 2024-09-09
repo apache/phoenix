@@ -1699,7 +1699,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // perform the mutation and return the result.
         if (opBytes == null) {
             mutations.add(atomicPut);
-            updateCurrColumnCellExpr(atomicPut, currColumnCellExprMap);
+            updateCurrColumnCellExpr(currentDataRowState != null ? currentDataRowState : atomicPut,
+                    currColumnCellExprMap);
             if (context.returnResult) {
                 context.currColumnCellExprMap = currColumnCellExprMap;
             }

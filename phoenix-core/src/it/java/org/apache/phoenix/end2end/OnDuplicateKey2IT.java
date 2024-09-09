@@ -177,7 +177,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                             + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
                             + "'pk003', 234, 'col2_000')";
             validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
-                    null, null, null);
+                    null, bsonDocument1, 123);
 
             upsertSql = "UPSERT INTO " + tableName
                     + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
