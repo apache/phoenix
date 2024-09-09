@@ -75,7 +75,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.2.4</hadoop.version>
+    <hadoop.version>3.3.6</hadoop.version>
 
     <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
@@ -1877,7 +1877,6 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
-        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1909,7 +1908,6 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
-        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1925,7 +1923,6 @@
       <properties>
         <hbase.profile>2.5.0</hbase.profile>
         <hbase.compat.version>2.5.0</hbase.compat.version>
-        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1941,7 +1938,6 @@
       <properties>
         <hbase.profile>2.6</hbase.profile>
         <hbase.compat.version>2.6.0</hbase.compat.version>
-        <hadoop.version>3.3.5</hadoop.version>
         <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
       </properties>
     </profile>
