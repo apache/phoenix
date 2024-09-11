@@ -198,4 +198,44 @@ public class MetaDataCachingIT extends BaseTest {
             assertTrue(hitCount > 0);
         }
     }
+
+    @Test
+    public void testGlobalClientCacheMetricsOfCreateAndDropTable() throws Exception {
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.getMetric().reset();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().reset();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().reset();
+
+        String tableName = generateUniqueName();
+        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+            long prevCacheAddCount =
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.getMetric().getValue();
+            long prevEstimatedUsedCacheSize =
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE .getMetric().getValue();
+            createTable(conn, tableName, 0);
+
+            assertEquals("Incorrect number of client metadata cache adds",
+                    prevCacheAddCount + 1,
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.getMetric().getValue());
+
+            long currEstimatedUsedCacheSize =
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue();
+            int tableEstimatedSize = conn.getTableNoCache(tableName).getEstimatedSize();
+            assertTrue("Incorrect estimated used size of client metadata cache",
+                    currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize + tableEstimatedSize);
+
+            long prevCacheRemovalCount =
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue();
+            prevEstimatedUsedCacheSize = currEstimatedUsedCacheSize;
+
+            conn.createStatement().execute("DROP TABLE " + tableName);
+
+            currEstimatedUsedCacheSize =
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue();
+            assertEquals("Incorrect number of client metadata cache removals",
+                    prevCacheRemovalCount + 1,
+                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue());
+            assertTrue("Incorrect estimated used size of client metadata cache",
+                    currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize - tableEstimatedSize);
+        }
+    }
 }
