@@ -71,7 +71,7 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     }
 
     @Override
-    public synchronized QueryServices getQueryServices() {
+    public QueryServices getQueryServices() {
         checkClosed();
         return queryServices;
     }
@@ -83,13 +83,13 @@ public class PhoenixTestDriver extends PhoenixEmbeddedDriver {
     }
     
     @Override
-    public synchronized Connection connect(String url, Properties info) throws SQLException {
+    public Connection connect(String url, Properties info) throws SQLException {
         checkClosed();
         return super.connect(url, info);
     }
     
     @Override // public for testing
-    public synchronized ConnectionQueryServices getConnectionQueryServices(String url, Properties infoIn) throws SQLException {
+    public ConnectionQueryServices getConnectionQueryServices(String url, Properties infoIn) throws SQLException {
         checkClosed();
         final Properties info = PropertiesUtil.deepCopy(infoIn);
         ConnectionInfo connInfo = ConnectionInfo.create(url, null, info);

@@ -216,14 +216,14 @@ public class CompactionScanner implements InternalScanner {
                         "emptyCF = %s, emptyCQ = %s, " +
                         "minVersion = %d, maxVersion = %d, keepDeletedCells = %s, " +
                         "familyCount = %d, localIndex = %s, emptyCFStore = %s, " +
-                        "compactionTime = %d, maxLookbackWindowStart = %d, maxLookbackInMillis = %d)",
+                        "compactionTime = %d, maxLookbackWindowStart = %d, maxLookbackInMillis = %d, major = %s)",
                 dataTableName, tableName, region.getRegionInfo().getEncodedName(),
                 Bytes.toStringBinary(region.getRegionInfo().getStartKey()),
                 Bytes.toStringBinary(region.getRegionInfo().getEndKey()),
                 Bytes.toString(this.emptyCF), Bytes.toString(emptyCQ),
                 this.minVersion, this.maxVersion, this.keepDeletedCells.name(),
                 this.familyCount, this.localIndex, this.emptyCFStore,
-                compactionTime, maxLookbackWindowStart, maxLookbackInMillis));
+                compactionTime, maxLookbackWindowStart, maxLookbackInMillis, this.major));
 
     }
 
