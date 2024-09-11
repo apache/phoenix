@@ -206,6 +206,17 @@ public class IndexMetricsIT extends ParallelStatsDisabledIT {
         assertEquals(1, counter.value());
     }
 
+    public static void verifyCounterWithValue(String counterName, DynamicMetricsRegistry registry
+            , long expectedValue) {
+        MutableFastCounter counter = registry.getCounter(counterName, 0);
+        assertEquals(expectedValue, counter.value());
+    }
+
+    public static long getCounterValueByName(String counterName, DynamicMetricsRegistry registry) {
+        MutableFastCounter counter = registry.getCounter(counterName, 0);
+        return counter.value();
+    }
+
     private String getTableCounterName(String baseCounterName) {
         return baseCounterName + "." + TABLE_NAME;
     }
