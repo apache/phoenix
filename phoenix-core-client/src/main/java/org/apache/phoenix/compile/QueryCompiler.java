@@ -217,10 +217,12 @@ public class QueryCompiler {
             QueryPlan subPlan = compileSubquery(subSelect, true);
             plans.add(subPlan);
         }
+
         TableRef tableRef = UnionCompiler.contructSchemaTable(statement, plans,
             select.hasWildcard() ? null : select.getSelect());
         ColumnResolver resolver = FromCompiler.getResolver(tableRef);
         StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        plans = UnionCompiler.convertToTupleProjectionPlan(plans, tableRef, context);
         QueryPlan plan = compileSingleFlatQuery(
                 context,
                 select,
@@ -236,13 +238,17 @@ public class QueryCompiler {
     }
 
     public QueryPlan compileSelect(SelectStatement select) throws SQLException{
-        StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        StatementContext context = createStatementContext();
         if (select.isJoin()) {
             JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
             return compileJoinQuery(context, joinTable, false, false, null);
         } else {
             return compileSingleQuery(context, select, false, true);
         }
+    }
+
+    private StatementContext createStatementContext() {
+        return new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
     }
 
     /**
@@ -668,6 +674,13 @@ public class QueryCompiler {
         }
 
         QueryPlan innerPlan = compileSubquery(innerSelect, false);
+        if (innerPlan instanceof UnionPlan) {
+            UnionCompiler.optimizeUnionOrderByIfPossible(
+                    (UnionPlan) innerPlan,
+                    select,
+                    this::createStatementContext);
+        }
+
         RowProjector innerQueryPlanRowProjector = innerPlan.getProjector();
         TupleProjector tupleProjector = new TupleProjector(innerQueryPlanRowProjector);
 
