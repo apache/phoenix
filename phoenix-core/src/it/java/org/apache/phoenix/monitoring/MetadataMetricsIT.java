@@ -198,19 +198,19 @@ public class MetadataMetricsIT extends ParallelStatsDisabledIT {
         int estimatedSizeOfTable1 = 1000;
         int estimatedSizeOfTable2 = 500;
         metadataSource.incrementMetadataCacheUsedSize(estimatedSizeOfTable1);
-        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                 registry, estimatedSizeOfTable1);
 
         metadataSource.incrementMetadataCacheUsedSize(estimatedSizeOfTable2);
-        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                 registry, estimatedSizeOfTable1 + estimatedSizeOfTable2);
 
         metadataSource.decrementMetadataCacheUsedSize(estimatedSizeOfTable1);
-        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                 registry, estimatedSizeOfTable2);
 
         metadataSource.decrementMetadataCacheUsedSize(estimatedSizeOfTable2);
-        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                 registry, 0);
     }
 

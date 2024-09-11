@@ -110,8 +110,8 @@ public class MetricsMetadataSourceImpl extends BaseSourceImpl implements Metrics
         dropFunctionCount = getMetricsRegistry().newCounter(DROP_FUNCTION_COUNT,
                 DROP_FUNCTION_COUNT_DESC, 0L);
 
-        metadataCacheUsedSize = getMetricsRegistry().newCounter(METADATA_CACHE_USED_SIZE,
-                METADATA_CACHE_USED_SIZE_DESC, 0L);
+        metadataCacheUsedSize = getMetricsRegistry().newCounter(METADATA_CACHE_ESTIMATED_USED_SIZE,
+                METADATA_CACHE_ESTIMATED_USED_SIZE_DESC, 0L);
         metadataCacheHitCount = getMetricsRegistry().newCounter(METADATA_CACHE_HIT_COUNT,
                 METADATA_CACHE_HIT_COUNT_DESC, 0L);
         metadataCacheMissCount = getMetricsRegistry().newCounter(METADATA_CACHE_MISS_COUNT,

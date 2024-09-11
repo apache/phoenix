@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -72,7 +73,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
             long expectedCreateTableCount =
                     IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.CREATE_TABLE_COUNT, registry);
             long expectedCacheUsedSize =
-                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_USED_SIZE, registry);
+                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE, registry);
             long expectedCacheAddCount =
                     IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_ADD_COUNT, registry);
 
@@ -86,7 +87,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
 
             PTable table = conn.getTableNoCache(fullTableName);
             expectedCacheUsedSize += table.getEstimatedSize();
-            IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
+            IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                     registry, expectedCacheUsedSize);
 
             expectedCacheAddCount += 1;
@@ -111,7 +112,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
             long expectedDropTableCount =
                     IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.DROP_TABLE_COUNT, registry);
             long expectedCacheUsedSize =
-                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_USED_SIZE, registry);
+                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE, registry);
             PTable table = conn.getTableNoCache(fullTableName);
 
             ddl = "DROP TABLE " + fullTableName;
@@ -122,7 +123,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
                     registry, expectedDropTableCount);
 
             expectedCacheUsedSize -= table.getEstimatedSize();
-            IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
+            IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                     registry, expectedCacheUsedSize);
         }
     }
@@ -143,24 +144,19 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
 
             long expectedDropTableCount =
                     IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.ALTER_ADD_COLUMN_COUNT, registry);
-//            long expectedCacheUsedSize =
-//                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_USED_SIZE, registry);
-//            int tableEstimatedSize = conn.getTableNoCache(fullTableName).getEstimatedSize();
+            long prevCacheUsedSize =
+                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE, registry);
 
-            ddl = "ALTER TABLE " + fullTableName + " ADD  b_string VARCHAR  NULL PRIMARY KEY  ";
+            ddl = "ALTER TABLE " + fullTableName + " ADD b_string VARCHAR  NULL PRIMARY KEY  ";
             conn.createStatement().execute(ddl);
-//            int newTableEstimatedSize = conn.getTableNoCache(fullTableName).getEstimatedSize();
 
             expectedDropTableCount += 1;
             IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.ALTER_ADD_COLUMN_COUNT,
                     registry, expectedDropTableCount);
 
-//            System.out.println(expectedCacheUsedSize);
-//            System.out.println(tableEstimatedSize);
-//            System.out.println(newTableEstimatedSize);
-//            expectedCacheUsedSize = expectedCacheUsedSize - tableEstimatedSize + newTableEstimatedSize;
-//            IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_USED_SIZE,
-//                    registry, expectedCacheUsedSize);
+            long currCacheUsedSize =
+                    IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE, registry);
+            assertTrue(currCacheUsedSize >= prevCacheUsedSize);
         }
     }
 }

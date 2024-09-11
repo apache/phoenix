@@ -88,8 +88,8 @@ public interface MetricsMetadataSource {
     String DROP_FUNCTION_COUNT = "dropFunctionCount";
     String DROP_FUNCTION_COUNT_DESC = "Count of DROP FUNCTION DDL statements";
 
-    String METADATA_CACHE_USED_SIZE = "metadataCacheEstimatedUsedSize";
-    String METADATA_CACHE_USED_SIZE_DESC = "Estimated used size of the metadata cache";
+    String METADATA_CACHE_ESTIMATED_USED_SIZE = "metadataCacheEstimatedUsedSize";
+    String METADATA_CACHE_ESTIMATED_USED_SIZE_DESC = "Estimated used size of the metadata cache";
 
     String METADATA_CACHE_HIT_COUNT = "metadataCacheHitCount";
     String METADATA_CACHE_HIT_COUNT_DESC = "Hit count of the metadata cache";
