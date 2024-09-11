@@ -132,6 +132,11 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
         return null;
     }
 
+    @Override
+    public boolean returnResult(Mutation m) {
+        return false;
+    }
+
     public RegionCoprocessorEnvironment getEnv() {
         return this.env;
     }
