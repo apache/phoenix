@@ -80,7 +80,9 @@ public class OffsetCompiler {
 
     public CompiledOffset compile(StatementContext context, FilterableStatement statement, boolean inJoin, boolean inUnion) throws SQLException {
         OffsetNode offsetNode = statement.getOffset();
-        if (offsetNode == null) { return new CompiledOffset(Optional.<Integer>absent(), Optional.<byte[]>absent()); }
+        if (offsetNode == null) {
+            return CompiledOffset.EMPTY_COMPILED_OFFSET;
+        }
         if (offsetNode.isIntegerOffset()) {
             OffsetParseNodeVisitor visitor = new OffsetParseNodeVisitor(context);
             offsetNode.getOffsetParseNode().accept(visitor);

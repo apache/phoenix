@@ -50,15 +50,18 @@ public class OrderByExpression implements Writable {
     }
 
     /**
-     * If {@link Expression#getSortOrder()} is {@link SortOrder#DESC},the isAscending of returned new is reversed,but isNullsLast is untouched.
+     * If {@link Expression#getSortOrder()} is {@link SortOrder#DESC}, reverse the isAscending, but isNullsLast is untouched.
      * @param orderByExpression
      * @return
      */
     public static OrderByExpression convertIfExpressionSortOrderDesc(OrderByExpression orderByExpression) {
-        return createByCheckIfExpressionSortOrderDesc(
+        if (orderByExpression.getExpression().getSortOrder() != SortOrder.DESC) {
+            return orderByExpression;
+        }
+        return new OrderByExpression(
                 orderByExpression.getExpression(),
                 orderByExpression.isNullsLast(),
-                orderByExpression.isAscending());
+                !orderByExpression.isAscending());
     }
 
     /**

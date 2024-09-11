@@ -443,7 +443,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
                         "    CLIENT SORTED BY [BUCKET, \"TIMESTAMP\"]\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
+                        "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
                         :
                         "SORT-MERGE-JOIN (INNER) TABLES\n" +
                         "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + eventCountTableName + " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n" +
@@ -458,7 +458,7 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
                         "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n" +
                         "    CLIENT MERGE SORT\n" +
-                        "CLIENT AGGREGATE INTO DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
+                        "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
                 
                 ResultSet rs = conn.createStatement().executeQuery("explain " + q);
                 assertEquals(p, QueryUtil.getExplainPlan(rs));
