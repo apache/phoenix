@@ -86,13 +86,13 @@ public final class OrderByNode {
         if (nullsLast) buf.append(" NULLS LAST ");
     }
 
-    public boolean isLiteral() {
+    public boolean isIntegerLiteral() {
         return child instanceof LiteralParseNode
                 && ((LiteralParseNode) child).getType() == PInteger.INSTANCE;
     }
 
-    public Integer getIntValueIfLiteral() {
-        if (!isLiteral()) {
+    public Integer getValueIfIntegerLiteral() {
+        if (!isIntegerLiteral()) {
             return null;
         }
         return (Integer) ((LiteralParseNode) child).getValue();

@@ -277,7 +277,7 @@ public class UnionCompiler {
         // Just to avoid additional ProjectionCompiler.compile, make the compilation of order by
         // as simple as possible.
         if (!outerSelectStatement.haveGroupBy()
-                && outerSelectStatement.getOrderBy().stream().anyMatch(OrderByNode::isLiteral)) {
+                && outerSelectStatement.getOrderBy().stream().anyMatch(OrderByNode::isIntegerLiteral)) {
             return false;
         }
         StatementContext statementContext = statementContextCreator.get();

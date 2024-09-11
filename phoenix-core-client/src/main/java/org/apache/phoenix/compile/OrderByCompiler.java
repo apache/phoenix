@@ -153,12 +153,12 @@ public class OrderByCompiler {
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
             Expression expression = null;
-            if (node.isLiteral()) {
+            if (node.isIntegerLiteral()) {
                 if (rowProjector == null) {
                     throw new IllegalStateException(
                             "rowProjector is null when there is LiteralParseNode in orderByNodes");
                 }
-                Integer index = node.getIntValueIfLiteral();
+                Integer index = node.getValueIfIntegerLiteral();
                 assert index != null;
                 int size = rowProjector.getColumnProjectors().size();
                 if (index > size || index <= 0 ) {
