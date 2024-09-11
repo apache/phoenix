@@ -59,9 +59,7 @@ class PMetaDataCache {
                             GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.increment();
                         }
                         if (notification.getValue() != null) {
-                            long newSize =
-                                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue() - notification.getValue().getEstimatedSize();
-                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(newSize);
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(-notification.getValue().getEstimatedSize());
                         }
                     }
                 })

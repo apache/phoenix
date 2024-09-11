@@ -235,7 +235,8 @@ public class MetaDataCachingIT extends BaseTest {
                     prevCacheRemovalCount + 1,
                     GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue());
             assertTrue("Incorrect estimated used size of client metadata cache",
-                    currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize - tableEstimatedSize);
+                    currEstimatedUsedCacheSize < prevEstimatedUsedCacheSize
+                            && currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize - tableEstimatedSize);
         }
     }
 }
