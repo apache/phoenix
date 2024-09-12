@@ -220,7 +220,11 @@ public class MetaDataCachingIT extends BaseTest {
             long currEstimatedUsedCacheSize =
                     GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue();
             int tableEstimatedSize = conn.getTableNoCache(tableName).getEstimatedSize();
-            assertTrue("Incorrect estimated used size of client metadata cache",
+            assertTrue(String.format("Incorrect estimated used size of client metadata cache " +
+                                    "after creating table %s: tableEstimatedSize=%d, " +
+                                    "prevEstimatedUsedCacheSize=%d,  " +
+                                    "currEstimatedUsedCacheSize=%d", tableName,
+                            tableEstimatedSize, prevEstimatedUsedCacheSize, currEstimatedUsedCacheSize),
                     currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize + tableEstimatedSize);
 
             long prevCacheRemovalCount =
@@ -234,7 +238,11 @@ public class MetaDataCachingIT extends BaseTest {
             assertEquals("Incorrect number of client metadata cache removals",
                     prevCacheRemovalCount + 1,
                     GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue());
-            assertTrue("Incorrect estimated used size of client metadata cache",
+            assertTrue(String.format("Incorrect estimated used size of client metadata cache " +
+                                    "after dropping table %s: tableEstimatedSize=%d, " +
+                                    "prevEstimatedUsedCacheSize=%d, " +
+                                    "currEstimatedUsedCacheSize=%d", tableName,
+                            tableEstimatedSize, prevEstimatedUsedCacheSize, currEstimatedUsedCacheSize),
                     currEstimatedUsedCacheSize < prevEstimatedUsedCacheSize
                             && currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize - tableEstimatedSize);
         }
