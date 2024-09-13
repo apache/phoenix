@@ -18,7 +18,6 @@
 package org.apache.phoenix.query;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
-import static org.apache.hadoop.hbase.ipc.MetaRWQueueRpcExecutor.META_CALL_QUEUE_READ_SHARE_CONF_KEY;
 import static org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter.NUM_CONCURRENT_INDEX_WRITER_THREADS_CONF_KEY;
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
