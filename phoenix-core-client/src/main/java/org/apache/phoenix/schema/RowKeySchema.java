@@ -41,7 +41,10 @@ import org.apache.phoenix.util.SchemaUtil;
 public class RowKeySchema extends ValueSchema {
     public static final RowKeySchema EMPTY_SCHEMA = new RowKeySchema(0,Collections.<Field>emptyList(), true)
     ;
-    
+
+    private static final int SEPARATOR_OFFSET_NON_ENCODED_TYPES = 1;
+    private static final int SEPARATOR_OFFSET_ENCODED_TYPES = 2;
+
     public RowKeySchema() {
     }
     
@@ -162,9 +165,11 @@ public class RowKeySchema extends ValueSchema {
         // we may have a partial key for RVCs that doesn't include the leading field.
         if (position > 0 && !isFirst && !getField(position - 1).getDataType().isFixedWidth()) {
             if (getField(position - 1).getDataType() != PVarbinaryEncoded.INSTANCE) {
-                ptr.set(ptr.get(), ptr.getOffset() + ptr.getLength() + 1, 0);
+                ptr.set(ptr.get(),
+                    ptr.getOffset() + ptr.getLength() + SEPARATOR_OFFSET_NON_ENCODED_TYPES, 0);
             } else {
-                ptr.set(ptr.get(), ptr.getOffset() + ptr.getLength() + 2, 0);
+                ptr.set(ptr.get(),
+                    ptr.getOffset() + ptr.getLength() + SEPARATOR_OFFSET_ENCODED_TYPES, 0);
             }
         }
         Field field = this.getField(position);
@@ -276,7 +281,7 @@ public class RowKeySchema extends ValueSchema {
                     boolean ascSort =
                         !rowKeyOrderOptimizable || field.getSortOrder() == SortOrder.ASC;
                     do {
-                        offset++;
+                        offset--;
                     } while (offset > minOffset && !SchemaUtil.areSeparatorBytesForVarBinaryEncoded(
                         buf, offset, ascSort ? SortOrder.ASC : SortOrder.DESC));
                 }
