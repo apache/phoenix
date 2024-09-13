@@ -108,6 +108,7 @@ import org.apache.phoenix.schema.stats.StatisticsCollectorFactory;
 import org.apache.phoenix.schema.stats.StatsCollectionDisabledOnServerException;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -579,35 +580,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private boolean areMutationsInSameTable(Table targetHTable, Region region) {
         return (targetHTable == null || Bytes.compareTo(targetHTable.getName().getName(),
                 region.getTableDescriptor().getTableName().getName()) == 0);
-    }
-
-    @Override
-    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
-        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
-            return scanner;
-        } else {
-            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-                @Override public InternalScanner run() throws Exception {
-                    Configuration conf = c.getEnvironment().getConfiguration();
-                    String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable()
-                            .getNameAsString();
-                    PTable table = getPTable(c);
-                    if (table == null) {
-                        // If retrieval of PTable object failed then flush all the cells and extra
-                        // cells will be removed in next compaction.
-                        LOGGER.warn("Flushing all the cells for table: {} " +
-                                "as failed to retrieve PTable object", tableName);
-                        return scanner;
-                    }
-                    long maxLookbackInMillis = MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
-                    maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
-                            store.getColumnFamilyName(), maxLookbackInMillis);
-                    return new CompactionScanner(c.getEnvironment(), store, scanner,
-                            maxLookbackInMillis, false, true, table);
-                }
-            });
-        }
     }
 
     @Override

@@ -173,6 +173,7 @@ public class TableTTLIT extends BaseTest {
             conn.commit();
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
+            conn.createStatement().execute("ALTER TABLE " + noCompactTableName + " set MAX_LOOKBACK_AGE = " + maxLookbackAge * 1000);
             conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
@@ -246,7 +247,7 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Test
-    public void testFlushesAndMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
+    public void testMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
             throws Exception {
         final int maxLookbackAge = tableLevelMaxLooback != null
                 ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
@@ -268,25 +269,17 @@ public class TableTTLIT extends BaseTest {
                     updateRow(conn, tableName, "a");
                 }
                 flush(TableName.valueOf(tableName));
-                // At every flush, extra cell versions should be removed.
-                // MAX_COLUMN_INDEX table columns will be retained for
-                // each row version along with all empty column cells.
+                // Flushes dump and retain all the cells to HFile.
+                // Doing MAX_COLUMN_INDEX + 1 to account for empty cells
                 assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row),
-                        (i + 1) * (MAX_COLUMN_INDEX * versions) + rowUpdateCounter);
+                        rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
             }
-            // Run one minor/major compaction (in case compaction has happened yet)
-            Admin admin = utility.getAdmin();
-            admin.compact(TableName.valueOf(tableName));
-            int waitCount = 0;
-            while (TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
-                    Bytes.toBytes("a")) > MAX_COLUMN_INDEX * versions + rowUpdateCounter) {
-                // Wait for compactions to happen
-                Thread.sleep(1000);
-                waitCount++;
-                if (waitCount > 30) {
-                    Assert.fail();
-                }
-            }
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            // Run one minor compaction (in case no minor compaction has happened yet)
+            TestUtil.minorCompact(utility, TableName.valueOf(tableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), Bytes.toBytes("a")),
+                    (MAX_COLUMN_INDEX + 1) * versions);
         }
     }
 

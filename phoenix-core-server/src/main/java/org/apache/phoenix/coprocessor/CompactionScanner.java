@@ -67,6 +67,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PSmallint;
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -154,6 +155,7 @@ public class CompactionScanner implements InternalScanner {
     private long inputCellCount = 0;
     private long outputCellCount = 0;
     private boolean phoenixLevelOnly = false;
+    private static boolean forceMinorCompaction = false;
 
     public CompactionScanner(RegionCoprocessorEnvironment env,
             Store store,
@@ -167,9 +169,8 @@ public class CompactionScanner implements InternalScanner {
         this.store = store;
         this.env = env;
         // Empty column family and qualifier are always needed to compute which all empty cells to retain
-        // even during flushes and minor compactions. If required empty cells are not retained during
-        // flushes and minor compactions then we can run into the risk of partial row expiry on next major
-        // compaction.
+        // even during minor compactions. If required empty cells are not retained during
+        // minor compactions then we can run into the risk of partial row expiry on next major compaction.
         this.emptyCF = SchemaUtil.getEmptyColumnFamily(table);
         this.emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
         compactionTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -185,7 +186,7 @@ public class CompactionScanner implements InternalScanner {
         // maxLookbackInMillis + 1 so that the oldest scn does not return empty row
         this.maxLookbackWindowStart = this.maxLookbackInMillis == 0 ? compactionTime : compactionTime - (this.maxLookbackInMillis + 1);
         ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
-        this.major = major;
+        this.major = major && ! forceMinorCompaction;
         this.minVersion = cfd.getMinVersions();
         this.maxVersion = cfd.getMaxVersions();
         this.keepDeletedCells = keepDeleted ? KeepDeletedCells.TTL : cfd.getKeepDeletedCells();
@@ -200,7 +201,7 @@ public class CompactionScanner implements InternalScanner {
         // complex when the TTL can vary per row when the compacting table is Partitioned.
         TTLTracker
                 ttlTracker =
-                major ?
+                this.major ?
                         createTTLTrackerFor(env, store, table):
                         new TableTTLTrackerForFlushesAndMinor(tableName);
 
@@ -208,7 +209,7 @@ public class CompactionScanner implements InternalScanner {
         hBaseLevelRowCompactor = new HBaseLevelRowCompactor(ttlTracker);
 
         LOGGER.info("Starting CompactionScanner for table " + tableName + " store "
-                + columnFamilyName + (major ? " major " : " not major ") + "compaction ttl "
+                + columnFamilyName + (this.major ? " major " : " not major ") + "compaction ttl "
                 + ttlTracker.getRowContext().getTTL() + "ms " + "max lookback " + this.maxLookbackInMillis + "ms");
         LOGGER.info(String.format("CompactionScanner params:- (" +
                         "physical-data-tablename = %s, compaction-tablename = %s, region = %s, " +
@@ -225,6 +226,16 @@ public class CompactionScanner implements InternalScanner {
                 this.familyCount, this.localIndex, this.emptyCFStore,
                 compactionTime, maxLookbackWindowStart, maxLookbackInMillis, this.major));
 
+    }
+
+    @VisibleForTesting
+    public static void setForceMinorCompaction(boolean doMinorCompaction) {
+        forceMinorCompaction = doMinorCompaction;
+    }
+
+    @VisibleForTesting
+    public static boolean getForceMinorCompaction() {
+        return forceMinorCompaction;
     }
 
     /**
@@ -394,6 +405,9 @@ public class CompactionScanner implements InternalScanner {
                 + columnFamilyName + (major ? " major " : " not major ") + "compaction retained "
                 + outputCellCount + " of " + inputCellCount + " cells"
                 + (phoenixLevelOnly ? " phoenix level only" : ""));
+        if (forceMinorCompaction) {
+            forceMinorCompaction = false;
+        }
         storeScanner.close();
     }
 
@@ -2181,14 +2195,10 @@ public class CompactionScanner implements InternalScanner {
                 List<Cell> lastRowVersion, List<Cell> retainedCells, List<Cell> emptyColumn) {
             Cell currentColumnCell = null;
             boolean isEmptyColumn = false;
-            Cell cellAtMaxLookbackWindowStart = null;
             for (Cell cell : result) {
                 long maxLookbackWindowStart = rowTracker.getRowContext().getMaxLookbackWindowStart();
-                if (cell.getTimestamp() >= maxLookbackWindowStart) {
+                if (cell.getTimestamp() > maxLookbackWindowStart) {
                     retainedCells.add(cell);
-                    if (cell.getTimestamp() == maxLookbackWindowStart) {
-                        cellAtMaxLookbackWindowStart = cell;
-                    }
                     continue;
                 }
                 if (!major && cell.getType() != Cell.Type.Put) {
@@ -2197,23 +2207,18 @@ public class CompactionScanner implements InternalScanner {
                 if (currentColumnCell == null ||
                         !CellUtil.matchingColumn(cell, currentColumnCell)) {
                     currentColumnCell = cell;
+                    isEmptyColumn = ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ);
                     if (cell.getType() != Cell.Type.Delete
                             && cell.getType() != Cell.Type.DeleteColumn) {
                         // Include only delete family markers and put cells
-                        // It is possible that this cell is not visible from the max lookback
-                        // window. This happens when there is a mutation with the mutation timestamp
-                        // equal to the max lookback window start timestamp. The following is to
-                        // check for this case
-                        if (cellAtMaxLookbackWindowStart == null
-                                || !CellUtil.matchingColumn(cell, cellAtMaxLookbackWindowStart)) {
-                            lastRowVersion.add(cell);
-                        }
+                        // The last row version can also be the cells with timestamp
+                        // same as timestamp of start of max lookback window
+                        lastRowVersion.add(cell);
                     }
-                    isEmptyColumn = ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ);
                 } else if (isEmptyColumn) {
                     // We only need to keep one cell for every column for the last row version.
                     // So here we just form the empty column beyond the last row version.
-                    // Empty column needs to be collected during flushes and minor compactions also
+                    // Empty column needs to be collected during minor compactions also
                     // else we will see partial row expiry.
                     emptyColumn.add(cell);
                 }
@@ -2260,6 +2265,35 @@ public class CompactionScanner implements InternalScanner {
         }
 
         /**
+         * Retains minimum empty cells needed during minor compaction to not loose data/partial row expiry
+         * on next major compaction.
+         * @param emptyColumn Empty column cells in decreasing order of timestamp.
+         * @param retainedCells Cells to be retained.
+         */
+        private void retainEmptyCellsInMinorCompaction(List<Cell> emptyColumn, List<Cell> retainedCells) {
+            if (emptyColumn.isEmpty()) {
+                return;
+            }
+            else if (familyCount == 1 || localIndex) {
+                // We are compacting empty column family store and its single column family so
+                // just need to retain empty cells till min timestamp of last row version. Can't
+                // minimize the retained empty cells further as we don't know actual TTL during
+                // minor compactions.
+                long minRowTimestamp = rowContext.minTimestamp;
+                for (Cell emptyCell: emptyColumn) {
+                    if (emptyCell.getTimestamp() > minRowTimestamp) {
+                        retainedCells.add(emptyCell);
+                    }
+                }
+                return;
+            }
+            // For multi-column family, w/o doing region level scan we can't put a bound on timestamp
+            // till which we should retain the empty cells. The empty cells can be needed to close the gap
+            // b/w empty column family cell and non-empty column family cell.
+            retainedCells.addAll(emptyColumn);
+        }
+
+        /**
          * Retain the last row version visible through the max lookback window
          */
         private void retainCellsOfLastRowVersion(List<Cell> lastRow,
@@ -2282,9 +2316,7 @@ public class CompactionScanner implements InternalScanner {
             }
 
             if (major && compactionTime - rowContext.maxTimestamp > maxLookbackInMillis + ttl) {
-                // Only do this check for major compaction as for flushes and minor compactions
-                // we don't expire cells especially for multi-CF case as for that we need to do a
-                // region level scan which can be expensive operation for flushes and minor compactions.
+                // Only do this check for major compaction as for minor compactions we don't expire cells.
                 // The row version should not be visible via the max lookback window. Nothing to do
                 return;
             }
@@ -2294,23 +2326,17 @@ public class CompactionScanner implements InternalScanner {
             // a row version is not more than ttl, then we know the cells covered by the row
             // version are not apart from each other more than ttl and will not be masked.
             if (major && rowContext.maxTimestamp - rowContext.minTimestamp <= ttl) {
-                // Skip this check for minor compactions and flushes as we don't compute actual TTL for
-                // flushes and minor compactions and don't expire cells.
+                // Skip this check for minor compactions as we don't compute actual TTL for
+                // minor compactions and don't expire cells.
                 return;
             }
             // The quick time range check did not pass. We need get at least one empty cell to cover
             // the gap so that the row version will not be masked by PhoenixTTLRegionScanner.
             if (emptyColumn.isEmpty()) {
-                // For multi-CF case when its a flush or minor compaction and the store we are
-                // flushing/compacting is not an empty store then we will always hit this condition.
                 return;
             }
             else if (! major) {
-                // Retain all empty cells for flushes and minor compactions to retain minimal needed
-                // we need to know the actual TTL which is not known during flushes and minor compactions
-                // For multi-CF case, to retain minimal empty cells, region level scan is needed thus,
-                // to keep flushes and minor compactions lightweight its optimal to retain all empty cells.
-                retainedCells.addAll(emptyColumn);
+                retainEmptyCellsInMinorCompaction(emptyColumn, retainedCells);
                 return;
             }
             int size = lastRow.size();
@@ -2450,10 +2476,10 @@ public class CompactionScanner implements InternalScanner {
             }
             phoenixResult.clear();
             rowTracker.setTTL(result.get(0));
-            // For multi-CF case, always do region level compaction for empty CF store else during major compaction
-            // we could end-up removing some empty cells which are not needed by empty CF store itself but by other
-            // stores. Non-empty CF stores can require empty cells to close the gap b/w oldest cell belonging
-            // to last row version from empty CF store and the latest cell from non-empty CF store.
+            // For multi-CF case, always do region level scan for empty CF store during major compaction else
+            // we could end-up removing some empty cells which are needed to close the gap b/w empty CF cell and
+            // non-empty CF cell to prevent partial row expiry. This can happen when last row version of non-empty
+            // CF cell outside max lookback window is older than last row version of empty CF cell.
             if (major && familyCount > 1 && ! localIndex && emptyCFStore && ! regionLevel) {
                 compactRegionLevel(result, phoenixResult);
             }

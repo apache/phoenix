@@ -20,7 +20,6 @@ package org.apache.phoenix.coprocessor;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Properties;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -68,13 +67,10 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
-import static org.apache.phoenix.query.QueryConstants.COPROC_PHOENIX_CONNECTION_PRINCIPAL;
-import static org.apache.phoenix.query.QueryConstants.COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES;
 
 abstract public class BaseScannerRegionObserver implements RegionObserver {
 
@@ -543,34 +539,13 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         return maxLookbackTime > 0L;
     }
 
-    /**
-     * To retrieve PTable object from co-proc hook. For some co-proc hooks it is not always guaranteed that
-     * PTable object can be retrieved and this method returns null in those cases.
-     * Ex- during region flush we try to get PTable to pass onto {@link CompactionScanner} and if SYSCAT is
-     * offline or all RS are going down then this method will return null.
-     *
-     * The caller is expected to handle the case of null PTable object being returned even if an entry for table
-     * exists in SYSCAT.
-     * @return Retrieved PTable object or null.
-     */
-    protected static PTable getPTable(ObserverContext<RegionCoprocessorEnvironment> c) {
+    private static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
         TableName tableName = c.getEnvironment().getRegion().getRegionInfo().getTable();
-        boolean isMultiTenantIndexTable = false;
-        if (tableName.getNameAsString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)) {
-            isMultiTenantIndexTable = true;
-        }
-        final String fullTableName = isMultiTenantIndexTable ?
-                SchemaUtil.getParentTableNameFromIndexTable(tableName.getNameAsString(),
-                        MetaDataUtil.VIEW_INDEX_TABLE_PREFIX) :
-                tableName.getNameAsString();
+        String fullTableName = tableName.getNameAsString();
         Configuration conf = c.getEnvironment().getConfiguration();
-        PTable table = null;
-        Properties props = new Properties();
-        // Using a separate connection profile to initiate a new HConnection with lesser number of
-        // HBase client retries so that connection creation or PTable retrieval fail fast.
-        props.setProperty(HConstants.HBASE_CLIENT_RETRIES_NUMBER, COPROC_PHOENIX_CONNECTION_HBASE_CLIENT_RETRIES);
-        try(PhoenixConnection conn = QueryUtil.getConnectionOnServerWithCustomUrl(
-                props, conf, COPROC_PHOENIX_CONNECTION_PRINCIPAL).unwrap(PhoenixConnection.class)) {
+        PTable table;
+        try(PhoenixConnection conn = QueryUtil.getConnectionOnServer(
+                conf).unwrap(PhoenixConnection.class)) {
             table = conn.getTableNoCache(fullTableName);
         }
         catch (SQLException e) {
@@ -578,26 +553,11 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
                 LOGGER.debug("Ignoring HBase table that is not a Phoenix table: {}", fullTableName);
                 // non-Phoenix HBase tables won't be found, do nothing
             } else {
-                LOGGER.warn("Failed to retrieve PTable for: {}", fullTableName, e);
+                LOGGER.error("Unable to fetch table level max lookback age for {}", fullTableName, e);
             }
-        }
-        return table;
-    }
-
-    /**
-     * Retrieves table level max lookback age from inside co-proc hooks. If table level max lookback age is
-     * not set or there is failure to retrieve that then cluster level max lookback age is returned.
-     * @return Retrieved table level max lookback age or cluster level max lookback age
-     */
-    protected static long getMaxLookbackAge(ObserverContext<RegionCoprocessorEnvironment> c) {
-        Configuration conf = c.getEnvironment().getConfiguration();
-        PTable table = getPTable(c);
-        if (table != null) {
-            return MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
-        }
-        else {
             return MetaDataUtil.getMaxLookbackAge(conf, null);
         }
+        return MetaDataUtil.getMaxLookbackAge(conf, table.getMaxLookbackAge());
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
