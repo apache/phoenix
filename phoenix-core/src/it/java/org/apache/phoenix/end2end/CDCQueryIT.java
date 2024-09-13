@@ -164,7 +164,7 @@ public class CDCQueryIT extends CDCBaseIT {
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
             //dumpCDCResults(conn, cdcName,
-            //        new TreeMap<String, String>() {{ put("K1", "INTEGER"); }},
+            //        new TreeMap<String, String>() {{ put("K", "INTEGER"); }},
             //        "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
             //                "\"CDC JSON\" FROM " + cdcFullName);
 
@@ -282,7 +282,8 @@ public class CDCQueryIT extends CDCBaseIT {
         Map<String, List<Set<ChangeRow>>> allBatches = new HashMap<>(tenantids.length);
         for (String tid: tenantids) {
             allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 20, 5));
-            applyMutations(COMMIT_SUCCESS, tableName, tid, allBatches.get(tid), cdcName);
+            applyMutations(COMMIT_SUCCESS, schemaName, tableName, datatableName, tid,
+                    allBatches.get(tid), cdcName);
         }
 
         if (dataBeforeCDC) {
@@ -354,8 +355,8 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         long startTS = System.currentTimeMillis();
-        List<ChangeRow> changes = generateChangesImmutableTable(startTS, tenantids, tableName,
-                COMMIT_SUCCESS, cdcName);
+        List<ChangeRow> changes = generateChangesImmutableTable(startTS, tenantids, schemaName,
+                tableName, datatableName, COMMIT_SUCCESS, cdcName);
 
         if (dataBeforeCDC) {
             try (Connection conn = newConnection()) {
@@ -377,7 +378,7 @@ public class CDCQueryIT extends CDCBaseIT {
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
             //dumpCDCResults(conn, cdcName,
-            //        new TreeMap<String, String>() {{ put("K1", "INTEGER"); }},
+            //        new TreeMap<String, String>() {{ put("K", "INTEGER"); }},
             //        "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
             //                "\"CDC JSON\" FROM " + cdcFullName);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
@@ -403,7 +404,7 @@ public class CDCQueryIT extends CDCBaseIT {
     }
 
     @Test
-    public void testSeletWithTimeRange() throws Exception {
+    public void testSelectWithTimeRange() throws Exception {
         String cdcName, cdc_sql;
         String schemaName = withSchemaName ? generateUniqueName() : null;
         String tableName = SchemaUtil.getTableName(schemaName, generateUniqueName());
@@ -441,7 +442,8 @@ public class CDCQueryIT extends CDCBaseIT {
         Map<String, List<Set<ChangeRow>>> allBatches = new HashMap<>(tenantids.length);
         for (String tid: tenantids) {
             allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 20, 5));
-            applyMutations(COMMIT_SUCCESS, tableName, tid, allBatches.get(tid), cdcName);
+            applyMutations(COMMIT_SUCCESS, schemaName, tableName, datatableName, tid,
+                    allBatches.get(tid), cdcName);
         }
 
         if (dataBeforeCDC) {
@@ -458,8 +460,8 @@ public class CDCQueryIT extends CDCBaseIT {
         String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
         try (Connection conn = newConnection(tenantId)) {
             // For debug: uncomment to see the exact results logged to console.
-            dumpCDCResults(conn, cdcName, pkColumns,
-                    "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName);
+            //dumpCDCResults(conn, cdcName, pkColumns,
+            //        "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName);
 
             List<ChangeRow> changes = new ArrayList<>();
             for (Set<ChangeRow> batch: allBatches.get(tenantId)) {

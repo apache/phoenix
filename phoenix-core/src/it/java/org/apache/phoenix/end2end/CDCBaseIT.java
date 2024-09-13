@@ -22,6 +22,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
@@ -345,15 +346,16 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             batchTS += 100;
         }
 
+        // For debug: uncomment to see the mutations generated.
         //LOGGER.debug("----- DUMP Mutations -----");
         //int bnr = 1, mnr = 0;
-        //for (Set<ChangeRow> batch: allBatches.get(tid)) {
+        //for (Set<ChangeRow> batch: batches) {
         //    for (ChangeRow change : batch) {
         //        LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " +
-        //            " tenantId:" + changes.get(i).tenantId +
-        //            " changeTS: " + changes.get(i).changeTS +
-        //            " pks: " + changes.get(i).pks +
-        //            " change: " + changes.get(i).change);
+        //            " tenantId:" + change.tenantId +
+        //            " changeTS: " + change.changeTS +
+        //            " pks: " + change.pks +
+        //            " change: " + change.change);
         //    }
         //    ++bnr;
         //}
@@ -386,13 +388,15 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return row;
     }
 
-    protected void applyMutations(CommitAdapter committer, String datatableName, String tid,
-                                  List<Set<ChangeRow>> batches, String cdcName) throws Exception {
+    protected void applyMutations(CommitAdapter committer, String schemaName, String tableName,
+                                  String datatableName, String tid, List<Set<ChangeRow>> batches,
+                                  String cdcName)
+            throws Exception {
         EnvironmentEdgeManager.injectEdge(injectEdge);
         try (Connection conn = committer.getConnection(tid)) {
             for (Set<ChangeRow> batch: batches) {
                 for (ChangeRow changeRow: batch) {
-                    addChange(conn, datatableName, changeRow);
+                    addChange(conn, tableName, changeRow);
                 }
                 committer.commit(conn);
             }
@@ -400,14 +404,23 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         committer.reset();
 
         // For debug: uncomment to see the exact HBase cells.
-        //dumpCells(datatableName, cdcName);
+        //dumpCells(schemaName, tableName, datatableName, cdcName);
     }
 
-    protected void dumpCells(String datatableName, String cdcName) throws Exception {
+    protected void dumpCells(String schemaName, String tableName, String datatableName,
+                             String cdcName) throws Exception {
         LOGGER.debug("----- DUMP data table: " + datatableName + " -----");
         SingleCellIndexIT.dumpTable(datatableName);
-        LOGGER.debug("----- DUMP index table: " + CDCUtil.getCDCIndexName(cdcName) + " -----");
-        SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
+        String indexName = CDCUtil.getCDCIndexName(cdcName);
+        String indexTableName = SchemaUtil.getTableName(schemaName, tableName == datatableName ?
+                indexName : getViewIndexPhysicalName(datatableName));
+        LOGGER.debug("----- DUMP index table: " + indexTableName + " -----");
+        try {
+            SingleCellIndexIT.dumpTable(indexTableName);
+        } catch (TableNotFoundException e) {
+            // Ignore, this would happen if CDC is not yet created. This use case is going to go
+            // away soon anyway.
+        }
         LOGGER.debug("----------");
     }
 
@@ -581,7 +594,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         committer.reset();
         // For debug logging, uncomment this code to see the list of changes.
         //for (int i = 0; i < changes.size(); ++i) {
-        //    System.out.println("----- generated change: " + i +
+        //    LOGGER.debug("----- generated change: " + i +
         //            " tenantId:" + changes.get(i).tenantId +
         //            " changeTS: " + changes.get(i).changeTS +
         //            " pks: " + changes.get(i).pks +
@@ -622,9 +635,9 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 continue;
             }
             if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
-                // FIXME: Check if this can cause a flapper as we are not incrementing changenr.
                 // Consecutive delete operations don't appear as separate events.
                 if (deletedRows.contains(changeRow.pks)) {
+                    ++changenr;
                     continue;
                 }
                 deletedRows.add(changeRow.pks);
@@ -737,7 +750,9 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     }
 
     protected List<ChangeRow> generateChangesImmutableTable(long startTS, String[] tenantids,
-                                                            String tableName, CommitAdapter committer, String cdcName)
+                                                            String schemaName, String tableName,
+                                                            String datatableName,
+                                                            CommitAdapter committer, String cdcName)
             throws Exception {
         List<ChangeRow> changes = new ArrayList<>();
         EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -805,9 +820,9 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         }
         committer.reset();
         // For debug logging, uncomment this code to see the list of changes.
-        //dumpCells(tableName, cdcName);
+        //dumpCells(schemaName, tableName, datatableName, cdcName);
         //for (int i = 0; i < changes.size(); ++i) {
-        //    System.out.println("----- generated change: " + i +
+        //    LOGGER.debug("----- generated change: " + i +
         //            " tenantId:" + changes.get(i).tenantId +
         //            " changeTS: " + changes.get(i).changeTS +
         //            " pks: " + changes.get(i).pks +
