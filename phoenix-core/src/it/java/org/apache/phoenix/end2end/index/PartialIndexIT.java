@@ -28,7 +28,9 @@ import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -54,6 +56,7 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -1051,6 +1054,36 @@ public class PartialIndexIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testPartialIndexOnTableWithCaseSensitiveColumns() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            Statement stmt = conn.createStatement()) {
+            String dataTableName = generateUniqueName();
+            String indexName = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + dataTableName
+                    + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, v3 VARCHAR)");
+
+            stmt.execute("CREATE INDEX " + indexName
+                    + " ON " + dataTableName + "(v1) INCLUDE (\"CoL\") WHERE v3 IS NOT NULL");
+
+            stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
+            conn.commit();
+
+            List<PColumn> cols = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, dataTableName)).getColumns();
+            for (PColumn col: cols) {
+                System.out.println(col.getName().getString());
+            }
+            cols = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null, indexName)).getColumns();
+            for (PColumn col: cols) {
+                System.out.println(col.getName().getString());
+            }
+
+            ResultSet rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE v1='b'");
+            Assert.assertTrue(rs.next());
         }
     }
 }

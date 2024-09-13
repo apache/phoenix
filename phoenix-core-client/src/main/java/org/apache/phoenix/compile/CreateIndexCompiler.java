@@ -75,6 +75,7 @@ import java.util.List;
 public class CreateIndexCompiler {
     private final PhoenixStatement statement;
     private final Operation operation;
+    private final String DOUBLE_QUOTE = "\"";
 
     public CreateIndexCompiler(PhoenixStatement statement, Operation operation) {
         this.statement = statement;
@@ -161,13 +162,13 @@ public class CreateIndexCompiler {
             column =  dataTable.getColumns().get(i);
             value = column.getViewConstant();
             if (value == null) {
-                stringBuilder.append(column.getName().getString() + ",");
+                stringBuilder.append(DOUBLE_QUOTE+column.getName().getString()+DOUBLE_QUOTE + ",");
             }
         }
         column =  dataTable.getColumns().get(i);
         value = column.getViewConstant();
         if (value == null) {
-            stringBuilder.append(column.getName().getString() + ")");
+            stringBuilder.append(DOUBLE_QUOTE+column.getName().getString()+DOUBLE_QUOTE + ")");
         } else {
             stringBuilder.append(")");
         }
