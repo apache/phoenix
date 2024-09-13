@@ -159,7 +159,7 @@
     <jacoco-maven-plugin.version>0.8.11</jacoco-maven-plugin.version>
     <sonar-maven-plugin.version>3.10.0.2594</sonar-maven-plugin.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
-    <maven-owasp-plugin.version>8.4.0</maven-owasp-plugin.version>
+    <maven-owasp-plugin.version>10.0.2</maven-owasp-plugin.version>
     <os.maven.version>1.7.1</os.maven.version>
     <jasmine-maven-plugin.version>2.2</jasmine-maven-plugin.version>
     <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
