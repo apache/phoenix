@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -38,6 +39,7 @@ import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.LimitingResultIterator;
@@ -51,7 +53,6 @@ import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
-import org.apache.phoenix.util.ExpressionUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
@@ -75,6 +76,8 @@ public class UnionPlan implements QueryPlan {
     private Long estimatedBytes;
     private Long estimateInfoTs;
     private boolean getEstimatesCalled;
+    private boolean supportOrderByOptimize = false;
+    private List<OrderBy> outputOrderBys = null;
 
     public UnionPlan(StatementContext context, FilterableStatement statement, TableRef table, RowProjector projector,
             Integer limit, Integer offset, OrderBy orderBy, GroupBy groupBy, List<QueryPlan> plans, ParameterMetaData paramMetaData) throws SQLException {
@@ -95,7 +98,53 @@ public class UnionPlan implements QueryPlan {
                 break;
             }
         }
-        this.isDegenerate = isDegen;     
+        this.isDegenerate = isDegen;
+    }
+
+    /**
+     * If every subquery in {@link UnionPlan} is ordered, and {@link QueryPlan#getOutputOrderBys}
+     * of each subquery are equal(absolute equality or the same column name is unnecessary, just
+     * column types are compatible and columns count is same), then it just needs to perform a
+     * simple merge on the subquery results to ensure the overall order of the union all, see
+     * comments on {@link QueryCompiler#optimizeUnionOrderByIfPossible}.
+     */
+    private boolean checkIfSupportOrderByOptimize() {
+        if (!this.orderBy.isEmpty()) {
+            return false;
+        }
+        if (plans.isEmpty()) {
+            return false;
+        }
+        OrderBy prevOrderBy = null;
+        for (QueryPlan queryPlan : plans) {
+            List<OrderBy> orderBys = queryPlan.getOutputOrderBys();
+            if (orderBys.isEmpty() || orderBys.size() > 1) {
+                return false;
+            }
+            OrderBy orderBy = orderBys.get(0);
+            if (prevOrderBy != null && !OrderBy.equalsForOutputOrderBy(prevOrderBy, orderBy)) {
+                return false;
+            }
+            prevOrderBy = orderBy;
+        }
+        return true;
+    }
+
+    public boolean isSupportOrderByOptimize() {
+        return this.supportOrderByOptimize;
+    }
+
+    public void enableCheckSupportOrderByOptimize() {
+        this.supportOrderByOptimize = checkIfSupportOrderByOptimize();
+        this.outputOrderBys = null;
+    }
+
+    public void disableSupportOrderByOptimize() {
+        if (!this.supportOrderByOptimize) {
+            return;
+        }
+        this.outputOrderBys = null;
+        this.supportOrderByOptimize = false;
     }
 
     @Override
@@ -165,10 +214,13 @@ public class UnionPlan implements QueryPlan {
     public final ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
         this.iterators = new UnionResultIterators(plans, parentContext);
         ResultIterator scanner;      
-        boolean isOrdered = !orderBy.getOrderByExpressions().isEmpty();
 
-        if (isOrdered) { // TopN
+        if (!orderBy.isEmpty()) { // TopN
             scanner = new MergeSortTopNResultIterator(iterators, limit, offset, orderBy.getOrderByExpressions());
+        } else if (this.supportOrderByOptimize) {
+            //Every subquery is ordered
+            scanner = new MergeSortTopNResultIterator(
+                    iterators, limit, offset, getOrderByExpressionsWhenSupportOrderByOptimize());
         } else {
             scanner = new ConcatResultIterator(iterators);
             if (offset != null) {
@@ -308,15 +360,41 @@ public class UnionPlan implements QueryPlan {
         }
     }
 
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings(
+            value = "EI_EXPOSE_REP",
+            justification = "getOutputOrderBys designed to work this way.")
     @Override
     public List<OrderBy> getOutputOrderBys() {
+        if (this.outputOrderBys != null) {
+            return this.outputOrderBys;
+        }
+        return this.outputOrderBys = convertToOutputOrderBys();
+    }
+
+    private List<OrderBy> convertToOutputOrderBys() {
         assert this.groupBy == GroupBy.EMPTY_GROUP_BY;
         assert this.orderBy != OrderBy.FWD_ROW_KEY_ORDER_BY && this.orderBy != OrderBy.REV_ROW_KEY_ORDER_BY;
         if(!this.orderBy.isEmpty()) {
             return Collections.<OrderBy> singletonList(
                     OrderBy.convertCompiledOrderByToOutputOrderBy(this.orderBy));
         }
+        if (this.supportOrderByOptimize) {
+            assert this.plans.size() > 0;
+            return this.plans.get(0).getOutputOrderBys();
+        }
         return Collections.<OrderBy> emptyList();
+    }
+
+    private List<OrderByExpression> getOrderByExpressionsWhenSupportOrderByOptimize() {
+        assert this.supportOrderByOptimize;
+        assert this.plans.size() > 0;
+        assert this.orderBy.isEmpty();
+        List<OrderBy> outputOrderBys = this.plans.get(0).getOutputOrderBys();
+        assert outputOrderBys != null && outputOrderBys.size() == 1;
+        List<OrderByExpression> orderByExpressions = outputOrderBys.get(0).getOrderByExpressions();
+        assert orderByExpressions != null && orderByExpressions.size() > 0;
+        return orderByExpressions.stream().map(OrderByExpression::convertIfExpressionSortOrderDesc)
+            .collect(Collectors.toList());
     }
 
     @Override

@@ -37,8 +37,10 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -1132,6 +1134,331 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
             assertFalse(rs.next());
         } finally {
             conn.close();
+        }
+    }
+
+    @Test
+    public void testOrderByOptimizeBug7397() throws Exception {
+        String tableName1 = generateUniqueName();
+        String tableName2 = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        Connection conn = DriverManager.getConnection(getUrl(), props);
+
+        try {
+            String ddl = "create table " + tableName1 + "( "+
+                    " fuid UNSIGNED_LONG not null , " +
+                    " fstatsdate UNSIGNED_LONG not null, " +
+                    " fversion UNSIGNED_LONG not null," +
+                    " faid_1 UNSIGNED_LONG not null," +
+                    " clk_pv_1 UNSIGNED_LONG, " +
+                    " activation_pv_1 UNSIGNED_LONG, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( " +
+                    " fuid , " +
+                    " fstatsdate, " +
+                    " fversion, " +
+                    " faid_1 " +
+                    " ))";
+            createTestTable(getUrl(), ddl);
+            String dml = "UPSERT INTO " + tableName1 + " VALUES(?,?,?,?,?,?)";
+            PreparedStatement stmt = conn.prepareStatement(dml);
+            setValues(stmt, 1, 20240711, 1, 11, 1, 1);
+            stmt.execute();
+            setValues(stmt, 1, 20240712, 1, 22, 3, 3);
+            stmt.execute();
+            setValues(stmt, 1, 20240713, 1, 33, 7, 7);
+            stmt.execute();
+            conn.commit();
+
+            ddl = "create table " + tableName2 + "( "+
+                    " fuid UNSIGNED_LONG not null, " +
+                    " fstatsdate UNSIGNED_LONG not null, " +
+                    " fversion UNSIGNED_LONG not null," +
+                    " faid_2 UNSIGNED_LONG not null," +
+                    " clk_pv_2 UNSIGNED_LONG, " +
+                    " activation_pv_2 UNSIGNED_LONG, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( " +
+                    " fuid , " +
+                    " fstatsdate, " +
+                    " fversion," +
+                    " faid_2 " +
+                    " ))";
+            createTestTable(getUrl(), ddl);
+            dml = "UPSERT INTO " + tableName2 + " VALUES(?,?,?,?,?,?)";
+            stmt = conn.prepareStatement(dml);
+            setValues(stmt, 1, 20240711, 1, 11, 6, 6);
+            stmt.execute();
+            setValues(stmt, 1, 20240712, 1, 22, 2, 2);
+            stmt.execute();
+            setValues(stmt, 1, 20240713, 1, 33, 4, 4);
+            stmt.execute();
+            setValues(stmt, 1, 20240710, 1, 22, 5, 5);
+            stmt.execute();
+            conn.commit();
+
+            String orderedUnionSql = "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id,"
+                    + "   FStatsDate AS date,"
+                    + "   SUM(clk_pv_1) AS valid_click_count,"
+                    + "   SUM(activation_pv_1) AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_1, FStatsDate"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2 AS adgroup_id,"
+                    + "  FStatsDate AS date,"
+                    + "  SUM(clk_pv_2) AS valid_click_count,"
+                    + "  SUM(activation_pv_2) AS activated_count"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_2, FStatsDate"
+                    + ")";
+
+            //Test group by orderPreserving
+            String sql = "SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            ResultSet rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 11L, 20240711L, 7L, 7L},
+                {1L, 22L, 20240710L, 5L, 5L},
+                {1L, 22L, 20240712L, 5L, 5L},
+                {1L, 33L, 20240713L, 11L, 11L}});
+
+            //Test group by not orderPreserving
+            sql = "SELECT ADVERTISER_ID AS i_advertiser_id,"
+                    + "ADGROUP_ID AS i_adgroup_id,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "GROUP BY I_ADVERTISER_ID, ADGROUP_ID "
+                    + "ORDER BY i_adgroup_id "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 11L, 7L, 7L},
+                {1L, 22L, 10L, 10L},
+                {1L, 33L, 11L, 11L}});
+
+            //Test group by not orderPreserving
+            sql = "SELECT ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "GROUP BY ADGROUP_ID, I_DATE "
+                    + "ORDER BY adgroup_id, i_date "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {11L, 20240711L, 7L, 7L},
+                {22L, 20240710L, 5L, 5L},
+                {22L, 20240712L, 5L, 5L},
+                {33L, 20240713L, 11L, 11L}});
+
+            //Test group by orderPreserving with where
+            sql = "SELECT ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + " where advertiser_id = 1 "
+                    + "GROUP BY ADGROUP_ID, I_DATE "
+                    + "ORDER BY adgroup_id, i_date "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {11L, 20240711L, 7L, 7L},
+                {22L, 20240710L, 5L, 5L},
+                {22L, 20240712L, 5L, 5L},
+                {33L, 20240713L, 11L, 11L}});
+
+            //Test order by orderPreserving
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "VALID_CLICK_COUNT AS valid_click_count,"
+                    + "ACTIVATED_COUNT AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + " where valid_click_count in (1, 5, 2, 4) "
+                    + "ORDER BY advertiser_id, i_date, adgroup_id "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 22L, 20240710L, 5L, 5L},
+                {1L, 11L, 20240711L, 1L, 1L},
+                {1L, 22L, 20240712L, 2L, 2L},
+                {1L, 33L, 20240713L, 4L, 4L}});
+
+            //Test order by not orderPreserving
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS i_adgroup_id,"
+                    + "DATE AS date,"
+                    + "VALID_CLICK_COUNT AS valid_click_count,"
+                    + "ACTIVATED_COUNT AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "ORDER BY advertiser_id, i_adgroup_id, date, valid_click_count "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 11L, 20240711L, 1L, 1L},
+                {1L, 11L, 20240711L, 6L, 6L},
+                {1L, 22L, 20240710L, 5L, 5L},
+                {1L, 22L, 20240712L, 2L, 2L},
+                {1L, 22L, 20240712L, 3L, 3L},
+                {1L, 33L, 20240713L, 4L, 4L},
+                {1L, 33L, 20240713L, 7L, 7L}});
+
+            //Test there is no order in union
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id,"
+                    + "   FStatsDate AS date,"
+                    + "   clk_pv_1 AS valid_click_count,"
+                    + "   activation_pv_1 AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2 AS adgroup_id,"
+                    + "  FStatsDate AS date,"
+                    + "  clk_pv_2 AS valid_click_count,"
+                    + "  activation_pv_2 AS activated_count"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + ")"
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 11L, 20240711L, 7L, 7L},
+                {1L, 22L, 20240710L, 5L, 5L},
+                {1L, 22L, 20240712L, 5L, 5L},
+                {1L, 33L, 20240713L, 11L, 11L}});
+
+            //Test alias not inconsistent in union
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID_1 AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id_1,"
+                    + "   FStatsDate AS date,"
+                    + "   SUM(clk_pv_1) AS valid_click_count,"
+                    + "   SUM(activation_pv_1) AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_1, FStatsDate"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2,"
+                    + "  FStatsDate AS date,"
+                    + "  SUM(clk_pv_2),"
+                    + "  SUM(activation_pv_2)"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_2, FStatsDate"
+                    + ")"
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID_1, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 11L, 20240711L, 7L, 7L},
+                {1L, 22L, 20240710L, 5L, 5L},
+                {1L, 22L, 20240712L, 5L, 5L},
+                {1L, 33L, 20240713L, 11L, 11L}});
+
+            //Test order by column not equals in union
+            sql = "SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id,"
+                    + "   FStatsDate AS date,"
+                    + "   SUM(clk_pv_1) AS valid_click_count,"
+                    + "   SUM(activation_pv_1) AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_1, FStatsDate"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2 AS adgroup_id,"
+                    + "  cast (0 as UNSIGNED_LONG)  AS date,"
+                    + "  SUM(clk_pv_2) AS valid_click_count,"
+                    + "  SUM(activation_pv_2) AS activated_count"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_2"
+                    + ")"
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 11L, 0L, 6L, 6L},
+                {1L, 11L, 20240711L, 1L, 1L},
+                {1L, 22L, 0L, 7L, 7L},
+                {1L, 22L, 20240712L, 3L, 3L},
+                {1L, 33L, 0L, 4L, 4L},
+                {1L, 33L, 20240713L, 7L, 7L}});
+
+            //Test only union and order by not match
+            sql = orderedUnionSql.substring(1, orderedUnionSql.length()-1) +
+                    " order by advertiser_id, date, adgroup_id, valid_click_count";
+            rs = conn.createStatement().executeQuery(sql);
+            TestUtil.assertResultSet(rs, new Long[][]{
+                {1L, 22L, 20240710L, 5L, 5L},
+                {1L, 11L, 20240711L, 1L, 1L},
+                {1L, 11L, 20240711L, 6L, 6L},
+                {1L, 22L, 20240712L, 2L, 2L},
+                {1L, 22L, 20240712L, 3L, 3L},
+                {1L, 33L, 20240713L, 4L, 4L},
+                {1L, 33L, 20240713L, 7L, 7L}});
+        } finally {
+            conn.close();
+        }
+    }
+
+    private static void setValues(PreparedStatement stmt, int... values) throws SQLException {
+        for(int i = 0; i < values.length; i++) {
+            stmt.setLong(i + 1, values[i]);
         }
     }
 }

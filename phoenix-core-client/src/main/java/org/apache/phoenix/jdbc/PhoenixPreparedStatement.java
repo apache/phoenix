@@ -46,15 +46,18 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.schema.ExecuteQueryNotApplicableException;
 import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.Sequence;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
@@ -197,6 +200,11 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
 
     @Override
     public int executeUpdate() throws SQLException {
+        preExecuteUpdate();
+        return executeMutation(statement, createAuditQueryLogger(statement,query));
+    }
+
+    private void preExecuteUpdate() throws SQLException {
         throwIfUnboundParameters();
         if (!statement.getOperation().isMutation()) {
             throw new ExecuteUpdateNotApplicableException(statement.getOperation());
@@ -205,7 +213,27 @@ public class PhoenixPreparedStatement extends PhoenixStatement implements Phoeni
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.EXECUTE_UPDATE_WITH_NON_EMPTY_BATCH)
             .build().buildException();
         }
-        return executeMutation(statement, createAuditQueryLogger(statement,query));
+    }
+
+    /**
+     * Executes the given SQL statement similar to JDBC API executeUpdate() but also returns the
+     * updated or non-updated row as Result object back to the client. This must be used with
+     * auto-commit Connection. This makes the operation atomic.
+     * If the row is successfully updated, return the updated row, otherwise if the row
+     * cannot be updated, return non-updated row.
+     *
+     * @return The pair of int and Tuple, where int represents value 1 for successful row update
+     * and 0 for non-successful row update, and Tuple represents the state of the row.
+     * @throws SQLException If the statement cannot be executed.
+     */
+    public Pair<Integer, Tuple> executeUpdateReturnRow() throws SQLException {
+        if (!connection.getAutoCommit()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED).build()
+                    .buildException();
+        }
+        preExecuteUpdate();
+        return executeMutation(statement, createAuditQueryLogger(statement, query),
+                MutationState.ReturnResult.ROW);
     }
 
     public QueryPlan optimizeQuery() throws SQLException {
