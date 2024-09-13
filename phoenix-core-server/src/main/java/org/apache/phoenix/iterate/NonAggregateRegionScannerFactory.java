@@ -226,20 +226,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         if (serverParsedArrayFuncRefs != null) {
             Collections.addAll(resultList, serverParsedArrayFuncRefs);
         }
-        Expression[] serverParsedJsonValueFuncRefs = null;
-        if (scan.getAttribute(BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION) != null) {
-            serverParsedJsonValueFuncRefs =
-                    deserializeServerParsedPositionalExpressionInfoFromScan(scan,
-                            BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION, serverParsedKVRefs);
-        }
-        if (scan.getAttribute(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION) != null) {
-            serverParsedJsonValueFuncRefs =
-                deserializeServerParsedPositionalExpressionInfoFromScan(scan,
-                    BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION, serverParsedKVRefs);
-        }
-        if (serverParsedJsonValueFuncRefs != null) {
-            Collections.addAll(resultList, serverParsedJsonValueFuncRefs);
-        }
+        deserializeAndAddComplexDataTypeFunctions(scan,
+                BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION, serverParsedKVRefs,
+                resultList);
+        deserializeAndAddComplexDataTypeFunctions(scan,
+                BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION, serverParsedKVRefs,
+                resultList);
         Expression[] serverParsedJsonQueryFuncRefs = null;
         if (scan.getAttribute(BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION) != null) {
             serverParsedJsonQueryFuncRefs =
@@ -250,6 +242,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             Collections.addAll(resultList, serverParsedJsonQueryFuncRefs);
         }
         return resultList;
+    }
+
+    private void deserializeAndAddComplexDataTypeFunctions(Scan scan,
+                                                           String functionName,
+                                                           Set<KeyValueColumnExpression>
+                                                                   serverParsedKVRefs,
+                                                           List<Expression> resultList) {
+        if (scan.getAttribute(functionName) != null) {
+            Expression[] serverParsedJsonValueFuncRefs =
+                    deserializeServerParsedPositionalExpressionInfoFromScan(scan,
+                            functionName, serverParsedKVRefs);
+            if (serverParsedJsonValueFuncRefs != null) {
+                Collections.addAll(resultList, serverParsedJsonValueFuncRefs);
+            }
+        }
     }
 
     @VisibleForTesting
