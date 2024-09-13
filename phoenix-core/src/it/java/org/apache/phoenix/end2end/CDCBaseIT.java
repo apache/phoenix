@@ -347,19 +347,19 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         }
 
         // For debug: uncomment to see the mutations generated.
-        //LOGGER.debug("----- DUMP Mutations -----");
-        //int bnr = 1, mnr = 0;
-        //for (Set<ChangeRow> batch: batches) {
-        //    for (ChangeRow change : batch) {
-        //        LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " +
-        //            " tenantId:" + change.tenantId +
-        //            " changeTS: " + change.changeTS +
-        //            " pks: " + change.pks +
-        //            " change: " + change.change);
-        //    }
-        //    ++bnr;
-        //}
-        //LOGGER.debug("----------");
+        LOGGER.debug("----- DUMP Mutations -----");
+        int bnr = 1, mnr = 0;
+        for (Set<ChangeRow> batch: batches) {
+            for (ChangeRow change : batch) {
+                LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " +
+                    " tenantId:" + change.tenantId +
+                    " changeTS: " + change.changeTS +
+                    " pks: " + change.pks +
+                    " change: " + change.change);
+            }
+            ++bnr;
+        }
+        LOGGER.debug("----------");
         return batches;
     }
 
@@ -404,7 +404,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         committer.reset();
 
         // For debug: uncomment to see the exact HBase cells.
-        //dumpCells(schemaName, tableName, datatableName, cdcName);
+        dumpCells(schemaName, tableName, datatableName, cdcName);
     }
 
     protected void dumpCells(String schemaName, String tableName, String datatableName,
@@ -593,13 +593,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         }
         committer.reset();
         // For debug logging, uncomment this code to see the list of changes.
-        //for (int i = 0; i < changes.size(); ++i) {
-        //    LOGGER.debug("----- generated change: " + i +
-        //            " tenantId:" + changes.get(i).tenantId +
-        //            " changeTS: " + changes.get(i).changeTS +
-        //            " pks: " + changes.get(i).pks +
-        //            " change: " + changes.get(i).change);
-        //}
+        for (int i = 0; i < changes.size(); ++i) {
+            LOGGER.debug("----- generated change: " + i +
+                    " tenantId:" + changes.get(i).tenantId +
+                    " changeTS: " + changes.get(i).changeTS +
+                    " pks: " + changes.get(i).pks +
+                    " change: " + changes.get(i).change);
+        }
         return changes;
     }
 
@@ -820,14 +820,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         }
         committer.reset();
         // For debug logging, uncomment this code to see the list of changes.
-        //dumpCells(schemaName, tableName, datatableName, cdcName);
-        //for (int i = 0; i < changes.size(); ++i) {
-        //    LOGGER.debug("----- generated change: " + i +
-        //            " tenantId:" + changes.get(i).tenantId +
-        //            " changeTS: " + changes.get(i).changeTS +
-        //            " pks: " + changes.get(i).pks +
-        //            " change: " + changes.get(i).change);
-        //}
+        dumpCells(schemaName, tableName, datatableName, cdcName);
+        for (int i = 0; i < changes.size(); ++i) {
+            LOGGER.debug("----- generated change: " + i +
+                    " tenantId:" + changes.get(i).tenantId +
+                    " changeTS: " + changes.get(i).changeTS +
+                    " pks: " + changes.get(i).pks +
+                    " change: " + changes.get(i).change);
+        }
         return changes;
     }
 
