@@ -66,7 +66,7 @@ public class MetaDataCachingIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    private void createTable(Connection conn, String tableName, long updateCacheFrequency) throws SQLException {
+    protected void createTable(Connection conn, String tableName, long updateCacheFrequency) throws SQLException {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER, v3 VARCHAR, v4 Date, "
                 +" v5 BIGINT, v6 SMALLINT)" + (updateCacheFrequency == 0 ? "" : "UPDATE_CACHE_FREQUENCY="+updateCacheFrequency));
@@ -196,55 +196,6 @@ public class MetaDataCachingIT extends BaseTest {
                 }
             }
             assertTrue(hitCount > 0);
-        }
-    }
-
-    @Test
-    public void testGlobalClientCacheMetricsOfCreateAndDropTable() throws Exception {
-        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.getMetric().reset();
-        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().reset();
-        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().reset();
-
-        String tableName = generateUniqueName();
-        try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
-            long prevCacheAddCount =
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.getMetric().getValue();
-            long prevEstimatedUsedCacheSize =
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE .getMetric().getValue();
-            createTable(conn, tableName, 0);
-
-            assertEquals("Incorrect number of client metadata cache adds",
-                    prevCacheAddCount + 1,
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.getMetric().getValue());
-
-            long currEstimatedUsedCacheSize =
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue();
-            int tableEstimatedSize = conn.getTableNoCache(tableName).getEstimatedSize();
-            assertTrue(String.format("Incorrect estimated used size of client metadata cache " +
-                                    "after creating table %s: tableEstimatedSize=%d, " +
-                                    "prevEstimatedUsedCacheSize=%d,  " +
-                                    "currEstimatedUsedCacheSize=%d", tableName,
-                            tableEstimatedSize, prevEstimatedUsedCacheSize, currEstimatedUsedCacheSize),
-                    currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize + tableEstimatedSize);
-
-            long prevCacheRemovalCount =
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue();
-            prevEstimatedUsedCacheSize = currEstimatedUsedCacheSize;
-
-            conn.createStatement().execute("DROP TABLE " + tableName);
-
-            currEstimatedUsedCacheSize =
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue();
-            assertEquals("Incorrect number of client metadata cache removals",
-                    prevCacheRemovalCount + 1,
-                    GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue());
-            assertTrue(String.format("Incorrect estimated used size of client metadata cache " +
-                                    "after dropping table %s: tableEstimatedSize=%d, " +
-                                    "prevEstimatedUsedCacheSize=%d, " +
-                                    "currEstimatedUsedCacheSize=%d", tableName,
-                            tableEstimatedSize, prevEstimatedUsedCacheSize, currEstimatedUsedCacheSize),
-                    currEstimatedUsedCacheSize < prevEstimatedUsedCacheSize
-                            && currEstimatedUsedCacheSize >= prevEstimatedUsedCacheSize - tableEstimatedSize);
         }
     }
 }

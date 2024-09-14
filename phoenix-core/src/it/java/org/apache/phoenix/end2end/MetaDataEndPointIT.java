@@ -85,7 +85,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
             IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.CREATE_TABLE_COUNT,
                     registry, expectedCreateTableCount);
 
-            PTable table = conn.getTableNoCache(fullTableName);
+            PTable table = conn.getTable(fullTableName);
             expectedCacheUsedSize += table.getEstimatedSize();
             IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
                     registry, expectedCacheUsedSize);
@@ -113,7 +113,7 @@ public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
                     IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.DROP_TABLE_COUNT, registry);
             long expectedCacheUsedSize =
                     IndexMetricsIT.getCounterValueByName(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE, registry);
-            PTable table = conn.getTableNoCache(fullTableName);
+            PTable table = conn.getTable(fullTableName);
 
             ddl = "DROP TABLE " + fullTableName;
             conn.createStatement().execute(ddl);
