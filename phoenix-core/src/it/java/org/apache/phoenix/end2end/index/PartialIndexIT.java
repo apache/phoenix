@@ -24,6 +24,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -1057,7 +1058,7 @@ public class PartialIndexIT extends BaseTest {
     @Test
     public void testPartialIndexOnTableWithCaseSensitiveColumns() throws Exception {
         try(Connection conn = DriverManager.getConnection(getUrl());
-            Statement stmt = conn.createStatement()) {
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class)) {
             String dataTableName = generateUniqueName();
             String indexName1 = generateUniqueName();
             String indexName2 = generateUniqueName();
@@ -1076,12 +1077,21 @@ public class PartialIndexIT extends BaseTest {
             stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
             conn.commit();
 
-            ResultSet rs = stmt.executeQuery("SELECT \"CoL\", \"coLUmn3\" FROM " + dataTableName + " WHERE v1='b'");
+            ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX("+ dataTableName  + " " + indexName1+") */"
+                    + "\"CoL\" FROM " + dataTableName + " WHERE v1='b'");
             Assert.assertTrue(rs.next());
-            rs = stmt.executeQuery("SELECT v1, \"coLUmn3\" FROM " + dataTableName + " WHERE \"CoL\"='c'");
+            Assert.assertEquals(indexName1, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
+            rs = stmt.executeQuery("SELECT /*+ INDEX("+ dataTableName  + " " + indexName2+") */"
+                    + "v1 FROM " + dataTableName + " WHERE \"CoL\"='c'");
             Assert.assertTrue(rs.next());
-            rs = stmt.executeQuery("SELECT \"CoL\", v1 FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
+            Assert.assertEquals(indexName2, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
+            rs = stmt.executeQuery("SELECT /*+ INDEX("+ dataTableName  + " " + indexName3+") */"
+                    + "\"CoL\" FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
             Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName3, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
         }
     }
 }
