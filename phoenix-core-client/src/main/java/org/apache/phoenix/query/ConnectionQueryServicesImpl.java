@@ -69,9 +69,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_HBASE_TABLE_NAME;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_GET_TABLE_REGIONS_FAIL;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_SERVICES_COUNTER;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_FAILURES;
 import static org.apache.phoenix.monitoring.MetricType.NUM_SYSTEM_TABLE_RPC_SUCCESS;
 import static org.apache.phoenix.monitoring.MetricType.TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS;
@@ -904,6 +905,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (retryCount++ < maxRetryCount) {
                     continue;
                 }
+                GLOBAL_HBASE_COUNTER_GET_TABLE_REGIONS_FAIL.increment();
                 throw new SQLExceptionInfo.Builder(
                     SQLExceptionCode.GET_TABLE_REGIONS_FAIL).setRootCause(e).build()
                     .buildException();
@@ -6358,6 +6360,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 if (retryCount++ < maxRetryCount) { // One retry, in case split occurs while navigating
                     continue;
                 }
+                GLOBAL_HBASE_COUNTER_GET_TABLE_REGIONS_FAIL.increment();
                 throw new SQLExceptionInfo.Builder(SQLExceptionCode.GET_TABLE_REGIONS_FAIL)
                 .setRootCause(e).build().buildException();
             }
