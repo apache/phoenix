@@ -121,7 +121,8 @@ public class GlobalCache extends TenantCacheImpl {
                                         metricsSource.incrementMetadataCacheRemovalCount();
                                     }
                                     if (notification.getValue() != null) {
-                                        metricsSource.decrementMetadataCacheUsedSize(notification.getValue().getEstimatedSize());
+                                        metricsSource.decrementMetadataCacheUsedSize(
+                                                notification.getValue().getEstimatedSize());
                                     }
                                 }
                             })
