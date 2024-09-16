@@ -443,6 +443,11 @@ public interface QueryServices extends SQLCloseable {
     String SKIP_SYSTEM_TABLES_EXISTENCE_CHECK = "phoenix.skip.system.tables.existence.check";
 
     /**
+     * Parameter to skip the minimum version check for system table upgrades
+     */
+    String SKIP_UPGRADE_BLOCK_CHECK = "phoenix.skip.upgrade.block.check";
+
+    /**
      * Config key to represent max region locations to be displayed as part of the Explain plan
      * output.
      */
@@ -471,6 +476,15 @@ public interface QueryServices extends SQLCloseable {
     String DISABLE_VIEW_SUBTREE_VALIDATION = "phoenix.disable.view.subtree.validation";
 
     boolean DEFAULT_DISABLE_VIEW_SUBTREE_VALIDATION = false;
+
+    /**
+     * Param to enable updatable view restriction that only mark view as updatable if rows
+     * cannot overlap with other updatable views.
+     */
+    String PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED =
+            "phoenix.updatable.view.restriction.enabled";
+
+    boolean DEFAULT_PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED = false;
 
     /**
      * Only used by tests: parameter to determine num of regionservers to be created by
@@ -509,6 +523,15 @@ public interface QueryServices extends SQLCloseable {
     int DEFAULT_PHOENIX_GET_REGIONS_RETRIES = 10;
 
     String PHOENIX_GET_METADATA_READ_LOCK_ENABLED = "phoenix.get.metadata.read.lock.enabled";
+
+    /**
+     * If server side metadata cache is empty, take Phoenix writeLock for the given row
+     * and make sure we can acquire the writeLock within the configurable duration.
+     */
+    String PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT =
+        "phoenix.metadata.update.rowlock.timeout";
+
+    long DEFAULT_PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT = 60000;
 
     /**
      * Get executor service used for parallel scans

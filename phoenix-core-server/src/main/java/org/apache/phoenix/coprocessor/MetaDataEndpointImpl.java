@@ -104,6 +104,7 @@ import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
+import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -195,6 +196,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
+import org.apache.phoenix.hbase.index.LockManager;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -257,6 +259,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
@@ -325,6 +328,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final byte[] CHILD_TABLE_BYTES = new byte[]{PTable.LinkType.CHILD_TABLE.getSerializedValue()};
     private static final byte[] PHYSICAL_TABLE_BYTES =
             new byte[]{PTable.LinkType.PHYSICAL_TABLE.getSerializedValue()};
+
+    private LockManager lockManager;
+    private long metadataCacheRowLockTimeout;
 
     // KeyValues for Table
     private static final Cell TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
@@ -613,6 +619,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    private boolean isSystemCatalogSplittable;
+
     protected boolean getMetadataReadLockEnabled;
 
     private MetricsMetadataSource metricsSource;
@@ -640,8 +648,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             throw new CoprocessorException("Must be loaded on a table region!");
         }
 
+        this.lockManager = new LockManager();
         phoenixAccessCoprocessorHost = new PhoenixMetaDataCoprocessorHost(this.env);
         Configuration config = env.getConfiguration();
+        this.metadataCacheRowLockTimeout =
+            config.getLong(QueryServices.PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT,
+                QueryServices.DEFAULT_PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT);
         this.accessCheckEnabled = config.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
         this.blockWriteRebuildIndex = config.getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE,
@@ -658,6 +670,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         this.getMetadataReadLockEnabled
                 = config.getBoolean(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED,
                             QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
+        this.isSystemCatalogSplittable = MetaDataSplitPolicy.isSystemCatalogSplittable(config);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
@@ -711,7 +724,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             if (request.getClientVersion() < MIN_SPLITTABLE_SYSTEM_CATALOG
                     && table.getType() == PTableType.VIEW
                     && table.getViewType() != MAPPED) {
-                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                try (PhoenixConnection connection = getServerConnectionForMetaData(
+                        env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = connection.getTableNoCache(table.getParentName().getString());
                     table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
                 }
@@ -762,6 +776,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable newTable;
+        region.startRegionOperation();
         try (RegionScanner scanner = region.getScanner(scan)) {
             PTable oldTable = (PTable) metaDataCache.getIfPresent(cacheKey);
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP - 1 : oldTable.getTimeStamp();
@@ -779,6 +794,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
                 metaDataCache.put(cacheKey, newTable);
             }
+        } finally {
+            region.closeRegionOperation();
         }
         return newTable;
     }
@@ -1547,12 +1564,24 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 } else if (linkType == PHYSICAL_TABLE) {
                     // famName contains the logical name of the parent table. We need to get the actual physical name of the table
                     PTable parentTable = null;
-                    if (indexType != IndexType.LOCAL) {
+                    // call getTable() on famName only if it does not start with _IDX_.
+                    // Table name starting with _IDX_ always must refer to HBase table that is
+                    // shared by all view indexes on the given table/view hierarchy.
+                    // _IDX_ is HBase table that does not have corresponding PTable representation
+                    // in Phoenix, hence there is no point of calling getTable().
+                    if (!famName.getString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)
+                        && indexType != IndexType.LOCAL) {
                         parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
                                 SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
-                        if (parentTable == null || isTableDeleted(parentTable)) {
-                            // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
-                            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                        if (isSystemCatalogSplittable
+                            && (parentTable == null || isTableDeleted(parentTable))) {
+                            // parentTable is neither in the cache nor in the local region. Since
+                            // famName is only logical name, we need to find the physical table.
+                            // Hence, it is recommended to scan SYSTEM.CATALOG table again using
+                            // separate CQSI connection as SYSTEM.CATALOG is splittable so the
+                            // PTable with famName might be available on different region.
+                            try (PhoenixConnection connection = getServerConnectionForMetaData(
+                                    env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                                 parentTable = connection.getTableNoCache(famName.getString());
                             } catch (TableNotFoundException e) {
                                 // It is ok to swallow this exception since this could be a view index and _IDX_ table is not there.
@@ -2517,7 +2546,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // tableMetadata and set the view statement and partition column correctly
                 if (parentTable != null && parentTable.getAutoPartitionSeqName() != null) {
                     long autoPartitionNum = 1;
-                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+                    try (PhoenixConnection connection = getServerConnectionForMetaData(
+                            env.getConfiguration()).unwrap(PhoenixConnection.class);
                          Statement stmt = connection.createStatement()) {
                         String seqName = parentTable.getAutoPartitionSeqName();
                         // Not going through the standard route of using statement.execute() as that code path
@@ -2591,7 +2621,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Long indexId = null;
                 if (request.hasAllocateIndexId() && request.getAllocateIndexId()) {
                     String tenantIdStr = tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
-                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                    try (PhoenixConnection connection = getServerConnectionForMetaData(
+                            env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                         PName physicalName = parentTable.getPhysicalName();
                         long seqValue = getViewIndexSequenceValue(connection, tenantIdStr, parentTable);
                         Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
@@ -2997,9 +3028,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             && (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ||
                             SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
                                     env.getConfiguration()).equals(hTable.getName()))) {
-                        try (PhoenixConnection conn =
-                                QueryUtil.getConnectionOnServer(env.getConfiguration())
-                                    .unwrap(PhoenixConnection.class)) {
+                        try (PhoenixConnection conn = getServerConnectionForMetaData(
+                                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             ServerTask.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
                                 .setConn(conn)
                                 .setTaskType(PTable.TaskType.DROP_CHILD_VIEWS)
@@ -3144,9 +3174,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 User.runAsLoginUser(new PrivilegedExceptionAction<Object>() {
                     @Override
                     public Object run() throws Exception {
-                        try (PhoenixConnection connection =
-                                     QueryUtil.getConnectionOnServer(env.getConfiguration())
-                                             .unwrap(PhoenixConnection.class)) {
+                        try (PhoenixConnection connection = getServerConnectionForMetaData(
+                                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             try {
                                 MetaDataUtil.deleteFromStatsTable(connection, deletedTable,
                                         physicalTableNames, sharedTableStates);
@@ -3319,7 +3348,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
 
         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && tableType == PTableType.VIEW) {
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+            try (PhoenixConnection connection = getServerConnectionForMetaData(
                     env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                 PTable pTable = connection.getTableNoCache(table.getParentName().getString());
                 table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
@@ -3519,9 +3548,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
                         props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
                     }
-                    try (PhoenixConnection connection =
-                                 QueryUtil.getConnectionOnServer(props, env.getConfiguration())
-                                         .unwrap(PhoenixConnection.class)) {
+                    try (PhoenixConnection connection = getServerConnectionForMetaData(props,
+                            env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                         table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table,
                                 parentTable);
                     }
@@ -3697,7 +3725,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         invalidateAllChildTablesAndIndexes(table, childViews);
                     }
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
-                        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+                        try (PhoenixConnection connection = getServerConnectionForMetaData(
                                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             PTable pTable = connection.getTableNoCache(
                                     table.getParentName().getString());
@@ -3734,11 +3762,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     + " phoenix.metadata.invalidate.cache.enabled is set to false");
             return;
         }
-        Properties properties = new Properties();
-        // Skip checking of system table existence since the system tables should have created
-        // by now.
-        properties.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
-        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
+        try (PhoenixConnection connection = getServerConnectionForMetaData(
                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
             queryServices.invalidateServerMetadataCache(requests);
@@ -3780,9 +3804,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
             props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
         }
-        try (PhoenixConnection connection =
-                     QueryUtil.getConnectionOnServer(props, env.getConfiguration())
-                             .unwrap(PhoenixConnection.class)) {
+        try (PhoenixConnection connection = getServerConnectionForMetaData(props,
+                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
             queryServices.clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, schemaName, tableName,
                     clientTimeStamp);
@@ -3906,8 +3929,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 rowLock = acquireLock(region, key, null, true);
             }
             PTable table =
-                    getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
-            table = modifyIndexStateForOldClient(clientVersion, table);
+                getTableFromCacheWithModifiedIndexState(clientTimeStamp, clientVersion, cacheKey);
             // We only cache the latest, so we'll end up building the table with every call if the
             // client connection has specified an SCN.
             // TODO: If we indicate to the client that we're returning an older version, but there's a
@@ -3920,22 +3942,44 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
                 return table;
             }
-            // Query for the latest table first, since it's not cached
-            table =
+            // take Phoenix row level write-lock as we need to protect metadata cache update
+            // after scanning SYSTEM.CATALOG to retrieve the PTable object
+            LockManager.RowLock phoenixRowLock =
+                lockManager.lockRow(key, this.metadataCacheRowLockTimeout);
+            try {
+                table = getTableFromCacheWithModifiedIndexState(clientTimeStamp, clientVersion,
+                    cacheKey);
+                if (table != null && table.getTimeStamp() < clientTimeStamp) {
+                    if (isTableDeleted(table)) {
+                        return null;
+                    }
+                    return table;
+                }
+                // Query for the latest table first, since it's not cached
+                table =
                     buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
-            if ((table != null && table.getTimeStamp() <= clientTimeStamp) ||
-                    (blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
+                if ((table != null && table.getTimeStamp() <= clientTimeStamp) || (
+                    blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
+                    return table;
+                }
+                // Otherwise, query for an older version of the table - it won't be cached
+                table = buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
                 return table;
+            } finally {
+                phoenixRowLock.release();
             }
-            // Otherwise, query for an older version of the table - it won't be cached
-            table =
-                    buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
-            return table;
         } finally {
             if (!wasLocked && rowLock != null) {
                 rowLock.release();
             }
         }
+    }
+
+    private PTable getTableFromCacheWithModifiedIndexState(long clientTimeStamp, int clientVersion,
+        ImmutableBytesPtr cacheKey) throws SQLException {
+        PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
+        table = modifyIndexStateForOldClient(clientVersion, table);
+        return table;
     }
 
     private List<PFunction> doGetFunctions(List<byte[]> keys, long clientTimeStamp) throws IOException, SQLException {
@@ -4024,9 +4068,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
         Region region = env.getRegion();
-        PhoenixConnection connection =
-                table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
-                        env.getConfiguration()).unwrap(PhoenixConnection.class);
+        PhoenixConnection connection = table.getIndexes().isEmpty() ? null :
+                getServerConnectionForMetaData(env.getConfiguration()).unwrap(
+                        PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             // ignore any indexes derived from ancestors
             if (index.getName().getString().contains(
@@ -4112,9 +4156,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
-        PhoenixConnection connection =
-                table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
-                        env.getConfiguration()).unwrap(PhoenixConnection.class);
+        PhoenixConnection connection = table.getIndexes().isEmpty() ? null :
+                getServerConnectionForMetaData(env.getConfiguration()).unwrap(
+                        PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             byte[] tenantId = index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes();
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
@@ -5091,5 +5135,40 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                                 .getPhysicalHBaseTableName(table.getSchemaName(),
                                         table.getTableName(), table.isNamespaceMapped())
                                 .getBytes());
+    }
+
+    /**
+     * Get the server side connection by skipping system table existence check.
+     *
+     * @param config The configuration object.
+     * @return Connection object.
+     * @throws SQLException If the Connection could not be retrieved.
+     */
+    private static Connection getServerConnectionForMetaData(final Configuration config)
+            throws SQLException {
+        Preconditions.checkNotNull(config, "The configs must not be null");
+        return getServerConnectionForMetaData(new Properties(), config);
+    }
+
+    /**
+     * Get the server side connection by skipping system table existence check.
+     *
+     * @param props The properties to be used while retrieving the Connection. Adds skipping of
+     * the system table existence check to the properties.
+     * @param config The configuration object.
+     * @return Connection object.
+     * @throws SQLException If the Connection could not be retrieved.
+     */
+    private static Connection getServerConnectionForMetaData(final Properties props,
+                                                             final Configuration config)
+            throws SQLException {
+        Preconditions.checkNotNull(props, "The properties must not be null");
+        Preconditions.checkNotNull(config, "The configs must not be null");
+        // No need to check for system table existence as the coproc is already running,
+        // hence the system tables are already created.
+        // Similarly, no need to check for client - server version compatibility as
+        // this is already server hosting SYSTEM.CATALOG region(s).
+        props.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, Boolean.TRUE.toString());
+        return QueryUtil.getConnectionOnServer(props, config);
     }
 }

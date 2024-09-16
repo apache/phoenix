@@ -485,7 +485,10 @@ public enum SQLExceptionCode {
             "Missing ENCODED_QUALIFIER."),
     EXECUTE_BATCH_FOR_STMT_WITH_RESULT_SET(1151, "XCL51", "A batch operation can't include a "
             + "statement that produces result sets.", Factory.BATCH_UPDATE_ERROR),
-
+    SPLITS_AND_SPLIT_FILE_EXISTS(1152, "XCL52", "Both splits and split file are passed"),
+    // 1153 code is taken by CANNOT_DROP_CDC_INDEX
+    SPLIT_FILE_DONT_EXIST(1154, "XCL54", "Either split file don't exist or is not a file"),
+    UNABLE_TO_OPEN_SPLIT_FILE(1155, "XCL55", "Exception occurred while opening splits file"),
 
     /**
      * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
@@ -507,6 +510,8 @@ public enum SQLExceptionCode {
     ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_COERCIBLE(2014, "INT16", "Row Value Constructor Offset Not Coercible to a Primary or Indexed RowKey."),
     ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR(2015, "INT17", "Row Value Constructor Offset had an Unexpected Error."),
     ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_ALLOWED_IN_QUERY(2016, "INT18", "Row Value Constructor Offset Not Allowed In Query."),
+
+    UPGRADE_BLOCKED(2017, "INT19", ""),
 
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
@@ -626,6 +631,8 @@ public enum SQLExceptionCode {
 
     STALE_METADATA_CACHE_EXCEPTION(915, "43M26", "Stale metadata cache exception",
         info -> new StaleMetadataCacheException(info.getMessage())),
+
+    AUTO_COMMIT_NOT_ENABLED(916, "43M27", "Connection does not have auto-commit enabled"),
 
     //SQLCode for testing exceptions
     FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");

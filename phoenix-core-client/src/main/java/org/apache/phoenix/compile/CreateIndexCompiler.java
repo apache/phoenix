@@ -43,6 +43,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -111,8 +112,8 @@ public class CreateIndexCompiler {
             return "ARRAY[" + getValue(PDate.INSTANCE) + "]";
         } else if (type instanceof PArrayDataType) {
             return "ARRAY" + type.getSampleValue().toString();
-        } else if (type instanceof PJson) {
-            return "'{a:1}'";
+        } else if (type instanceof PJson || type instanceof PBson) {
+            return "'{\"a\":\"b\"}'";
         } else {
             return "0123";
         }

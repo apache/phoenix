@@ -274,5 +274,9 @@ public class PhoenixIndexBuilder extends NonTxIndexBuilder {
     public ReplayWrite getReplayWrite(Mutation m) {
         return PhoenixIndexMetaData.getReplayWrite(m.getAttributesMap());
     }
-    
+
+    @Override
+    public boolean returnResult(Mutation m) {
+        return m.getAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT) != null;
+    }
 }

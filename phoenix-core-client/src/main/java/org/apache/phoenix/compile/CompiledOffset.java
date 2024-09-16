@@ -23,6 +23,8 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
  * CompiledOffset represents the result of the Compiler on the OFFSET clause.
  */
 public class CompiledOffset {
+    public static final CompiledOffset EMPTY_COMPILED_OFFSET =
+            new CompiledOffset(Optional.<Integer>absent(), Optional.<byte[]>absent());
     private final Optional<Integer> integerOffset;
     private final Optional<byte[]> byteOffset;
 

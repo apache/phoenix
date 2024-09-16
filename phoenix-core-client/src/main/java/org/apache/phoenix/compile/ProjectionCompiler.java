@@ -47,6 +47,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
+import org.apache.phoenix.expression.function.BsonValueFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
@@ -88,6 +89,7 @@ import org.apache.phoenix.schema.ValueBitSet;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -504,11 +506,13 @@ public class ProjectionCompiler {
                     scanAttributes =
                     new String[] { BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX,
                             BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
-                            BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION };
+                            BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION,
+                            BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION};
             Map<String, Class> attributeToFunctionMap = new HashMap<String, Class>() {{
                 put(scanAttributes[0], ArrayIndexFunction.class);
                 put(scanAttributes[1], JsonValueFunction.class);
                 put(scanAttributes[2], JsonQueryFunction.class);
+                put(scanAttributes[3], BsonValueFunction.class);
             }};
             // This map is to keep track of the positions that get swapped with rearranging
             // the functions in the serialized data to server.
@@ -782,7 +786,7 @@ public class ProjectionCompiler {
 
         private static boolean parseOnServer(Expression expression) {
             return expression.getDataType().isArrayType() || expression.getDataType()
-                    .equals(PJson.INSTANCE);
+                    .equals(PJson.INSTANCE) || expression.getDataType().equals(PBson.INSTANCE);
         }
 
         @Override
@@ -807,7 +811,7 @@ public class ProjectionCompiler {
 
             // this need not be done for group by clause with array or json. Hence, the below check
             if (!statement.isAggregate() && (ArrayIndexFunction.NAME.equals(
-                    node.getName()) || isJsonFunction(node)) &&
+                    node.getName()) || isJsonFunction(node) || isBsonFunction(node)) &&
                     children.get(0) instanceof ProjectedColumnExpression) {
                 final List<KeyValueColumnExpression> indexKVs = Lists.newArrayList();
                 final List<ProjectedColumnExpression> indexProjectedColumns = Lists.newArrayList();
@@ -817,7 +821,8 @@ public class ProjectionCompiler {
                     @Override
                     public Void visit(ProjectedColumnExpression expression) {
                         if (expression.getDataType().isArrayType() || expression.getDataType()
-                                .equals(PJson.INSTANCE)) {
+                            .equals(PJson.INSTANCE) || expression.getDataType()
+                            .equals(PBson.INSTANCE)) {
                             indexProjectedColumns.add(expression);
                             PColumn col = expression.getColumn();
                             // hack'ish... For covered columns with local indexes we defer to the server.
@@ -865,5 +870,9 @@ public class ProjectionCompiler {
     private static boolean isJsonFunction(FunctionParseNode node) {
         return JsonValueFunction.NAME.equals(node.getName()) || JsonQueryFunction.NAME.equals(
                 node.getName());
+    }
+
+    private static boolean isBsonFunction(FunctionParseNode node) {
+        return BsonValueFunction.NAME.equals(node.getName());
     }
 }

@@ -344,6 +344,7 @@ public interface QueryConstants {
     String CDC_CHANGE_IMAGE = "change_image";
     String CDC_UPSERT_EVENT_TYPE = "upsert";
     String CDC_DELETE_EVENT_TYPE = "delete";
+    String SPLITS_FILE = "SPLITS_FILE";
 
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
