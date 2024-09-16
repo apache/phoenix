@@ -54,12 +54,15 @@ class PMetaDataCache {
                         LOGGER.debug("Expiring " + key + " because of "
                                 + notification.getCause().name());
                         if (notification.wasEvicted()) {
-                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_EVICTION_COUNTER.increment();
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_EVICTION_COUNTER
+                                    .increment();
                         } else {
-                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.increment();
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER
+                                    .increment();
                         }
                         if (notification.getValue() != null) {
-                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(-notification.getValue().getEstimatedSize());
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE
+                                    .update(-notification.getValue().getEstimatedSize());
                         }
                     }
                 })

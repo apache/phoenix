@@ -105,7 +105,7 @@ public interface MetricsMetadataSource {
 
     String METADATA_CACHE_ADD_COUNT = "metadataCacheAddCount";
     String METADATA_CACHE_ADD_COUNT_DESC = "Add count of the metadata cache";
-    
+
     // TODO: metrics for addIndexToTable and dropIndexes
 
     /**
