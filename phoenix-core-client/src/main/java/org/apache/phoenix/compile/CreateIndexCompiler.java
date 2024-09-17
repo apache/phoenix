@@ -62,6 +62,7 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.SchemaUtil;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -157,13 +158,14 @@ public class CreateIndexCompiler {
             column =  dataTable.getColumns().get(i);
             value = column.getViewConstant();
             if (value == null) {
-                stringBuilder.append(column.getName().getString() + ",");
+                stringBuilder.append(SchemaUtil.getEscapedArgument(column.getName().getString())
+                        + ",");
             }
         }
         column =  dataTable.getColumns().get(i);
         value = column.getViewConstant();
         if (value == null) {
-            stringBuilder.append(column.getName().getString() + ")");
+            stringBuilder.append(SchemaUtil.getEscapedArgument(column.getName().getString()) + ")");
         } else {
             stringBuilder.append(")");
         }
