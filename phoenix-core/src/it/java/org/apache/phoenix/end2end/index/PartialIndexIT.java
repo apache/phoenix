@@ -24,6 +24,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -1051,6 +1052,46 @@ public class PartialIndexIT extends BaseTest {
             assertTrue(rs.next());
             assertEquals(1, rs.getInt(1));
             assertFalse(rs.next());
+        }
+    }
+
+    @Test
+    public void testPartialIndexOnTableWithCaseSensitiveColumns() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class)) {
+            String dataTableName = generateUniqueName();
+            String indexName1 = generateUniqueName();
+            String indexName2 = generateUniqueName();
+            String indexName3 = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + dataTableName
+                    + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, \"coLUmn3\" VARCHAR)"
+                    + (salted ? " SALT_BUCKETS=4" : ""));
+
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName1 + " on " + dataTableName + " (v1) " +
+                    (uncovered ? "" : "INCLUDE (\"CoL\", \"coLUmn3\")"));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName2 + " on " + dataTableName + " (\"CoL\") " +
+                    (uncovered ? "" : "INCLUDE (v1, \"coLUmn3\")"));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName3 + " on " + dataTableName + " (\"coLUmn3\") " +
+                    (uncovered ? "" : "INCLUDE (\"CoL\", v1)"));
+
+            stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE v1='b'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName1, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
+            rs = stmt.executeQuery("SELECT v1 FROM " + dataTableName + " WHERE \"CoL\"='c'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName2, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
+            rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName3, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
         }
     }
 }
