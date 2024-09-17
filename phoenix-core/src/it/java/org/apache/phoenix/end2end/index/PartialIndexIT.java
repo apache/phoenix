@@ -1067,31 +1067,30 @@ public class PartialIndexIT extends BaseTest {
             stmt.execute("CREATE TABLE " + dataTableName
                     + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, \"coLUmn3\" VARCHAR)");
 
-            stmt.execute("CREATE INDEX " + indexName1
-                    + " ON " + dataTableName + "(v1) INCLUDE (\"CoL\") WHERE \"coLUmn3\" IS NOT NULL");
-            stmt.execute("CREATE INDEX " + indexName2
-                    + " ON " + dataTableName + "(\"CoL\") INCLUDE (v1) WHERE \"coLUmn3\" IS NOT NULL");
-            stmt.execute("CREATE INDEX " + indexName3
-                    + " ON " + dataTableName + "(\"coLUmn3\") INCLUDE (\"CoL\") WHERE v1 IS NOT NULL");
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName1 + " on " + dataTableName + " (v1) " +
+                    (uncovered ? "" : "INCLUDE (\"CoL\", \"coLUmn3\")"));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName2 + " on " + dataTableName + " (\"CoL\") " +
+                    (uncovered ? "" : "INCLUDE (v1, \"coLUmn3\")"));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                    + "INDEX " + indexName3 + " on " + dataTableName + " (\"coLUmn3\") " +
+                    (uncovered ? "" : "INCLUDE (\"CoL\", v1)"));
 
             stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
             conn.commit();
 
-            ResultSet rs = stmt.executeQuery("SELECT /*+ INDEX("+ dataTableName  + " " + indexName1+") */"
-                    + "\"CoL\" FROM " + dataTableName + " WHERE v1='b'");
+            ResultSet rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE v1='b'");
             Assert.assertTrue(rs.next());
             Assert.assertEquals(indexName1, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
 
-            rs = stmt.executeQuery("SELECT /*+ INDEX("+ dataTableName  + " " + indexName2+") */"
-                    + "v1 FROM " + dataTableName + " WHERE \"CoL\"='c'");
+            rs = stmt.executeQuery("SELECT v1 FROM " + dataTableName + " WHERE \"CoL\"='c'");
             Assert.assertTrue(rs.next());
             Assert.assertEquals(indexName2, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
 
-            rs = stmt.executeQuery("SELECT /*+ INDEX("+ dataTableName  + " " + indexName3+") */"
-                    + "\"CoL\" FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
+            rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
             Assert.assertTrue(rs.next());
             Assert.assertEquals(indexName3, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
-
         }
     }
 }
