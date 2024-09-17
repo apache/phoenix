@@ -645,6 +645,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
+        GlobalCache.getInstance(this.env).setMetricsSource(metricsSource);
     }
 
     @Override
@@ -746,6 +747,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         region.startRegionOperation();
         try (RegionScanner scanner = region.getScanner(scan)) {
             PTable oldTable = (PTable) metaDataCache.getIfPresent(cacheKey);
+            if (oldTable == null) {
+                metricsSource.incrementMetadataCacheMissCount();
+            } else {
+                metricsSource.incrementMetadataCacheHitCount();
+            }
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP - 1 : oldTable.getTimeStamp();
             newTable = getTable(scanner, clientTimeStamp, tableTimeStamp, clientVersion);
             if (newTable != null
@@ -760,6 +766,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             + tableTimeStamp);
                 }
                 metaDataCache.put(cacheKey, newTable);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(newTable.getEstimatedSize());
             }
         } finally {
             region.closeRegionOperation();
@@ -798,6 +806,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                                         .getTenantId().getBytes(), Bytes.toBytes(function
                                         .getFunctionName()));
                 metaDataCache.put(new FunctionBytesPtr(functionKey), function);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(function.getEstimatedSize());
                 functions.add(function);
             }
             return functions;
@@ -834,6 +844,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     return null;
                 }
                 metaDataCache.put(cacheKey, schema);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(schema.getEstimatedSize());
                 schemas.add(schema);
             }
             return schemas;
@@ -1835,6 +1847,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         GlobalCache.getInstance(this.env).getMetaDataCache();
                 PTable table = newDeletedTableMarker(kv.getTimestamp());
                 metaDataCache.put(cacheKey, table);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(table.getEstimatedSize());
                 return table;
             }
         }
@@ -1863,6 +1877,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         GlobalCache.getInstance(this.env).getMetaDataCache();
                 PFunction function = newDeletedFunctionMarker(kv.getTimestamp());
                 metaDataCache.put(cacheKey, function);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(function.getEstimatedSize());
                 return function;
             }
         }
@@ -1890,6 +1906,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         .getMetaDataCache();
                 PSchema schema = newDeletedSchemaMarker(kv.getTimestamp());
                 metaDataCache.put(cacheKey, schema);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(schema.getEstimatedSize());
                 return schema;
             }
         }
@@ -1958,6 +1976,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private PTable getTableFromCache(ImmutableBytesPtr cacheKey, long clientTimeStamp, int clientVersion) {
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable table = (PTable) metaDataCache.getIfPresent(cacheKey);
+        if (table == null) {
+            metricsSource.incrementMetadataCacheMissCount();
+        } else {
+            metricsSource.incrementMetadataCacheHitCount();
+        }
         return table;
     }
 
@@ -1969,8 +1992,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PFunction function = (PFunction) metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
         if (function != null && !isReplace) {
+            metricsSource.incrementMetadataCacheHitCount();
             return function;
         }
+        metricsSource.incrementMetadataCacheMissCount();
         ArrayList<byte[]> arrayList = new ArrayList<byte[]>(1);
         arrayList.add(key);
         List<PFunction> functions = buildFunctions(arrayList, region, asOfTimeStamp, isReplace, deleteMutationsForReplace);
@@ -1991,8 +2016,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PSchema schema = (PSchema) metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
         if (schema != null) {
+            metricsSource.incrementMetadataCacheHitCount();
             return schema;
         }
+        metricsSource.incrementMetadataCacheMissCount();
         ArrayList<byte[]> arrayList = new ArrayList<byte[]>(1);
         arrayList.add(key);
         List<PSchema> schemas = buildSchemas(arrayList, region, asOfTimeStamp, cacheKey);
@@ -2825,7 +2852,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
-                    metaDataCache.put(ckey, newDeletedTableMarker(currentTime));
+                    PTable table = newDeletedTableMarker(currentTime);
+                    metaDataCache.put(ckey, table);
+                    metricsSource.incrementMetadataCacheAddCount();
+                    metricsSource.incrementMetadataCacheUsedSize(table.getEstimatedSize());
                 }
                 if (parentLockKey != null) {
                     ImmutableBytesPtr parentCacheKey = new ImmutableBytesPtr(parentLockKey);
@@ -3685,6 +3715,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             while (iterator.hasNext()) {
                 byte[] key = iterator.next();
                 PFunction function = (PFunction) metaDataCache.getIfPresent(new FunctionBytesPtr(key));
+                if (function == null) {
+                    metricsSource.incrementMetadataCacheMissCount();
+                } else {
+                    metricsSource.incrementMetadataCacheHitCount();
+                }
                 if (function != null && function.getTimeStamp() < clientTimeStamp) {
                     if (isFunctionDeleted(function)) {
                         return null;
@@ -4517,8 +4552,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long currentTime = MetaDataUtil.getClientTimeStamp(functionMetaData);
                 for (ImmutableBytesPtr ptr : invalidateList) {
                     metaDataCache.invalidate(ptr);
-                    metaDataCache.put(ptr, newDeletedFunctionMarker(currentTime));
-
+                    PFunction function = newDeletedFunctionMarker(currentTime);
+                    metaDataCache.put(ptr, function);
+                    metricsSource.incrementMetadataCacheAddCount();
+                    metricsSource.incrementMetadataCacheUsedSize(function.getEstimatedSize());
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
@@ -4689,7 +4726,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long currentTime = MetaDataUtil.getClientTimeStamp(schemaMetaData);
                 for (ImmutableBytesPtr ptr : invalidateList) {
                     metaDataCache.invalidate(ptr);
-                    metaDataCache.put(ptr, newDeletedSchemaMarker(currentTime));
+                    PSchema schema = newDeletedSchemaMarker(currentTime);
+                    metaDataCache.put(ptr, schema);
+                    metricsSource.incrementMetadataCacheAddCount();
+                    metricsSource.incrementMetadataCacheUsedSize(schema.getEstimatedSize());
                 }
                 done.run(MetaDataMutationResult.toProto(result));
 
