@@ -2208,8 +2208,9 @@ public class CompactionScanner implements InternalScanner {
                         !CellUtil.matchingColumn(cell, currentColumnCell)) {
                     currentColumnCell = cell;
                     isEmptyColumn = ScanUtil.isEmptyColumn(cell, emptyCF, emptyCQ);
-                    if (cell.getType() != Cell.Type.Delete
-                            && cell.getType() != Cell.Type.DeleteColumn) {
+                    if ((cell.getType() != Cell.Type.Delete
+                            && cell.getType() != Cell.Type.DeleteColumn)
+                            || cell.getTimestamp() == maxLookbackWindowStart) {
                         // Include only delete family markers and put cells
                         // The last row version can also be the cells with timestamp
                         // same as timestamp of start of max lookback window
