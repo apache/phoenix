@@ -1065,7 +1065,8 @@ public class PartialIndexIT extends BaseTest {
             String indexName3 = generateUniqueName();
 
             stmt.execute("CREATE TABLE " + dataTableName
-                    + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, \"coLUmn3\" VARCHAR)");
+                    + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, \"coLUmn3\" VARCHAR)"
+                    + (salted ? " SALT_BUCKETS=4" : ""));
 
             stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
                     + "INDEX " + indexName1 + " on " + dataTableName + " (v1) " +
