@@ -50,6 +50,13 @@ public class MetricsMetadataSourceImpl extends BaseSourceImpl implements Metrics
     private final MutableFastCounter dropSchemaCount;
     private final MutableFastCounter dropFunctionCount;
 
+    private final MutableFastCounter metadataCacheUsedSize;
+    private final MutableFastCounter metadataCacheHitCount;
+    private final MutableFastCounter metadataCacheMissCount;
+    private final MutableFastCounter metadataCacheEvictionCount;
+    private final MutableFastCounter metadataCacheRemovalCount;
+    private final MutableFastCounter metadataCacheAddCount;
+
     public MetricsMetadataSourceImpl() {
         this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
     }
@@ -102,6 +109,19 @@ public class MetricsMetadataSourceImpl extends BaseSourceImpl implements Metrics
                 DROP_SCHEMA_COUNT_DESC, 0L);
         dropFunctionCount = getMetricsRegistry().newCounter(DROP_FUNCTION_COUNT,
                 DROP_FUNCTION_COUNT_DESC, 0L);
+
+        metadataCacheUsedSize = getMetricsRegistry().newCounter(METADATA_CACHE_ESTIMATED_USED_SIZE,
+                METADATA_CACHE_ESTIMATED_USED_SIZE_DESC, 0L);
+        metadataCacheHitCount = getMetricsRegistry().newCounter(METADATA_CACHE_HIT_COUNT,
+                METADATA_CACHE_HIT_COUNT_DESC, 0L);
+        metadataCacheMissCount = getMetricsRegistry().newCounter(METADATA_CACHE_MISS_COUNT,
+                METADATA_CACHE_MISS_COUNT_DESC, 0L);
+        metadataCacheEvictionCount = getMetricsRegistry().newCounter(METADATA_CACHE_EVICTION_COUNT,
+                METADATA_CACHE_EVICTION_COUNT_DESC, 0L);
+        metadataCacheRemovalCount = getMetricsRegistry().newCounter(METADATA_CACHE_REMOVAL_COUNT,
+                METADATA_CACHE_REMOVAL_COUNT_DESC, 0L);
+        metadataCacheAddCount = getMetricsRegistry().newCounter(METADATA_CACHE_ADD_COUNT,
+                METADATA_CACHE_ADD_COUNT_DESC, 0L);
     }
 
     @Override public void incrementCreateExportCount() {
@@ -182,5 +202,40 @@ public class MetricsMetadataSourceImpl extends BaseSourceImpl implements Metrics
 
     @Override public void incrementDropFunctionCount() {
         dropFunctionCount.incr();
+    }
+
+    @Override
+    public void incrementMetadataCacheUsedSize(long estimatedSize) {
+        metadataCacheUsedSize.incr(estimatedSize);
+    }
+
+    @Override
+    public void decrementMetadataCacheUsedSize(long estimatedSize) {
+        metadataCacheUsedSize.incr(-estimatedSize);
+    }
+
+    @Override
+    public void incrementMetadataCacheHitCount() {
+        metadataCacheHitCount.incr();
+    }
+
+    @Override
+    public void incrementMetadataCacheMissCount() {
+        metadataCacheMissCount.incr();
+    }
+
+    @Override
+    public void incrementMetadataCacheEvictionCount() {
+        metadataCacheEvictionCount.incr();
+    }
+
+    @Override
+    public void incrementMetadataCacheRemovalCount() {
+        metadataCacheRemovalCount.incr();
+    }
+
+    @Override
+    public void incrementMetadataCacheAddCount() {
+        metadataCacheAddCount.incr();
     }
 }

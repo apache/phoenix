@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_ADD_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_EVICTION_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_REMOVAL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_WAIT_TIME;
@@ -161,6 +165,10 @@ public enum GlobalClientMetrics {
 
     GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER(CLIENT_METADATA_CACHE_MISS_COUNTER),
     GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER(CLIENT_METADATA_CACHE_HIT_COUNTER),
+    GLOBAL_CLIENT_METADATA_CACHE_EVICTION_COUNTER(CLIENT_METADATA_CACHE_EVICTION_COUNTER),
+    GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER(CLIENT_METADATA_CACHE_REMOVAL_COUNTER),
+    GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER(CLIENT_METADATA_CACHE_ADD_COUNTER),
+    GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE(CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE),
     GLOBAL_CLIENT_STALE_METADATA_CACHE_EXCEPTION_COUNTER(STALE_METADATA_CACHE_EXCEPTION_COUNTER);
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalClientMetrics.class);

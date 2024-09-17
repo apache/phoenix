@@ -88,6 +88,24 @@ public interface MetricsMetadataSource {
     String DROP_FUNCTION_COUNT = "dropFunctionCount";
     String DROP_FUNCTION_COUNT_DESC = "Count of DROP FUNCTION DDL statements";
 
+    String METADATA_CACHE_ESTIMATED_USED_SIZE = "metadataCacheEstimatedUsedSize";
+    String METADATA_CACHE_ESTIMATED_USED_SIZE_DESC = "Estimated used size of the metadata cache";
+
+    String METADATA_CACHE_HIT_COUNT = "metadataCacheHitCount";
+    String METADATA_CACHE_HIT_COUNT_DESC = "Hit count of the metadata cache";
+
+    String METADATA_CACHE_MISS_COUNT = "metadataCacheMissCount";
+    String METADATA_CACHE_MISS_COUNT_DESC = "Miss count of the metadata cache";
+
+    String METADATA_CACHE_EVICTION_COUNT = "metadataCacheEvictionCount";
+    String METADATA_CACHE_EVICTION_COUNT_DESC = "Eviction count of the metadata cache";
+
+    String METADATA_CACHE_REMOVAL_COUNT = "metadataCacheRemovalCount";
+    String METADATA_CACHE_REMOVAL_COUNT_DESC = "Removal count of the metadata cache";
+
+    String METADATA_CACHE_ADD_COUNT = "metadataCacheAddCount";
+    String METADATA_CACHE_ADD_COUNT_DESC = "Add count of the metadata cache";
+
     // TODO: metrics for addIndexToTable and dropIndexes
 
     /**
@@ -120,7 +138,7 @@ public interface MetricsMetadataSource {
 
     /**
      * Updates the histogram of time taken updating the schema registry for ALTER statements
-     * @param t time takne
+     * @param t time taken
      */
     void updateAlterExportTime(long t);
 
@@ -195,4 +213,41 @@ public interface MetricsMetadataSource {
      * Updates the count of successful DROP FUNCTION DDL operations
      */
     void incrementDropFunctionCount();
+
+    /**
+     * Increases the estimated used size of metadata cache
+     * @param estimatedSize the estimated size to be increased
+     */
+    void incrementMetadataCacheUsedSize(long estimatedSize);
+
+    /**
+     * Decreases the estimated used size of metadata cache
+     * @param estimatedSize the estimated size to be decreased
+     */
+    void decrementMetadataCacheUsedSize(long estimatedSize);
+
+    /**
+     * Updates the count of metadata cache hit
+     */
+    void incrementMetadataCacheHitCount();
+
+    /**
+     * Updates the count of metadata cache miss
+     */
+    void incrementMetadataCacheMissCount();
+
+    /**
+     * Updates the count of metadata cache eviction
+     */
+    void incrementMetadataCacheEvictionCount();
+
+    /**
+     * Updates the count of metadata cache removal
+     */
+    void incrementMetadataCacheRemovalCount();
+
+    /**
+     * Updates the count of metadata cache add
+     */
+    void incrementMetadataCacheAddCount();
 }
