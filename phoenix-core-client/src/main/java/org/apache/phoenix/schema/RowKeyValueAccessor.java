@@ -67,7 +67,7 @@ public class RowKeyValueAccessor implements Writable {
      * RowKeyValueAccessor. The value of the list determines which separator bytes need to be
      * used while iterating through the rowkey bytes.
      */
-    static class BinaryEncodedTypesLists {
+    static class ListOfEncodedTypeFlags {
         private final List<Boolean> binaryEncodedDataTypes = new ArrayList<>();
 
         public void addBinaryEncodedDataTypes(boolean val) {
@@ -87,7 +87,7 @@ public class RowKeyValueAccessor implements Writable {
      * together with other fields of RowKeyValueAccessor. The value of the list determines which
      * separator bytes need to be used while iterating through the rowkey bytes.
      */
-    static class SortOrderLists {
+    static class SortOrderList {
         private final List<Boolean> sortOrderAsc = new ArrayList<>();
 
         public void addSortOrderAsc(boolean val) {
@@ -109,9 +109,9 @@ public class RowKeyValueAccessor implements Writable {
     public RowKeyValueAccessor(List<? extends PDatum> data, int index) {
         this.index = index;
         int[] offsets = new int[data.size()];
-        BinaryEncodedTypesLists[] binaryEncodedTypesLists =
-            new BinaryEncodedTypesLists[data.size()];
-        SortOrderLists[] sortOrderLists = new SortOrderLists[data.size()];
+        ListOfEncodedTypeFlags[] listOfEncodedTypesLists =
+            new ListOfEncodedTypeFlags[data.size()];
+        SortOrderList[] sortOrderLists = new SortOrderList[data.size()];
         int nOffsets = 0;
         Iterator<? extends PDatum> iterator = data.iterator();
         PDatum datum = iterator.next();
@@ -121,8 +121,8 @@ public class RowKeyValueAccessor implements Writable {
             if (datum.getDataType().isFixedWidth()) {
                 // For continuous fixed width data type columns, accumulate how many
                 // of them contains ASC and DESC order types.
-                BinaryEncodedTypesLists encodedTypesLists = new BinaryEncodedTypesLists();
-                SortOrderLists sortOrders = new SortOrderLists();
+                ListOfEncodedTypeFlags encodedTypesLists = new ListOfEncodedTypeFlags();
+                SortOrderList sortOrders = new SortOrderList();
                 do {
                     encodedTypesLists.addBinaryEncodedDataTypes(false);
                     sortOrders.addSortOrderAsc(datum.getSortOrder() == SortOrder.ASC);
@@ -135,7 +135,7 @@ public class RowKeyValueAccessor implements Writable {
                     pos++;
                 } while (pos < index && datum.getDataType().isFixedWidth());
                 offsets[nOffsets] = offset; // Encode fixed byte offset as positive
-                binaryEncodedTypesLists[nOffsets] = encodedTypesLists;
+                listOfEncodedTypesLists[nOffsets] = encodedTypesLists;
                 sortOrderLists[nOffsets++] = sortOrders;
             } else {
                 // For continuous variable length data type columns, accumulate how many
@@ -143,8 +143,8 @@ public class RowKeyValueAccessor implements Writable {
                 // VARBINARY_ENCODED and other variable length types. This information is
                 // crucial to figure out which separator bytes to use while going through each
                 // column value.
-                BinaryEncodedTypesLists encodedTypesLists = new BinaryEncodedTypesLists();
-                SortOrderLists sortOrders = new SortOrderLists();
+                ListOfEncodedTypeFlags encodedTypesLists = new ListOfEncodedTypeFlags();
+                SortOrderList sortOrders = new SortOrderList();
                 do {
                     encodedTypesLists.addBinaryEncodedDataTypes(
                         datum.getDataType() == PVarbinaryEncoded.INSTANCE);
@@ -154,17 +154,17 @@ public class RowKeyValueAccessor implements Writable {
                     pos++;
                 } while (pos < index && !datum.getDataType().isFixedWidth());
                 offsets[nOffsets] = -offset; // Encode number of variable length columns as negative
-                binaryEncodedTypesLists[nOffsets] = encodedTypesLists;
+                listOfEncodedTypesLists[nOffsets] = encodedTypesLists;
                 sortOrderLists[nOffsets++] = sortOrders;
             }
         }
         if (nOffsets < offsets.length) {
             this.offsets = Arrays.copyOf(offsets, nOffsets);
-            this.binaryEncodedTypesLists = Arrays.copyOf(binaryEncodedTypesLists, nOffsets);
+            this.listOfEncodedTypesLists = Arrays.copyOf(listOfEncodedTypesLists, nOffsets);
             this.sortOrderLists = Arrays.copyOf(sortOrderLists, nOffsets);
         } else {
             this.offsets = offsets;
-            this.binaryEncodedTypesLists = binaryEncodedTypesLists;
+            this.listOfEncodedTypesLists = listOfEncodedTypesLists;
             this.sortOrderLists = sortOrderLists;
         }
         // Remember this so that we don't bother looking for the null separator byte in this case
@@ -193,7 +193,7 @@ public class RowKeyValueAccessor implements Writable {
      * [false, true, false] because D and F are not VARBINARY_ENCODED whereas E is
      * VARBINARY_ENCODED.
      */
-    private BinaryEncodedTypesLists[] binaryEncodedTypesLists;
+    private ListOfEncodedTypeFlags[] listOfEncodedTypesLists;
     /**
      * An array of SortOrderLists. Each element of SortOrderLists consists of list of booleans
      * representing whether the given column is ASC of DESC order. All the continuous fixed length
@@ -206,7 +206,7 @@ public class RowKeyValueAccessor implements Writable {
      * ordered column. sortOrderLists[1] consists of List<Boolean> as [false, true, true] because
      * D is DESC whereas E and F are ASC ordered columns.
      */
-    private SortOrderLists[] sortOrderLists;
+    private SortOrderList[] sortOrderLists;
     private boolean isFixedLength;
     private boolean hasSeparator;
 
@@ -250,7 +250,7 @@ public class RowKeyValueAccessor implements Writable {
         length >>= 2;
         offsets = ByteUtil.deserializeVIntArray(input, length);
 
-        this.binaryEncodedTypesLists = null;
+        this.listOfEncodedTypesLists = null;
         this.sortOrderLists = null;
 
         // New client that supports new structure of RowKeyValueAccessor with additional fields
@@ -327,22 +327,22 @@ public class RowKeyValueAccessor implements Writable {
 
         int binaryEncodedTypesListsLen = WritableUtils.readVInt(input);
         if (binaryEncodedTypesListsLen == 0) {
-            this.binaryEncodedTypesLists = new BinaryEncodedTypesLists[0];
+            this.listOfEncodedTypesLists = new ListOfEncodedTypeFlags[0];
         } else {
             byte[] binaryEncodedTypesListsBytes = new byte[binaryEncodedTypesListsLen];
             input.readFully(binaryEncodedTypesListsBytes, 0, binaryEncodedTypesListsLen);
-            this.binaryEncodedTypesLists = JacksonUtil.getObjectReader()
-                .readValue(binaryEncodedTypesListsBytes, BinaryEncodedTypesLists[].class);
+            this.listOfEncodedTypesLists = JacksonUtil.getObjectReader()
+                .readValue(binaryEncodedTypesListsBytes, ListOfEncodedTypeFlags[].class);
         }
 
         int sortOrderListsLen = WritableUtils.readVInt(input);
         if (sortOrderListsLen == 0) {
-            this.sortOrderLists = new SortOrderLists[0];
+            this.sortOrderLists = new SortOrderList[0];
         } else {
             byte[] sortOrdersListsBytes = new byte[sortOrderListsLen];
             input.readFully(sortOrdersListsBytes, 0, sortOrderListsLen);
             this.sortOrderLists = JacksonUtil.getObjectReader()
-                .readValue(sortOrdersListsBytes, SortOrderLists[].class);
+                .readValue(sortOrdersListsBytes, SortOrderList[].class);
         }
     }
 
@@ -361,11 +361,11 @@ public class RowKeyValueAccessor implements Writable {
         // So, let's write separator bytes as ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR, followed
         // by serialization of new fields (binaryEncodedTypesLists and sortOrderLists).
         output.write(QueryConstants.ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR);
-        if (this.binaryEncodedTypesLists.length == 0) {
+        if (this.listOfEncodedTypesLists.length == 0) {
             WritableUtils.writeVInt(output, 0);
         } else {
             byte[] binaryEncodedTypesListsBytes =
-                JacksonUtil.getObjectWriter().writeValueAsBytes(this.binaryEncodedTypesLists);
+                JacksonUtil.getObjectWriter().writeValueAsBytes(this.listOfEncodedTypesLists);
             WritableUtils.writeVInt(output, binaryEncodedTypesListsBytes.length);
             if (binaryEncodedTypesListsBytes.length > 0) {
                 output.write(binaryEncodedTypesListsBytes);
@@ -395,14 +395,14 @@ public class RowKeyValueAccessor implements Writable {
      * @return byte offset to the start of the PK column value
      */
     public int getOffset(byte[] keyBuffer, int keyOffset) {
-        if (this.binaryEncodedTypesLists == null && this.sortOrderLists == null) {
+        if (this.listOfEncodedTypesLists == null && this.sortOrderLists == null) {
             return getOffsetWithNullTypeAndOrderInfo(keyBuffer, keyOffset);
         }
         // Use encoded offsets to navigate through row key buffer
         for (int i = 0; i < offsets.length; i++) {
             int offset = offsets[i];
-            BinaryEncodedTypesLists binaryEncodedTypesList = this.binaryEncodedTypesLists[i];
-            SortOrderLists sortOrderList = this.sortOrderLists[i];
+            ListOfEncodedTypeFlags binaryEncodedTypesList = this.listOfEncodedTypesLists[i];
+            SortOrderList sortOrderList = this.sortOrderLists[i];
             if (offset >= 0) { // If offset is non negative, it's a byte offset
                 keyOffset += offset;
             } else { // Else, a negative offset is the number of variable length values to skip

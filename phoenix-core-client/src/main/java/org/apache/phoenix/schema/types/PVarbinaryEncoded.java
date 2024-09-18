@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.schema.types;
 
-import java.text.Format;
-import java.util.Base64;
-
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.util.ByteUtil;
 
@@ -183,80 +179,8 @@ public class PVarbinaryEncoded extends PVarbinary {
     }
 
     @Override
-    public Object toObject(Object object, PDataType actualType) {
-        return actualType.toBytes(object);
-    }
-
-    @Override
-    public boolean isFixedWidth() {
-        return false;
-    }
-
-    @Override
-    public int estimateByteSize(Object o) {
-        byte[] value = (byte[]) o;
-        return value == null ? 1 : value.length;
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return null;
-    }
-
-    @Override
     public boolean isCoercibleTo(PDataType targetType) {
         return equalsAny(targetType, this, PBinary.INSTANCE, PVarbinary.INSTANCE);
     }
 
-    @Override
-    public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
-        if (lhs == null && rhs == null) {
-            return 0;
-        } else if (lhs == null) {
-            return -1;
-        } else if (rhs == null) {
-            return 1;
-        }
-        if (equalsAny(rhsType, this, PBinary.INSTANCE)) {
-            return Bytes.compareTo((byte[]) lhs, (byte[]) rhs);
-        } else {
-            byte[] rhsBytes = rhsType.toBytes(rhs);
-            return Bytes.compareTo((byte[]) lhs, rhsBytes);
-        }
-    }
-
-    @Override
-    public Object toObject(String value) {
-        if (value == null || value.length() == 0) {
-            return null;
-        }
-        Object object = Base64.getDecoder().decode(value);
-        if (object == null) { throw newIllegalDataException(
-                "Input: [" + value + "]  is not base64 encoded"); }
-        return object;
-    }
-
-    @Override
-    public String toStringLiteral(byte[] b, int o, int length, Format formatter) {
-        StringBuilder buf = new StringBuilder();
-        buf.append("X'");
-        if (length > 0) {
-            buf.append(Bytes.toHex(b, o, length));
-        }
-        buf.append("'");
-        return buf.toString();
-    }
-
-    @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        return toStringLiteral((byte[])o, 0, ((byte[]) o).length, formatter);
-    }
-
-    @Override
-    public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-        int length = maxLength != null && maxLength > 0 ? maxLength : 1;
-        byte[] b = new byte[length];
-        RANDOM.get().nextBytes(b);
-        return b;
-    }
 }
