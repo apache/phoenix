@@ -66,7 +66,7 @@ public class MetaDataCachingIT extends BaseTest {
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
 
-    private void createTable(Connection conn, String tableName, long updateCacheFrequency) throws SQLException {
+    protected void createTable(Connection conn, String tableName, long updateCacheFrequency) throws SQLException {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER, v3 VARCHAR, v4 Date, "
                 +" v5 BIGINT, v6 SMALLINT)" + (updateCacheFrequency == 0 ? "" : "UPDATE_CACHE_FREQUENCY="+updateCacheFrequency));
