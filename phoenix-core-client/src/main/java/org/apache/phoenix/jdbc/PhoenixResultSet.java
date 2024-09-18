@@ -50,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.phoenix.monitoring.TableMetricsManager;
+import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.commons.lang3.ArrayUtils;
@@ -94,7 +96,6 @@ import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
-import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.SQLCloseable;
@@ -390,8 +391,11 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
     @Override
     public byte[] getBytes(int columnIndex) throws SQLException {
         checkCursorState();
-        byte[] value = (byte[])getRowProjector().getColumnProjector(columnIndex-1)
-                .getValue(currentRow, PVarbinary.INSTANCE, ptr);
+        ColumnProjector projector = getRowProjector().getColumnProjector(columnIndex - 1);
+        PDataType<?> dataType = projector.getExpression().getDataType();
+        byte[] value = (byte[]) projector.getValue(currentRow,
+            dataType == PVarbinaryEncoded.INSTANCE ? PVarbinaryEncoded.INSTANCE
+                : PVarbinary.INSTANCE, ptr);
         wasNull = (value == null);
         return value;
     }

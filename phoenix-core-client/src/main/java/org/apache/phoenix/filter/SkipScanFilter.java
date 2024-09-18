@@ -40,6 +40,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
@@ -576,13 +577,19 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     private int setStartKey(ImmutableBytesWritable ptr, int offset, int i, int nSlots, boolean atEndOfKey) {
         int length = ptr.getOffset() - offset;
-        startKey = copyKey(startKey, length + this.maxKeyLength, ptr.get(), offset, length);
+        startKey = copyKey(startKey, length + this.maxKeyLength + 1, ptr.get(), offset, length);
         startKeyLength = length;
         // Add separator byte if we're at end of the key, since trailing separator bytes are stripped
-        if (atEndOfKey && i > 0 && i-1 < nSlots) {
-            Field field = schema.getField(i-1);
+        if (atEndOfKey && i > 0 && i - 1 < nSlots) {
+            Field field = schema.getField(i - 1);
             if (!field.getDataType().isFixedWidth()) {
-                startKey[startKeyLength++] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), true, field);
+                byte[] sepBytes = SchemaUtil.getSeparatorBytes(field.getDataType(),
+                    schema.rowKeyOrderOptimizable(),
+                    true,
+                    field.getSortOrder());
+                for (byte sepByte : sepBytes) {
+                    startKey[startKeyLength++] = sepByte;
+                }
             }
         }
         startKeyLength += setKey(Bound.LOWER, startKey, startKeyLength, i);

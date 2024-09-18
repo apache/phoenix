@@ -44,6 +44,7 @@ import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 
@@ -1038,18 +1039,19 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
         return transformDNF(where, plan.getContext());
     }
+
     @Test
     public void testWhereInclusion() throws SQLException {
         PhoenixConnection pconn = DriverManager.getConnection(getUrl(),
                 PropertiesUtil.deepCopy(TEST_PROPERTIES)).unwrap(PhoenixConnection.class);
         String ddl = "create table myTable(ID varchar primary key, A integer, B varchar, " +
-                "C date, D double, E integer, F json)";
+                "C date, D double, E integer, F json, G varbinary, H varbinary_encoded)";
         pconn.createStatement().execute(ddl);
         ddl = "create table myTableDesc(ID varchar primary key DESC, A integer, B varchar, " +
-                "C date, D double, E integer, F json)";
+                "C date, D double, E integer, F json, G varbinary, H varbinary_encoded)";
         pconn.createStatement().execute(ddl);
 
-        final int NUM = 20;
+        final int NUM = 25;
         String[] containingQueries = new String[NUM];
         String[] containedQueries = new String[NUM];
 
@@ -1122,11 +1124,41 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
         containingQueries[19] = "select * from myTable where JSON_VALUE(F, '$.type') IN ('i3', 'i7', 'i1') and A < 10";
         containedQueries[19] = "select * from myTableDesc where JSON_VALUE(F, '$.type') IN ('i1', 'i7') and A < 10 / 2";
 
+        String val1 = Base64.getEncoder().encodeToString(Bytes.toBytes("Hello"));
+        String val2 = Base64.getEncoder().encodeToString(Bytes.toBytes("Hello1"));
+        String val3 = Base64.getEncoder().encodeToString(Bytes.toBytes("Hello2"));
+        containingQueries[20] =
+            "select * from myTable where ID = 'i1' or (ID = 'i2' and G > '" + val1 + "')";
+        containedQueries[20] =
+            "select * from myTable where ID = 'i1' or (ID = 'i2' and G > '" + val2 + "')";
+
+        containingQueries[21] =
+            "select * from myTable where ID = 'i1' or (ID = 'i2' and H > '" + val1 + "')";
+        containedQueries[21] =
+            "select * from myTable where ID = 'i1' or (ID = 'i2' and H > '" + val2 + "')";
+
+        containingQueries[22] =
+            "select * from myTable where G > '" + val1 + "' and G < '" + val3 + "'";
+        containedQueries[22] = "select * from myTable where (G = '" + val2 + "') ";
+
+        containingQueries[23] =
+            "select * from myTable where H > '" + val1 + "' and H < '" + val3 + "'";
+        containedQueries[23] = "select * from myTable where (H = '" + val2 + "') ";
+
+        containingQueries[24] =
+            "select * from myTable where (G, H) IN (('" + val1 + "', '" + val2 + "'), ('" + val1
+                + "', '" + val3 + "'), ('" + val2 + "', '" + val3 + "'))";
+        containedQueries[24] =
+            "select * from myTable where (G, H) IN (('" + val1 + "', '" + val3 + "'), ('" + val2
+                + "', '" + val3 + "'))";
+
         for (int i = 0; i < NUM; i++) {
-            Assert.assertTrue(WhereCompiler.contains(getDNF(pconn, containingQueries[i]),
-                    getDNF(pconn, containedQueries[i])));
-            Assert.assertFalse(WhereCompiler.contains(getDNF(pconn, containedQueries[i]),
-                    getDNF(pconn, containingQueries[i])));
+            Assert.assertTrue("Containing query: " + containingQueries[i] + " , Contained query: "
+                + containedQueries[i], WhereCompiler.contains(getDNF(pconn, containingQueries[i]),
+                getDNF(pconn, containedQueries[i])));
+            Assert.assertFalse("Containing query: " + containingQueries[i] + " , Contained query: "
+                + containedQueries[i], WhereCompiler.contains(getDNF(pconn, containedQueries[i]),
+                getDNF(pconn, containingQueries[i])));
         }
     }
 
