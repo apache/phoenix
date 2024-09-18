@@ -224,7 +224,9 @@ public enum SQLExceptionCode {
     // Primary/row key related exceptions.
     PRIMARY_KEY_WITH_FAMILY_NAME(1003, "42J01", "Primary key columns must not have a family name."),
     PRIMARY_KEY_OUT_OF_ORDER(1004, "42J02", "Order of columns in primary key constraint must match the order in which they're declared."),
-    VARBINARY_IN_ROW_KEY(1005, "42J03", "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key."),
+    VARBINARY_IN_ROW_KEY(1005, "42J03",
+        "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key. "
+            + "For Binary types, you can use VARBINARY_ENCODED for early part of multi-part row key."),
     NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to primary key."),
     VARBINARY_LAST_PK(1015, "42J04", "Cannot add column to table when the last PK column is of type VARBINARY or ARRAY."),
     NULLABLE_FIXED_WIDTH_LAST_PK(1023, "42J04", "Cannot add column to table when the last PK column is nullable and fixed width."),
