@@ -18,8 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -48,10 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.sql.Types;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -257,7 +252,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
 
     private Object getColumnValue(byte[] cellValue, int offset, int length, PDataType dataType) {
         Object value;
-        if (dataType.getSqlType() == Types.BINARY) {
+        if (CDCUtil.isBinaryType(dataType)) {
             value = ImmutableBytesPtr.copyBytesIfNecessary(cellValue, offset, length);
         } else {
             value = dataType.toObject(cellValue, offset, length);
