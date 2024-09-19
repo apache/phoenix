@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PSchema;
 import org.apache.phoenix.thirdparty.com.google.common.cache.CacheBuilder;
@@ -52,6 +53,17 @@ class PMetaDataCache {
                         String key = notification.getKey().toString();
                         LOGGER.debug("Expiring " + key + " because of "
                                 + notification.getCause().name());
+                        if (notification.wasEvicted()) {
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_EVICTION_COUNTER
+                                    .increment();
+                        } else {
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER
+                                    .increment();
+                        }
+                        if (notification.getValue() != null) {
+                            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE
+                                    .update(-notification.getValue().getEstimatedSize());
+                        }
                     }
                 })
                 .maximumWeight(maxByteSize)

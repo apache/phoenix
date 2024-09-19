@@ -384,4 +384,16 @@ public class SelectStatement implements FilterableStatement {
         return offset;
     }
 
+    public boolean haveGroupBy() {
+        return this.getGroupBy() != null && this.getGroupBy().size() > 0
+                || !this.isAggregate()
+                        && this.isDistinct()
+                        && this.getSelect() != null
+                        && this.getSelect().size() > 0;
+    }
+
+    public boolean haveOrderBy() {
+        return this.getOrderBy() != null && this.getOrderBy().size() > 0;
+    }
+
 }

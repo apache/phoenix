@@ -150,4 +150,12 @@ public interface IndexBuilder extends Stoppable {
   public List<Mutation> executeAtomicOp(Increment inc) throws IOException;
 
   public ReplayWrite getReplayWrite(Mutation m);
+
+  /**
+   * True if mutation needs to return result.
+   *
+   * @param m Mutation object.
+   * @return True if mutation needs to return result, False otherwise.
+   */
+  boolean returnResult(Mutation m);
 }

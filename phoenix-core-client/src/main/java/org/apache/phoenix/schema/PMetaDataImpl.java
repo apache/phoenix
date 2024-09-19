@@ -121,6 +121,9 @@ public class PMetaDataImpl implements PMetaData {
     public void updateResolvedTimestamp(PTable table, long resolvedTimestamp) throws SQLException {
         metaData.put(table.getKey(), tableRefFactory.makePTableRef(table,
                 this.timeKeeper.getCurrentTime(), resolvedTimestamp));
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                table.getEstimatedSize());
     }
 
     @Override
@@ -157,12 +160,20 @@ public class PMetaDataImpl implements PMetaData {
         
         if (newParentTable != null) { // Upsert new index table into parent data table list
             metaData.put(newParentTable.getKey(), newParentTableRef);
-            metaData.put(table.getKey(), tableRef);
-        } else {
-            metaData.put(table.getKey(), tableRef);
+            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                    newParentTable.getEstimatedSize());
         }
+        metaData.put(table.getKey(), tableRef);
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                table.getEstimatedSize());
+
         for (PTable index : table.getIndexes()) {
             metaData.put(index.getKey(), tableRefFactory.makePTableRef(index, this.timeKeeper.getCurrentTime(), resolvedTime));
+            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+            GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                    index.getEstimatedSize());
         }
         if (table.getPhysicalName(true) != null &&
                 !Strings.isNullOrEmpty(table.getPhysicalName(true).getString()) && !table.getPhysicalName(true).getString().equals(table.getTableName().getString())) {
@@ -212,6 +223,9 @@ public class PMetaDataImpl implements PMetaData {
                         }
                         PTable parentTable = parentTableBuilder.build();
                         metaData.put(parentTable.getKey(), tableRefFactory.makePTableRef(parentTable, this.timeKeeper.getCurrentTime(), parentTableRef.getResolvedTimeStamp()));
+                        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+                        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                                parentTable.getEstimatedSize());
                         break;
                     }
                 }
@@ -258,6 +272,9 @@ public class PMetaDataImpl implements PMetaData {
                     .build();
         }
         tables.put(table.getKey(), tableRefFactory.makePTableRef(table, this.timeKeeper.getCurrentTime(), resolvedTime));
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                table.getEstimatedSize());
     }
 
     @Override
@@ -283,6 +300,9 @@ public class PMetaDataImpl implements PMetaData {
     @Override
     public void addFunction(PFunction function) throws SQLException {
         this.metaData.functions.put(function.getKey(), function);
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                function.getEstimatedSize());
     }
 
     @Override
@@ -314,6 +334,9 @@ public class PMetaDataImpl implements PMetaData {
     @Override
     public void addSchema(PSchema schema) throws SQLException {
         this.metaData.schemas.put(schema.getSchemaKey(), schema);
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ADD_COUNTER.increment();
+        GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.update(
+                schema.getEstimatedSize());
     }
 
     @Override

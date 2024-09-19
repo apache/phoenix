@@ -36,6 +36,7 @@ import org.apache.phoenix.memory.GlobalMemoryManager;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PMetaDataEntity;
+import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
 import org.apache.phoenix.util.SizedUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +63,8 @@ public class GlobalCache extends TenantCacheImpl {
     private final ConcurrentMap<ImmutableBytesWritable,TenantCache> perTenantCacheMap = new ConcurrentHashMap<ImmutableBytesWritable,TenantCache>();
     // Cache for lastest PTable for a given Phoenix table
     private volatile Cache<ImmutableBytesPtr,PMetaDataEntity> metaDataCache;
-    
+    private MetricsMetadataSource metricsSource;
+
     public long clearTenantCache() {
         long unfreedBytes = getMemoryManager().getMaxMemory() - getMemoryManager().getAvailableMemory();
         if (unfreedBytes != 0 && LOGGER.isDebugEnabled()) {
@@ -109,6 +111,19 @@ public class GlobalCache extends TenantCacheImpl {
                                 @Override
                                 public int weigh(ImmutableBytesPtr key, PMetaDataEntity table) {
                                     return SizedUtil.IMMUTABLE_BYTES_PTR_SIZE + key.getLength() + table.getEstimatedSize();
+                                }
+                            })
+                            .removalListener(notification -> {
+                                if (this.metricsSource != null) {
+                                    if (notification.wasEvicted()) {
+                                        metricsSource.incrementMetadataCacheEvictionCount();
+                                    } else {
+                                        metricsSource.incrementMetadataCacheRemovalCount();
+                                    }
+                                    if (notification.getValue() != null) {
+                                        metricsSource.decrementMetadataCacheUsedSize(
+                                                notification.getValue().getEstimatedSize());
+                                    }
                                 }
                             })
                             .build();
@@ -192,6 +207,10 @@ public class GlobalCache extends TenantCacheImpl {
             }
         }
         return tenantCache;
+    }
+
+    public void setMetricsSource(MetricsMetadataSource metricsSource) {
+        this.metricsSource = metricsSource;
     }
 
     public static class FunctionBytesPtr extends ImmutableBytesPtr {

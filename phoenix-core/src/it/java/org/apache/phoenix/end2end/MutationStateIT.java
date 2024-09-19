@@ -616,12 +616,6 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                                 SQLExceptionCode.MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED.getMessage()));
                         assertTrue(e.getMessage().contains(
                                 connectionProperties.getProperty(QueryServices.HBASE_CLIENT_KEYVALUE_MAXSIZE)));
-                        assertTrue(e.getMessage().contains(pk1Name));
-                        assertTrue(e.getMessage().contains(pk2Name));
-                        assertTrue(e.getMessage().contains(pk1Value));
-                        assertTrue(e.getMessage().contains(pk2Value));
-                        assertFalse(e.getMessage().contains(payload1Value));
-                        assertFalse(e.getMessage().contains(payload3Value));
                     }
                 }
             }

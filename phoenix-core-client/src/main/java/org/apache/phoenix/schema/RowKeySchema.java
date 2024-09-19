@@ -23,6 +23,7 @@ import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
@@ -40,7 +41,10 @@ import org.apache.phoenix.util.SchemaUtil;
 public class RowKeySchema extends ValueSchema {
     public static final RowKeySchema EMPTY_SCHEMA = new RowKeySchema(0,Collections.<Field>emptyList(), true)
     ;
-    
+
+    private static final int SEPARATOR_OFFSET_NON_ENCODED_TYPES = 1;
+    private static final int SEPARATOR_OFFSET_ENCODED_TYPES = 2;
+
     public RowKeySchema() {
     }
     
@@ -159,30 +163,61 @@ public class RowKeySchema extends ValueSchema {
         // If positioned at SEPARATOR_BYTE, skip it.
         // Don't look back at previous fields if this is our first next call, as
         // we may have a partial key for RVCs that doesn't include the leading field.
-        if (position > 0 && !isFirst && !getField(position-1).getDataType().isFixedWidth()) {
-            ptr.set(ptr.get(), ptr.getOffset()+ptr.getLength()+1, 0);
+        if (position > 0 && !isFirst && !getField(position - 1).getDataType().isFixedWidth()) {
+            if (getField(position - 1).getDataType() != PVarbinaryEncoded.INSTANCE) {
+                ptr.set(ptr.get(),
+                    ptr.getOffset() + ptr.getLength() + SEPARATOR_OFFSET_NON_ENCODED_TYPES, 0);
+            } else {
+                ptr.set(ptr.get(),
+                    ptr.getOffset() + ptr.getLength() + SEPARATOR_OFFSET_ENCODED_TYPES, 0);
+            }
         }
         Field field = this.getField(position);
         if (field.getDataType().isFixedWidth()) {
             // It is possible that the number of remaining row key bytes are less than the fixed
             // width size. See PHOENIX-3968.
-            ptr.set(ptr.get(), ptr.getOffset(), Math.min(maxOffset - ptr.getOffset(), field.getByteSize()));
+            ptr.set(ptr.get(), ptr.getOffset(),
+                Math.min(maxOffset - ptr.getOffset(), field.getByteSize()));
         } else {
-            if (position+1 == getFieldCount() ) {
+            if (position + 1 == getFieldCount()) {
                 // Last field has no terminator unless it's descending sort order
                 int len = maxOffset - ptr.getOffset();
-                ptr.set(ptr.get(), ptr.getOffset(), maxOffset - ptr.getOffset() - (SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, len == 0, field) == QueryConstants.DESC_SEPARATOR_BYTE ? 1 : 0));
+                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                    ptr.set(ptr.get(), ptr.getOffset(), maxOffset - ptr.getOffset() - (
+                        SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, len == 0, field)
+                            == QueryConstants.DESC_SEPARATOR_BYTE ? 1 : 0));
+                } else {
+                    boolean ascSort = !rowKeyOrderOptimizable || len == 0
+                        || field.getSortOrder() == SortOrder.ASC;
+                    int lastFieldTerminatorLen = ascSort ? 0 : 2;
+                    ptr.set(ptr.get(), ptr.getOffset(),
+                        maxOffset - ptr.getOffset() - lastFieldTerminatorLen);
+                }
             } else {
                 byte[] buf = ptr.get();
                 int offset = ptr.getOffset();
-                // First byte 
-                if (offset < maxOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
-                    byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
-                    do {
-                        offset++;
-                    } while (offset < maxOffset && buf[offset] != sepByte);
+                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                    if (offset < maxOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
+                        byte sepByte =
+                            SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
+                        do {
+                            offset++;
+                        } while (offset < maxOffset && buf[offset] != sepByte);
+                    }
+                    ptr.set(buf, ptr.getOffset(), offset - ptr.getOffset());
+                } else {
+                    if (offset < maxOffset && !SchemaUtil
+                        .areSeparatorBytesForVarBinaryEncoded(buf, offset, SortOrder.ASC)) {
+                        boolean ascSort =
+                            !rowKeyOrderOptimizable || field.getSortOrder() == SortOrder.ASC;
+                        do {
+                            offset++;
+                        } while (offset < maxOffset
+                            && !SchemaUtil.areSeparatorBytesForVarBinaryEncoded(buf, offset,
+                            ascSort ? SortOrder.ASC : SortOrder.DESC));
+                    }
+                    ptr.set(buf, ptr.getOffset(), offset - ptr.getOffset());
                 }
-                ptr.set(buf, ptr.getOffset(), offset - ptr.getOffset());
             }
         }
         return ptr.getLength() > 0;
@@ -232,11 +267,24 @@ public class RowKeySchema extends ValueSchema {
             byte[] buf = ptr.get();
             int offset = ptr.getOffset()-1-offsetAdjustment;
             // Separator always zero byte if zero length
-            if (offset > minOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
-                byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
-                do {
-                    offset--;
-                } while (offset > minOffset && buf[offset] != sepByte);
+            if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                if (offset > minOffset && buf[offset] != QueryConstants.SEPARATOR_BYTE) {
+                    byte sepByte =
+                        SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, false, field);
+                    do {
+                        offset--;
+                    } while (offset > minOffset && buf[offset] != sepByte);
+                }
+            } else {
+                if (offset > minOffset && SchemaUtil.areSeparatorBytesForVarBinaryEncoded(buf,
+                    offset, SortOrder.ASC)) {
+                    boolean ascSort =
+                        !rowKeyOrderOptimizable || field.getSortOrder() == SortOrder.ASC;
+                    do {
+                        offset--;
+                    } while (offset > minOffset && !SchemaUtil.areSeparatorBytesForVarBinaryEncoded(
+                        buf, offset, ascSort ? SortOrder.ASC : SortOrder.DESC));
+                }
             }
             if (offset == minOffset) { // shouldn't happen
                 ptr.set(buf, minOffset, ptr.getOffset()-minOffset-1);

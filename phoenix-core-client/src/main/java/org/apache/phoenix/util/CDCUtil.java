@@ -147,6 +147,7 @@ public class CDCUtil {
         int sqlType = dataType.getSqlType();
         return (sqlType == Types.BINARY
                 || sqlType == Types.VARBINARY
-                || sqlType == Types.LONGVARBINARY);
+                || sqlType == Types.LONGVARBINARY
+                || dataType.getSqlType() == PDataType.VARBINARY_ENCODED_TYPE);
     }
 }

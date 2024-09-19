@@ -180,4 +180,9 @@ public class IndexBuildManager implements Stoppable {
   public ReplayWrite getReplayWrite(Mutation m) throws IOException {
     return this.delegate.getReplayWrite(m);
   }
+
+  public boolean returnResult(Mutation m) {
+    return delegate.returnResult(m);
+  }
+
 }
