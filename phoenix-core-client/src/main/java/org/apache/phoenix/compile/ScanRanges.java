@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
@@ -104,7 +105,7 @@ public class ScanRanges {
             useSkipScan = keyRanges.size() > 1;
             // Treat as binary if descending because we've got a separator byte at the end
             // which is not part of the value.
-            if (keys.size() > 1 || SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, schema.getField(schema.getFieldCount()-1)) == QueryConstants.DESC_SEPARATOR_BYTE) {
+            if (keys.size() > 1 || hasTrailingDescSeparatorByte(schema)) {
                 schema = SchemaUtil.VAR_BINARY_SCHEMA;
                 slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
             } else {
@@ -166,6 +167,18 @@ public class ScanRanges {
             return NOTHING;
         }
         return new ScanRanges(schema, slotSpan, sortedRanges, scanRange, useSkipScan, isPointLookup, nBuckets, rowTimestampRange);
+    }
+
+    private static boolean hasTrailingDescSeparatorByte(RowKeySchema schema) {
+        return
+            (schema.getField(schema.getFieldCount() - 1).getDataType() != PVarbinaryEncoded.INSTANCE
+                && SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false,
+                schema.getField(schema.getFieldCount() - 1)) == QueryConstants.DESC_SEPARATOR_BYTE)
+                || (schema.getField(schema.getFieldCount() - 1).getDataType()
+                == PVarbinaryEncoded.INSTANCE && SchemaUtil
+                .getSeparatorBytesForVarBinaryEncoded(schema.rowKeyOrderOptimizable(), false,
+                    schema.getField(schema.getFieldCount() - 1).getSortOrder())
+                == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES);
     }
 
     private SkipScanFilter filter;

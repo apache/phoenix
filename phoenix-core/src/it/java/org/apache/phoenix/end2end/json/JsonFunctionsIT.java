@@ -206,6 +206,20 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
             assertTrue(rs.next());
             assertEquals("Bristol", rs.getString(1));
 
+            query =
+                "SELECT BSON_VALUE(jsoncol, 'info.address.town', 'VARCHAR') FROM " + tableName
+                    + " WHERE BSON_VALUE(jsoncol, 'infox.type', 'VARCHAR') IS NULL";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals("Bristol", rs.getString(1));
+
+            query =
+                "SELECT BSON_VALUE(jsoncol, 'info.type', 'DOUBLE') FROM " + tableName
+                    + " WHERE BSON_VALUE(jsoncol, 'info.type', 'VARCHAR') IS NOT NULL";
+            rs = conn.createStatement().executeQuery(query);
+            assertTrue(rs.next());
+            assertEquals(1.0, rs.getDouble(1), 0.0);
+
             conn.createStatement().execute("UPSERT INTO " + tableName + " (pk, col) VALUES(1,2" +
                     ") ON DUPLICATE KEY UPDATE jsoncol = JSON_MODIFY(jsoncol, '$.info.tags[1]', '\"alto1\"')");
 

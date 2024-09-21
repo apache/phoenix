@@ -23,17 +23,23 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Supplier;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
+import org.apache.phoenix.execute.UnionPlan;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.OrderByNode;
+import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PName;
@@ -80,12 +86,6 @@ public class UnionCompiler {
     public static TableRef contructSchemaTable(PhoenixStatement statement, List<QueryPlan> plans,
             List<AliasedNode> selectNodes) throws SQLException {
         List<TargetDataExpression> targetTypes = checkProjectionNumAndExpressions(plans);
-        for (int i = 0; i < plans.size(); i++) {
-            QueryPlan subPlan = plans.get(i);
-            TupleProjector projector = getTupleProjector(subPlan.getProjector(), targetTypes);
-            subPlan = new TupleProjectionPlan(subPlan, projector, null, null);
-            plans.set(i, subPlan);
-        }
         QueryPlan plan = plans.get(0);
         List<PColumn> projectedColumns = new ArrayList<PColumn>();
         for (int i = 0; i < plan.getProjector().getColumnCount(); i++) {
@@ -161,13 +161,13 @@ public class UnionCompiler {
     }
 
     private static TupleProjector getTupleProjector(RowProjector rowProj,
-            List<TargetDataExpression> targetTypes) throws SQLException {
-        Expression[] exprs = new Expression[targetTypes.size()];
+            List<PColumn> columns) throws SQLException {
+        Expression[] exprs = new Expression[columns.size()];
         int i = 0;
         for (ColumnProjector colProj : rowProj.getColumnProjectors()) {
             exprs[i] = CoerceExpression.create(colProj.getExpression(),
-                targetTypes.get(i).getType(), targetTypes.get(i).getSortOrder(),
-                targetTypes.get(i).getMaxLength());
+                    columns.get(i).getDataType(), columns.get(i).getSortOrder(),
+                    columns.get(i).getMaxLength());
             i++;
         }
         return new TupleProjector(exprs);
@@ -217,5 +217,107 @@ public class UnionCompiler {
         public void setSortOrder(SortOrder sortOrder) {
             this.sortOrder = sortOrder;
         }
+    }
+
+    static List<QueryPlan> convertToTupleProjectionPlan(
+            List<QueryPlan> plans,
+            TableRef tableRef,
+            StatementContext statementContext) throws SQLException {
+        List<PColumn> columns =  tableRef.getTable().getColumns();
+        for (int i = 0; i < plans.size(); i++) {
+            QueryPlan subPlan = plans.get(i);
+            TupleProjector projector = getTupleProjector(subPlan.getProjector(), columns);
+            subPlan = new TupleProjectionPlan(subPlan, projector, statementContext, null);
+            plans.set(i, subPlan);
+        }
+        return plans;
+    }
+
+    /**
+     * If every subquery in {@link UnionPlan} is ordered, and {@link QueryPlan#getOutputOrderBys}
+     * of each subquery are equal(absolute equality or the same column name is unnecessary, just
+     * column types are compatible and columns count is same), and at the same time the outer
+     * query of {@link UnionPlan} has group by or order by, we would further examine whether
+     * maintaining this order for the entire {@link UnionPlan} can compile out the outer query's
+     * group by or order by. If it is sure, then {@link UnionPlan} just to perform a simple
+     * merge on the output of each subquery to ensure the overall order of the union all;
+     * otherwise, {@link UnionPlan} would not perform any special processing on the output
+     * of the subqueries.
+     */
+    static void optimizeUnionOrderByIfPossible(
+            UnionPlan innerUnionPlan,
+            SelectStatement outerSelectStatement,
+            Supplier<StatementContext> statementContextCreator) throws SQLException {
+        innerUnionPlan.enableCheckSupportOrderByOptimize();
+        if (!innerUnionPlan.isSupportOrderByOptimize()) {
+            return;
+        }
+
+        if (!isOptimizeUnionOrderByDeserved(
+                innerUnionPlan, outerSelectStatement, statementContextCreator)) {
+            // If maintain the order for the entire UnionPlan(by merge on the output of each
+            // subquery) could not compile out the outer query's group by or order by, we would
+            // not perform any special processing on the output of the subqueries.
+            innerUnionPlan.disableSupportOrderByOptimize();
+        }
+    }
+
+    /**
+     * If group by or order by in outerSelectStatement could be compiled out,
+     * this optimization is deserved.
+     */
+    private static boolean isOptimizeUnionOrderByDeserved(
+            UnionPlan innerUnionPlan,
+            SelectStatement outerSelectStatement,
+            Supplier<StatementContext> statementContextCreator) throws SQLException {
+        if (!outerSelectStatement.haveGroupBy() && !outerSelectStatement.haveOrderBy()) {
+            return false;
+        }
+
+        // Just to avoid additional ProjectionCompiler.compile, make the compilation of order by
+        // as simple as possible.
+        if (!outerSelectStatement.haveGroupBy()
+                && outerSelectStatement.getOrderBy().stream().anyMatch(OrderByNode::isIntegerLiteral)) {
+            return false;
+        }
+        StatementContext statementContext = statementContextCreator.get();
+        ColumnResolver columResover = innerUnionPlan.getContext().getResolver();
+        TableRef tableRef = innerUnionPlan.getTableRef();
+        statementContext.setResolver(columResover);
+        statementContext.setCurrentTable(tableRef);
+
+        if (outerSelectStatement.haveGroupBy()) {
+            // For outer query has group by, we check whether groupBy.isOrderPreserving is true.
+            GroupBy groupBy = GroupByCompiler.compile(statementContext, outerSelectStatement);
+            outerSelectStatement =
+                    HavingCompiler.rewrite(statementContext, outerSelectStatement, groupBy);
+            Expression where = WhereCompiler.compile(
+                    statementContext,
+                    outerSelectStatement,
+                    null,
+                    null,
+                    CompiledOffset.EMPTY_COMPILED_OFFSET.getByteOffset());
+            groupBy = groupBy.compile(statementContext, innerUnionPlan, where);
+            return groupBy.isOrderPreserving();
+        }
+
+        assert outerSelectStatement.haveOrderBy();
+        Expression where = WhereCompiler.compile(
+                statementContext,
+                outerSelectStatement,
+                null,
+                null,
+                CompiledOffset.EMPTY_COMPILED_OFFSET.getByteOffset());
+        // For outer query has order by, we check whether orderBy is OrderBy.FWD_ROW_KEY_ORDER_BY.
+        OrderBy orderBy = OrderByCompiler.compile(
+                statementContext,
+                outerSelectStatement,
+                GroupBy.EMPTY_GROUP_BY,
+                null,
+                CompiledOffset.EMPTY_COMPILED_OFFSET,
+                null,
+                innerUnionPlan,
+                where);
+        return orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY;
     }
 }

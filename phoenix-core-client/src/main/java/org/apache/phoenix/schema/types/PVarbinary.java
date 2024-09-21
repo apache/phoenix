@@ -110,7 +110,7 @@ public class PVarbinary extends PBinaryBase {
 
     @Override
     public boolean isCoercibleTo(PDataType targetType) {
-        return equalsAny(targetType, this, PBinary.INSTANCE);
+        return equalsAny(targetType, this, PBinary.INSTANCE, PVarbinaryEncoded.INSTANCE);
     }
 
     @Override

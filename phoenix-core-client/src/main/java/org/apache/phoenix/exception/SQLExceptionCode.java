@@ -224,7 +224,9 @@ public enum SQLExceptionCode {
     // Primary/row key related exceptions.
     PRIMARY_KEY_WITH_FAMILY_NAME(1003, "42J01", "Primary key columns must not have a family name."),
     PRIMARY_KEY_OUT_OF_ORDER(1004, "42J02", "Order of columns in primary key constraint must match the order in which they're declared."),
-    VARBINARY_IN_ROW_KEY(1005, "42J03", "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key."),
+    VARBINARY_IN_ROW_KEY(1005, "42J03",
+        "The VARBINARY/ARRAY type can only be used as the last part of a multi-part row key. "
+            + "For Binary types, you can use VARBINARY_ENCODED for early part of multi-part row key."),
     NOT_NULLABLE_COLUMN_IN_ROW_KEY(1006, "42J04", "Only nullable columns may be added to primary key."),
     VARBINARY_LAST_PK(1015, "42J04", "Cannot add column to table when the last PK column is of type VARBINARY or ARRAY."),
     NULLABLE_FIXED_WIDTH_LAST_PK(1023, "42J04", "Cannot add column to table when the last PK column is nullable and fixed width."),
@@ -511,6 +513,8 @@ public enum SQLExceptionCode {
     ROW_VALUE_CONSTRUCTOR_OFFSET_INTERNAL_ERROR(2015, "INT17", "Row Value Constructor Offset had an Unexpected Error."),
     ROW_VALUE_CONSTRUCTOR_OFFSET_NOT_ALLOWED_IN_QUERY(2016, "INT18", "Row Value Constructor Offset Not Allowed In Query."),
 
+    UPGRADE_BLOCKED(2017, "INT19", ""),
+
     OPERATION_TIMED_OUT(6000, "TIM01", "Operation timed out.", new Factory() {
         @Override
         public SQLException newException(SQLExceptionInfo info) {
@@ -629,6 +633,8 @@ public enum SQLExceptionCode {
 
     STALE_METADATA_CACHE_EXCEPTION(915, "43M26", "Stale metadata cache exception",
         info -> new StaleMetadataCacheException(info.getMessage())),
+
+    AUTO_COMMIT_NOT_ENABLED(916, "43M27", "Connection does not have auto-commit enabled"),
 
     //SQLCode for testing exceptions
     FAILED_KNOWINGLY_FOR_TEST(7777, "TEST", "Exception was thrown to test something");

@@ -21,8 +21,13 @@ import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
+import java.nio.charset.Charset;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -33,21 +38,37 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.tuple.ResultTuple;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PBson;
+import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.bson.BsonDocument;
+import org.bson.RawBsonDocument;
+import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -116,6 +137,177 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
         assertEquals(0, actualReturnValue);
 
         conn.close();
+    }
+
+    @Test
+    public void testReturnRowResult() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                    + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                    "IGNORE";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                    bsonDocument1, bsonDocument1, 123);
+
+            upsertSql =
+                    "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
+                            + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE"
+                            + " KEY IGNORE";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
+                    null, bsonDocument1, 123);
+
+            upsertSql =
+                    "UPSERT INTO " + tableName
+                            + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
+                            + "'pk003', 234, 'col2_000')";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
+                    null, bsonDocument1, 123);
+
+            upsertSql = "UPSERT INTO " + tableName
+                    + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
+                    + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                    + " END, "
+                    + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                    + "END, "
+                    + "COL3 = ?, "
+                    + "COL4 = 234";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
+                    bsonDocument2, bsonDocument2, 234);
+
+            upsertSql = "UPSERT INTO " + tableName
+                    + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
+                    + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                    + " END,"
+                    + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                    + "END";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
+                    , null, bsonDocument2, 234);
+        }
+    }
+
+    private static void validateReturnedRowAfterUpsert(Connection conn,
+                                                       String upsertSql,
+                                                       String tableName,
+                                                       Double col1,
+                                                       String col2,
+                                                       boolean success,
+                                                       BsonDocument inputDoc,
+                                                       BsonDocument expectedDoc,
+                                                       Integer col4)
+            throws SQLException {
+        final Pair<Integer, Tuple> resultPair;
+        if (inputDoc != null) {
+            PhoenixPreparedStatement ps =
+                    conn.prepareStatement(upsertSql).unwrap(PhoenixPreparedStatement.class);
+            ps.setObject(1, inputDoc);
+            resultPair = ps.executeUpdateReturnRow();
+        } else {
+            resultPair = conn.createStatement().unwrap(PhoenixStatement.class)
+                    .executeUpdateReturnRow(upsertSql);
+        }
+        assertEquals(success ? 1 : 0, resultPair.getFirst().intValue());
+        ResultTuple result = (ResultTuple) resultPair.getSecond();
+        PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
+
+        Cell cell =
+                result.getResult()
+                        .getColumnLatestCell(table.getColumns().get(3).getFamilyName().getBytes(),
+                                table.getColumns().get(3).getColumnQualifierBytes());
+        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 1);
+        assertEquals("pk000",
+                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 2);
+        assertEquals(-123.98,
+                PDouble.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 3);
+        assertEquals("pk003",
+                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        assertEquals(col1,
+                PDouble.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
+                        cell.getValueLength()));
+        cell = result.getResult()
+                .getColumnLatestCell(table.getColumns().get(4).getFamilyName().getBytes(),
+                        table.getColumns().get(4).getColumnQualifierBytes());
+        if (col2 != null) {
+            assertEquals(col2,
+                    PVarchar.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
+                            cell.getValueLength()));
+        } else {
+            assertNull(cell);
+        }
+
+        cell = result.getResult()
+                .getColumnLatestCell(table.getColumns().get(5).getFamilyName().getBytes(),
+                        table.getColumns().get(5).getColumnQualifierBytes());
+        if (expectedDoc != null) {
+            assertEquals(expectedDoc,
+                    PBson.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
+                            cell.getValueLength()));
+        } else {
+            assertNull(cell);
+        }
+
+        cell = result.getResult()
+                .getColumnLatestCell(table.getColumns().get(6).getFamilyName().getBytes(),
+                        table.getColumns().get(6).getColumnQualifierBytes());
+        if (col4 != null) {
+            assertEquals(col4,
+                    PInteger.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
+                            cell.getValueLength()));
+        } else {
+            assertNull(cell);
+        }
+    }
+
+    @Test
+    public void testReturnRowResultWithoutAutoCommit() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                    + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                    "IGNORE";
+            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                    bsonDocument1, bsonDocument1, 123);
+            throw new RuntimeException("Should not reach here");
+        } catch (SQLException e) {
+            Assert.assertEquals(SQLExceptionCode.AUTO_COMMIT_NOT_ENABLED.getErrorCode(),
+                    e.getErrorCode());
+        }
     }
 
     @Test
@@ -642,5 +834,10 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             return patchVersion >= 18;
         }
         return patchVersion >= 9;
+    }
+
+    private static String getJsonString(String jsonFilePath) throws IOException {
+        URL fileUrl = OnDuplicateKey2IT.class.getClassLoader().getResource(jsonFilePath);
+        return FileUtils.readFileToString(new File(fileUrl.getFile()), Charset.defaultCharset());
     }
 }

@@ -17,11 +17,16 @@
  */
 package org.apache.phoenix.end2end;
 
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.Version;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -31,6 +36,7 @@ import org.apache.phoenix.schema.types.PBinaryBase;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
@@ -39,6 +45,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -77,6 +84,10 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCBaseIT.class);
     protected static final ObjectMapper mapper = new ObjectMapper();
     static {
+        SimpleModule module = new SimpleModule("ChangeRow", new Version(1, 0, 0, null, null, null));
+        PhoenixArraySerializer phoenixArraySerializer = new PhoenixArraySerializer(PhoenixArray.class);
+        module.addSerializer(PhoenixArray.class, phoenixArraySerializer);
+        mapper.registerModule(module);
         mapper.configure(DeserializationFeature.USE_LONG_FOR_INTS, true);
     }
 
@@ -839,4 +850,17 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
         }
     };
+
+    public static class PhoenixArraySerializer extends StdSerializer<PhoenixArray> {
+        protected PhoenixArraySerializer(Class<PhoenixArray> t) {
+            super(t);
+        }
+
+        @Override
+        public void serialize(PhoenixArray value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+            gen.writeStartObject();
+            gen.writeStringField("elements", value.toString());
+            gen.writeEndObject();
+        }
+    }
 }
