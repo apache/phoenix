@@ -402,16 +402,22 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     //  - with a null
     //  - missing columns
     protected List<ChangeRow> generateChanges(long startTS, String[] tenantids, String tableName,
-            String datatableNameForDDL, CommitAdapter committer, String columnToDrop)
+            String datatableNameForDDL, CommitAdapter committer)
                             throws Exception {
+        return generateChanges(startTS, tenantids, tableName, datatableNameForDDL, committer,
+                "v3", 0);
+    }
+    protected List<ChangeRow> generateChanges(long startTS, String[] tenantids, String tableName,
+            String datatableNameForDDL, CommitAdapter committer, String columnToDrop, int startKey)
+            throws Exception {
         List<ChangeRow> changes = new ArrayList<>();
         EnvironmentEdgeManager.injectEdge(injectEdge);
         injectEdge.setValue(startTS);
         boolean dropColumnDone = false;
         committer.init();
-        Map<String, Object> rowid1 = new HashMap() {{ put("K", 1); }};
-        Map<String, Object> rowid2 = new HashMap() {{ put("K", 2); }};
-        Map<String, Object> rowid3 = new HashMap() {{ put("K", 3); }};
+        Map<String, Object> rowid1 = new HashMap() {{ put("K", startKey + 1); }};
+        Map<String, Object> rowid2 = new HashMap() {{ put("K", startKey + 2); }};
+        Map<String, Object> rowid3 = new HashMap() {{ put("K", startKey + 3); }};
         for (String tid: tenantids) {
             try (Connection conn = committer.getConnection(tid)) {
                 changes.add(addChange(conn, tableName,
@@ -428,8 +434,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                         }})
                 ));
                 committer.commit(conn);
-
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS,
                         rowid3, new TreeMap<String, Object>() {{
                             put("V1", 300L);
                             put("V2", null);
@@ -438,7 +444,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 101L);
                         }})
@@ -453,15 +460,18 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 dropColumnDone = true;
             }
             try (Connection conn = newConnection(tid)) {
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         null)));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         null)));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 102L);
                             put("V2", 1002L);
@@ -469,11 +479,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                 null)));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid2,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid2,
                         new TreeMap<String, Object>() {{
                             put("V1", 201L);
                             put("V2", null);
@@ -482,7 +494,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 )));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 103L);
                             put("V2", 1003L);
@@ -490,19 +503,22 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         null)));
                 committer.commit(conn);
 
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                startTS += 100;
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 104L);
                             put("V2", 1004L);
                         }})
                 ));
                 committer.commit(conn);
-
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
+                injectEdge.setValue(startTS += 100);
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
                         null)));
                 committer.commit(conn);
             }
@@ -510,6 +526,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         committer.reset();
         return changes;
     }
+
 
     protected void verifyChangesViaSCN(String tenantId, ResultSet rs, String dataTableName,
                                        Map<String, String> dataColumns, List<ChangeRow> changes,

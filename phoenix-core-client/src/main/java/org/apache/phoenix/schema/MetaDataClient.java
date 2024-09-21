@@ -1948,28 +1948,29 @@ public class MetaDataClient {
         populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
         Properties props = connection.getClientInfo();
         props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
+
+        String
+                dataTableFullName =
+                SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
+                        statement.getDataTable().getTableName());
+        String
+                createIndexSql =
+                "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
+                        + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName())
+                        + " ON " + dataTableFullName + " ("
+                        + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
+        List<String> indexProps = new ArrayList<>();
+        Object saltBucketNum = TableProperty.SALT_BUCKETS.getValue(tableProps);
+        if (saltBucketNum != null) {
+            indexProps.add("SALT_BUCKETS=" + saltBucketNum);
+        }
+        Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
+        if (columnEncodedBytes != null) {
+            indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
+        }
+        createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
         try (Connection internalConnection = QueryUtil.getConnection(props, connection.getQueryServices().getConfiguration())) {
             PhoenixStatement pstmt = new PhoenixStatement((PhoenixConnection) internalConnection);
-            String
-                    dataTableFullName =
-                    SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
-                            statement.getDataTable().getTableName());
-            String
-                    createIndexSql =
-                    "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
-                            + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName())
-                            + " ON " + dataTableFullName + " ("
-                            + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
-            List<String> indexProps = new ArrayList<>();
-            Object saltBucketNum = TableProperty.SALT_BUCKETS.getValue(tableProps);
-            if (saltBucketNum != null) {
-                indexProps.add("SALT_BUCKETS=" + saltBucketNum);
-            }
-            Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
-            if (columnEncodedBytes != null) {
-                indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
-            }
-            createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
                 pstmt.execute(createIndexSql);
             } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {

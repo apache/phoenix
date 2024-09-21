@@ -19,11 +19,9 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.coprocessor.BaseRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -84,7 +82,7 @@ import static org.junit.Assert.assertTrue;
 @Category(ParallelStatsDisabledTest.class)
 public class CDCQueryIT extends CDCBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCQueryIT.class);
-    private static final int MAX_LOOKBACK_AGE = 3; // seconds
+    private static final int MAX_LOOKBACK_AGE = 5; // seconds
 
     // Offset of the first column, depending on whether PHOENIX_ROW_TIMESTAMP() is in the schema
     // or not.
@@ -172,7 +170,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, null,
-                COMMIT_SUCCESS, "v3");
+                COMMIT_SUCCESS);
 
         //SingleCellIndexIT.dumpTable(tableName);
         //SingleCellIndexIT.dumpTable(CDCUtil.getCDCIndexName(cdcName));
@@ -609,7 +607,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
         long startTS = System.currentTimeMillis();
         List<ChangeRow> changes = generateChanges(startTS, tenantids, tableName, datatableName,
-                COMMIT_SUCCESS, "v3");
+                COMMIT_SUCCESS);
 
         Map<String, String> dataColumns = new TreeMap<String, String>() {{
             put("V0", "INTEGER");
@@ -659,8 +657,7 @@ public class CDCQueryIT extends CDCBaseIT {
         }
 
         long startTS = System.currentTimeMillis();
-        generateChanges(startTS, tenantids, tableName, null,
-                COMMIT_FAILURE_EXPECTED, "v3");
+        generateChanges(startTS, tenantids, tableName, null, COMMIT_FAILURE_EXPECTED);
 
         try (Connection conn = newConnection(tenantId)) {
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " +
@@ -701,8 +698,14 @@ public class CDCQueryIT extends CDCBaseIT {
             }
 
             long startTS = System.currentTimeMillis();
-            generateChanges(startTS, tenantids, tableFullName, tableFullName, COMMIT_SUCCESS, null);
-            EnvironmentEdgeManager.reset();
+            List<ChangeRow> changes = generateChanges(startTS, tenantids, tableFullName,
+                    tableFullName, COMMIT_SUCCESS, null, 0);
+            // Make sure the timestamp of the mutations are not in the future
+            long currentTime = System.currentTimeMillis();
+            long nextTime = changes.get(changes.size() - 1).getTimestamp() + 1;
+            if (nextTime > currentTime) {
+                Thread.sleep(nextTime - currentTime);
+            }
             // Create a CDC table
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableFullName;
@@ -721,7 +724,14 @@ public class CDCQueryIT extends CDCBaseIT {
                     TableName.valueOf(indexTable.getPhysicalName().getString()),0);
             // Add more rows
             startTS = System.currentTimeMillis();
-            generateChanges(startTS, tenantids, tableFullName, tableFullName, COMMIT_SUCCESS, null);
+            changes = generateChanges(startTS, tenantids, tableFullName,
+                    tableFullName, COMMIT_SUCCESS, null, 1);
+            currentTime = System.currentTimeMillis();
+            // Advance time by the max lookback age. This will cause all rows to expire
+            nextTime = changes.get(changes.size() - 1).getTimestamp() + 1;
+            if (nextTime > currentTime) {
+                Thread.sleep(nextTime - currentTime);
+            }
             // Verify CDC index verification pass
             IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName,
                     CDCUtil.getCDCIndexName(cdcName), null, 0, IndexTool.IndexVerifyType.ONLY);
@@ -777,15 +787,21 @@ public class CDCQueryIT extends CDCBaseIT {
             // Add rows
             long startTS = System.currentTimeMillis();
             List<ChangeRow> changes = generateChanges(startTS, tenantids, tableFullName,
-                    tableFullName, COMMIT_SUCCESS, null);
-            // Advance time by the max lookback age. This will cause all rows to expire
-            Thread.sleep( changes.get(changes.size() - 1).getTimestamp() -
-                    System.currentTimeMillis() + MAX_LOOKBACK_AGE * 1000);
-            // Major compact the CDC index which remove all expired rows
+                    tableFullName, COMMIT_SUCCESS, null, 0);
             String indexTableFullName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
             PTable indexTable = ((PhoenixConnection) conn).getTableNoCache(indexTableFullName);
             String indexTablePhysicalName = indexTable.getPhysicalName().toString();
+            int expectedRawRowCount = TestUtil.getRawRowCount(conn,
+                    TableName.valueOf(indexTablePhysicalName));
+            long currentTime = System.currentTimeMillis();
+            // Advance time by the max lookback age. This will cause all rows to expire
+            long nextTime = changes.get(changes.size() - 1).getTimestamp()
+                    + MAX_LOOKBACK_AGE * 1000 + 1;
+            if (nextTime > currentTime) {
+                Thread.sleep(nextTime - currentTime);
+            }
+            // Major compact the CDC index. This will remove all expired rows
             Admin admin = getUtility().getAdmin();
             admin.flush(TableName.valueOf(indexTablePhysicalName));
             TestUtil.majorCompact(getUtility(), TableName.valueOf(indexTablePhysicalName));
@@ -796,6 +812,35 @@ public class CDCQueryIT extends CDCBaseIT {
             IndexToolIT.runIndexTool(false, schemaName, tableName,
                     CDCUtil.getCDCIndexName(cdcName));
             TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),0);
+            // This time we test we only keep the rows versions within the max lookback window
+            startTS = System.currentTimeMillis();
+            // Add the first set of rows
+            changes = generateChanges(startTS, tenantids, tableFullName,
+                    tableFullName, COMMIT_SUCCESS, null, 0);
+            // Advance time by the max lookback age. This will cause the first set of rows to expire
+            startTS = changes.get(changes.size() - 1).getTimestamp()
+                    + MAX_LOOKBACK_AGE * 1000 + 1;
+            // Add another set of changes
+            changes = generateChanges(startTS, tenantids, tableFullName,
+                    tableFullName, COMMIT_SUCCESS, null, 10);
+            nextTime = changes.get(changes.size() - 1).getTimestamp() + 1;
+            // Major compact the CDC index which remove all expired rows which is
+            // the first set of rows
+            admin.flush(TableName.valueOf(indexTablePhysicalName));
+            currentTime = System.currentTimeMillis();
+            if (nextTime > currentTime) {
+                Thread.sleep(nextTime - currentTime);
+            }
+            TestUtil.majorCompact(getUtility(), TableName.valueOf(indexTablePhysicalName));
+            // Check the CDC index has the first set of rows
+            TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),
+                    expectedRawRowCount);
+            EnvironmentEdgeManager.reset();
+            // Rebuild the index and verify that it still have the same number of rows
+            IndexToolIT.runIndexTool(false, schemaName, tableName,
+                    CDCUtil.getCDCIndexName(cdcName));
+            TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),
+                    expectedRawRowCount);
 
         }
     }
