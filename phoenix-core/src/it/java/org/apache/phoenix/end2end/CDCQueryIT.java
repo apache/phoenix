@@ -804,17 +804,14 @@ public class CDCQueryIT extends CDCBaseIT {
                 Thread.sleep(nextTime - currentTime);
             }
             // Major compact the CDC index. This will remove all expired rows
-            Admin admin = getUtility().getAdmin();
-            admin.flush(TableName.valueOf(indexTablePhysicalName));
-            TestUtil.majorCompact(getUtility(), TableName.valueOf(indexTablePhysicalName));
+            TestUtil.doMajorCompaction(conn, indexTablePhysicalName);
             // Check CDC index is empty
             TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),0);
-            EnvironmentEdgeManager.reset();
             // Rebuild the index and verify that it is still empty
             IndexToolIT.runIndexTool(false, schemaName, tableName,
                     CDCUtil.getCDCIndexName(cdcName));
             TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),0);
-            // This time we test we only keep the rows versions within the max lookback window
+            // This time we test we only keep the row versions within the max lookback window
             startTS = System.currentTimeMillis();
             // Add the first set of rows
             changes = generateChanges(startTS, tenantids, tableFullName,
@@ -828,16 +825,14 @@ public class CDCQueryIT extends CDCBaseIT {
             nextTime = changes.get(changes.size() - 1).getTimestamp() + 1;
             // Major compact the CDC index which remove all expired rows which is
             // the first set of rows
-            admin.flush(TableName.valueOf(indexTablePhysicalName));
             currentTime = System.currentTimeMillis();
             if (nextTime > currentTime) {
                 Thread.sleep(nextTime - currentTime);
             }
-            TestUtil.majorCompact(getUtility(), TableName.valueOf(indexTablePhysicalName));
+            TestUtil.doMajorCompaction(conn, indexTablePhysicalName);
             // Check the CDC index has the first set of rows
             TestUtil.assertRawRowCount(conn, TableName.valueOf(indexTablePhysicalName),
                     expectedRawRowCount);
-            EnvironmentEdgeManager.reset();
             // Rebuild the index and verify that it still have the same number of rows
             IndexToolIT.runIndexTool(false, schemaName, tableName,
                     CDCUtil.getCDCIndexName(cdcName));

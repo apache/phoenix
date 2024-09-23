@@ -445,8 +445,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                         }})
                 ));
                 committer.commit(conn);
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100,
                         rowid3, new TreeMap<String, Object>() {{
                             put("V1", 300L);
                             put("V2", null);
@@ -455,8 +454,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 101L);
                         }})
@@ -471,18 +469,15 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 dropColumnDone = true;
             }
             try (Connection conn = newConnection(tid)) {
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         null)));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         null)));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 102L);
                             put("V2", 1002L);
@@ -490,13 +485,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                 null)));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid2,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid2,
                         new TreeMap<String, Object>() {{
                             put("V1", 201L);
                             put("V2", null);
@@ -505,8 +498,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 )));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 103L);
                             put("V2", 1003L);
@@ -514,22 +506,18 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
 
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         null)));
                 committer.commit(conn);
 
-                startTS += 100;
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         new TreeMap<String, Object>() {{
                             put("V1", 104L);
                             put("V2", 1004L);
                         }})
                 ));
                 committer.commit(conn);
-                injectEdge.setValue(startTS += 100);
-                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS, rowid1,
+                changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         null)));
                 committer.commit(conn);
             }
