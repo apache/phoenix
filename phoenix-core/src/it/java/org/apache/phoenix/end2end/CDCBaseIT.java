@@ -22,9 +22,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.hadoop.hbase.TableNotFoundException;
+import com.fasterxml.jackson.databind.ObjectReader;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
@@ -60,14 +59,11 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.stream.Collectors.*;
 import static org.apache.phoenix.query.QueryConstants.CDC_CHANGE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_DELETE_EVENT_TYPE;
-import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
-import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
@@ -315,24 +311,15 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         List<Set<ChangeRow>> batches = new ArrayList<>(nBatches);
         Set<Map<String, Object>> mutatedRows = new HashSet<>(nRows);
         long batchTS = startTS;
-        boolean gotDelete = false;
         for (int i = 0; i < nBatches; ++i) {
             Set<ChangeRow> batch = new TreeSet<>();
             for (int j = 0; j < nRows; ++j) {
                 if (rand.nextInt(nRows) % 2 == 0) {
-                    boolean isDelete;
-                    if (i > nBatches/2 && ! gotDelete) {
-                        // Force a delete if there was none so far.
-                        isDelete = true;
-                    }
-                    else {
-                        isDelete = mutatedRows.contains(rows.get(j))
-                                && rand.nextInt(5) == 0;
-                    }
+                    boolean isDelete = mutatedRows.contains(rows.get(j))
+                            && rand.nextInt(5) == 0;
                     ChangeRow changeRow;
                     if (isDelete) {
                         changeRow = new ChangeRow(null, batchTS, rows.get(j), null);
-                        gotDelete = true;
                     }
                     else {
                         changeRow = new ChangeRow(null, batchTS, rows.get(j),
@@ -346,20 +333,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             batchTS += 100;
         }
 
-        // For debug: uncomment to see the mutations generated.
-        LOGGER.debug("----- DUMP Mutations -----");
-        int bnr = 1, mnr = 0;
-        for (Set<ChangeRow> batch: batches) {
-            for (ChangeRow change : batch) {
-                LOGGER.debug("Mutation: " + (++mnr) + " in batch: " + bnr + " " +
-                    " tenantId:" + change.tenantId +
-                    " changeTS: " + change.changeTS +
-                    " pks: " + change.pks +
-                    " change: " + change.change);
-            }
-            ++bnr;
-        }
-        LOGGER.debug("----------");
         return batches;
     }
 
@@ -388,68 +361,18 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return row;
     }
 
-    protected void applyMutations(CommitAdapter committer, String schemaName, String tableName,
-                                  String datatableName, String tid, List<Set<ChangeRow>> batches,
-                                  String cdcName)
-            throws Exception {
+    protected void applyMutations(CommitAdapter committer, String datatableName, String tid,
+                                  List<Set<ChangeRow>> batches) throws Exception {
         EnvironmentEdgeManager.injectEdge(injectEdge);
         try (Connection conn = committer.getConnection(tid)) {
             for (Set<ChangeRow> batch: batches) {
                 for (ChangeRow changeRow: batch) {
-                    addChange(conn, tableName, changeRow);
+                    addChange(conn, datatableName, changeRow);
                 }
                 committer.commit(conn);
             }
         }
         committer.reset();
-
-        // For debug: uncomment to see the exact HBase cells.
-        dumpCells(schemaName, tableName, datatableName, cdcName);
-    }
-
-    protected void dumpCells(String schemaName, String tableName, String datatableName,
-                             String cdcName) throws Exception {
-        LOGGER.debug("----- DUMP data table: " + datatableName + " -----");
-        SingleCellIndexIT.dumpTable(datatableName);
-        String indexName = CDCUtil.getCDCIndexName(cdcName);
-        String indexTableName = SchemaUtil.getTableName(schemaName, tableName == datatableName ?
-                indexName : getViewIndexPhysicalName(datatableName));
-        LOGGER.debug("----- DUMP index table: " + indexTableName + " -----");
-        try {
-            SingleCellIndexIT.dumpTable(indexTableName);
-        } catch (TableNotFoundException e) {
-            // Ignore, this would happen if CDC is not yet created. This use case is going to go
-            // away soon anyway.
-        }
-        LOGGER.debug("----------");
-    }
-
-    protected void dumpCDCResults(Connection conn, String cdcName, Map<String, String> pkColumns,
-                                  String cdcQuery) throws Exception {
-        try (Statement stmt = conn.createStatement()) {
-            try (ResultSet rs = stmt.executeQuery(cdcQuery)) {
-                LOGGER.debug("----- DUMP CDC: " + cdcName + " -----");
-                for (int i = 0; rs.next(); ++i) {
-                    LOGGER.debug("CDC row: " + (i+1) + " timestamp="
-                            + rs.getDate(1).getTime() + " "
-                            + collectColumns(pkColumns, rs) + ", " + CDC_JSON_COL_NAME + "="
-                            + rs.getString(pkColumns.size() + 2));
-                }
-                LOGGER.debug("----------");
-            }
-        }
-    }
-
-    private static String collectColumns(Map<String, String> pkColumns, ResultSet rs) {
-        return pkColumns.keySet().stream().map(
-                k -> {
-                    try {
-                        return k + "=" + rs.getObject(k);
-                    } catch (SQLException e) {
-                        throw new RuntimeException(e);
-                    }
-                }).collect(
-                Collectors.joining(", "));
     }
 
     protected void createTable(Connection conn, String tableName, Map<String, String> pkColumns,
@@ -592,37 +515,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
         }
         committer.reset();
-        // For debug logging, uncomment this code to see the list of changes.
-        for (int i = 0; i < changes.size(); ++i) {
-            LOGGER.debug("----- generated change: " + i +
-                    " tenantId:" + changes.get(i).tenantId +
-                    " changeTS: " + changes.get(i).changeTS +
-                    " pks: " + changes.get(i).pks +
-                    " change: " + changes.get(i).change);
-        }
         return changes;
-    }
-
-    protected void verifyChangesViaSCN(String tenantId, Connection conn, String cdcFullName,
-                                       Map<String, String> pkColumns,
-                                       String dataTableName, Map<String, String> dataColumns,
-                                       List<ChangeRow> changes, long startTS, long endTS)
-            throws Exception {
-        List<ChangeRow> filteredChanges = new ArrayList<>();
-        for (ChangeRow change: changes) {
-            if (change.changeTS >= startTS && change.changeTS <= endTS) {
-                filteredChanges.add(change);
-            }
-        }
-        String cdcSql = "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROm " + cdcFullName + " WHERE " +
-                " PHOENIX_ROW_TIMESTAMP() >= CAST(CAST(" + startTS + " AS BIGINT) AS TIMESTAMP) " +
-                "AND PHOENIX_ROW_TIMESTAMP() <= CAST(CAST(" + endTS + " AS BIGINT) AS TIMESTAMP)";
-        dumpCDCResults(conn, cdcFullName,
-                new TreeMap<String, String>() {{ put("K1", "INTEGER"); }}, cdcSql);
-        try (ResultSet rs = conn.createStatement().executeQuery(cdcSql)) {
-            verifyChangesViaSCN(tenantId, rs, dataTableName, dataColumns, filteredChanges,
-                    CHANGE_IMG);
-        }
     }
 
     protected void verifyChangesViaSCN(String tenantId, ResultSet rs, String dataTableName,
@@ -631,13 +524,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         Set<Map<String, Object>> deletedRows = new HashSet<>();
         for (int i = 0, changenr = 0; i < changes.size(); ++i) {
             ChangeRow changeRow = changes.get(i);
-            if (tenantId != null && changeRow.getTenantID() != tenantId) {
+            if (changeRow.getTenantID() != null && changeRow.getTenantID() != tenantId) {
                 continue;
             }
             if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
                 // Consecutive delete operations don't appear as separate events.
                 if (deletedRows.contains(changeRow.pks)) {
-                    ++changenr;
                     continue;
                 }
                 deletedRows.add(changeRow.pks);
@@ -645,14 +537,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             else {
                 deletedRows.remove(changeRow.pks);
             }
-            String changeDesc = "Change " + changenr + ": " + changeRow;
+            String changeDesc = "Change " + (changenr+1) + ": " + changeRow;
             assertTrue(changeDesc, rs.next());
             for (Map.Entry<String, Object> pkCol: changeRow.pks.entrySet()) {
                 assertEquals(changeDesc, pkCol.getValue(), rs.getObject(pkCol.getKey()));
             }
             Map<String, Object> cdcObj = mapper.reader(HashMap.class).readValue(
                     rs.getString(changeRow.pks.size()+2));
-            assertEquals(changeDesc, changeRow.getChangeType(), cdcObj.get(CDC_EVENT_TYPE));
             if (cdcObj.containsKey(CDC_PRE_IMAGE)
                     && ! ((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
                     && changeScopes.contains(PTable.CDCChangeScope.PRE)) {
@@ -750,9 +641,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     }
 
     protected List<ChangeRow> generateChangesImmutableTable(long startTS, String[] tenantids,
-                                                            String schemaName, String tableName,
-                                                            String datatableName,
-                                                            CommitAdapter committer, String cdcName)
+                                                            String tableName, CommitAdapter committer)
             throws Exception {
         List<ChangeRow> changes = new ArrayList<>();
         EnvironmentEdgeManager.injectEdge(injectEdge);
@@ -819,15 +708,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             }
         }
         committer.reset();
-        // For debug logging, uncomment this code to see the list of changes.
-        dumpCells(schemaName, tableName, datatableName, cdcName);
-        for (int i = 0; i < changes.size(); ++i) {
-            LOGGER.debug("----- generated change: " + i +
-                    " tenantId:" + changes.get(i).tenantId +
-                    " changeTS: " + changes.get(i).changeTS +
-                    " pks: " + changes.get(i).pks +
-                    " change: " + changes.get(i).change);
-        }
         return changes;
     }
 
@@ -840,13 +720,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     )
     protected class ChangeRow implements Comparable<ChangeRow> {
         @JsonProperty
-        protected final String tenantId;
+        private final String tenantId;
         @JsonProperty
-        protected final long changeTS;
+        private final long changeTS;
         @JsonProperty
-        protected final Map<String, Object> pks;
+        private final Map<String, Object> pks;
         @JsonProperty
-        protected final Map<String, Object> change;
+        private final Map<String, Object> change;
 
         public String getTenantID() {
             return tenantId;

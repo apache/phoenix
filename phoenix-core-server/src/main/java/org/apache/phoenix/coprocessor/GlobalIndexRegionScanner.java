@@ -1355,6 +1355,10 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                             // CDC Index needs two delete markers one for deleting the index row,
                             // and the other for referencing the data table delete mutation with
                             // the right index row key, that is, the index row key starting with ts
+                            Put cdcDataRowState = new Put(currentDataRowState.getRow());
+                            cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
+                                    indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
+                                    ByteUtil.EMPTY_BYTE_ARRAY);
                             indexMutations.add(IndexRegionObserver.getDeleteIndexMutation(
                                     currentDataRowState, indexMaintainer, ts, rowKeyPtr));
                         }
