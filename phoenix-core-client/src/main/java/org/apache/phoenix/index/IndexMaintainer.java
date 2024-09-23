@@ -540,7 +540,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexedColumnTypes = Lists.<PDataType>newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.indexedExpressions = Lists.newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.coveredColumnsMap = Maps.newHashMapWithExpectedSize(nIndexColumns - nIndexPKColumns);
-        this.nIndexSaltBuckets  = nIndexSaltBuckets == null ? 0 : nIndexSaltBuckets;
+        this.nIndexSaltBuckets  = nIndexSaltBuckets == null ? PTable.NO_SALTING : nIndexSaltBuckets;
         this.dataEmptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(dataTable);
         this.emptyKeyValueCFPtr = SchemaUtil.getEmptyColumnFamilyPtr(index);
         this.nDataCFs = dataTable.getColumnFamilies().size();
@@ -1788,9 +1788,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         } else {
             maintainer.isCDCIndex = false;
         }
-        if (proto.hasDataTableSaltBuckets()) {
-            maintainer.nDataTableSaltBuckets = proto.getDataTableSaltBuckets();
-        }
+        maintainer.nDataTableSaltBuckets = proto.hasDataTableSaltBuckets() ?
+                proto.getDataTableSaltBuckets() : -1;
         maintainer.initCachedState();
         return maintainer;
     }
