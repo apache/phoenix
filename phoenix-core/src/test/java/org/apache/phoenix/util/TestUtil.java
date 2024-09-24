@@ -98,6 +98,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
+import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
@@ -813,6 +814,26 @@ public class TestUtil {
     public static void flush(HBaseTestingUtility utility, TableName table) throws IOException {
         Admin admin = utility.getAdmin();
         admin.flush(table);
+    }
+
+    public static void minorCompact(HBaseTestingUtility utility, TableName table)
+            throws IOException, InterruptedException {
+        try {
+            CompactionScanner.setForceMinorCompaction(true);
+            Admin admin = utility.getAdmin();
+            admin.compact(table);
+            int waitForCompactionToCompleteCounter = 0;
+            while (CompactionScanner.getForceMinorCompaction()) {
+                waitForCompactionToCompleteCounter++;
+                if (waitForCompactionToCompleteCounter > 20) {
+                    Assert.fail();
+                }
+                Thread.sleep(1000);
+            }
+        }
+        finally {
+            CompactionScanner.setForceMinorCompaction(false);
+        }
     }
 
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
