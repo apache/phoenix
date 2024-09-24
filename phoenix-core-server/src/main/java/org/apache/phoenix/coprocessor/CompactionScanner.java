@@ -155,6 +155,8 @@ public class CompactionScanner implements InternalScanner {
     private long inputCellCount = 0;
     private long outputCellCount = 0;
     private boolean phoenixLevelOnly = false;
+
+    // Only for forcing minor compaction while testing
     private static boolean forceMinorCompaction = false;
 
     public CompactionScanner(RegionCoprocessorEnvironment env,
