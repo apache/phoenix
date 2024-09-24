@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
@@ -79,7 +78,7 @@ import static org.junit.Assert.assertTrue;
 //          "".isEmpty();
 //      }
 @RunWith(Parameterized.class)
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 public class CDCQueryIT extends CDCBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCQueryIT.class);
     private static final int MAX_LOOKBACK_AGE = 5; // seconds
