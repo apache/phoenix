@@ -81,7 +81,7 @@ import static org.junit.Assert.assertTrue;
 @Category(NeedsOwnMiniClusterTest.class)
 public class CDCQueryIT extends CDCBaseIT {
     private static final Logger LOGGER = LoggerFactory.getLogger(CDCQueryIT.class);
-    private static final int MAX_LOOKBACK_AGE = 5; // seconds
+    private static final int MAX_LOOKBACK_AGE = 10; // seconds
 
     // Offset of the first column, depending on whether PHOENIX_ROW_TIMESTAMP() is in the schema
     // or not.
@@ -120,7 +120,8 @@ public class CDCQueryIT extends CDCBaseIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
+        props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+                Integer.toString(MAX_LOOKBACK_AGE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     }
     @Before
