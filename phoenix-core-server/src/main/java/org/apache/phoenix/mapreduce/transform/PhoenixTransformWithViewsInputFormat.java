@@ -71,8 +71,10 @@ public class PhoenixTransformWithViewsInputFormat<T extends DBWritable> extends 
                 String schemaName = SchemaUtil.getSchemaNameFromFullName(oldDataTableFullName);
                 String tableName = SchemaUtil.getTableNameFromFullName(oldDataTableFullName);
                 byte[] schemaNameBytes = Strings.isNullOrEmpty(schemaName) ? null : schemaName.getBytes();
-                Pair<List<PTable>, List<TableInfo>> allDescendantViews = ViewUtil.findAllDescendantViews(hTable, configuration, null, schemaNameBytes,
-                        tableName.getBytes(), EnvironmentEdgeManager.currentTimeMillis(), false,true);
+                Pair<List<PTable>, List<TableInfo>> allDescendantViews =
+                        ViewUtil.findAllDescendantViews(hTable, configuration, null, schemaNameBytes,
+                        tableName.getBytes(), EnvironmentEdgeManager.currentTimeMillis(),
+                                false, true);
                 List<PTable> legitimateDecendants = allDescendantViews.getFirst();
 
                 List<InputSplit> inputSplits = new ArrayList<>();
