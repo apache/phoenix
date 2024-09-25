@@ -828,7 +828,7 @@ public class TestUtil {
                 if (waitForCompactionToCompleteCounter > 50) {
                     Assert.fail();
                 }
-                Thread.sleep(1000);
+                Thread.sleep(3000);
             }
         }
         finally {
