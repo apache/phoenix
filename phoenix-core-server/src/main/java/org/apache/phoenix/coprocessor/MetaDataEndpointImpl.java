@@ -3016,7 +3016,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     Pair<List<PTable>, List<TableInfo>> descendantViews =
                             findAllDescendantViews(hTable, env.getConfiguration(),
                                     tenantIdBytes, schemaName, tableOrViewName, clientTimeStamp,
-                                    true,true);
+                                    true, true);
                     List<PTable> legitimateChildViews = descendantViews.getFirst();
                     List<TableInfo> orphanChildViews = descendantViews.getSecond();
                     if (!legitimateChildViews.isEmpty()) {
@@ -3438,7 +3438,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 childViews.addAll(findAllDescendantViews(hTable, sysCat, env.getConfiguration(),
                         tenantId, schemaName, tableOrViewName, clientTimeStamp, new ArrayList<>(),
                         new ArrayList<>(), false,
-                        scanSysCatForTTLDefinedOnAnyChildPair,true)
+                        scanSysCatForTTLDefinedOnAnyChildPair, true)
                         .getFirst());
             }
 
