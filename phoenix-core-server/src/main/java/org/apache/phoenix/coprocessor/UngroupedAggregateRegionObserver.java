@@ -582,27 +582,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
-        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
-            return scanner;
-        } else {
-            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-                @Override public InternalScanner run() throws Exception {
-                    String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable()
-                            .getNameAsString();
-                    long maxLookbackInMillis = BaseScannerRegionObserverConstants
-                            .getMaxLookbackInMillis(c.getEnvironment().getConfiguration());
-                    maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
-                            store.getColumnFamilyName(), maxLookbackInMillis);
-                    return new CompactionScanner(c.getEnvironment(), store, scanner,
-                            maxLookbackInMillis, null, null, false, true);
-                }
-            });
-        }
-    }
-
-    @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                       InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
                                       CompactionRequest request) throws IOException {
@@ -678,6 +657,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                             table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME),
                                     request.isMajor() || request.isAllFiles(), keepDeleted
                                     );
+                }
+                else if (isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                    LOGGER.warn("Skipping compaction for table: {} " +
+                            "as failed to retrieve PTable object", fullTableName);
                 }
                 if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
                     try {
