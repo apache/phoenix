@@ -529,7 +529,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           BatchMutateContext context) {
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
-          if (this.builder.isAtomicOp(m) || this.builder.returnResult(m) ||
+          if (this.builder.isAtomicOp(m) || context.returnResult ||
                   this.builder.isEnabled(m)) {
               ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
               context.rowsToLock.add(row);
@@ -598,6 +598,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                   Result result = Result.create(cells);
                   miniBatchOp.setOperationStatus(i,
                           new OperationStatus(SUCCESS, result));
+              }
+          } else if (context.returnResult) {
+              Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap = new HashMap<>();
+              byte[] rowKey = m.getRow();
+              ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(rowKey);
+              Pair<Put, Put> dataRowState = context.dataRowStates.get(rowKeyPtr);
+              Put currentDataRowState = dataRowState != null ? dataRowState.getFirst() : null;
+              if (currentDataRowState != null) {
+                  updateCurrColumnCellExpr(currentDataRowState, currColumnCellExprMap);
+                  context.currColumnCellExprMap = currColumnCellExprMap;
               }
           }
       }
@@ -1503,8 +1513,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (context.returnResult) {
             Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap =
                     context.currColumnCellExprMap;
+            if (currColumnCellExprMap == null) {
+                return;
+            }
             Mutation mutation = miniBatchOp.getOperation(0);
-            updateColumnCellExprMap(mutation, currColumnCellExprMap);
+            if (mutation instanceof Put) {
+                updateColumnCellExprMap(mutation, currColumnCellExprMap);
+            }
             Mutation[] mutations = miniBatchOp.getOperationsFromCoprocessors(0);
             if (mutations != null) {
                 for (Mutation m : mutations) {
