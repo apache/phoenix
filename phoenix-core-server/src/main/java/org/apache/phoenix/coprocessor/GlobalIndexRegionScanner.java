@@ -55,12 +55,15 @@ import org.apache.phoenix.hbase.index.write.IndexWriterUtils;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -70,6 +73,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
@@ -77,6 +81,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -273,11 +278,31 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
             verificationResultRepository =
                     new IndexVerificationResultRepository(indexMaintainer.getIndexTableName(), hTableFactory);
             nextStartKey = null;
-            minTimestamp = scan.getTimeRange().getMin();
         }
+        computeMinTimestamp(config);
     }
 
-
+    /**
+     * For CDC indexes we do not need to consider rows outside max lookback window or before
+     * the index create time. minTimestamp needs to be computed and used for CDC indexes always
+     * even when it is not set on the scan
+     */
+    private void computeMinTimestamp(Configuration config) throws IOException {
+        minTimestamp = scan.getTimeRange().getMin();
+        if (indexMaintainer.isCDCIndex()) {
+            minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackInMills;
+            try (PhoenixConnection conn =
+                    QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
+                PTable indexTable = conn.getTableNoCache(indexMaintainer.getLogicalIndexName());
+                minTimestamp = Math.max(indexTable.getTimeStamp() + 1, minTimestamp);
+            } catch (SQLException e) {
+                LOGGER.error(
+                        "Unable to get the PTable for the index table "
+                                + indexMaintainer.getLogicalIndexName() + " " + e);
+                throw new IOException(e);
+            }
+        }
+    }
     public static long getTimestamp(Mutation m) {
         for (List<Cell> cells : m.getFamilyCellMap().values()) {
             for (Cell cell : cells) {

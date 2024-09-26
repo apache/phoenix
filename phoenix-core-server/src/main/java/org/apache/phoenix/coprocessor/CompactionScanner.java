@@ -70,6 +70,7 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.coprocessorclient.RowKeyMatcher;
 import org.apache.phoenix.coprocessorclient.TableTTLInfoCache;
@@ -155,6 +156,7 @@ public class CompactionScanner implements InternalScanner {
     private long inputCellCount = 0;
     private long outputCellCount = 0;
     private boolean phoenixLevelOnly = false;
+    private boolean isCDCIndex;
 
     // Only for forcing minor compaction while testing
     private static boolean forceMinorCompaction = false;
@@ -197,6 +199,7 @@ public class CompactionScanner implements InternalScanner {
         emptyCFStore = familyCount == 1 || columnFamilyName.equals(Bytes.toString(emptyCF))
                         || localIndex;
 
+        isCDCIndex = table != null ? CDCUtil.isCDCIndex(table) : false;
         // Initialize the tracker that computes the TTL for the compacting table.
         // The TTL tracker can be
         // simple (one single TTL for the table) when the compacting table is not Partitioned
@@ -2357,6 +2360,19 @@ public class CompactionScanner implements InternalScanner {
         }
 
         /**
+         * For a CDC index, we retain all cells within the max lookback window as opposed to
+         * retaining all row versions visible through max lookback window we do for other tables
+         */
+        private boolean retainCellsForCDCIndex(List<Cell> result, List<Cell> retainedCells) {
+            for (Cell cell : result) {
+                if (cell.getTimestamp() >= rowTracker.getRowContext().getMaxLookbackWindowStart()) {
+                    retainedCells.add(cell);
+                }
+            }
+            return true;
+        }
+
+        /**
          * The retained cells includes the cells that are visible through the max lookback
          * window and the additional empty column cells that are needed to reduce large time
          * between the cells of the last row version.
@@ -2366,6 +2382,9 @@ public class CompactionScanner implements InternalScanner {
 
             lastRowVersion.clear();
             emptyColumn.clear();
+            if (isCDCIndex) {
+                return retainCellsForCDCIndex(result, retainedCells);
+            }
             getLastRowVersionInMaxLookbackWindow(result, lastRowVersion, retainedCells,
                     emptyColumn);
             if (lastRowVersion.isEmpty()) {
