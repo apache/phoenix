@@ -98,6 +98,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
+import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
@@ -815,6 +816,26 @@ public class TestUtil {
         admin.flush(table);
     }
 
+    public static void minorCompact(HBaseTestingUtility utility, TableName table)
+            throws IOException, InterruptedException {
+        try {
+            CompactionScanner.setForceMinorCompaction(true);
+            Admin admin = utility.getAdmin();
+            admin.compact(table);
+            int waitForCompactionToCompleteCounter = 0;
+            while (CompactionScanner.getForceMinorCompaction()) {
+                waitForCompactionToCompleteCounter++;
+                if (waitForCompactionToCompleteCounter > 20) {
+                    Assert.fail();
+                }
+                Thread.sleep(1000);
+            }
+        }
+        finally {
+            CompactionScanner.setForceMinorCompaction(false);
+        }
+    }
+
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
         throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
@@ -1337,10 +1358,16 @@ public class TestUtil {
         assertEquals(code.getSQLState(), se.getSQLState());
     }
 
-    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl)
+    public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
         throws SQLException, IOException {
-        ColumnFamilyDescriptor cd = getColumnDescriptor(conn, tableName);
-        Assert.assertEquals(ttl, cd.getTimeToLive());
+        long tableTTL = -1;
+        if (phoenixTTLEnabled) {
+            tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
+                    tableName.getNameAsString())).getTTL();
+        } else {
+            tableTTL = getColumnDescriptor(conn, tableName).getTimeToLive();
+        }
+        Assert.assertEquals(ttl, tableTTL);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)

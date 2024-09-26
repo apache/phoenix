@@ -36,7 +36,6 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -59,7 +58,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
@@ -68,7 +66,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
-import org.apache.phoenix.parse.NamedNode;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -94,6 +91,7 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
@@ -529,6 +527,12 @@ public class SchemaUtil {
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY_BYTES : QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES) : table.getDefaultFamilyName().getBytes() : families.get(0).getName().getBytes();
     }
 
+    public static byte[] getEmptyColumnQualifier(PTable table) {
+        return table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
+                QueryConstants.EMPTY_COLUMN_BYTES :
+                table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+    }
+
     public static String getEmptyColumnFamilyAsString(PTable table) {
         List<PColumnFamily> families = table.getColumnFamilies();
         return families.isEmpty() ? table.getDefaultFamilyName() == null ? (table.getIndexType() == IndexType.LOCAL ? QueryConstants.DEFAULT_LOCAL_INDEX_COLUMN_FAMILY : QueryConstants.DEFAULT_COLUMN_FAMILY) : table.getDefaultFamilyName().getString() : families.get(0).getName().getString();
@@ -940,7 +944,44 @@ public class SchemaUtil {
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, SortOrder sortOrder) {
         return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ? SEPARATOR_BYTE : QueryConstants.DESC_SEPARATOR_BYTE;
     }
-    
+
+    /**
+     * Get separator bytes for Variable length encoded data type (e.g. VARBINARY_ENCODED).
+     *
+     * @param rowKeyOrderOptimizable Whether the table may optimize descending row keys.
+     * @param isNullValue Whether the value is null.
+     * @param sortOrder Whether the value sorts ascending or descending.
+     * @return The separator byte array.
+     */
+    public static byte[] getSeparatorBytesForVarBinaryEncoded(boolean rowKeyOrderOptimizable,
+        boolean isNullValue, SortOrder sortOrder) {
+        return !rowKeyOrderOptimizable || isNullValue || sortOrder == SortOrder.ASC ?
+            QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES :
+            QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES;
+    }
+
+    /**
+     * Return separator bytes depending on the data type.
+     *
+     * @param pDataType Data type used.
+     * @param rowKeyOrderOptimizable Whether the table may optimize descending row keys.
+     * @param isNullValue Whether the value is null.
+     * @param sortOrder Whether the value sorts ascending or descending.
+     * @return The separator byte array.
+     */
+    public static byte[] getSeparatorBytes(final PDataType<?> pDataType,
+        final boolean rowKeyOrderOptimizable,
+        final boolean isNullValue,
+        final SortOrder sortOrder) {
+        if (pDataType == PVarbinaryEncoded.INSTANCE) {
+            return getSeparatorBytesForVarBinaryEncoded(rowKeyOrderOptimizable, isNullValue,
+                sortOrder);
+        } else {
+            return new byte[] {getSeparatorByte(rowKeyOrderOptimizable, isNullValue, sortOrder)};
+        }
+    }
+
+
     public static byte getSeparatorByte(boolean rowKeyOrderOptimizable, boolean isNullValue, Field f) {
         return getSeparatorByte(rowKeyOrderOptimizable, isNullValue, f.getSortOrder());
     }
@@ -1379,6 +1420,21 @@ public class SchemaUtil {
             if (!(Character.isAlphabetic(charAtI)) && !Character.isDigit(charAtI) && charAtI != '_') {
                 return true;
             }
+        }
+        return false;
+    }
+
+    public static boolean areSeparatorBytesForVarBinaryEncoded(byte[] bytes, int offset,
+        SortOrder sortOrder) {
+        if (offset >= (bytes.length - 1)) {
+            return false;
+        }
+        if (sortOrder == SortOrder.ASC || sortOrder == null) {
+            return bytes[offset] == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[0]
+                && bytes[offset + 1] == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[1];
+        } else if (sortOrder == SortOrder.DESC) {
+            return bytes[offset] == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[0]
+                && bytes[offset + 1] == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[1];
         }
         return false;
     }

@@ -1,0 +1,327 @@
+{
+  "result": [
+    {
+      "status": "active",
+      "name": {
+        "first": "Nat",
+        "middle": "Ellis",
+        "last": "Muller"
+      },
+      "username": "Nat-Muller",
+      "emails": [
+        "Delia3@example.com",
+        "Minnie.Mohr@gmail.com"
+      ],
+      "phoneNumber": "548-392-1895",
+      "location": {
+        "street": "41886 Mittie Forest",
+        "city": "Blockshire",
+        "state": "Wyoming",
+        "country": "Syrian Arab Republic",
+        "zip": "13127-2399",
+        "coordinates": {
+          "latitude": -58.0598,
+          "longitude": -44.9835
+        }
+      },
+      "website": "https://arctic-bolero.name",
+      "domain": "medium-daddy.info",
+      "job": {
+        "title": "Senior Usability Director",
+        "descriptor": "International",
+        "area": "Web",
+        "type": "Coordinator",
+        "company": "Berge Group"
+      },
+      "uuid": "e2af22f7-00fa-435a-b277-7e1cb771af36",
+      "objectId": "666bdf52dd6539db3454d499"
+    },
+    {
+      "status": "disabled",
+      "name": {
+        "first": "Elliot",
+        "middle": "Jamie",
+        "last": "Watsica"
+      },
+      "username": "Elliot-Watsica",
+      "emails": [
+        "Petra.Upton-Kozey@gmail.com",
+        "Regan78@example.com"
+      ],
+      "phoneNumber": "(308) 971-1166 x5940",
+      "location": {
+        "street": "4897 Gerhold Lodge",
+        "city": "Minneapolis",
+        "state": "AK",
+        "country": "Democratic Republic of the Congo",
+        "zip": "79299",
+        "coordinates": {
+          "latitude": 3.4015,
+          "longitude": 52.3736
+        }
+      },
+      "website": "https://cautious-fugato.info",
+      "domain": "pricey-block.org",
+      "job": {
+        "title": "Forward Program Developer",
+        "descriptor": "Direct",
+        "area": "Quality",
+        "type": "Producer",
+        "company": "Davis, Turcotte and Padberg"
+      },
+      "uuid": "80874c0d-3014-4860-8a08-d0f59c709a82",
+      "objectId": "666bdf52dd6539db3454d49a"
+    },
+    {
+      "status": "active",
+      "name": {
+        "first": "Esteban",
+        "middle": "Jaden",
+        "last": "Beatty"
+      },
+      "username": "Esteban-Beatty",
+      "emails": [
+        "Bert.Adams53@example.com",
+        "Chanel_Renner-Carter@example.com"
+      ],
+      "phoneNumber": "240-999-1841 x356",
+      "location": {
+        "street": "4964 Hagenes Fork",
+        "city": "South Mohamed",
+        "state": "Ohio",
+        "country": "Turks and Caicos Islands",
+        "zip": "30649",
+        "coordinates": {
+          "latitude": -45.0224,
+          "longitude": -131.4055
+        }
+      },
+      "website": "https://bite-sized-bellows.name",
+      "domain": "windy-driving.info",
+      "job": {
+        "title": "Corporate Tactics Consultant",
+        "descriptor": "Corporate",
+        "area": "Accountability",
+        "type": "Planner",
+        "company": "Padberg LLC"
+      },
+      "uuid": "6ac5946e-6acf-405f-b47a-80f92c8681cc",
+      "objectId": "666bdf52dd6539db3454d49b"
+    },
+    {
+      "status": "disabled",
+      "name": {
+        "first": "Clint",
+        "middle": "Corey",
+        "last": "Gleichner"
+      },
+      "username": "Clint-Gleichner",
+      "emails": [
+        "Kadin3@example.com",
+        "Isabelle.Hermann44@gmail.com"
+      ],
+      "phoneNumber": "387.712.5381 x6598",
+      "location": {
+        "street": "47004 Wyman Trail",
+        "city": "Seattle",
+        "state": "Nebraska",
+        "country": "Svalbard & Jan Mayen Islands",
+        "zip": "73927",
+        "coordinates": {
+          "latitude": -75.2248,
+          "longitude": 107.0872
+        }
+      },
+      "website": "https://skinny-skyline.com/",
+      "domain": "possible-sill.info",
+      "job": {
+        "title": "Global Interactions Producer",
+        "descriptor": "Global",
+        "area": "Solutions",
+        "type": "Planner",
+        "company": "Schoen - Corkery"
+      },
+      "uuid": "a194136c-62b2-4e69-b256-3fd3c2285816",
+      "objectId": "666bdf52dd6539db3454d49c"
+    },
+    {
+      "status": "active",
+      "name": {
+        "first": "Marisa",
+        "middle": "Reese",
+        "last": "West"
+      },
+      "username": "Marisa-West",
+      "emails": [
+        "Elvis82@example.com"
+      ],
+      "phoneNumber": "(757) 887-5160 x181",
+      "location": {
+        "street": "70273 Pollich Squares",
+        "city": "Cummeratafield",
+        "state": "Idaho",
+        "country": "Qatar",
+        "zip": "66684-4034",
+        "coordinates": {
+          "latitude": 67.8857,
+          "longitude": -59.1559
+        }
+      },
+      "website": "https://dangerous-fanny-pack.com",
+      "domain": "strident-aluminium.com",
+      "job": {
+        "title": "Principal Markets Director",
+        "descriptor": "Human",
+        "area": "Identity",
+        "type": "Specialist",
+        "company": "Nolan - Kozey"
+      },
+      "uuid": "cf2dacac-0b6a-4bc7-a375-6f3b7906c40c",
+      "objectId": "666bdf52dd6539db3454d49d"
+    },
+    {
+      "status": "disabled",
+      "name": {
+        "first": "Leonie",
+        "middle": "Reese",
+        "last": "Kessler"
+      },
+      "username": "Leonie-Kessler",
+      "emails": [
+        "Bradford.Abernathy@example.com",
+        "Ludie.Schmidt62@example.com"
+      ],
+      "phoneNumber": "411.584.7976",
+      "location": {
+        "street": "790 Wiza Shoals",
+        "city": "Hagenestown",
+        "state": "Alabama",
+        "country": "Bouvet Island",
+        "zip": "63799",
+        "coordinates": {
+          "latitude": 33.2153,
+          "longitude": -98.5389
+        }
+      },
+      "website": "https://sniveling-manner.biz",
+      "domain": "dizzy-molding.net",
+      "job": {
+        "title": "Corporate Response Specialist",
+        "descriptor": "Future",
+        "area": "Interactions",
+        "type": "Assistant",
+        "company": "Block LLC"
+      },
+      "uuid": "9c992028-f776-4d50-ab66-2ababdfc62fb",
+      "objectId": "666bdf52dd6539db3454d49e"
+    },
+    {
+      "status": "active",
+      "name": {
+        "first": "Andrew",
+        "middle": "Bowie",
+        "last": "Reilly-Hahn"
+      },
+      "username": "Andrew-Reilly-Hahn",
+      "emails": [
+        "Jacinto94@example.com",
+        "Nicolette51@example.com"
+      ],
+      "phoneNumber": "1-891-508-4746 x2730",
+      "location": {
+        "street": "169 Faye Island",
+        "city": "Fort Ashlyshire",
+        "state": "Arkansas",
+        "country": "Bahamas",
+        "zip": "13604",
+        "coordinates": {
+          "latitude": -15.1819,
+          "longitude": -91.9214
+        }
+      },
+      "website": "https://lopsided-cassock.info/",
+      "domain": "immense-courtroom.info",
+      "job": {
+        "title": "Direct Solutions Supervisor",
+        "descriptor": "Internal",
+        "area": "Markets",
+        "type": "Architect",
+        "company": "Grimes, Krajcik and Medhurst"
+      },
+      "uuid": "711bbf38-3c15-44dc-bf72-796ea2d7dfbf",
+      "objectId": "666bdf52dd6539db3454d49f"
+    },
+    {
+      "status": "disabled",
+      "name": {
+        "first": "Jaron",
+        "middle": "Corey",
+        "last": "Wolff"
+      },
+      "username": "Jaron-Wolff",
+      "emails": [
+        "Amaya19@gmail.com",
+        "Lera_Buckridge@example.com"
+      ],
+      "phoneNumber": "863-981-9104 x64213",
+      "location": {
+        "street": "50828 Chance Junction",
+        "city": "East Gerda",
+        "state": "Kentucky",
+        "country": "Aland Islands",
+        "zip": "68664-7869",
+        "coordinates": {
+          "latitude": 2.7211,
+          "longitude": 94.1885
+        }
+      },
+      "website": "https://unsightly-shortage.com/",
+      "domain": "acceptable-bankruptcy.com",
+      "job": {
+        "title": "National Security Manager",
+        "descriptor": "Chief",
+        "area": "Implementation",
+        "type": "Strategist",
+        "company": "Fahey and Sons"
+      },
+      "uuid": "cdca9da3-7b95-419d-b979-2e299b4beefa",
+      "objectId": "666bdf52dd6539db3454d4a0"
+    },
+    {
+      "status": "disabled",
+      "name": {
+        "first": "Wendell",
+        "middle": "Finley",
+        "last": "Cartwright"
+      },
+      "username": "Wendell-Cartwright",
+      "emails": [
+        "Virgil77@example.com",
+        "Jeromy42@example.com"
+      ],
+      "phoneNumber": "757.581.1946 x822",
+      "location": {
+        "street": "23083 Barton Viaduct",
+        "city": "New Genevieve",
+        "state": "Louisiana",
+        "country": "Turkmenistan",
+        "zip": "95556",
+        "coordinates": {
+          "latitude": -31.709,
+          "longitude": 52.4862
+        }
+      },
+      "website": "https://exotic-science.name",
+      "domain": "careful-liberty.net",
+      "job": {
+        "title": "Chief Tactics Consultant",
+        "descriptor": "Legacy",
+        "area": "Accountability",
+        "type": "Manager",
+        "company": "Hermann - Wisozk"
+      },
+      "uuid": "0cf0691a-a8a3-42a6-8b8c-9d5ded4c81bc",
+      "objectId": "666bdf52dd6539db3454d4a1"
+    }
+  ]
+}

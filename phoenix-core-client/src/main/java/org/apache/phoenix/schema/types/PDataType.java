@@ -44,6 +44,8 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.math.LongMath;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Doubles;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Longs;
+
+import org.bson.BsonDocument;
 import org.bson.RawBsonDocument;
 
 /**
@@ -92,7 +94,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     }
 
     public boolean isBytesComparableWith(PDataType otherType) {
-        return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE);
+        return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE,
+            PVarbinaryEncoded.INSTANCE);
     }
 
     /**
@@ -532,6 +535,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
 
     public static final int ARRAY_TYPE_BASE = 3000;
     public static final int JSON_TYPE = 5000;
+    public static final int BSON_TYPE = 7000;
+    public static final int VARBINARY_ENCODED_TYPE = 9000;
     public static final String ARRAY_TYPE_SUFFIX = "ARRAY";
 
     protected static final ThreadLocal<Random> RANDOM = new ThreadLocal<Random>() {
@@ -747,7 +752,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
     }
 
     public boolean isCoercibleTo(PDataType targetType) {
-        return this.equals(targetType) || targetType.equals(PVarbinary.INSTANCE);
+        return this.equals(targetType) || targetType.equals(PVarbinary.INSTANCE)
+            || targetType.equals(PVarbinaryEncoded.INSTANCE);
     }
 
     // Specialized on enums to take into account type hierarchy (i.e. UNSIGNED_LONG is comparable to INTEGER)
@@ -1219,8 +1225,8 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
                         }
                     } catch (SQLException e) { /* Passthrough to fail */ }
                 }
-            } else if (value instanceof RawBsonDocument) {
-                if (type == PJson.INSTANCE) {
+            } else if (value instanceof BsonDocument) {
+                if (type == PBson.INSTANCE) {
                     return type;
                 }
             } else {

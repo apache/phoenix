@@ -187,6 +187,15 @@ public class MutationState implements SQLCloseable {
 
     private final boolean indexRegionObserverEnabledAllTables;
 
+    /**
+     * Return result back to client. To be used when client needs to read the whole row
+     * or some specific attributes of the row back. As of PHOENIX-7398, returning whole
+     * row is supported. This is used to allow client to set Mutation attribute that is read
+     * by server for it to atomically read the row and return it back.
+     */
+    private ReturnResult returnResult;
+    private Result result;
+
     public static void resetAllMutationState(){
         allDeletesMutations = true;
         allUpsertsMutations = true;
@@ -480,6 +489,10 @@ public class MutationState implements SQLCloseable {
 
     public int getNumRows() {
         return numRows;
+    }
+
+    public Result getResult() {
+        return this.result;
     }
 
     private MultiRowMutationState getLastMutationBatch(Map<TableRef, List<MultiRowMutationState>> mutations, TableRef tableRef) {
@@ -847,6 +860,12 @@ public class MutationState implements SQLCloseable {
                     if (onDupKeyBytes != null) {
                         mutation.setAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB, onDupKeyBytes);
                     }
+                    if (this.returnResult != null) {
+                        if (this.returnResult == ReturnResult.ROW) {
+                            mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
+                                    PhoenixIndexBuilderHelper.RETURN_RESULT_ROW);
+                        }
+                    }
                 }
                 rowMutationsPertainingToIndex = rowMutations;
             }
@@ -1125,6 +1144,10 @@ public class MutationState implements SQLCloseable {
 
     public long getBatchCount() {
         return batchCount;
+    }
+
+    public void setReturnResult(ReturnResult returnResult) {
+        this.returnResult = returnResult;
     }
 
     public static final class MutationBytes {
@@ -1550,6 +1573,11 @@ public class MutationState implements SQLCloseable {
                                 numUpdatedRowsForAutoCommit = PInteger.INSTANCE.getCodec()
                                         .decodeInt(cell.getValueArray(), cell.getValueOffset(),
                                                 SortOrder.getDefault());
+                                if (this.returnResult != null) {
+                                    if (this.returnResult == ReturnResult.ROW) {
+                                        this.result = result;
+                                    }
+                                }
                             } else {
                                 numUpdatedRowsForAutoCommit = 1;
                             }
@@ -2005,6 +2033,7 @@ public class MutationState implements SQLCloseable {
         estimatedSize = 0;
         this.mutationsMap.clear();
         phoenixTransactionContext = PhoenixTransactionContext.NULL_CONTEXT;
+        this.returnResult = null;
     }
 
     private void resetTransactionalState() {
@@ -2418,4 +2447,9 @@ public class MutationState implements SQLCloseable {
     public boolean isEmpty() {
         return mutationsMap != null ? mutationsMap.isEmpty() : true;
     }
+
+    public enum ReturnResult {
+        ROW
+    }
+
 }

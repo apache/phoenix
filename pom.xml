@@ -75,7 +75,7 @@
     <!-- Hadoop and Hbase-thirdparty version -->
     <!-- These are expected to be overridden to conform to cluster versions
     along with hbase.version (defined in profiles) -->
-    <hadoop.version>3.2.4</hadoop.version>
+    <hadoop.version>3.3.6</hadoop.version>
 
     <phoenix.thirdparty.version>2.1.0</phoenix.thirdparty.version>
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
@@ -85,7 +85,7 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
-    <hbase-2.5.runtime.version>2.5.8-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.10-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.runtime.version>2.6.0-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
@@ -114,7 +114,7 @@
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
     <commons-io.version>2.11.0</commons-io.version>
-    <commons-lang.version>3.8</commons-lang.version>
+    <commons-lang3.version>3.8</commons-lang3.version>
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.26.0</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
@@ -133,7 +133,7 @@
     <zookeeper.version>3.8.4</zookeeper.version>
     <curator.version>4.2.0</curator.version>
     <jcodings.version>1.0.55</jcodings.version>
-    <jetty.version>9.4.53.v20231009</jetty.version>
+    <jetty.version>9.4.56.v20240826</jetty.version>
     <javax.servlet-api.version>3.1.0</javax.servlet-api.version>
     <json-path.version>2.9.0</json-path.version>
     <bson.version>4.4.0</bson.version>
@@ -141,6 +141,13 @@
     <mockito.version>4.11.0</mockito.version>
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
+
+    <!-- These are only used for exclusion when shading, and the exact version is completely
+    irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
+    use theses packages, it does not explicitly depend on them, but instead takes the transitve
+    dependencies from the Hadoop/HBase version used for building. -->
+    <commons-configuration2.excludeonly.version>2.10.1</commons-configuration2.excludeonly.version>
+    <hbase-thirdparty.excludeonly.version>4.1.7</hbase-thirdparty.excludeonly.version>
 
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.10</maven-eclipse-plugin.version>
@@ -152,13 +159,14 @@
     <jacoco-maven-plugin.version>0.8.11</jacoco-maven-plugin.version>
     <sonar-maven-plugin.version>3.10.0.2594</sonar-maven-plugin.version>
     <findbugs-annotations.version>1.3.9-1</findbugs-annotations.version>
-    <maven-owasp-plugin.version>8.4.0</maven-owasp-plugin.version>
+    <maven-owasp-plugin.version>10.0.2</maven-owasp-plugin.version>
     <os.maven.version>1.7.1</os.maven.version>
     <jasmine-maven-plugin.version>2.2</jasmine-maven-plugin.version>
     <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
     <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
+    <mvel2.version>2.5.2.Final</mvel2.version>
 
     <!-- Plugin options -->
     <skipParallelStatsEnabledTests>false</skipParallelStatsEnabledTests>
@@ -1561,6 +1569,18 @@
         </exclusions>
       </dependency>
 
+      <dependency>
+        <groupId>org.mvel</groupId>
+        <artifactId>mvel2</artifactId>
+        <version>${mvel2.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.thoughtworks.xstream</groupId>
+            <artifactId>xstream</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
       <!-- Other dependencies -->
       <dependency>
         <groupId>org.apache.zookeeper</groupId>
@@ -1662,6 +1682,12 @@
         <artifactId>commons-collections</artifactId>
         <version>${collections.version}</version>
       </dependency>
+      <!-- Update transitive dependency to a one without CVEs -->
+      <dependency>
+          <groupId>com.fasterxml.woodstox</groupId>
+          <artifactId>woodstox-core</artifactId>
+          <version>5.4.0</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-csv</artifactId>
@@ -1675,7 +1701,7 @@
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
-        <version>${commons-lang.version}</version>
+        <version>${commons-lang3.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>
@@ -1851,7 +1877,6 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
-        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1883,7 +1908,6 @@
       <properties>
         <hbase.profile>2.5</hbase.profile>
         <hbase.compat.version>2.5.4</hbase.compat.version>
-        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1899,7 +1923,6 @@
       <properties>
         <hbase.profile>2.5.0</hbase.profile>
         <hbase.compat.version>2.5.0</hbase.compat.version>
-        <hadoop.version>3.2.4</hadoop.version>
         <hbase.version>${hbase-2.5.0.runtime.version}</hbase.version>
       </properties>
     </profile>
@@ -1915,7 +1938,6 @@
       <properties>
         <hbase.profile>2.6</hbase.profile>
         <hbase.compat.version>2.6.0</hbase.compat.version>
-        <hadoop.version>3.3.5</hadoop.version>
         <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
       </properties>
     </profile>

@@ -24,6 +24,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_START_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.SCAN_STOP_ROW_SUFFIX;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
@@ -41,6 +42,7 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
@@ -107,10 +109,12 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Iterators;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -393,9 +397,18 @@ public class ScanUtil {
             Field field = schema.getField(slotEndingFieldPos);
             int keyLength = range.getRange(bound).length;
             if (!field.getDataType().isFixedWidth()) {
-                keyLength++;
-                if (range.isUnbound(bound) && !range.isInclusive(bound) && field.getSortOrder() == SortOrder.DESC) {
+                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
                     keyLength++;
+                    if (range.isUnbound(bound) && !range.isInclusive(bound)
+                        && field.getSortOrder() == SortOrder.DESC) {
+                        keyLength++;
+                    }
+                } else {
+                    keyLength += 2;
+                    if (range.isUnbound(bound) && !range.isInclusive(bound)
+                        && field.getSortOrder() == SortOrder.DESC) {
+                        keyLength += 2;
+                    }
                 }
             }
             maxLength += keyLength;
@@ -489,22 +502,42 @@ public class ScanUtil {
             // key slots would cause the flag to become true.
             lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
             anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
-            // A null or empty byte array is always represented as a zero byte
-            byte sepByte = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0, field);
-            
-            if ( !isFixedWidth && ( sepByte == QueryConstants.DESC_SEPARATOR_BYTE 
-                                    || ( !exclusiveUpper 
-                                         && (fieldIndex < schema.getMaxFields() || inclusiveUpper || exclusiveLower) ) ) ) {
-                key[offset++] = sepByte;
-                // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
-                // as we don't want to increment the QueryConstants.SEPARATOR_BYTE byte in this case.
-                // To test if this is the last pk column we need to consider the span of this slot
-                // and the field index to see if this slot considers the last column.
-                // But if last field of rowKey is variable length and also DESC, the trailing 0xFF
-                // is not removed when stored in HBASE, so for such case, we should not set
-                // lastInclusiveUpperSingleKey back to false.
-                if (sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
-                    lastInclusiveUpperSingleKey &= (fieldIndex + slotSpan[i]) < schema.getMaxFields()-1;
+            if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                // A null or empty byte array is always represented as a zero byte
+                byte sepByte =
+                    SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), bytes.length == 0,
+                        field);
+
+                if (!isFixedWidth && (sepByte == QueryConstants.DESC_SEPARATOR_BYTE || (
+                    !exclusiveUpper && (fieldIndex < schema.getMaxFields() || inclusiveUpper
+                        || exclusiveLower)))) {
+                    key[offset++] = sepByte;
+                    // Set lastInclusiveUpperSingleKey back to false if this is the last pk column
+                    // as we don't want to increment the QueryConstants.SEPARATOR_BYTE byte in this case.
+                    // To test if this is the last pk column we need to consider the span of this slot
+                    // and the field index to see if this slot considers the last column.
+                    // But if last field of rowKey is variable length and also DESC, the trailing 0xFF
+                    // is not removed when stored in HBASE, so for such case, we should not set
+                    // lastInclusiveUpperSingleKey back to false.
+                    if (sepByte != QueryConstants.DESC_SEPARATOR_BYTE) {
+                        lastInclusiveUpperSingleKey &=
+                            (fieldIndex + slotSpan[i]) < schema.getMaxFields() - 1;
+                    }
+                }
+            } else {
+                byte[] sepBytes =
+                    SchemaUtil.getSeparatorBytesForVarBinaryEncoded(schema.rowKeyOrderOptimizable(),
+                        bytes.length == 0, field.getSortOrder());
+                if (!isFixedWidth && (
+                    sepBytes == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES || (
+                        !exclusiveUpper && (fieldIndex < schema.getMaxFields() || inclusiveUpper
+                            || exclusiveLower)))) {
+                    key[offset++] = sepBytes[0];
+                    key[offset++] = sepBytes[1];
+                    if (sepBytes != QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES) {
+                        lastInclusiveUpperSingleKey &=
+                            (fieldIndex + slotSpan[i]) < schema.getMaxFields() - 1;
+                    }
                 }
             }
             if (exclusiveUpper) {
@@ -529,9 +562,20 @@ public class ScanUtil {
                 // terminator, since DESC keys ignore the last byte as it's expected to be 
                 // the terminator. Without this, we'd ignore the separator byte that was
                 // just added and incremented.
-                if (!isFixedWidth && bytes.length == 0 
-                    && SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, field) == QueryConstants.DESC_SEPARATOR_BYTE) {
-                    key[offset++] = QueryConstants.DESC_SEPARATOR_BYTE;
+                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                    if (!isFixedWidth && bytes.length == 0 &&
+                        SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), false, field)
+                            == QueryConstants.DESC_SEPARATOR_BYTE) {
+                        key[offset++] = QueryConstants.DESC_SEPARATOR_BYTE;
+                    }
+                } else {
+                    if (!isFixedWidth && bytes.length == 0 &&
+                        SchemaUtil.getSeparatorBytesForVarBinaryEncoded(
+                            schema.rowKeyOrderOptimizable(), false, field.getSortOrder())
+                            == QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES) {
+                        key[offset++] = QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[0];
+                        key[offset++] = QueryConstants.DESC_VARBINARY_ENCODED_SEPARATOR_BYTES[1];
+                    }
                 }
             }
             
@@ -551,15 +595,27 @@ public class ScanUtil {
         // after the table has data, in which case there won't be a separator
         // byte.
         if (bound == Bound.LOWER) {
-            while (--i >= schemaStartIndex && offset > byteOffset && 
-                    !(field=schema.getField(--fieldIndex)).getDataType().isFixedWidth() && 
-                    field.getSortOrder() == SortOrder.ASC &&
-                    key[offset-1] == QueryConstants.SEPARATOR_BYTE) {
-                offset--;
-                fieldIndex -= slotSpan[i];
+            while (--i >= schemaStartIndex && offset > byteOffset && !(field =
+                schema.getField(--fieldIndex)).getDataType().isFixedWidth()
+                && field.getSortOrder() == SortOrder.ASC && hasSeparatorBytes(key, field, offset)) {
+                if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                    offset--;
+                    fieldIndex -= slotSpan[i];
+                } else {
+                    offset -= 2;
+                    fieldIndex -= slotSpan[i];
+                }
             }
         }
         return offset - byteOffset;
+    }
+
+    private static boolean hasSeparatorBytes(byte[] key, Field field, int offset) {
+        return (field.getDataType() != PVarbinaryEncoded.INSTANCE
+            && key[offset - 1] == QueryConstants.SEPARATOR_BYTE) || (
+            field.getDataType() == PVarbinaryEncoded.INSTANCE && offset >= 2
+                && key[offset - 1] == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[1]
+                && key[offset - 2] == QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES[0]);
     }
 
     public static boolean adjustScanFilterForGlobalIndexRegionScanner(Scan scan) {
@@ -693,10 +749,23 @@ public class ScanUtil {
         }
         Field field = schema.getField(pos - 1);
         if (!field.getDataType().isFixedWidth()) {
-            byte[] newLowerRange = new byte[key.length + 1];
-            System.arraycopy(key, 0, newLowerRange, 0, key.length);
-            newLowerRange[key.length] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), key.length==0, field);
-            key = newLowerRange;
+            if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
+                byte[] newLowerRange = new byte[key.length + 1];
+                System.arraycopy(key, 0, newLowerRange, 0, key.length);
+                newLowerRange[key.length] =
+                    SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), key.length == 0,
+                        field);
+                key = newLowerRange;
+            } else {
+                byte[] newLowerRange = new byte[key.length + 2];
+                System.arraycopy(key, 0, newLowerRange, 0, key.length);
+                byte[] sepBytes =
+                    SchemaUtil.getSeparatorBytesForVarBinaryEncoded(schema.rowKeyOrderOptimizable(),
+                        key.length == 0, field.getSortOrder());
+                newLowerRange[key.length] = sepBytes[0];
+                newLowerRange[key.length + 1] = sepBytes[1];
+                key = newLowerRange;
+            }
         } else {
             key = Arrays.copyOf(key, key.length);
         }
@@ -1078,26 +1147,31 @@ public class ScanUtil {
     }
 
 
-    public static long getPhoenixTTL(Scan scan) {
-        byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL);
+    public static int getTTL(Scan scan) {
+        byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
-            return 0L;
+            return DEFAULT_TTL;
         }
-        return Bytes.toLong(phoenixTTL);
+        return Bytes.readAsInt(phoenixTTL, 0, phoenixTTL.length);
+    }
+
+    public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
+        return conf.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED);
     }
 
     public static boolean isMaskTTLExpiredRows(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED) != null &&
                 (Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED),
                         PDataType.TRUE_BYTES) == 0)
-                && scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL) != null;
+                && scan.getAttribute(BaseScannerRegionObserverConstants.TTL) != null;
     }
 
     public static boolean isDeleteTTLExpiredRows(Scan scan) {
         return scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED) != null && (
                 Bytes.compareTo(scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_PHOENIX_TTL_EXPIRED),
                         PDataType.TRUE_BYTES) == 0)
-                && scan.getAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL) != null;
+                && scan.getAttribute(BaseScannerRegionObserverConstants.TTL) != null;
     }
 
     public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
@@ -1121,7 +1195,7 @@ public class ScanUtil {
 
     public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
         long ts = cell.getTimestamp();
-        long ttl = ScanUtil.getPhoenixTTL(scan);
+        int ttl = ScanUtil.getTTL(scan);
         return ts + ttl < nowTS;
     }
 
@@ -1306,10 +1380,22 @@ public class ScanUtil {
     public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
             PhoenixConnection phoenixConnection) throws SQLException {
 
-        // If server side masking for PHOENIX_TTL is not enabled OR is a SYSTEM table then return.
-        if (!ScanUtil.isServerSideMaskingEnabled(phoenixConnection) || SchemaUtil.isSystemTable(
-                SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
-                        table.getTableName().getString()))) {
+        //If entity is a view and phoenix.view.ttl.enabled is false then don't set TTL scan attribute.
+        if ((table.getType() == PTableType.VIEW) && !phoenixConnection.getQueryServices().getConfiguration().getBoolean(
+                QueryServices.PHOENIX_VIEW_TTL_ENABLED,
+                QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED
+        )) {
+            return;
+        }
+
+        // If Phoenix level TTL is not enabled OR is a system table then return.
+        if (!isPhoenixTableTTLEnabled(phoenixConnection.getQueryServices().getConfiguration())) {
+            if (SchemaUtil.isSystemTable(
+                    SchemaUtil.getTableNameAsBytes(table.getSchemaName().getString(),
+                            table.getTableName().getString()))) {
+                scan.setAttribute(BaseScannerRegionObserverConstants.IS_PHOENIX_TTL_SCAN_TABLE_SYSTEM,
+                        Bytes.toBytes(true));
+            }
             return;
         }
 
@@ -1338,8 +1424,7 @@ public class ScanUtil {
                 return;
             }
         }
-
-        if (dataTable.getPhoenixTTL() != 0) {
+        if (dataTable.getTTL() != 0) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
@@ -1349,8 +1434,8 @@ public class ScanUtil {
                     Bytes.toBytes(tableName));
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL,
-                    Bytes.toBytes(Long.valueOf(dataTable.getPhoenixTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
+                    Bytes.toBytes(Integer.valueOf(dataTable.getTTL())));
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
                 scan.setAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
@@ -1403,8 +1488,9 @@ public class ScanUtil {
             long pageSizeMs = phoenixConnection.getQueryServices().getProps()
                     .getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
             if (pageSizeMs == -1) {
-                // Use the half of the HBase RPC timeout value as the server page size to make sure that the HBase
-                // region server will be able to send a heartbeat message to the client before the client times out
+                // Use the half of the HBase RPC timeout value as the server page size to make sure
+                // that the HBase region server will be able to send a heartbeat message to the
+                // client before the client times out.
                 pageSizeMs = (long) (phoenixConnection.getQueryServices().getProps()
                         .getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
             }
@@ -1678,6 +1764,50 @@ public class ScanUtil {
                 return (PageFilter) filter;
             } else if (filter instanceof FilterList) {
                 return removePageFilterFromFilterList((FilterList) filter);
+            }
+        }
+        return null;
+    }
+
+    public static SkipScanFilter removeSkipScanFilterFromFilterList(FilterList filterList) {
+        Iterator<Filter> filterIterator = filterList.getFilters().iterator();
+        while (filterIterator.hasNext()) {
+            Filter filter = filterIterator.next();
+            if (filter instanceof SkipScanFilter
+                    && ((SkipScanFilter) filter).isMultiKeyPointLookup()) {
+                filterIterator.remove();
+                return (SkipScanFilter) filter;
+            } else if (filter instanceof FilterList) {
+                SkipScanFilter skipScanFilter = removeSkipScanFilterFromFilterList((FilterList) filter);
+                if (skipScanFilter != null) {
+                    return skipScanFilter;
+                }
+            }
+        }
+        return null;
+    }
+    public static SkipScanFilter removeSkipScanFilter(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null) {
+            PagingFilter pagingFilter = null;
+            if (filter instanceof PagingFilter) {
+                pagingFilter = (PagingFilter) filter;
+                filter = pagingFilter.getDelegateFilter();
+                if (filter == null) {
+                    return null;
+                }
+            }
+            if (filter instanceof SkipScanFilter
+                    && ((SkipScanFilter) filter).isMultiKeyPointLookup()) {
+                if (pagingFilter != null) {
+                    pagingFilter.setDelegateFilter(null);
+                    scan.setFilter(pagingFilter);
+                } else {
+                    scan.setFilter(null);
+                }
+                return (SkipScanFilter) filter;
+            } else if (filter instanceof FilterList) {
+                return removeSkipScanFilterFromFilterList((FilterList) filter);
             }
         }
         return null;

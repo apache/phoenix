@@ -163,7 +163,7 @@ public class PBinary extends PBinaryBase {
         } else if (rhs == null) {
             return 1;
         }
-        if (equalsAny(rhsType, PVarbinary.INSTANCE, PBinary.INSTANCE)) {
+        if (equalsAny(rhsType, PVarbinary.INSTANCE, PBinary.INSTANCE, PVarbinaryEncoded.INSTANCE)) {
             return Bytes.compareTo((byte[]) lhs, (byte[]) rhs);
         } else {
             byte[] rhsBytes = rhsType.toBytes(rhs);

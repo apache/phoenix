@@ -42,7 +42,6 @@ import org.apache.phoenix.compile.JoinCompiler.JoinSpec;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.compile.JoinCompiler.Table;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.AggregatePlan;
@@ -237,10 +236,12 @@ public class QueryCompiler {
             QueryPlan subPlan = compileSubquery(subSelect, true);
             plans.add(subPlan);
         }
+
         TableRef tableRef = UnionCompiler.contructSchemaTable(statement, plans,
             select.hasWildcard() ? null : select.getSelect());
         ColumnResolver resolver = FromCompiler.getResolver(tableRef);
         StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        plans = UnionCompiler.convertToTupleProjectionPlan(plans, tableRef, context);
         QueryPlan plan = compileSingleFlatQuery(
                 context,
                 select,
@@ -267,7 +268,7 @@ public class QueryCompiler {
     }
 
     public QueryPlan compileSelect(SelectStatement select) throws SQLException{
-        StatementContext context = new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+        StatementContext context = createStatementContext();
         QueryPlan dataPlanForCDC = getExistingDataPlanForCDC();
         if (dataPlanForCDC != null) {
             TableRef cdcTableRef = dataPlanForCDC.getTableRef();
@@ -296,6 +297,10 @@ public class QueryCompiler {
         } else {
             return compileSingleQuery(context, select, false, true);
         }
+    }
+
+    private StatementContext createStatementContext() {
+        return new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
     }
 
     /**
@@ -721,6 +726,13 @@ public class QueryCompiler {
         }
 
         QueryPlan innerPlan = compileSubquery(innerSelect, false);
+        if (innerPlan instanceof UnionPlan) {
+            UnionCompiler.optimizeUnionOrderByIfPossible(
+                    (UnionPlan) innerPlan,
+                    select,
+                    this::createStatementContext);
+        }
+
         RowProjector innerQueryPlanRowProjector = innerPlan.getProjector();
         TupleProjector tupleProjector = new TupleProjector(innerQueryPlanRowProjector);
 

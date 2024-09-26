@@ -21,6 +21,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.JsonValueFunction;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PJson;
 
@@ -37,7 +38,7 @@ public class JsonValueParseNode extends FunctionParseNode {
     public FunctionExpression create(List<Expression> children, StatementContext context)
             throws SQLException {
         PDataType dataType = children.get(0).getDataType();
-        if (!dataType.isCoercibleTo(PJson.INSTANCE)) {
+        if (!dataType.isCoercibleTo(PJson.INSTANCE) && !dataType.isCoercibleTo(PBson.INSTANCE)) {
             throw new SQLException(dataType + " type is unsupported for JSON_VALUE().");
         }
         return new JsonValueFunction(children);

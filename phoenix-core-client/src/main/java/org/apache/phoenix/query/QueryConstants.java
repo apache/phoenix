@@ -116,6 +116,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.QUERY_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REF_GENERATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REMARKS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCAN_METRICS_JSON;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION;
@@ -164,6 +165,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_START_TS
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_TYPE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_FOR_MUTEX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
@@ -245,6 +247,13 @@ public interface QueryConstants {
     byte[] SEPARATOR_BYTE_ARRAY = new byte[] {SEPARATOR_BYTE};
     byte DESC_SEPARATOR_BYTE = SortOrder.invert(SEPARATOR_BYTE);
     byte[] DESC_SEPARATOR_BYTE_ARRAY = new byte[] {DESC_SEPARATOR_BYTE};
+
+    byte[] VARBINARY_ENCODED_SEPARATOR_BYTES = new byte[] {0x00, 0x01};
+    byte[] DESC_VARBINARY_ENCODED_SEPARATOR_BYTES =
+        SortOrder.invert(VARBINARY_ENCODED_SEPARATOR_BYTES, 0, 2);
+
+    byte[] ROW_KEY_VAL_ACCESSOR_NEW_FIELDS_SEPARATOR =
+        Bytes.toBytes("_ROW_KEY_VALUE_ACCESSOR_ENCODED_SEPARATOR_");
 
     String DEFAULT_COPROCESS_JAR_NAME = "phoenix-[version]-server.jar";
     
@@ -342,6 +351,7 @@ public interface QueryConstants {
     String CDC_CHANGE_IMAGE = "change_image";
     String CDC_UPSERT_EVENT_TYPE = "upsert";
     String CDC_DELETE_EVENT_TYPE = "delete";
+    String SPLITS_FILE = "SPLITS_FILE";
 
     /**
      * We mark counter values 0 to 10 as reserved. Value 0 is used by
@@ -385,6 +395,8 @@ public interface QueryConstants {
             INDEX_WHERE + " VARCHAR, \n" +
             MAX_LOOKBACK_AGE + " BIGINT, \n" +
             CDC_INCLUDE_TABLE + " VARCHAR, \n" +
+            TTL + " VARCHAR, \n" +
+            ROW_KEY_MATCHER + " VARBINARY, \n" +
             // Column metadata (will be null for table row)
             DATA_TYPE + " INTEGER," +
             COLUMN_SIZE + " INTEGER," +

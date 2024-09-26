@@ -18,6 +18,7 @@
 package org.apache.phoenix.parse;
 
 import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.schema.types.PInteger;
 
 
 /**
@@ -83,5 +84,17 @@ public final class OrderByNode {
         child.toSQL(resolver, buf);
         if (!orderAscending) buf.append(" DESC");
         if (nullsLast) buf.append(" NULLS LAST ");
+    }
+
+    public boolean isIntegerLiteral() {
+        return child instanceof LiteralParseNode
+                && ((LiteralParseNode) child).getType() == PInteger.INSTANCE;
+    }
+
+    public Integer getValueIfIntegerLiteral() {
+        if (!isIntegerLiteral()) {
+            return null;
+        }
+        return (Integer) ((LiteralParseNode) child).getValue();
     }
 }

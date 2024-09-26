@@ -21,6 +21,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.ValueSchema.Field;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ScanUtil.BytesComparator;
@@ -79,6 +81,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     private int endKeyLength;
     private boolean isDone;
     private int offset;
+    private boolean isMultiKeyPointLookup;
     private Map<ImmutableBytesWritable, Cell> nextCellHintMap =
             new HashMap<ImmutableBytesWritable, Cell>();
 
@@ -92,26 +95,50 @@ public class SkipScanFilter extends FilterBase implements Writable {
     }
 
     public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions) {
-        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions);
+        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions,
+                filter.isMultiKeyPointLookup);
+    }
+
+    public SkipScanFilter(SkipScanFilter filter, boolean includeMultipleVersions,
+            boolean isMultiKeyPointLookup) {
+        this(filter.slots, filter.slotSpan, filter.schema, includeMultipleVersions,
+                isMultiKeyPointLookup);
     }
 
     public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema) {
-        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema);
-    }
-
-    public SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema) {
-        this(slots, slotSpan, schema, false);
+        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema, false);
     }
     
-    private SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema, boolean includeMultipleVersions) {
-        init(slots, slotSpan, schema, includeMultipleVersions);
+    public SkipScanFilter(List<List<KeyRange>> slots, RowKeySchema schema, boolean isMultiKeyPointLookup) {
+        this(slots, ScanUtil.getDefaultSlotSpans(slots.size()), schema, isMultiKeyPointLookup);
+    }
+
+    public SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
+            boolean isMultiKeyPointLookup) {
+        this(slots, slotSpan, schema, false, isMultiKeyPointLookup);
+    }
+
+    private SkipScanFilter(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
+            boolean includeMultipleVersions, boolean isMultiKeyPointLookup) {
+        init(slots, slotSpan, schema, includeMultipleVersions, isMultiKeyPointLookup);
     }
     
     public void setOffset(int offset) {
         this.offset = offset;
     }
+    public int getOffset() {
+        return offset;
+    }
+    public boolean isMultiKeyPointLookup() {
+        return isMultiKeyPointLookup;
+    }
 
-    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema, boolean includeMultipleVersions) {
+    public List<KeyRange> getPointLookupKeyRanges() {
+        return isMultiKeyPointLookup ? slots.get(0) : Collections.emptyList();
+    }
+
+    private void init(List<List<KeyRange>> slots, int[] slotSpan, RowKeySchema schema,
+            boolean includeMultipleVersions, boolean isPointLookup) {
         for (List<KeyRange> ranges : slots) {
             if (ranges.isEmpty()) {
                 throw new IllegalStateException();
@@ -126,6 +153,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
         this.endKey = new byte[maxKeyLength];
         this.endKeyLength = 0;
         this.includeMultipleVersions = includeMultipleVersions;
+        this.isMultiKeyPointLookup = isPointLookup;
     }
 
     // Exposed for testing.
@@ -194,7 +222,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
     public SkipScanFilter intersect(byte[] lowerInclusiveKey, byte[] upperExclusiveKey) {
         List<List<KeyRange>> newSlots = Lists.newArrayListWithCapacity(slots.size());
         if (intersect(lowerInclusiveKey, upperExclusiveKey, newSlots)) {
-            return new SkipScanFilter(newSlots, slotSpan, schema);
+            return new SkipScanFilter(newSlots, slotSpan, schema, isMultiKeyPointLookup);
         }
         return null;
     }
@@ -549,13 +577,19 @@ public class SkipScanFilter extends FilterBase implements Writable {
 
     private int setStartKey(ImmutableBytesWritable ptr, int offset, int i, int nSlots, boolean atEndOfKey) {
         int length = ptr.getOffset() - offset;
-        startKey = copyKey(startKey, length + this.maxKeyLength, ptr.get(), offset, length);
+        startKey = copyKey(startKey, length + this.maxKeyLength + 1, ptr.get(), offset, length);
         startKeyLength = length;
         // Add separator byte if we're at end of the key, since trailing separator bytes are stripped
-        if (atEndOfKey && i > 0 && i-1 < nSlots) {
-            Field field = schema.getField(i-1);
+        if (atEndOfKey && i > 0 && i - 1 < nSlots) {
+            Field field = schema.getField(i - 1);
             if (!field.getDataType().isFixedWidth()) {
-                startKey[startKeyLength++] = SchemaUtil.getSeparatorByte(schema.rowKeyOrderOptimizable(), true, field);
+                byte[] sepBytes = SchemaUtil.getSeparatorBytes(field.getDataType(),
+                    schema.rowKeyOrderOptimizable(),
+                    true,
+                    field.getSortOrder());
+                for (byte sepByte : sepBytes) {
+                    startKey[startKeyLength++] = sepByte;
+                }
             }
         }
         startKeyLength += setKey(Bound.LOWER, startKey, startKeyLength, i);
@@ -618,7 +652,14 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 orClause.add(range);
             }
         }
-        this.init(slots, slotSpan, schema, includeMultipleVersions);
+        try {
+            boolean isPointLookup = in.readBoolean();
+            this.init(slots, slotSpan, schema, includeMultipleVersions, isPointLookup);
+        } catch (IOException e) {
+            // Reached the end of the stream before reading the boolean field. The client can be
+            // an older client
+            this.init(slots, slotSpan, schema, includeMultipleVersions, false);
+        }
     }
 
     @Override
@@ -636,6 +677,7 @@ public class SkipScanFilter extends FilterBase implements Writable {
                 range.write(out);
             }
         }
+        out.writeBoolean(isMultiKeyPointLookup);
     }
     
     @Override

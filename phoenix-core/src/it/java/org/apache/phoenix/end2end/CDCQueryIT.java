@@ -257,6 +257,8 @@ public class CDCQueryIT extends CDCBaseIT {
             put("V7", "TIMESTAMP");
             put("V8", "VARBINARY");
             put("V9", "BINARY");
+            put("V10", "VARCHAR ARRAY");
+            put("V11", "JSON");
         }};
         try (Connection conn = newConnection()) {
             createTable(conn, tableName, pkColumns, dataColumns, multitenant, encodingScheme,

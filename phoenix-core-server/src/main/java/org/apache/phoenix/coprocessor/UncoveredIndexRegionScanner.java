@@ -206,7 +206,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             dataScan.setTimeRange(scan.getTimeRange().getMin(), scan.getTimeRange().getMax());
             scanRanges.initializeScan(dataScan);
             SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
-            dataScan.setFilter(new SkipScanFilter(skipScanFilter, includeMultipleVersions));
+            dataScan.setFilter(new SkipScanFilter(skipScanFilter, includeMultipleVersions, true));
             dataScan.setAttribute(SERVER_PAGE_SIZE_MS,
                     Bytes.toBytes(Long.valueOf(pageSizeMs)));
             return dataScan;
@@ -267,10 +267,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
                 lastIndexRowKey = ImmutableBytesPtr.copyBytesIfNecessary(firstCell.getRowArray(),
                         firstCell.getRowOffset() + offset,
                         firstCell.getRowLength() - offset);
-                indexToDataRowKeyMap.put(offset == 0 ? lastIndexRowKey :
-                                CellUtil.cloneRow(firstCell), indexMaintainer.buildDataRowKey(
-                                        new ImmutableBytesWritable(lastIndexRowKey),
-                                viewConstants));
+                indexToDataRowKeyMap.put(
+                    offset == 0 ? lastIndexRowKey : CellUtil.cloneRow(firstCell),
+                    indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(lastIndexRowKey),
+                        viewConstants));
                 indexRows.add(row);
                 indexRowCount++;
                 if (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime)

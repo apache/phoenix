@@ -388,8 +388,6 @@ public class QueryServicesOptions {
                 = (long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS");
     public static final boolean DEFAULT_LAST_DDL_TIMESTAMP_VALIDATION_ENABLED = false;
     public static final boolean DEFAULT_PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED = false;
-    public static final String DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX
-                                                                            = Long.toString(0L);
     public static final int DEFAULT_PHOENIX_METADATA_CACHE_INVALIDATION_THREAD_POOL_SIZE = 20;
 
     // default system task handling interval in milliseconds
@@ -442,6 +440,9 @@ public class QueryServicesOptions {
     public static final int DEFAULT_SCAN_PAGE_SIZE = 32768;
     public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
     public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
+    public static final boolean DEFAULT_PHOENIX_VIEW_TTL_ENABLED = true;
+    public static final int DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = 100;
+
     public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
     public static final boolean DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX = true;
 

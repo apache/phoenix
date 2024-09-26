@@ -51,19 +51,18 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_VALUE_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MIN_VALUE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM_BYTES;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_NOT_DEFINED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.RETURN_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ROW_KEY_MATCHER_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SCHEMA_VERSION_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SORT_ORDER_BYTES;
@@ -76,6 +75,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTE
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
@@ -89,18 +89,22 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE_B
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_BYTES;
+import static org.apache.phoenix.query.QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+import static org.apache.phoenix.schema.PTable.LinkType.PARENT_TABLE;
+import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.INDEX;
+import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
-import static org.apache.phoenix.util.SchemaUtil.getVarCharLength;
-import static org.apache.phoenix.util.SchemaUtil.getVarChars;
+import static org.apache.phoenix.util.SchemaUtil.*;
 import static org.apache.phoenix.util.ViewUtil.findAllDescendantViews;
 import static org.apache.phoenix.util.ViewUtil.getSystemTableForChildLinks;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
+import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -192,6 +196,7 @@ import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseAllExpressionVisitor;
+import org.apache.phoenix.hbase.index.LockManager;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -254,6 +259,7 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
@@ -323,6 +329,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     private static final byte[] PHYSICAL_TABLE_BYTES =
             new byte[]{PTable.LinkType.PHYSICAL_TABLE.getSerializedValue()};
 
+    private LockManager lockManager;
+    private long metadataCacheRowLockTimeout;
+
     // KeyValues for Table
     private static final Cell TABLE_TYPE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
         TABLE_FAMILY_BYTES, TABLE_TYPE_BYTES);
@@ -361,8 +370,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final Cell STORAGE_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, STORAGE_SCHEME_BYTES);
     private static final Cell ENCODING_SCHEME_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, ENCODING_SCHEME_BYTES);
     private static final Cell USE_STATS_FOR_PARALLELIZATION_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, USE_STATS_FOR_PARALLELIZATION_BYTES);
-    private static final Cell PHOENIX_TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PHOENIX_TTL_BYTES);
-    private static final Cell PHOENIX_TTL_HWM_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, PHOENIX_TTL_HWM_BYTES);
     private static final Cell LAST_DDL_TIMESTAMP_KV =
         createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, LAST_DDL_TIMESTAMP_BYTES);
     private static final Cell CHANGE_DETECTION_ENABLED_KV =
@@ -380,6 +387,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
 
     private static final Cell MAX_LOOKBACK_AGE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, MAX_LOOKBACK_AGE_BYTES);
+
+    private static final Cell TTL_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, TTL_BYTES);
+    private static final Cell ROW_KEY_MATCHER_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY,
+            TABLE_FAMILY_BYTES, ROW_KEY_MATCHER_BYTES);
 
     private static final List<Cell> TABLE_KV_COLUMNS = Lists.newArrayList(
             EMPTY_KEYVALUE_KV,
@@ -413,8 +425,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             STORAGE_SCHEME_KV,
             ENCODING_SCHEME_KV,
             USE_STATS_FOR_PARALLELIZATION_KV,
-            PHOENIX_TTL_KV,
-            PHOENIX_TTL_HWM_KV,
             LAST_DDL_TIMESTAMP_KV,
             CHANGE_DETECTION_ENABLED_KV,
             SCHEMA_VERSION_KV,
@@ -422,7 +432,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             STREAMING_TOPIC_NAME_KV,
             INDEX_WHERE_KV,
             MAX_LOOKBACK_AGE_KV,
-            CDC_INCLUDE_KV
+            CDC_INCLUDE_KV,
+            TTL_KV,
+            ROW_KEY_MATCHER_KV
     );
 
     static {
@@ -459,8 +471,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private static final int QUALIFIER_ENCODING_SCHEME_INDEX = TABLE_KV_COLUMNS.indexOf(ENCODING_SCHEME_KV);
     private static final int USE_STATS_FOR_PARALLELIZATION_INDEX = TABLE_KV_COLUMNS.indexOf(USE_STATS_FOR_PARALLELIZATION_KV);
     private static final int PHYSICAL_TABLE_NAME_INDEX = TABLE_KV_COLUMNS.indexOf(PHYSICAL_TABLE_NAME_KV);
-    private static final int PHOENIX_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(PHOENIX_TTL_KV);
-    private static final int PHOENIX_TTL_HWM_INDEX = TABLE_KV_COLUMNS.indexOf(PHOENIX_TTL_HWM_KV);
     private static final int LAST_DDL_TIMESTAMP_INDEX =
         TABLE_KV_COLUMNS.indexOf(LAST_DDL_TIMESTAMP_KV);
     private static final int CHANGE_DETECTION_ENABLED_INDEX =
@@ -475,6 +485,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             TABLE_KV_COLUMNS.indexOf(INDEX_WHERE_KV);
 
     private static final int MAX_LOOKBACK_AGE_INDEX = TABLE_KV_COLUMNS.indexOf(MAX_LOOKBACK_AGE_KV);
+    private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
+    private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
     // KeyValues for Column
     private static final KeyValue DECIMAL_DIGITS_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
     private static final KeyValue COLUMN_SIZE_KV = createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, COLUMN_SIZE_BYTES);
@@ -607,6 +619,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     // before 4.15, so that we can rollback the upgrade to 4.15 if required
     private boolean allowSplittableSystemCatalogRollback;
 
+    private boolean isSystemCatalogSplittable;
+
     protected boolean getMetadataReadLockEnabled;
 
     private MetricsMetadataSource metricsSource;
@@ -634,8 +648,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             throw new CoprocessorException("Must be loaded on a table region!");
         }
 
+        this.lockManager = new LockManager();
         phoenixAccessCoprocessorHost = new PhoenixMetaDataCoprocessorHost(this.env);
         Configuration config = env.getConfiguration();
+        this.metadataCacheRowLockTimeout =
+            config.getLong(QueryServices.PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT,
+                QueryServices.DEFAULT_PHOENIX_METADATA_CACHE_UPDATE_ROWLOCK_TIMEOUT);
         this.accessCheckEnabled = config.getBoolean(QueryServices.PHOENIX_ACLS_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_ACLS_ENABLED);
         this.blockWriteRebuildIndex = config.getBoolean(QueryServices.INDEX_FAILURE_BLOCK_WRITE,
@@ -652,12 +670,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         this.getMetadataReadLockEnabled
                 = config.getBoolean(QueryServices.PHOENIX_GET_METADATA_READ_LOCK_ENABLED,
                             QueryServicesOptions.DEFAULT_PHOENIX_GET_METADATA_READ_LOCK_ENABLED);
+        this.isSystemCatalogSplittable = MetaDataSplitPolicy.isSystemCatalogSplittable(config);
 
         LOGGER.info("Starting Tracing-Metrics Systems");
         // Start the phoenix trace collection
         Tracing.addTraceMetricsSource();
         Metrics.ensureConfigured();
         metricsSource = MetricsMetadataSourceFactory.getMetadataMetricsSource();
+        GlobalCache.getInstance(this.env).setMetricsSource(metricsSource);
     }
 
     @Override
@@ -704,8 +724,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
             if (request.getClientVersion() < MIN_SPLITTABLE_SYSTEM_CATALOG
                     && table.getType() == PTableType.VIEW
-                    && table.getViewType() != ViewType.MAPPED) {
-                try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                    && table.getViewType() != MAPPED) {
+                try (PhoenixConnection connection = getServerConnectionForMetaData(
+                        env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                     PTable pTable = connection.getTableNoCache(table.getParentName().getString());
                     table = ViewUtil.addDerivedColumnsFromParent(connection, table, pTable);
                 }
@@ -756,8 +777,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         Scan scan = MetaDataUtil.newTableRowsScan(key, MIN_TABLE_TIMESTAMP, clientTimeStamp);
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable newTable;
+        region.startRegionOperation();
         try (RegionScanner scanner = region.getScanner(scan)) {
             PTable oldTable = (PTable) metaDataCache.getIfPresent(cacheKey);
+            if (oldTable == null) {
+                metricsSource.incrementMetadataCacheMissCount();
+            } else {
+                metricsSource.incrementMetadataCacheHitCount();
+            }
             long tableTimeStamp = oldTable == null ? MIN_TABLE_TIMESTAMP - 1 : oldTable.getTimeStamp();
             newTable = getTable(scanner, clientTimeStamp, tableTimeStamp, clientVersion);
             if (newTable != null
@@ -772,7 +799,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             + tableTimeStamp);
                 }
                 metaDataCache.put(cacheKey, newTable);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(newTable.getEstimatedSize());
             }
+        } finally {
+            region.closeRegionOperation();
         }
         return newTable;
     }
@@ -808,6 +839,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                                         .getTenantId().getBytes(), Bytes.toBytes(function
                                         .getFunctionName()));
                 metaDataCache.put(new FunctionBytesPtr(functionKey), function);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(function.getEstimatedSize());
                 functions.add(function);
             }
             return functions;
@@ -844,6 +877,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     return null;
                 }
                 metaDataCache.put(cacheKey, schema);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(schema.getEstimatedSize());
                 schemas.add(schema);
             }
             return schemas;
@@ -1391,29 +1426,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(), useStatsForParallelizationKv.getValueOffset(), useStatsForParallelizationKv.getValueLength()));
          builder.setUseStatsForParallelization(useStatsForParallelization != null ?
              useStatsForParallelization : oldTable != null ? oldTable.useStatsForParallelization() : null);
-
-        Cell phoenixTTLKv = tableKeyValues[PHOENIX_TTL_INDEX];
-        long phoenixTTL = phoenixTTLKv == null ? PHOENIX_TTL_NOT_DEFINED :
-                PLong.INSTANCE.getCodec().decodeLong(phoenixTTLKv.getValueArray(),
-                        phoenixTTLKv.getValueOffset(), SortOrder.getDefault());
-        builder.setPhoenixTTL(phoenixTTLKv != null ? phoenixTTL :
-            oldTable != null ? oldTable.getPhoenixTTL() : PHOENIX_TTL_NOT_DEFINED);
-
-        Cell phoenixTTLHWMKv = tableKeyValues[PHOENIX_TTL_HWM_INDEX];
-        long phoenixTTLHWM = phoenixTTLHWMKv == null ? MIN_PHOENIX_TTL_HWM :
-                PLong.INSTANCE.getCodec().decodeLong(phoenixTTLHWMKv.getValueArray(),
-                        phoenixTTLHWMKv.getValueOffset(), SortOrder.getDefault());
-        builder.setPhoenixTTLHighWaterMark(phoenixTTLHWMKv != null ? phoenixTTLHWM :
-            oldTable != null ? oldTable.getPhoenixTTLHighWaterMark() : MIN_PHOENIX_TTL_HWM);
-
-        // Check the cell tag to see whether the view has modified this property
-        final byte[] tagPhoenixTTL = (phoenixTTLKv == null) ?
-                HConstants.EMPTY_BYTE_ARRAY : CellUtil.getTagArray(phoenixTTLKv);
-        boolean viewModifiedPhoenixTTL = (PTableType.VIEW.equals(tableType)) &&
-                Bytes.contains(tagPhoenixTTL, MetaDataEndpointImplConstants.VIEW_MODIFIED_PROPERTY_BYTES);
-        builder.setViewModifiedPhoenixTTL(oldTable != null ?
-            oldTable.hasViewModifiedPhoenixTTL() || viewModifiedPhoenixTTL : viewModifiedPhoenixTTL);
-
         Cell lastDDLTimestampKv = tableKeyValues[LAST_DDL_TIMESTAMP_INDEX];
         Long lastDDLTimestamp = lastDDLTimestampKv == null ?
            null : PLong.INSTANCE.getCodec().decodeLong(lastDDLTimestampKv.getValueArray(),
@@ -1478,6 +1490,33 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
             maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
         }
+        Cell ttlKv = tableKeyValues[TTL_INDEX];
+        int ttl = TTL_NOT_DEFINED;
+        if (ttlKv != null) {
+            String ttlStr = (String) PVarchar.INSTANCE.toObject(
+                    ttlKv.getValueArray(),
+                    ttlKv.getValueOffset(),
+                    ttlKv.getValueLength());
+            ttl = Integer.parseInt(ttlStr);
+        }
+        ttl = ttlKv != null ? ttl : oldTable != null
+                ? oldTable.getTTL() : TTL_NOT_DEFINED;
+        if (tableType == VIEW && viewType != MAPPED && ttl == TTL_NOT_DEFINED) {
+            //Scan SysCat to get TTL from Parent View/Table
+            byte[] viewKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                    schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
+            ttl = getTTLFromHierarchy(viewKey, clientTimeStamp, false);
+
+            // TODO: Need to Update Cache for Alter Commands, can use PHOENIX-6883.
+        }
+
+        Cell rowKeyMatcherKv = tableKeyValues[ROW_KEY_MATCHER_INDEX];
+        byte[] rowKeyMatcher = rowKeyMatcherKv != null
+                ? CellUtil.cloneValue(rowKeyMatcherKv)
+                : HConstants.EMPTY_BYTE_ARRAY;
+        builder.setRowKeyMatcher(rowKeyMatcher != null ? rowKeyMatcher
+                : oldTable != null ? oldTable.getRowKeyMatcher() : HConstants.EMPTY_BYTE_ARRAY);
+
 
         // Check the cell tag to see whether the view has modified this property
         final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null) ?
@@ -1511,8 +1550,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
 
         PTable transformingNewTable = null;
-        boolean isRegularView = (tableType == PTableType.VIEW && viewType != ViewType.MAPPED);
-        boolean isViewIndex = false;
+        boolean isRegularView = (tableType == PTableType.VIEW && viewType != MAPPED);
+        boolean isThisAViewIndex = false;
         for (List<Cell> columnCellList : allColumnCellList) {
 
             Cell colKv = columnCellList.get(LINK_TYPE_INDEX);
@@ -1534,15 +1573,27 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 LinkType linkType = LinkType.fromSerializedValue(colKv.getValueArray()[colKv.getValueOffset()]);
                 if (linkType == LinkType.INDEX_TABLE) {
                     addIndexToTable(tenantId, schemaName, famName, tableName, clientTimeStamp, indexes, clientVersion);
-                } else if (linkType == LinkType.PHYSICAL_TABLE) {
+                } else if (linkType == PHYSICAL_TABLE) {
                     // famName contains the logical name of the parent table. We need to get the actual physical name of the table
                     PTable parentTable = null;
-                    if (indexType != IndexType.LOCAL) {
+                    // call getTable() on famName only if it does not start with _IDX_.
+                    // Table name starting with _IDX_ always must refer to HBase table that is
+                    // shared by all view indexes on the given table/view hierarchy.
+                    // _IDX_ is HBase table that does not have corresponding PTable representation
+                    // in Phoenix, hence there is no point of calling getTable().
+                    if (!famName.getString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)
+                        && indexType != IndexType.LOCAL) {
                         parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
                                 SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
-                        if (parentTable == null || isTableDeleted(parentTable)) {
-                            // parentTable is not in the cache. Since famName is only logical name, we need to find the physical table.
-                            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                        if (isSystemCatalogSplittable
+                            && (parentTable == null || isTableDeleted(parentTable))) {
+                            // parentTable is neither in the cache nor in the local region. Since
+                            // famName is only logical name, we need to find the physical table.
+                            // Hence, it is recommended to scan SYSTEM.CATALOG table again using
+                            // separate CQSI connection as SYSTEM.CATALOG is splittable so the
+                            // PTable with famName might be available on different region.
+                            try (PhoenixConnection connection = getServerConnectionForMetaData(
+                                    env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                                 parentTable = connection.getTableNoCache(famName.getString());
                             } catch (TableNotFoundException e) {
                                 // It is ok to swallow this exception since this could be a view index and _IDX_ table is not there.
@@ -1578,7 +1629,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         setPhysicalName = true;
                         parentLogicalName = SchemaUtil.getTableName(parentTable.getSchemaName(), parentTable.getTableName());
                     }
-                } else if (linkType == LinkType.PARENT_TABLE) {
+                } else if (linkType == PARENT_TABLE) {
                     parentTableName = PNameFactory.newName(SchemaUtil.getTableNameFromFullName(famName.getBytes()));
                     parentSchemaName = PNameFactory.newName(SchemaUtil.getSchemaNameFromFullName(famName.getBytes()));
                 } else if (linkType == LinkType.EXCLUDED_COLUMN) {
@@ -1595,12 +1646,14 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             ClientUtil.throwIOException("Transforming new table not found", new TableNotFoundException(schemaName.getString(), famName.getString()));
                         }
                     }
-                }
-                else if (linkType == VIEW_INDEX_PARENT_TABLE) {
-                    isViewIndex = true;
-                    byte[] indexKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
-                            schemaName == null ? null : schemaName.getBytes(), tableNameBytes);
-                    maxLookbackAge = scanMaxLookbackAgeFromParent(indexKey, clientTimeStamp);
+                } else if (linkType == VIEW_INDEX_PARENT_TABLE) {
+                    byte[] viewKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                            parentSchemaName == null ? null : parentSchemaName.getBytes(),
+                            parentTableName.getBytes());
+                    //parentViewType should not be Mapped
+                    maxLookbackAge = scanMaxLookbackAgeFromParent(viewKey, clientTimeStamp);
+                    ttl = getTTLFromHierarchy(viewKey, clientTimeStamp, true);
+                    isThisAViewIndex = true;
                 }
             } else {
                 long columnTimestamp =
@@ -1613,13 +1666,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     isSalted, baseColumnCount, isRegularView, columnTimestamp);
             }
         }
-        if (tableType == INDEX && ! isViewIndex) {
+        if (tableType == INDEX && ! isThisAViewIndex) {
             byte[] tableKey = SchemaUtil.getTableKey(tenantId == null ? null : tenantId.getBytes(),
                     parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
             maxLookbackAge = scanMaxLookbackAgeFromParent(tableKey, clientTimeStamp);
         }
         builder.setMaxLookbackAge(maxLookbackAge != null ? maxLookbackAge :
                 (oldTable != null ? oldTable.getMaxLookbackAge() : null));
+
+        if(tableType == INDEX && !isThisAViewIndex && ttl == TTL_NOT_DEFINED) {
+            //If this is an index on Table get TTL from Table
+            byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
+                    parentSchemaName == null ? null : parentSchemaName.getBytes(),
+                    parentTableName.getBytes());
+            ttl = getTTLForTable(tableKey, clientTimeStamp);
+        }
+        builder.setTTL(ttl);
         builder.setEncodedCQCounter(cqCounter);
 
         builder.setIndexes(indexes != null ? indexes : oldTable != null
@@ -1693,12 +1755,126 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
     private byte[] getParentTableKeyFromChildRowKeyMetaData(byte[][] rowKeyMetaData) {
         byte[] parentTenantId = rowKeyMetaData[PhoenixDatabaseMetaData.TENANT_ID_INDEX];
-        String parentSchema = SchemaUtil.getSchemaNameFromFullName(
-                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-        byte[] parentSchemaName = parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
-        byte[] parentTableName = SchemaUtil.getTableNameFromFullName(
-                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]).getBytes(StandardCharsets.UTF_8);
+        String
+                parentSchema =
+                SchemaUtil.getSchemaNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+        byte[]
+                parentSchemaName =
+                parentSchema != null ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
+        byte[]
+                parentTableName =
+                SchemaUtil.getTableNameFromFullName(
+                                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
         return SchemaUtil.getTableKey(parentTenantId, parentSchemaName, parentTableName);
+    }
+
+    /**
+     * Method to return TTL value defined at current level or up the Hierarchy of the view.
+     * @param viewKey Key of the view for which we have to find TTL
+     * @param clientTimeStamp Client TimeStamp
+     * @return TTL value for a given view, if nothing is defined anywhere then return
+     *         TTL_NOT_DEFINED(0).
+     * @throws IOException
+     * @throws SQLException
+     */
+
+    private int getTTLFromHierarchy(byte[] viewKey, long clientTimeStamp, boolean checkForMappedView) throws IOException, SQLException {
+        Scan scan = MetaDataUtil.newTableRowsScan(viewKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                        env.getConfiguration()));
+        ResultScanner scanner = sysCat.getScanner(scan);
+        Result result = scanner.next();
+
+        byte[] tableKey = null;
+        do {
+
+            if (result == null) {
+                return TTL_NOT_DEFINED;
+            }
+
+            //return TTL_NOT_DEFINED for Index on a Mapped View.
+            if (checkForMappedView && checkIfViewIsMappedView(result)) {
+                return TTL_NOT_DEFINED;
+            }
+
+            byte[] linkTypeBytes = result.getValue(TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+            byte[][] rowKeyMetaData = new byte[5][];
+            getVarChars(result.getRow(), 5, rowKeyMetaData);
+            //Check if TTL is defined at the current given level
+            if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+                String ttlStr = (String) PVarchar.INSTANCE.toObject(
+                        result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
+                return Integer.parseInt(ttlStr);
+            } else if (linkTypeBytes != null ) {
+                String parentSchema =SchemaUtil.getSchemaNameFromFullName(
+                        rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
+                byte[] parentViewSchemaName = parentSchema != null
+                        ? parentSchema.getBytes(StandardCharsets.UTF_8) : null;
+                byte[] parentViewName = SchemaUtil.getTableNameFromFullName(
+                                rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX])
+                        .getBytes(StandardCharsets.UTF_8);
+                //Get TTL from up the hierarchy, Checking for Parent view link and getting TTL from it.
+                if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PARENT_TABLE) {
+                    byte[] parentViewTenantId = result.getValue(TABLE_FAMILY_BYTES,
+                            PARENT_TENANT_ID_BYTES);
+                    byte[] parentViewKey = SchemaUtil.getTableKey(parentViewTenantId,
+                            parentViewSchemaName, parentViewName);
+                    return getTTLFromHierarchy(parentViewKey, clientTimeStamp, false);
+                }
+
+                //Store tableKey to use if we don't find TTL at current level and from
+                //parent views above the hierarchy
+                if (LinkType.fromSerializedValue(linkTypeBytes[0]) == PHYSICAL_TABLE) {
+                    tableKey = SchemaUtil.getTableKey(null, parentViewSchemaName,
+                            parentViewName);
+                }
+            }
+
+            result = scanner.next();
+        } while (result != null);
+
+        //Return TTL defined at Table level for the given hierarchy as we didn't find TTL any of the views.
+        return getTTLForTable(tableKey, clientTimeStamp);
+
+    }
+
+    private boolean checkIfViewIsMappedView(Result result) {
+        byte[] viewTypeBytes = result.getValue(TABLE_FAMILY_BYTES, VIEW_TYPE_BYTES);
+        if (viewTypeBytes != null && ViewType.fromSerializedValue(viewTypeBytes[0]) == MAPPED) {
+            return true;
+        }
+        return false;
+    }
+
+    /***
+     * Get TTL Value stored in SYSCAT for a given table
+     * @param tableKey of table  for which we are fining TTL
+     * @param clientTimeStamp client TimeStamp value
+     * @return TTL defined for a given table if it is null then return TTL_NOT_DEFINED(0)
+     * @throws IOException
+     */
+    private int getTTLForTable(byte[] tableKey, long clientTimeStamp) throws IOException {
+        Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
+        Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
+                SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                        env.getConfiguration()));
+        ResultScanner scanner = sysCat.getScanner(scan);
+        Result result = scanner.next();
+        do {
+            if (result == null) {
+                return TTL_NOT_DEFINED;
+            }
+            if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
+                String ttlStr = (String) PVarchar.INSTANCE.toObject(
+                        result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
+                return Integer.parseInt(ttlStr);
+            }
+            result = scanner.next();
+        } while (result != null);
+        return TTL_NOT_DEFINED;
     }
 
     private Long getViewIndexId(Cell[] tableKeyValues, PDataType viewIndexIdType) {
@@ -1919,6 +2095,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         GlobalCache.getInstance(this.env).getMetaDataCache();
                 PTable table = newDeletedTableMarker(kv.getTimestamp());
                 metaDataCache.put(cacheKey, table);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(table.getEstimatedSize());
                 return table;
             }
         }
@@ -1947,6 +2125,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         GlobalCache.getInstance(this.env).getMetaDataCache();
                 PFunction function = newDeletedFunctionMarker(kv.getTimestamp());
                 metaDataCache.put(cacheKey, function);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(function.getEstimatedSize());
                 return function;
             }
         }
@@ -1974,6 +2154,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         .getMetaDataCache();
                 PSchema schema = newDeletedSchemaMarker(kv.getTimestamp());
                 metaDataCache.put(cacheKey, schema);
+                metricsSource.incrementMetadataCacheAddCount();
+                metricsSource.incrementMetadataCacheUsedSize(schema.getEstimatedSize());
                 return schema;
             }
         }
@@ -2042,6 +2224,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
     private PTable getTableFromCache(ImmutableBytesPtr cacheKey, long clientTimeStamp, int clientVersion) {
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache = GlobalCache.getInstance(this.env).getMetaDataCache();
         PTable table = (PTable) metaDataCache.getIfPresent(cacheKey);
+        if (table == null) {
+            metricsSource.incrementMetadataCacheMissCount();
+        } else {
+            metricsSource.incrementMetadataCacheHitCount();
+        }
         return table;
     }
 
@@ -2053,8 +2240,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PFunction function = (PFunction) metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
         if (function != null && !isReplace) {
+            metricsSource.incrementMetadataCacheHitCount();
             return function;
         }
+        metricsSource.incrementMetadataCacheMissCount();
         ArrayList<byte[]> arrayList = new ArrayList<byte[]>(1);
         arrayList.add(key);
         List<PFunction> functions = buildFunctions(arrayList, region, asOfTimeStamp, isReplace, deleteMutationsForReplace);
@@ -2075,8 +2264,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         PSchema schema = (PSchema) metaDataCache.getIfPresent(cacheKey);
         // We always cache the latest version - fault in if not in cache
         if (schema != null) {
+            metricsSource.incrementMetadataCacheHitCount();
             return schema;
         }
+        metricsSource.incrementMetadataCacheMissCount();
         ArrayList<byte[]> arrayList = new ArrayList<byte[]>(1);
         arrayList.add(key);
         List<PSchema> schemas = buildSchemas(arrayList, region, asOfTimeStamp, cacheKey);
@@ -2107,11 +2298,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Mutation m = tableMetadata.get(i);
                 if (m instanceof Put) {
                     LinkType linkType = MetaDataUtil.getLinkType(m);
-                    if (linkType == LinkType.PHYSICAL_TABLE) {
+                    if (linkType == PHYSICAL_TABLE) {
                         physicalTableRow = m;
                         physicalTableLinkFound = true;
                     }
-                    if (linkType == LinkType.PARENT_TABLE) {
+                    if (linkType == PARENT_TABLE) {
                         parentTableRow = m;
                         parentTableLinkFound = true;
                     }
@@ -2382,7 +2573,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 // tableMetadata and set the view statement and partition column correctly
                 if (parentTable != null && parentTable.getAutoPartitionSeqName() != null) {
                     long autoPartitionNum = 1;
-                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+                    try (PhoenixConnection connection = getServerConnectionForMetaData(
+                            env.getConfiguration()).unwrap(PhoenixConnection.class);
                          Statement stmt = connection.createStatement()) {
                         String seqName = parentTable.getAutoPartitionSeqName();
                         // Not going through the standard route of using statement.execute() as that code path
@@ -2456,7 +2648,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 Long indexId = null;
                 if (request.hasAllocateIndexId() && request.getAllocateIndexId()) {
                     String tenantIdStr = tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
-                    try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class)) {
+                    try (PhoenixConnection connection = getServerConnectionForMetaData(
+                            env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                         PName physicalName = parentTable.getPhysicalName();
                         long seqValue = getViewIndexSequenceValue(connection, tenantIdStr, parentTable);
                         Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
@@ -2570,7 +2763,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         // TODO: Avoid doing server-server RPC when we have held row locks
                         MetaDataResponse response =
                                 processRemoteRegionMutations(
-                                        PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES,
+                                        SYSTEM_CATALOG_NAME_BYTES,
                                         remoteMutations, MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
                         clearRemoteTableFromCache(clientTimeStamp,
                                 parentTable.getSchemaName() != null
@@ -2862,9 +3055,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             && (clientVersion >= MIN_SPLITTABLE_SYSTEM_CATALOG ||
                             SchemaUtil.getPhysicalTableName(SYSTEM_CHILD_LINK_NAME_BYTES,
                                     env.getConfiguration()).equals(hTable.getName()))) {
-                        try (PhoenixConnection conn =
-                                QueryUtil.getConnectionOnServer(env.getConfiguration())
-                                    .unwrap(PhoenixConnection.class)) {
+                        try (PhoenixConnection conn = getServerConnectionForMetaData(
+                                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             ServerTask.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
                                 .setConn(conn)
                                 .setTaskType(PTable.TaskType.DROP_CHILD_VIEWS)
@@ -2940,7 +3132,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
 
                 long currentTime = MetaDataUtil.getClientTimeStamp(tableMetadata);
                 for (ImmutableBytesPtr ckey : invalidateList) {
-                    metaDataCache.put(ckey, newDeletedTableMarker(currentTime));
+                    PTable table = newDeletedTableMarker(currentTime);
+                    metaDataCache.put(ckey, table);
+                    metricsSource.incrementMetadataCacheAddCount();
+                    metricsSource.incrementMetadataCacheUsedSize(table.getEstimatedSize());
                 }
                 if (parentLockKey != null) {
                     ImmutableBytesPtr parentCacheKey = new ImmutableBytesPtr(parentLockKey);
@@ -3009,9 +3204,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 User.runAsLoginUser(new PrivilegedExceptionAction<Object>() {
                     @Override
                     public Object run() throws Exception {
-                        try (PhoenixConnection connection =
-                                     QueryUtil.getConnectionOnServer(env.getConfiguration())
-                                             .unwrap(PhoenixConnection.class)) {
+                        try (PhoenixConnection connection = getServerConnectionForMetaData(
+                                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             try {
                                 MetaDataUtil.deleteFromStatsTable(connection, deletedTable,
                                         physicalTableNames, sharedTableStates);
@@ -3141,12 +3335,12 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (rowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX].length == 0 &&
                             linkType == LinkType.INDEX_TABLE) {
                         indexNames.add(rowKeyMetaData[PhoenixDatabaseMetaData.FAMILY_NAME_INDEX]);
-                    } else if (tableType == PTableType.VIEW && (linkType == LinkType.PARENT_TABLE ||
-                            linkType == LinkType.PHYSICAL_TABLE)) {
+                    } else if (tableType == PTableType.VIEW && (linkType == PARENT_TABLE ||
+                            linkType == PHYSICAL_TABLE)) {
                         // Populate the delete mutations for parent->child link for the child view
                         // in question, which we issue to SYSTEM.CHILD_LINK later
                         Cell parentTenantIdCell = MetaDataUtil.getCell(results,
-                                PhoenixDatabaseMetaData.PARENT_TENANT_ID_BYTES);
+                                PARENT_TENANT_ID_BYTES);
                         PName parentTenantId = parentTenantIdCell != null ?
                                 PNameFactory.newName(parentTenantIdCell.getValueArray(),
                                         parentTenantIdCell.getValueOffset(),
@@ -3184,7 +3378,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         }
 
         if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && tableType == PTableType.VIEW) {
-            try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+            try (PhoenixConnection connection = getServerConnectionForMetaData(
                     env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                 PTable pTable = connection.getTableNoCache(table.getParentName().getString());
                 table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table, pTable);
@@ -3230,11 +3424,19 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             final int clientVersion) throws IOException, SQLException {
         boolean isMutationAllowed = true;
         boolean isSchemaMutationAllowed = true;
+        Pair<Boolean, Boolean> scanSysCatForTTLDefinedOnAnyChildPair = new Pair<>(true, false);
         if (expectedType == PTableType.TABLE || expectedType == PTableType.VIEW) {
             try (Table hTable = ServerUtil.getHTableForCoprocessorScan(env,
-                    getSystemTableForChildLinks(clientVersion, env.getConfiguration()))) {
-                childViews.addAll(findAllDescendantViews(hTable, env.getConfiguration(),
-                        tenantId, schemaName, tableOrViewName, clientTimeStamp, false)
+                    getSystemTableForChildLinks(clientVersion, env.getConfiguration()));
+                Table sysCat = ServerUtil.getHTableForCoprocessorScan(env,
+                        SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES,
+                                env.getConfiguration()))) {
+                List<PTable> legitimateChildViews = new ArrayList<>();
+
+                childViews.addAll(findAllDescendantViews(hTable, sysCat, env.getConfiguration(),
+                        tenantId, schemaName, tableOrViewName, clientTimeStamp, new ArrayList<>(),
+                        new ArrayList<>(), false,
+                        scanSysCatForTTLDefinedOnAnyChildPair)
                         .getFirst());
             }
 
@@ -3258,10 +3460,18 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         QueryServices.ALLOW_SPLITTABLE_SYSTEM_CATALOG_ROLLBACK);
                 }
             }
-            // Validate PHOENIX_TTL property settings for views only.
-            if (expectedType == PTableType.VIEW) {
-                isSchemaMutationAllowed = validatePhoenixTTLAttributeSettingForView(
-                        parentTable, childViews, tableMetadata, PHOENIX_TTL_BYTES);
+
+            if (scanSysCatForTTLDefinedOnAnyChildPair.getSecond()
+                    && validateTTLAttributeSettingForEntity(tableMetadata, TTL_BYTES)) {
+                //We got here means There was already TTL defined at one of the child, and we are
+                //trying to set TTL at current level which should not be allowed as TTL can only
+                //be defined at one level in hierarchy.
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.
+                        TTL_ALREADY_DEFINED_IN_HIERARCHY)
+                        .setSchemaName(Arrays.toString(schemaName))
+                        .setTableName(Arrays.toString(tableOrViewName))
+                        .build()
+                        .buildException();
             }
         }
         if (!isMutationAllowed) {
@@ -3368,9 +3578,8 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
                         props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
                     }
-                    try (PhoenixConnection connection =
-                                 QueryUtil.getConnectionOnServer(props, env.getConfiguration())
-                                         .unwrap(PhoenixConnection.class)) {
+                    try (PhoenixConnection connection = getServerConnectionForMetaData(props,
+                            env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                         table = ViewUtil.addDerivedColumnsAndIndexesFromParent(connection, table,
                                 parentTable);
                     }
@@ -3503,7 +3712,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                             && table.getEncodingScheme() !=
                             QualifierEncodingScheme.NON_ENCODED_QUALIFIERS)) {
                         processRemoteRegionMutations(
-                                PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, remoteMutations,
+                                SYSTEM_CATALOG_NAME_BYTES, remoteMutations,
                                 MetaDataProtos.MutationCode.UNABLE_TO_UPDATE_PARENT_TABLE);
                         //if we're a view or index, clear the cache for our parent
                         if ((type == PTableType.VIEW || type == INDEX) && table.getParentTableName() != null) {
@@ -3546,7 +3755,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         invalidateAllChildTablesAndIndexes(table, childViews);
                     }
                     if (clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG && type == PTableType.VIEW) {
-                        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(
+                        try (PhoenixConnection connection = getServerConnectionForMetaData(
                                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
                             PTable pTable = connection.getTableNoCache(
                                     table.getParentName().getString());
@@ -3583,11 +3792,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     + " phoenix.metadata.invalidate.cache.enabled is set to false");
             return;
         }
-        Properties properties = new Properties();
-        // Skip checking of system table existence since the system tables should have created
-        // by now.
-        properties.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, "true");
-        try (PhoenixConnection connection = QueryUtil.getConnectionOnServer(properties,
+        try (PhoenixConnection connection = getServerConnectionForMetaData(
                 env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
             queryServices.invalidateServerMetadataCache(requests);
@@ -3629,53 +3834,32 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         if (clientTimeStamp != HConstants.LATEST_TIMESTAMP) {
             props.setProperty("CurrentSCN", Long.toString(clientTimeStamp));
         }
-        try (PhoenixConnection connection =
-                     QueryUtil.getConnectionOnServer(props, env.getConfiguration())
-                             .unwrap(PhoenixConnection.class)) {
+        try (PhoenixConnection connection = getServerConnectionForMetaData(props,
+                env.getConfiguration()).unwrap(PhoenixConnection.class)) {
             ConnectionQueryServices queryServices = connection.getQueryServices();
             queryServices.clearTableFromCache(ByteUtil.EMPTY_BYTE_ARRAY, schemaName, tableName,
                     clientTimeStamp);
         }
     }
 
-    // Checks whether a non-zero PHOENIX_TTL value is being set.
-    private boolean validatePhoenixTTLAttributeSettingForView(
-            final PTable parentTable,
-            final List<PTable> childViews,
+    // Checks whether a non-zero TTL value is being set.
+    private boolean validateTTLAttributeSettingForEntity(
             final List<Mutation> tableMetadata,
-            final byte[] phoenixTtlBytes) {
-        boolean hasNewPhoenixTTLAttribute = false;
-        boolean isSchemaMutationAllowed = true;
+            final byte[] ttlBytes) {
         for (Mutation m : tableMetadata) {
             if (m instanceof Put) {
                 Put p = (Put)m;
-                List<Cell> cells = p.get(TABLE_FAMILY_BYTES, phoenixTtlBytes);
+                List<Cell> cells = p.get(TABLE_FAMILY_BYTES, ttlBytes);
                 if (cells != null && cells.size() > 0) {
                     Cell cell = cells.get(0);
-                    long newPhoenixTTL = (long) PLong.INSTANCE.toObject(cell.getValueArray(),
+                    String newTTLStr = (String) PVarchar.INSTANCE.toObject(cell.getValueArray(),
                             cell.getValueOffset(), cell.getValueLength());
-                    hasNewPhoenixTTLAttribute =  newPhoenixTTL != PHOENIX_TTL_NOT_DEFINED ;
+                    int newTTL = Integer.parseInt(newTTLStr);
+                    return newTTL != TTL_NOT_DEFINED;
                 }
             }
         }
-
-        if (hasNewPhoenixTTLAttribute) {
-            // Disallow if the parent has PHOENIX_TTL set.
-            if (parentTable != null &&  parentTable.getPhoenixTTL() != PHOENIX_TTL_NOT_DEFINED) {
-                isSchemaMutationAllowed = false;
-            }
-
-            // Since we do not allow propagation of PHOENIX_TTL values during ALTER for now.
-            // If a child view exists and this view previously had a PHOENIX_TTL value set
-            // then that implies that the child view too has a valid PHOENIX_TTL (non zero).
-            // In this case we do not allow for ALTER of the view's PHOENIX_TTL value.
-            if (!childViews.isEmpty()) {
-                isSchemaMutationAllowed = false;
-            }
-        }
-        return isSchemaMutationAllowed;
-
-
+        return false;
     }
 
     public static class ColumnFinder extends StatelessTraverseAllExpressionVisitor<Void> {
@@ -3775,8 +3959,7 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 rowLock = acquireLock(region, key, null, true);
             }
             PTable table =
-                    getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
-            table = modifyIndexStateForOldClient(clientVersion, table);
+                getTableFromCacheWithModifiedIndexState(clientTimeStamp, clientVersion, cacheKey);
             // We only cache the latest, so we'll end up building the table with every call if the
             // client connection has specified an SCN.
             // TODO: If we indicate to the client that we're returning an older version, but there's a
@@ -3789,22 +3972,44 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 }
                 return table;
             }
-            // Query for the latest table first, since it's not cached
-            table =
+            // take Phoenix row level write-lock as we need to protect metadata cache update
+            // after scanning SYSTEM.CATALOG to retrieve the PTable object
+            LockManager.RowLock phoenixRowLock =
+                lockManager.lockRow(key, this.metadataCacheRowLockTimeout);
+            try {
+                table = getTableFromCacheWithModifiedIndexState(clientTimeStamp, clientVersion,
+                    cacheKey);
+                if (table != null && table.getTimeStamp() < clientTimeStamp) {
+                    if (isTableDeleted(table)) {
+                        return null;
+                    }
+                    return table;
+                }
+                // Query for the latest table first, since it's not cached
+                table =
                     buildTable(key, cacheKey, region, HConstants.LATEST_TIMESTAMP, clientVersion);
-            if ((table != null && table.getTimeStamp() <= clientTimeStamp) ||
-                    (blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
+                if ((table != null && table.getTimeStamp() <= clientTimeStamp) || (
+                    blockWriteRebuildIndex && table.getIndexDisableTimestamp() > 0)) {
+                    return table;
+                }
+                // Otherwise, query for an older version of the table - it won't be cached
+                table = buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
                 return table;
+            } finally {
+                phoenixRowLock.release();
             }
-            // Otherwise, query for an older version of the table - it won't be cached
-            table =
-                    buildTable(key, cacheKey, region, clientTimeStamp, clientVersion);
-            return table;
         } finally {
             if (!wasLocked && rowLock != null) {
                 rowLock.release();
             }
         }
+    }
+
+    private PTable getTableFromCacheWithModifiedIndexState(long clientTimeStamp, int clientVersion,
+        ImmutableBytesPtr cacheKey) throws SQLException {
+        PTable table = getTableFromCache(cacheKey, clientTimeStamp, clientVersion);
+        table = modifyIndexStateForOldClient(clientVersion, table);
+        return table;
     }
 
     private List<PFunction> doGetFunctions(List<byte[]> keys, long clientTimeStamp) throws IOException, SQLException {
@@ -3834,6 +4039,11 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
             while (iterator.hasNext()) {
                 byte[] key = iterator.next();
                 PFunction function = (PFunction) metaDataCache.getIfPresent(new FunctionBytesPtr(key));
+                if (function == null) {
+                    metricsSource.incrementMetadataCacheMissCount();
+                } else {
+                    metricsSource.incrementMetadataCacheHitCount();
+                }
                 if (function != null && function.getTimeStamp() < clientTimeStamp) {
                     if (isFunctionDeleted(function)) {
                         return null;
@@ -3893,9 +4103,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
         Region region = env.getRegion();
-        PhoenixConnection connection =
-                table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
-                        env.getConfiguration()).unwrap(PhoenixConnection.class);
+        PhoenixConnection connection = table.getIndexes().isEmpty() ? null :
+                getServerConnectionForMetaData(env.getConfiguration()).unwrap(
+                        PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             // ignore any indexes derived from ancestors
             if (index.getName().getString().contains(
@@ -3981,9 +4191,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         // Look for columnToDelete in any indexes. If found as PK column, get lock and drop the
         // index and then invalidate it
         // Covered columns are deleted from the index by the client
-        PhoenixConnection connection =
-                table.getIndexes().isEmpty() ? null : QueryUtil.getConnectionOnServer(
-                        env.getConfiguration()).unwrap(PhoenixConnection.class);
+        PhoenixConnection connection = table.getIndexes().isEmpty() ? null :
+                getServerConnectionForMetaData(env.getConfiguration()).unwrap(
+                        PhoenixConnection.class);
         for (PTable index : table.getIndexes()) {
             byte[] tenantId = index.getTenantId() == null ? ByteUtil.EMPTY_BYTE_ARRAY : index.getTenantId().getBytes();
             IndexMaintainer indexMaintainer = index.getIndexMaintainer(table, connection);
@@ -4675,8 +4885,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long currentTime = MetaDataUtil.getClientTimeStamp(functionMetaData);
                 for (ImmutableBytesPtr ptr : invalidateList) {
                     metaDataCache.invalidate(ptr);
-                    metaDataCache.put(ptr, newDeletedFunctionMarker(currentTime));
-
+                    PFunction function = newDeletedFunctionMarker(currentTime);
+                    metaDataCache.put(ptr, function);
+                    metricsSource.incrementMetadataCacheAddCount();
+                    metricsSource.incrementMetadataCacheUsedSize(function.getEstimatedSize());
                 }
 
                 done.run(MetaDataMutationResult.toProto(result));
@@ -4847,7 +5059,10 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                 long currentTime = MetaDataUtil.getClientTimeStamp(schemaMetaData);
                 for (ImmutableBytesPtr ptr : invalidateList) {
                     metaDataCache.invalidate(ptr);
-                    metaDataCache.put(ptr, newDeletedSchemaMarker(currentTime));
+                    PSchema schema = newDeletedSchemaMarker(currentTime);
+                    metaDataCache.put(ptr, schema);
+                    metricsSource.incrementMetadataCacheAddCount();
+                    metricsSource.incrementMetadataCacheUsedSize(schema.getEstimatedSize());
                 }
                 done.run(MetaDataMutationResult.toProto(result));
 
@@ -4960,5 +5175,40 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                                 .getPhysicalHBaseTableName(table.getSchemaName(),
                                         table.getTableName(), table.isNamespaceMapped())
                                 .getBytes());
+    }
+
+    /**
+     * Get the server side connection by skipping system table existence check.
+     *
+     * @param config The configuration object.
+     * @return Connection object.
+     * @throws SQLException If the Connection could not be retrieved.
+     */
+    private static Connection getServerConnectionForMetaData(final Configuration config)
+            throws SQLException {
+        Preconditions.checkNotNull(config, "The configs must not be null");
+        return getServerConnectionForMetaData(new Properties(), config);
+    }
+
+    /**
+     * Get the server side connection by skipping system table existence check.
+     *
+     * @param props The properties to be used while retrieving the Connection. Adds skipping of
+     * the system table existence check to the properties.
+     * @param config The configuration object.
+     * @return Connection object.
+     * @throws SQLException If the Connection could not be retrieved.
+     */
+    private static Connection getServerConnectionForMetaData(final Properties props,
+                                                             final Configuration config)
+            throws SQLException {
+        Preconditions.checkNotNull(props, "The properties must not be null");
+        Preconditions.checkNotNull(config, "The configs must not be null");
+        // No need to check for system table existence as the coproc is already running,
+        // hence the system tables are already created.
+        // Similarly, no need to check for client - server version compatibility as
+        // this is already server hosting SYSTEM.CATALOG region(s).
+        props.setProperty(SKIP_SYSTEM_TABLES_EXISTENCE_CHECK, Boolean.TRUE.toString());
+        return QueryUtil.getConnectionOnServer(props, config);
     }
 }

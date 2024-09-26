@@ -18,12 +18,17 @@
 package org.apache.phoenix.end2end.index;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.CounterGroup;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -1053,4 +1058,151 @@ public class PartialIndexIT extends BaseTest {
             assertFalse(rs.next());
         }
     }
+
+    @Test
+    public void testPartialIndexOnTableWithCaseSensitiveColumns() throws Exception {
+        try(Connection conn = DriverManager.getConnection(getUrl());
+            PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class)) {
+            String dataTableName = generateUniqueName();
+            String indexName1 = generateUniqueName();
+            String indexName2 = generateUniqueName();
+            String indexName3 = generateUniqueName();
+
+            stmt.execute("CREATE TABLE " + dataTableName
+                + " (\"hashKeY\" VARCHAR NOT NULL PRIMARY KEY, v1 VARCHAR, \"CoL\" VARCHAR, \"coLUmn3\" VARCHAR)"
+                + (salted ? " SALT_BUCKETS=4" : ""));
+
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                + "INDEX " + indexName1 + " on " + dataTableName + " (v1) " +
+                (uncovered ? "" : "INCLUDE (\"CoL\", \"coLUmn3\")"));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                + "INDEX " + indexName2 + " on " + dataTableName + " (\"CoL\") " +
+                (uncovered ? "" : "INCLUDE (v1, \"coLUmn3\")"));
+            stmt.execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ")
+                + "INDEX " + indexName3 + " on " + dataTableName + " (\"coLUmn3\") " +
+                (uncovered ? "" : "INCLUDE (\"CoL\", v1)"));
+
+            stmt.execute("UPSERT INTO " + dataTableName + " VALUES ('a', 'b', 'c', 'd')");
+            conn.commit();
+
+            ResultSet rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE v1='b'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName1, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
+            rs = stmt.executeQuery("SELECT v1 FROM " + dataTableName + " WHERE \"CoL\"='c'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName2, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+
+            rs = stmt.executeQuery("SELECT \"CoL\" FROM " + dataTableName + " WHERE \"coLUmn3\"='d'");
+            Assert.assertTrue(rs.next());
+            Assert.assertEquals(indexName3, stmt.getQueryPlan().getTableRef().getTable().getTableName().toString());
+        }
+    }
+
+    @Test
+    public void testPartialIndexWithVarbinaryEncoded() throws Exception {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String dataTableName = generateUniqueName();
+            conn.createStatement().execute(
+                "create table " + dataTableName + " (ID VARCHAR NOT NULL PRIMARY KEY, "
+                    + "A VARBINARY_ENCODED, B integer, C double, D varchar)" + (salted ?
+                    " SALT_BUCKETS=4" :
+                    ""));
+            try (PreparedStatement ps = conn.prepareStatement(
+                "UPSERT INTO " + dataTableName + "(ID, A, B, C, D) VALUES (?, ?, ?, ?, ?)")) {
+                ps.setString(1, "id1");
+                ps.setBytes(2, new byte[] {-2, 0, 2, 3, 1});
+                ps.setInt(3, 2);
+                ps.setDouble(4, 3.14);
+                ps.setString(5, "a");
+                ps.executeUpdate();
+            }
+            conn.commit();
+            try (PreparedStatement ps = conn.prepareStatement(
+                "UPSERT INTO " + dataTableName + "(ID, A, D) VALUES (?, ?, ?)")) {
+                ps.setString(1, "id2");
+                ps.setBytes(2, new byte[] {-2, 0, 2, 3, 1, 41});
+                ps.setString(3, "b");
+                ps.executeUpdate();
+            }
+            conn.commit();
+
+            String fullIndexTableName = generateUniqueName();
+            conn.createStatement().execute(
+                "CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ") + "INDEX "
+                    + fullIndexTableName + " on " + dataTableName + " (A) " + (uncovered ?
+                    "" :
+                    "INCLUDE (B, C, D)") + " ASYNC");
+            IndexToolIT.runIndexTool(false, null, dataTableName, fullIndexTableName);
+            String partialIndexTableName = generateUniqueName();
+            String partialIndexVal = toStringLiteral(new byte[] {-2, 0, 2, 3, 1, 35});
+            conn.createStatement().execute(
+                "CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ") + "INDEX "
+                    + partialIndexTableName + " on " + dataTableName + " (A) " + (uncovered ?
+                    "" :
+                    "INCLUDE (B, C, D)") + " WHERE A > " + partialIndexVal + " ASYNC");
+            IndexToolIT.runIndexTool(false, null, dataTableName, partialIndexTableName);
+
+            final byte[] greaterThanBytesFullIdx = {-2, 0, 2, 3, 1, 34};
+            final byte[] greaterThanBytesPartialIdx = {-2, 0, 2, 3, 1, 37};
+            final byte[] lessThanBytes = {-2, 0, 2, 3, 1, 35};
+
+            String selectSql = "SELECT D from " + dataTableName + " WHERE A > ?";
+            // Verify that the full index table is used
+            try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setBytes(1, greaterThanBytesFullIdx);
+                ResultSet rs = ps.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("b", rs.getString(1));
+                assertFalse(rs.next());
+
+                verifyIndexUsed(ps, fullIndexTableName, salted ? 4 : 1);
+            }
+
+            // Verify that the partial index table is used
+            try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setBytes(1, greaterThanBytesPartialIdx);
+                ResultSet rs = ps.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("b", rs.getString(1));
+                assertFalse(rs.next());
+
+                verifyIndexUsed(ps, partialIndexTableName, salted ? 4 : 1);
+            }
+
+            selectSql = "SELECT D from " + dataTableName + " WHERE A < ?";
+            // Verify that the full index table is used
+            try (PreparedStatement ps = conn.prepareStatement(selectSql)) {
+                ps.setBytes(1, lessThanBytes);
+                ResultSet rs = ps.executeQuery();
+                assertTrue(rs.next());
+                assertEquals("a", rs.getString(1));
+                assertFalse(rs.next());
+
+                verifyIndexUsed(ps, fullIndexTableName, salted ? 4 : 1);
+            }
+        }
+    }
+
+    private static void verifyIndexUsed(PreparedStatement preparedStatement,
+        String partialIndexTableName, int buckets) throws SQLException {
+        ExplainPlan plan = preparedStatement.unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+            .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(partialIndexTableName, explainPlanAttributes.getTableName());
+        assertEquals("PARALLEL " + buckets + "-WAY",
+            explainPlanAttributes.getIteratorTypeAndScanSize());
+        assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+    }
+
+    private static String toStringLiteral(byte[] b) {
+        StringBuilder buf = new StringBuilder();
+        buf.append("X'");
+        if (b.length > 0) {
+            buf.append(Bytes.toHex(b, 0, b.length));
+        }
+        buf.append("'");
+        return buf.toString();
+    }
+
 }
