@@ -424,7 +424,7 @@ public final class QueryUtil {
         return getConnection(new Properties(), conf);
     }
 
-    private static Connection getConnection(Properties props, Configuration conf)
+    public static Connection getConnection(Properties props, Configuration conf)
             throws SQLException {
         String url = getConnectionUrl(props, conf);
         LOGGER.info(String.format("Creating connection with the jdbc url: %s, isServerSide = %s",

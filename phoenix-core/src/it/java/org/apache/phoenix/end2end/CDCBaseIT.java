@@ -167,20 +167,14 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(table_sql);
     }
 
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
-                                    String cdc_sql) throws Exception {
-        createCDCAndWait(conn, tableName, cdcName, cdc_sql, null, null);
+    protected void createCDC(Connection conn, String cdc_sql) throws Exception {
+        createCDC(conn, cdc_sql, null, null);
     }
 
-    protected void createCDCAndWait(Connection conn, String tableName, String cdcName,
-                                    String cdc_sql, PTable.QualifierEncodingScheme encodingScheme,
-                                    Integer nSaltBuckets) throws Exception {
+    protected void createCDC(Connection conn, String cdc_sql,
+            PTable.QualifierEncodingScheme encodingScheme, Integer nSaltBuckets) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
         createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, false, null);
-        String schemaName = SchemaUtil.getSchemaNameFromFullName(tableName);
-        tableName = SchemaUtil.getTableNameFromFullName(tableName);
-        IndexToolIT.runIndexTool(false, schemaName, tableName,
-                "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
     }
 
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,
@@ -419,16 +413,22 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     //  - with a null
     //  - missing columns
     protected List<ChangeRow> generateChanges(long startTS, String[] tenantids, String tableName,
-                                              String datatableNameForDDL, CommitAdapter committer)
+            String datatableNameForDDL, CommitAdapter committer)
                             throws Exception {
+        return generateChanges(startTS, tenantids, tableName, datatableNameForDDL, committer,
+                "v3", 0);
+    }
+    protected List<ChangeRow> generateChanges(long startTS, String[] tenantids, String tableName,
+            String datatableNameForDDL, CommitAdapter committer, String columnToDrop, int startKey)
+            throws Exception {
         List<ChangeRow> changes = new ArrayList<>();
         EnvironmentEdgeManager.injectEdge(injectEdge);
         injectEdge.setValue(startTS);
-        boolean dropV3Done = false;
+        boolean dropColumnDone = false;
         committer.init();
-        Map<String, Object> rowid1 = new HashMap() {{ put("K", 1); }};
-        Map<String, Object> rowid2 = new HashMap() {{ put("K", 2); }};
-        Map<String, Object> rowid3 = new HashMap() {{ put("K", 3); }};
+        Map<String, Object> rowid1 = new HashMap() {{ put("K", startKey + 1); }};
+        Map<String, Object> rowid2 = new HashMap() {{ put("K", startKey + 2); }};
+        Map<String, Object> rowid3 = new HashMap() {{ put("K", startKey + 3); }};
         for (String tid: tenantids) {
             try (Connection conn = committer.getConnection(tid)) {
                 changes.add(addChange(conn, tableName,
@@ -445,7 +445,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                         }})
                 ));
                 committer.commit(conn);
-
                 changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100,
                         rowid3, new TreeMap<String, Object>() {{
                             put("V1", 300L);
@@ -462,12 +461,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 ));
                 committer.commit(conn);
             }
-            if (datatableNameForDDL != null && !dropV3Done) {
+            if (datatableNameForDDL != null && !dropColumnDone && columnToDrop != null) {
                 try (Connection conn = newConnection()) {
                     conn.createStatement().execute("ALTER TABLE " + datatableNameForDDL +
                             " DROP COLUMN v3");
                 }
-                dropV3Done = true;
+                dropColumnDone = true;
             }
             try (Connection conn = newConnection(tid)) {
                 changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
@@ -518,7 +517,6 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                         }})
                 ));
                 committer.commit(conn);
-
                 changes.add(addChange(conn, tableName, new ChangeRow(tid, startTS += 100, rowid1,
                         null)));
                 committer.commit(conn);
@@ -527,6 +525,7 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         committer.reset();
         return changes;
     }
+
 
     protected void verifyChangesViaSCN(String tenantId, ResultSet rs, String dataTableName,
                                        Map<String, String> dataColumns, List<ChangeRow> changes,
@@ -744,6 +743,10 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
 
         public String getChangeType() {
             return change == null ? CDC_DELETE_EVENT_TYPE : CDC_UPSERT_EVENT_TYPE;
+        }
+
+        public long getTimestamp() {
+            return changeTS;
         }
 
         ChangeRow(String tenantid, long changeTS, Map<String, Object> pks, Map<String, Object> change) {
