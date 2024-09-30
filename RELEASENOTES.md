@@ -16,6 +16,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 -->
+# PHOENIX  5.2.1 Release Notes
+
+These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
+
+
+---
+
+* [PHOENIX-7404](https://issues.apache.org/jira/browse/PHOENIX-7404) | *Major* | **Build the HBase 2.5+ profiles with Hadoop 3.3.6**
+
+Phoenix is now built with Hadoop 3.3.6 for the HBase 2.5 and 2.6 profiles.
+
+
+---
+
+* [PHOENIX-7363](https://issues.apache.org/jira/browse/PHOENIX-7363) | *Blocker* | **Protect server side metadata cache updates for the given PTable**
+
+PHOENIX-6066 introduces a way for us to take HBase read level row-lock while retrieving the PTable object as part of the getTable() RPC call, by default. Before PHOENIX-6066, only write level row-lock was used, which hurts the performance even if the server side metadata cache has latest data, requiring no lookup from SYSTEM.CATALOG table.
+
+PHOENIX-7363 allows to protect the metadata cache update at the server side with Phoenix write level row-lock. As part of getTable() call, we already must be holding HBase read level row-lock. Hence, PHOENIX-7363 provides protection for server side metadata cache updates.
+
+PHOENIX-6066 and PHOENIX-7363 must be combined.
+
+
+
 # PHOENIX  5.2.0 Release Notes
 
 These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.

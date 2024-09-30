@@ -18,6 +18,92 @@
 -->
 # PHOENIX Changelog
 
+## Release 5.2.1 - Unreleased (as of 2024-09-30)
+
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7395](https://issues.apache.org/jira/browse/PHOENIX-7395) | Metadata Cache metrics at server and client side |  Major | . |
+| [PHOENIX-7397](https://issues.apache.org/jira/browse/PHOENIX-7397) | Optimize ClientAggregatePlan/ClientScanPlan when inner query is UnionPlan |  Major | core |
+| [PHOENIX-7404](https://issues.apache.org/jira/browse/PHOENIX-7404) | Build the HBase 2.5+ profiles with Hadoop 3.3.6 |  Major | . |
+| [PHOENIX-7394](https://issues.apache.org/jira/browse/PHOENIX-7394) | MaxPhoenixColumnSizeExceededException should not print rowkey |  Major | . |
+| [PHOENIX-7393](https://issues.apache.org/jira/browse/PHOENIX-7393) | Update transitive dependency of woodstox-core to 5.4.0 |  Major | . |
+| [PHOENIX-7386](https://issues.apache.org/jira/browse/PHOENIX-7386) | Override UPDATE\_CACHE\_FREQUENCY if table has disabled indexes |  Major | . |
+| [PHOENIX-7385](https://issues.apache.org/jira/browse/PHOENIX-7385) | Fix MetadataGetTableReadLockIT flapper |  Major | . |
+| [PHOENIX-7379](https://issues.apache.org/jira/browse/PHOENIX-7379) | Improve handling of concurrent index mutations with the same timestamp |  Major | . |
+| [PHOENIX-7333](https://issues.apache.org/jira/browse/PHOENIX-7333) | Add HBase 2.6 profile to multibranch Jenkins job |  Minor | core |
+| [PHOENIX-7309](https://issues.apache.org/jira/browse/PHOENIX-7309) | Support specifying splits.txt file while creating a table. |  Major | . |
+| [PHOENIX-7352](https://issues.apache.org/jira/browse/PHOENIX-7352) | Improve OrderPreservingTracker to support extracting partial ordering columns for TupleProjectionPlan |  Major | core |
+| [PHOENIX-6066](https://issues.apache.org/jira/browse/PHOENIX-6066) | MetaDataEndpointImpl.doGetTable should acquire a readLock instead of an exclusive writeLock on the table header row |  Major | . |
+| [PHOENIX-7356](https://issues.apache.org/jira/browse/PHOENIX-7356) | Centralize and update versions for exclude-only dependencies |  Minor | core |
+| [PHOENIX-7287](https://issues.apache.org/jira/browse/PHOENIX-7287) | Leverage bloom filters for multi-key point lookups |  Major | . |
+| [PHOENIX-6714](https://issues.apache.org/jira/browse/PHOENIX-6714) | Return update status from Conditional Upserts |  Major | . |
+| [PHOENIX-7303](https://issues.apache.org/jira/browse/PHOENIX-7303) | fix CVE-2024-29025 in netty package |  Major | phoenix |
+| [PHOENIX-7130](https://issues.apache.org/jira/browse/PHOENIX-7130) | Support skipping of shade sources jar creation |  Minor | phoenix |
+| [PHOENIX-7172](https://issues.apache.org/jira/browse/PHOENIX-7172) | Support HBase 2.6 |  Major | core |
+| [PHOENIX-7326](https://issues.apache.org/jira/browse/PHOENIX-7326) | Simplify LockManager and make it more efficient |  Major | . |
+| [PHOENIX-7314](https://issues.apache.org/jira/browse/PHOENIX-7314) | Enable CompactionScanner for flushes and minor compaction |  Major | . |
+| [PHOENIX-7320](https://issues.apache.org/jira/browse/PHOENIX-7320) | Upgrade HBase 2.4 to 2.4.18 |  Major | core |
+| [PHOENIX-7319](https://issues.apache.org/jira/browse/PHOENIX-7319) | Leverage Bloom Filters to improve performance on write path |  Major | . |
+| [PHOENIX-7306](https://issues.apache.org/jira/browse/PHOENIX-7306) | Metadata lookup should be permitted only within query timeout |  Major | . |
+| [PHOENIX-7248](https://issues.apache.org/jira/browse/PHOENIX-7248) | Add logging excludes to hadoop-mapreduce-client-app and hadoop-mapreduce-client-jobclient |  Major | test |
+| [PHOENIX-7229](https://issues.apache.org/jira/browse/PHOENIX-7229) | Leverage bloom filters for single key point lookups |  Major | . |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7402](https://issues.apache.org/jira/browse/PHOENIX-7402) | Even if a row is updated within TTL its getting expired partially |  Critical | . |
+| [PHOENIX-7406](https://issues.apache.org/jira/browse/PHOENIX-7406) | Index creation fails when creating a partial index on a table which was created with column names in double quotes |  Major | . |
+| [PHOENIX-7405](https://issues.apache.org/jira/browse/PHOENIX-7405) | Update Jetty to 9.4.56.v20240826 |  Major | . |
+| [PHOENIX-7387](https://issues.apache.org/jira/browse/PHOENIX-7387) | SnapshotScanner's next method is ignoring the boolean value from hbase's nextRaw method |  Major | core |
+| [PHOENIX-7367](https://issues.apache.org/jira/browse/PHOENIX-7367) | Snapshot based mapreduce jobs fails after HBASE-28401 |  Major | . |
+| [PHOENIX-7363](https://issues.apache.org/jira/browse/PHOENIX-7363) | Protect server side metadata cache updates for the given PTable |  Blocker | . |
+| [PHOENIX-7369](https://issues.apache.org/jira/browse/PHOENIX-7369) | Avoid redundant recursive getTable() RPC calls |  Blocker | . |
+| [PHOENIX-7368](https://issues.apache.org/jira/browse/PHOENIX-7368) | Rename commons-lang.version maven property to commons-lang3.version |  Trivial | . |
+| [PHOENIX-7359](https://issues.apache.org/jira/browse/PHOENIX-7359) | BackwardCompatibilityIT throws NPE with Hbase 2.6 profile |  Major | core |
+| [PHOENIX-7353](https://issues.apache.org/jira/browse/PHOENIX-7353) | Disable remote procedure delay in TransformToolIT |  Major | core |
+| [PHOENIX-7316](https://issues.apache.org/jira/browse/PHOENIX-7316) | Need close more Statements |  Major | . |
+| [PHOENIX-7336](https://issues.apache.org/jira/browse/PHOENIX-7336) | Upgrade org.iq80.snappy:snappy version to 0.5 |  Major | . |
+| [PHOENIX-7331](https://issues.apache.org/jira/browse/PHOENIX-7331) | Fix incompatibilities with HBASE-28644 |  Critical | core |
+| [PHOENIX-7328](https://issues.apache.org/jira/browse/PHOENIX-7328) | Fix flapping ConcurrentMutationsExtendedIT#testConcurrentUpserts |  Major | . |
+| [PHOENIX-7313](https://issues.apache.org/jira/browse/PHOENIX-7313) | All cell versions should not be retained during flushes and minor compaction when maxlookback is disabled |  Major | . |
+| [PHOENIX-7250](https://issues.apache.org/jira/browse/PHOENIX-7250) | Fix HBase log level in tests |  Major | core |
+| [PHOENIX-7245](https://issues.apache.org/jira/browse/PHOENIX-7245) | NPE in Phoenix Coproc leading to Region Server crash |  Major | phoenix |
+| [PHOENIX-7290](https://issues.apache.org/jira/browse/PHOENIX-7290) | Cannot load or instantiate class org.apache.phoenix.query.DefaultGuidePostsCacheFactory from SquirrelSQL |  Major | core |
+| [PHOENIX-7302](https://issues.apache.org/jira/browse/PHOENIX-7302) | Server Paging doesn't work on scans with limit |  Major | . |
+| [PHOENIX-7299](https://issues.apache.org/jira/browse/PHOENIX-7299) | ScanningResultIterator should not time out a query after receiving a valid result |  Major | . |
+
+
+### TESTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7339](https://issues.apache.org/jira/browse/PHOENIX-7339) | HBase flushes with custom clock needs to disable remote procedure delay |  Major | . |
+
+
+### SUB-TASKS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7041](https://issues.apache.org/jira/browse/PHOENIX-7041) | Populate ROW\_KEY\_PREFIX column when creating views |  Major | . |
+
+
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7362](https://issues.apache.org/jira/browse/PHOENIX-7362) | Update owasp plugin to 10.0.2 |  Major | connectors, core, queryserver |
+| [PHOENIX-7371](https://issues.apache.org/jira/browse/PHOENIX-7371) | Update Hbase 2.5 version to 2.5.10 |  Major | . |
+| [PHOENIX-7365](https://issues.apache.org/jira/browse/PHOENIX-7365) | ExplainPlanV2 should get trimmed list for regionserver location |  Major | . |
+| [PHOENIX-7335](https://issues.apache.org/jira/browse/PHOENIX-7335) |  Bump Phoenix version to 5.2.1-SNAPSHOT |  Major | . |
+
+
+
 ## Release 5.2.0 - Unreleased (as of 2024-04-06)
 
 
