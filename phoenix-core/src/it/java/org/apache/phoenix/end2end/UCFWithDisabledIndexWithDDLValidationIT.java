@@ -40,7 +40,7 @@ public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledInde
         Map<String, String> props = Maps.newConcurrentMap();
         props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
                 Integer.toString(60 * 60 * 1000));
-        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "ALWAYS");
+        props.put(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB, "NEVER");
         props.put(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED, Boolean.toString(true));
         props.put(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(true));
         props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
@@ -55,26 +55,22 @@ public class UCFWithDisabledIndexWithDDLValidationIT extends UCFWithDisabledInde
 
     @Test
     public void testUcfWithNoGetTableCalls() throws Throwable {
-        // Uncomment with PHOENIX-7381
-        //super.testUcfWithNoGetTableCalls();
+        super.testUcfWithNoGetTableCalls();
     }
 
     @Test
     public void testUcfWithDisabledIndex1() throws Throwable {
-        // Uncomment with PHOENIX-7381
-        //super.testUcfWithDisabledIndex1();
+        super.testUcfWithDisabledIndex1();
     }
 
     @Test
     public void testUcfWithDisabledIndex2() throws Throwable {
-        // Uncomment with PHOENIX-7381
-        //super.testUcfWithDisabledIndex2();
+        super.testUcfWithDisabledIndex2();
     }
 
     @Test
     public void testUcfWithDisabledIndex3() throws Throwable {
-        // Uncomment with PHOENIX-7381
-        //super.testUcfWithDisabledIndex3();
+        super.testUcfWithDisabledIndex3();
     }
 
 }

@@ -785,13 +785,13 @@ public class MetaDataClient {
             final long effectiveUpdateCacheFreq;
             final String ucfInfoForLogging; // Only used for logging purposes
 
-            boolean overrideUcfToDefault = false;
+            boolean overrideUcfToAlways = false;
             if (table.getType() == INDEX) {
-                overrideUcfToDefault =
+                overrideUcfToAlways =
                         PIndexState.PENDING_DISABLE.equals(table.getIndexState()) ||
                                 !IndexMaintainer.sendIndexMaintainer(table);
             }
-            if (!overrideUcfToDefault && !table.getIndexes().isEmpty()) {
+            if (!overrideUcfToAlways && !table.getIndexes().isEmpty()) {
                 List<PTable> indexes = table.getIndexes();
                 List<PTable> maintainedIndexes =
                         Lists.newArrayList(IndexMaintainer.maintainedIndexes(indexes.iterator()));
@@ -801,7 +801,7 @@ public class MetaDataClient {
                 // not in usable state by the client mutations, we should override
                 // UPDATE_CACHE_FREQUENCY to default value so that we make getTable() RPC calls
                 // until all index states change to ACTIVE, BUILDING or other usable states.
-                overrideUcfToDefault = indexes.size() != maintainedIndexes.size();
+                overrideUcfToAlways = indexes.size() != maintainedIndexes.size();
             }
 
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
@@ -810,12 +810,10 @@ public class MetaDataClient {
 
             //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
             //QueryOptimizer needs that to decide whether the index can be used
-            if (overrideUcfToDefault) {
+            if (overrideUcfToAlways) {
                 effectiveUpdateCacheFreq =
-                    (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
-                        connection.getQueryServices().getProps()
-                            .get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
-                ucfInfoForLogging = "connection-level-default";
+                    (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS");
+                ucfInfoForLogging = "index-level-override";
             } else if (table.getUpdateCacheFrequency()
                     != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
@@ -836,9 +834,8 @@ public class MetaDataClient {
                         (table.getTenantId() != null ? ", Tenant ID: " + table.getTenantId() : ""));
             }
 
-            return (table.getRowTimestampColPos() == -1 &&
-                    connection.getMetaDataCache().getAge(tableRef) <
-                            effectiveUpdateCacheFreq);
+            return MetaDataUtil
+                    .avoidMetadataRPC(connection, table, tableRef, effectiveUpdateCacheFreq);
         }
         return false;
     }

@@ -246,8 +246,9 @@ public class ValidateLastDDLTimestampUtil {
         try {
             PTableRef ptr = conn.getTableRef(table.getKey());
             long tableUCF = table.getUpdateCacheFrequency();
-            return tableUCF > 0 && tableUCF < Long.MAX_VALUE
-                    && conn.getMetaDataCache().getAge(ptr) < table.getUpdateCacheFrequency();
+            return tableUCF > (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS")
+                    && tableUCF < (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER")
+                    && MetaDataUtil.avoidMetadataRPC(conn, table, ptr, tableUCF);
         } catch (TableNotFoundException e) {
             //should not happen since this is called after query compilation and optimizer
             //so the table would be in the cache
