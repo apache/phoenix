@@ -294,6 +294,12 @@ public class QueryOptimizer {
         }
         
         for (PTable index : indexes) {
+            if (CDCUtil.isCDCIndex(index) && !forCDC) {
+                // A CDC index is allowed only for the queries on its CDC table because a CDC index
+                // may not be built completely and may not include the index row updates for
+                // the data table mutations outside the max lookback window
+                continue;
+            }
             QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns,
                     parallelIteratorFactory, dataPlan, false, indexResolver);
             if (plan != null &&

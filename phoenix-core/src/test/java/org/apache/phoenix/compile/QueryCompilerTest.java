@@ -80,6 +80,7 @@ import org.apache.phoenix.expression.aggregator.CountAggregator;
 import org.apache.phoenix.expression.aggregator.ServerAggregators;
 import org.apache.phoenix.expression.function.TimeUnit;
 import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
+import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -6863,7 +6864,6 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
                     "(SELECT 1 FROM " + orderTableName + " o  where o.price > 8) ORDER BY name";
             queryPlan= TestUtil.getOptimizeQueryPlanNoIterator(conn, sql);
             assertTrue(queryPlan instanceof HashJoinPlan);
-            System.out.println(queryPlan.getStatement());
             TestUtil.assertSelectStatement(
                     queryPlan.getStatement(),
                     "SELECT ITEM_ID,NAME FROM ITEM_TABLE I  WHERE  EXISTS (SELECT 1 FROM ORDER_TABLE O  WHERE O.PRICE > 8 LIMIT 1) ORDER BY NAME");
@@ -7409,5 +7409,369 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         assertEquals(strExpression, orderByExpression.getExpression().toString());
         assertEquals(isNullsLast, orderByExpression.isNullsLast());
         assertEquals(isAscending, orderByExpression.isAscending());
+    }
+
+    @Test
+    public void testUnionAllOrderByOptimizeBug7397() throws Exception {
+        Properties props = new Properties();
+        props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String tableName1 = generateUniqueName();
+            String sql1 = "create table " + tableName1 + "( "+
+                    " fuid UNSIGNED_LONG not null , " +
+                    " fstatsdate UNSIGNED_LONG not null, " +
+                    " fversion UNSIGNED_LONG not null," +
+                    " faid_1 UNSIGNED_LONG not null," +
+                    " clk_pv_1 UNSIGNED_LONG, " +
+                    " activation_pv_1 UNSIGNED_LONG, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( " +
+                    " fuid , " +
+                    " fstatsdate, " +
+                    " fversion, " +
+                    " faid_1 " +
+                    " ))";
+            conn.createStatement().execute(sql1);
+
+            String tableName2= generateUniqueName();
+            String sql2 = "create table " + tableName2 + "( "+
+                    " fuid UNSIGNED_LONG not null , " +
+                    " fstatsdate UNSIGNED_LONG not null, " +
+                    " fversion UNSIGNED_LONG not null," +
+                    " faid_2 UNSIGNED_LONG not null," +
+                    " clk_pv_2 UNSIGNED_LONG, " +
+                    " activation_pv_2 UNSIGNED_LONG, " +
+                    " CONSTRAINT TEST_PK PRIMARY KEY ( " +
+                    " fuid , " +
+                    " fstatsdate, " +
+                    " fversion," +
+                    " faid_2 " +
+                    " ))";
+            conn.createStatement().execute(sql2);
+
+            String orderedUnionSql =
+                    "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id,"
+                    + "   FStatsDate AS date,"
+                    + "   SUM(clk_pv_1) AS valid_click_count,"
+                    + "   SUM(activation_pv_1) AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_1, FStatsDate"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2 AS adgroup_id,"
+                    + "  FStatsDate AS date,"
+                    + "  SUM(clk_pv_2) AS valid_click_count,"
+                    + "  SUM(activation_pv_2) AS activated_count"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_2, FStatsDate"
+                    + ")";
+
+            //Test group by orderPreserving
+            String sql = "SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            ClientAggregatePlan plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            UnionPlan unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            List<OrderBy> orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            OrderBy orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 3);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID"));
+
+            //Test group by orderPreserving for distinct
+            sql = "SELECT distinct ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 3);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID"));
+
+            //Test group by not orderPreserving
+            sql = "SELECT ADVERTISER_ID AS i_advertiser_id,"
+                    + "ADGROUP_ID AS i_adgroup_id,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "GROUP BY I_ADVERTISER_ID, ADGROUP_ID "
+                    + "ORDER BY i_adgroup_id "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() != OrderBy.FWD_ROW_KEY_ORDER_BY);
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(!(unionPlan.iterator() instanceof MergeSortTopNResultIterator));
+            assertTrue(unionPlan.getOutputOrderBys().isEmpty());
+
+            //Test group by not orderPreserving
+            sql = "SELECT ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "GROUP BY ADGROUP_ID, I_DATE "
+                    + "ORDER BY adgroup_id, i_date "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            assertTrue(plan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(!(unionPlan.iterator() instanceof MergeSortTopNResultIterator));
+            assertTrue(unionPlan.getOutputOrderBys().isEmpty());
+
+            //Test group by orderPreserving with where
+            sql = "SELECT ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + " where advertiser_id = 1 "
+                    + "GROUP BY ADGROUP_ID, I_DATE "
+                    + "ORDER BY adgroup_id, i_date "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 3);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID"));
+
+            //Test order by orderPreserving
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "VALID_CLICK_COUNT AS valid_click_count,"
+                    + "ACTIVATED_COUNT AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "ORDER BY advertiser_id, i_date, adgroup_id "
+                    + "limit 10";
+            ClientScanPlan scanPlan =(ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(scanPlan.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY);
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(scanPlan.getDelegate())).getDelegate();
+            assertTrue(unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 3);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID"));
+
+            //Test order by not orderPreserving
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS i_adgroup_id,"
+                    + "DATE AS date,"
+                    + "VALID_CLICK_COUNT AS valid_click_count,"
+                    + "ACTIVATED_COUNT AS activated_count "
+                    + "FROM "
+                    + orderedUnionSql
+                    + "ORDER BY advertiser_id, i_adgroup_id, date, valid_click_count "
+                    + "limit 10";
+            scanPlan =(ClientScanPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!scanPlan.getOrderBy().isEmpty());
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(scanPlan.getDelegate())).getDelegate();
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(!(unionPlan.iterator() instanceof MergeSortTopNResultIterator));
+            assertTrue(unionPlan.getOutputOrderBys().isEmpty());
+
+            //Test there is no order in union
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id,"
+                    + "   FStatsDate AS date,"
+                    + "   clk_pv_1 AS valid_click_count,"
+                    + "   activation_pv_1 AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2 AS adgroup_id,"
+                    + "  FStatsDate AS date,"
+                    + "  clk_pv_2 AS valid_click_count,"
+                    + "  activation_pv_2 AS activated_count"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + ")"
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(!(unionPlan.iterator() instanceof MergeSortTopNResultIterator));
+            assertTrue(unionPlan.getOutputOrderBys().isEmpty());
+
+            //Test alias not inconsistent in union
+            sql ="SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID_1 AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id_1,"
+                    + "   FStatsDate AS date,"
+                    + "   SUM(clk_pv_1) AS valid_click_count,"
+                    + "   SUM(activation_pv_1) AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_1, FStatsDate"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2,"
+                    + "  FStatsDate AS date,"
+                    + "  SUM(clk_pv_2),"
+                    + "  SUM(activation_pv_2)"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_2, FStatsDate"
+                    + ")"
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID_1, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(plan.getGroupBy().isOrderPreserving());
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 3);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID_1"));
+
+            //Test order by column not equals in union
+            sql = "SELECT ADVERTISER_ID AS advertiser_id,"
+                    + "ADGROUP_ID AS adgroup_id,"
+                    + "DATE AS i_date,"
+                    + "SUM(VALID_CLICK_COUNT) AS valid_click_count,"
+                    + "SUM(ACTIVATED_COUNT) AS activated_count "
+                    + "FROM "
+                    + "(SELECT FUId AS advertiser_id,"
+                    + "   FAId_1 AS adgroup_id,"
+                    + "   FStatsDate AS date,"
+                    + "   SUM(clk_pv_1) AS valid_click_count,"
+                    + "   SUM(activation_pv_1) AS activated_count"
+                    + "  FROM " + tableName1
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_1 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_1, FStatsDate"
+                    + "  UNION ALL "
+                    + "  SELECT "
+                    + "  FUId AS advertiser_id,"
+                    + "  FAId_2 AS adgroup_id,"
+                    + "  cast (0 as UNSIGNED_LONG)  AS date,"
+                    + "  SUM(clk_pv_2) AS valid_click_count,"
+                    + "  SUM(activation_pv_2) AS activated_count"
+                    + "  FROM " + tableName2
+                    + "  WHERE (FVersion = 1) AND (FUId IN (1)) AND (FAId_2 IN (11, 22, 33, 10))"
+                    + "  AND (FStatsDate >= 20240710) AND (FStatsDate <= 20240718)"
+                    + "  GROUP BY FUId, FAId_2"
+                    + ")"
+                    + "GROUP BY ADVERTISER_ID, ADGROUP_ID, I_DATE "
+                    + "ORDER BY advertiser_id, adgroup_id, i_date "
+                    + "limit 10";
+            plan =(ClientAggregatePlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!plan.getGroupBy().isOrderPreserving());
+            unionPlan = (UnionPlan)((TupleProjectionPlan)(plan.getDelegate())).getDelegate();
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(!(unionPlan.iterator() instanceof MergeSortTopNResultIterator));
+            assertTrue(unionPlan.getOutputOrderBys().isEmpty());
+
+            //Test only union
+            sql = orderedUnionSql.substring(1, orderedUnionSql.length()-1);
+            unionPlan =(UnionPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(!(unionPlan.iterator() instanceof MergeSortTopNResultIterator));
+            assertTrue(unionPlan.getOutputOrderBys().isEmpty());
+
+            //Test only union and order by match
+            sql = orderedUnionSql.substring(1, orderedUnionSql.length()-1) + " order by advertiser_id, date, adgroup_id";
+            unionPlan =(UnionPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            assertTrue(unionPlan.getSubPlans().stream().allMatch(
+                    p -> p.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY));
+            orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 3);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID"));
+
+            //Test only union and order by not match
+            sql = orderedUnionSql.substring(1, orderedUnionSql.length()-1) +
+                    " order by advertiser_id, date, adgroup_id, valid_click_count";
+            unionPlan =(UnionPlan)TestUtil.getOptimizeQueryPlan(conn, sql);
+            assertTrue(!unionPlan.isSupportOrderByOptimize());
+            assertTrue(unionPlan.iterator() instanceof MergeSortTopNResultIterator);
+            assertTrue(unionPlan.getSubPlans().stream().noneMatch(
+                    p -> p.getOrderBy() == OrderBy.FWD_ROW_KEY_ORDER_BY));
+            orderBys = unionPlan.getOutputOrderBys();
+            assertTrue(orderBys.size() == 1);
+            orderBy = orderBys.get(0);
+            assertTrue(orderBy.getOrderByExpressions().size() == 4);
+            assertTrue(orderBy.getOrderByExpressions().get(0).toString().equals("ADVERTISER_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(1).toString().equals("DATE"));
+            assertTrue(orderBy.getOrderByExpressions().get(2).toString().equals("ADGROUP_ID"));
+            assertTrue(orderBy.getOrderByExpressions().get(3).toString().equals("VALID_CLICK_COUNT"));
+        }
     }
 }

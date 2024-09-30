@@ -179,25 +179,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     private Configuration indexWriteConfig;
     private ReadOnlyProps indexWriteProps;
 
-    private static Map<String, Long> maxLookbackMap = new ConcurrentHashMap<>();
-
-    public static void setMaxLookbackInMillis(String tableName, long maxLookbackInMillis) {
-        if (tableName == null) {
-            return;
-        }
-        maxLookbackMap.put(tableName,
-                maxLookbackInMillis);
-    }
-
-    public static long getMaxLookbackInMillis(String tableName, long maxLookbackInMillis) {
-        if (tableName == null) {
-            return maxLookbackInMillis;
-        }
-        Long value = maxLookbackMap.get(tableName);
-        return value == null
-                ? maxLookbackInMillis
-                : maxLookbackMap.get(tableName);
-    }
     @Override
     public Optional<RegionObserver> getRegionObserver() {
         return Optional.of(this);
@@ -601,30 +582,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
     }
 
     @Override
-    public InternalScanner preFlush(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-            InternalScanner scanner, FlushLifeCycleTracker tracker) throws IOException {
-        if (!isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
-            return scanner;
-        } else {
-            return User.runAsLoginUser(new PrivilegedExceptionAction<InternalScanner>() {
-                @Override public InternalScanner run() throws Exception {
-                    String tableName = c.getEnvironment().getRegion().getRegionInfo().getTable()
-                            .getNameAsString();
-                    long maxLookbackInMillis =
-                            UngroupedAggregateRegionObserver.getMaxLookbackInMillis(
-                                    tableName,
-                                    BaseScannerRegionObserverConstants.getMaxLookbackInMillis(
-                                            c.getEnvironment().getConfiguration()));
-                    maxLookbackInMillis = CompactionScanner.getMaxLookbackInMillis(tableName,
-                            store.getColumnFamilyName(), maxLookbackInMillis);
-                    return new CompactionScanner(c.getEnvironment(), store, scanner,
-                            maxLookbackInMillis, false, true, null);
-                }
-            });
-        }
-    }
-
-    @Override
     public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
                                       InternalScanner scanner, ScanType scanType, CompactionLifeCycleTracker tracker,
                                       CompactionRequest request) throws IOException {
@@ -653,11 +610,6 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                         compactionConfig).unwrap(PhoenixConnection.class)) {
                     table = conn.getTableNoCache(fullTableName);
                     maxLookbackAge = table.getMaxLookbackAge();
-                    UngroupedAggregateRegionObserver.setMaxLookbackInMillis(
-                            tableName.getNameAsString(),
-                            MetaDataUtil.getMaxLookbackAge(
-                                    c.getEnvironment().getConfiguration(),
-                                    maxLookbackAge));
                 } catch (Exception e) {
                     if (e instanceof TableNotFoundException) {
                         LOGGER.debug("Ignoring HBase table that is not a Phoenix table: "
@@ -704,6 +656,10 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
                                     request.isMajor() || request.isAllFiles(),
                                     keepDeleted, table
                             );
+                }
+                else if (isPhoenixTableTTLEnabled(c.getEnvironment().getConfiguration())) {
+                    LOGGER.warn("Skipping compaction for table: {} " +
+                            "as failed to retrieve PTable object", fullTableName);
                 }
                 if (scanType.equals(ScanType.COMPACT_DROP_DELETES)) {
                     try {

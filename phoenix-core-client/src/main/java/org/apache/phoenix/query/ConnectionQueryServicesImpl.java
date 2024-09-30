@@ -52,6 +52,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCH
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
@@ -158,6 +159,7 @@ import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Increment;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -222,6 +224,7 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.exception.UpgradeInProgressException;
 import org.apache.phoenix.exception.UpgradeNotRequiredException;
 import org.apache.phoenix.exception.UpgradeRequiredException;
+import org.apache.phoenix.exception.UpgradeBlockedException;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
@@ -4447,6 +4450,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             metaConnection = new PhoenixConnection(ConnectionQueryServicesImpl.this, globalUrl,
                     scnProps);
             metaConnection.setRunningUpgrade(true);
+
             // Always try to create SYSTEM.MUTEX table first since we need it to acquire the
             // upgrade mutex. Upgrade or migration is not possible without the upgrade mutex
             try (Admin admin = getAdmin()) {
@@ -4478,6 +4482,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     currentServerSideTableTimeStamp =
                             caughtTableAlreadyExistsException.getTable().getTimeStamp();
                 }
+
+                ReadOnlyProps readOnlyProps = metaConnection.getQueryServices().getProps();
+                String skipUpgradeBlock = readOnlyProps.get(SKIP_UPGRADE_BLOCK_CHECK);
+
+                if (skipUpgradeBlock == null || !Boolean.valueOf(skipUpgradeBlock)) {
+                    checkUpgradeBlockMutex();
+                }
+
                 acquiredMutexLock = acquireUpgradeMutex(
                     MetaDataProtocol.MIN_SYSTEM_TABLE_MIGRATION_TIMESTAMP);
                 LOGGER.debug(
@@ -5133,6 +5145,31 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
      * @throws SQLException
      */
     @VisibleForTesting
+    public boolean checkUpgradeBlockMutex()
+            throws SQLException {
+        try (Table sysMutexTable = getSysMutexTable()) {
+            final byte[] rowKey = Bytes.toBytes("BLOCK_UPGRADE");
+
+            Get get = new Get(rowKey).addColumn(SYSTEM_MUTEX_FAMILY_NAME_BYTES, SYSTEM_MUTEX_COLUMN_NAME_BYTES);
+            Result r = sysMutexTable.get(get);
+
+            if (!r.isEmpty()) {
+                throw new UpgradeBlockedException();
+            }
+        } catch (IOException e) {
+            throw ClientUtil.parseServerException(e);
+        }
+        return true;
+    }
+
+    /**
+     * Acquire distributed mutex of sorts to make sure only one JVM is able to run the upgrade code by
+     * making use of HBase's checkAndPut api.
+     *
+     * @return true if client won the race, false otherwise
+     * @throws SQLException
+     */
+    @VisibleForTesting
     public boolean acquireUpgradeMutex(long currentServerSideTableTimestamp)
             throws SQLException {
         Preconditions.checkArgument(currentServerSideTableTimestamp < MIN_SYSTEM_TABLE_TIMESTAMP);
@@ -5155,13 +5192,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // at this point the system mutex table should have been created or
             // an exception thrown
             try (Table sysMutexTable = getSysMutexTable()) {
-                byte[] family = PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
-                byte[] qualifier = PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
-                byte[] value = MUTEX_LOCKED;
                 Put put = new Put(rowKey);
-                put.addColumn(family, qualifier, value);
+                put.addColumn(SYSTEM_MUTEX_FAMILY_NAME_BYTES, SYSTEM_MUTEX_COLUMN_NAME_BYTES, MUTEX_LOCKED);
                 CheckAndMutate checkAndMutate = CheckAndMutate.newBuilder(rowKey)
-                        .ifNotExists(family, qualifier)
+                        .ifNotExists(SYSTEM_MUTEX_FAMILY_NAME_BYTES, SYSTEM_MUTEX_COLUMN_NAME_BYTES)
                         .build(put);
                 boolean checkAndPut =
                         sysMutexTable.checkAndMutate(checkAndMutate).isSuccess();
@@ -5188,6 +5222,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         deleteMutexCell(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
             PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE, null, null);
     }
+
 
     @Override
     public void deleteMutexCell(String tenantId, String schemaName, String tableName,

@@ -25,6 +25,7 @@ import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.SchemaUtil;
 
 import java.util.List;
 import java.util.Map;
@@ -164,7 +165,11 @@ public class SchemaSQLUtil {
         if (props != null && !props.isEmpty()) {
             sb.append("\n");
             for (Map.Entry<String, Pair<String, Object>> entry : props.entries()) {
-                sb.append(entry.getValue().getFirst()).append("=")
+                String prop = entry.getValue().getFirst();
+                if (prop.contains(".")) {
+                    prop = SchemaUtil.getEscapedArgument(prop);
+                }
+                sb.append(prop).append("=")
                         .append(entry.getValue().getSecond());
                 sb.append(",");
             }

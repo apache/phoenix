@@ -189,4 +189,49 @@ public class MetadataMetricsIT extends ParallelStatsDisabledIT {
         metadataSource.incrementDropFunctionCount();
         IndexMetricsIT.verifyCounter(MetricsMetadataSource.DROP_FUNCTION_COUNT, registry);
     }
+
+    @Test
+    public void testMetadataCacheUsedSizeMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        int estimatedSizeOfTable1 = 1000;
+        int estimatedSizeOfTable2 = 500;
+        metadataSource.incrementMetadataCacheUsedSize(estimatedSizeOfTable1);
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
+                registry, estimatedSizeOfTable1);
+
+        metadataSource.incrementMetadataCacheUsedSize(estimatedSizeOfTable2);
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
+                registry, estimatedSizeOfTable1 + estimatedSizeOfTable2);
+
+        metadataSource.decrementMetadataCacheUsedSize(estimatedSizeOfTable1);
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
+                registry, estimatedSizeOfTable2);
+
+        metadataSource.decrementMetadataCacheUsedSize(estimatedSizeOfTable2);
+        IndexMetricsIT.verifyCounterWithValue(MetricsMetadataSource.METADATA_CACHE_ESTIMATED_USED_SIZE,
+                registry, 0);
+    }
+
+    @Test
+    public void testMetadataCacheCountMetrics() {
+        MetricsMetadataSourceImpl metadataSource = new MetricsMetadataSourceImpl();
+        DynamicMetricsRegistry registry = metadataSource.getMetricsRegistry();
+
+        metadataSource.incrementMetadataCacheHitCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.METADATA_CACHE_HIT_COUNT, registry);
+
+        metadataSource.incrementMetadataCacheMissCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.METADATA_CACHE_MISS_COUNT, registry);
+
+        metadataSource.incrementMetadataCacheEvictionCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.METADATA_CACHE_EVICTION_COUNT, registry);
+
+        metadataSource.incrementMetadataCacheRemovalCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.METADATA_CACHE_REMOVAL_COUNT, registry);
+
+        metadataSource.incrementMetadataCacheAddCount();
+        IndexMetricsIT.verifyCounter(MetricsMetadataSource.METADATA_CACHE_ADD_COUNT, registry);
+    }
 }

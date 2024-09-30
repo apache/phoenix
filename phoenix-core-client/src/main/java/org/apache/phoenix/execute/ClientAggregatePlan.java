@@ -236,8 +236,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
             planSteps.add("CLIENT AGGREGATE INTO SINGLE ROW");
             newBuilder.setClientAggregate("CLIENT AGGREGATE INTO SINGLE ROW");
         } else if (groupBy.isOrderPreserving()) {
-            planSteps.add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
-            newBuilder.setClientAggregate("CLIENT AGGREGATE INTO DISTINCT ROWS BY "
+            planSteps.add("CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY "
+                + groupBy.getExpressions().toString());
+            newBuilder.setClientAggregate("CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY "
                 + groupBy.getExpressions().toString());
         } else if (useHashAgg) {
             planSteps.add("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());

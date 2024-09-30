@@ -785,19 +785,37 @@ public class MetaDataClient {
             final long effectiveUpdateCacheFreq;
             final String ucfInfoForLogging; // Only used for logging purposes
 
+            boolean overrideUcfToDefault = false;
+            if (table.getType() == INDEX) {
+                overrideUcfToDefault =
+                        PIndexState.PENDING_DISABLE.equals(table.getIndexState()) ||
+                                !IndexMaintainer.sendIndexMaintainer(table);
+            }
+            if (!overrideUcfToDefault && !table.getIndexes().isEmpty()) {
+                List<PTable> indexes = table.getIndexes();
+                List<PTable> maintainedIndexes =
+                        Lists.newArrayList(IndexMaintainer.maintainedIndexes(indexes.iterator()));
+                // The maintainedIndexes contain only the indexes that are used by clients
+                // while generating the mutations. If all the indexes are usable by clients,
+                // we don't need to override UPDATE_CACHE_FREQUENCY. However, if any index is
+                // not in usable state by the client mutations, we should override
+                // UPDATE_CACHE_FREQUENCY to default value so that we make getTable() RPC calls
+                // until all index states change to ACTIVE, BUILDING or other usable states.
+                overrideUcfToDefault = indexes.size() != maintainedIndexes.size();
+            }
+
             // What if the table is created with UPDATE_CACHE_FREQUENCY explicitly set to ALWAYS?
             // i.e. explicitly set to 0. We should ideally be checking for something like
             // hasUpdateCacheFrequency().
 
             //always fetch an Index in PENDING_DISABLE state to retrieve server timestamp
             //QueryOptimizer needs that to decide whether the index can be used
-            if (PIndexState.PENDING_DISABLE.equals(table.getIndexState())) {
+            if (overrideUcfToDefault) {
                 effectiveUpdateCacheFreq =
-                        (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
-                            connection.getQueryServices().getProps().get(
-                  QueryServices.UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX,
-                  QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX));
-                ucfInfoForLogging = "pending-disable-index-level";
+                    (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(
+                        connection.getQueryServices().getProps()
+                            .get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+                ucfInfoForLogging = "connection-level-default";
             } else if (table.getUpdateCacheFrequency()
                     != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
@@ -1057,7 +1075,8 @@ public class MetaDataClient {
         TableName tableName = statement.getTableName();
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, statement.getTableType());
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps,
+                statement.getTableType(), false);
 
         splits = processSplits(tableProps, splits);
         boolean isAppendOnlySchema = false;
@@ -1213,13 +1232,14 @@ public class MetaDataClient {
      * @throws SQLException
      */
     private void populatePropertyMaps(ListMultimap<String,Pair<String,Object>> statementProps, Map<String, Object> tableProps,
-            Map<String, Object> commonFamilyProps, PTableType tableType) throws SQLException {
+            Map<String, Object> commonFamilyProps, PTableType tableType, boolean isCDCIndex) throws SQLException {
         // Somewhat hacky way of determining if property is for HColumnDescriptor or HTableDescriptor
         ColumnFamilyDescriptor defaultDescriptor = ColumnFamilyDescriptorBuilder.of(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES);
         if (!statementProps.isEmpty()) {
             Collection<Pair<String,Object>> propsList = statementProps.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
             for (Pair<String,Object> prop : propsList) {
-                if (tableType == PTableType.INDEX && MetaDataUtil.propertyNotAllowedToBeOutOfSync(prop.getFirst())) {
+                if (tableType == PTableType.INDEX && !isCDCIndex &&
+                        MetaDataUtil.propertyNotAllowedToBeOutOfSync(prop.getFirst())) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
                             .setMessage("Property: " + prop.getFirst()).build()
                             .buildException();
@@ -1616,7 +1636,9 @@ public class MetaDataClient {
 
         Map<String,Object> tableProps = Maps.newHashMapWithExpectedSize(statement.getProps().size());
         Map<String,Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.INDEX,
+                CDCUtil.isCDCIndex(SchemaUtil
+                        .getTableNameFromFullName(statement.getIndexTableName().toString())));
         List<Pair<ParseNode, SortOrder>> indexParseNodeAndSortOrderList = ik.getParseNodeAndSortOrderList();
         List<ColumnName> includedColumns = statement.getIncludeColumns();
         TableRef tableRef = null;
@@ -1945,16 +1967,23 @@ public class MetaDataClient {
                 statement.getProps().size());
         Map<String, Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size() + 1);
-        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC);
+        populatePropertyMaps(statement.getProps(), tableProps, commonFamilyProps, PTableType.CDC,
+                false);
+        Properties props = connection.getClientInfo();
+        props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
 
-        PhoenixStatement pstmt = new PhoenixStatement(connection);
-        String dataTableFullName = SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
-                statement.getDataTable().getTableName());
-        String createIndexSql = "CREATE UNCOVERED INDEX " +
-                (statement.isIfNotExists() ? "IF NOT EXISTS " : "") +
-                "\"" + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName()) + "\"" +
-                " ON " + dataTableFullName + " (" + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
+        String
+                dataTableFullName =
+                SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
+                        statement.getDataTable().getTableName());
+        String
+                createIndexSql =
+                "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
+                        + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName())
+                        + " ON " + dataTableFullName + " ("
+                        + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
         List<String> indexProps = new ArrayList<>();
+        indexProps.add("REPLICATION_SCOPE=0");
         Object saltBucketNum = TableProperty.SALT_BUCKETS.getValue(tableProps);
         if (saltBucketNum != null) {
             indexProps.add("SALT_BUCKETS=" + saltBucketNum);
@@ -1964,9 +1993,10 @@ public class MetaDataClient {
             indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);
         }
         createIndexSql = createIndexSql + " " + String.join(", ", indexProps);
-        try {
-            pstmt.execute(createIndexSql);
-        } catch (SQLException e) {
+        try (Connection internalConnection = QueryUtil.getConnection(props, connection.getQueryServices().getConfiguration())) {
+            PhoenixStatement pstmt = new PhoenixStatement((PhoenixConnection) internalConnection);
+                pstmt.execute(createIndexSql);
+            } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
                 throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
                         statement.getCdcObjName().getName()).setRootCause(

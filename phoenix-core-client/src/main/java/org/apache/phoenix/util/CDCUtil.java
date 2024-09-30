@@ -33,13 +33,12 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
 import org.bson.RawBsonDocument;
 
 public class CDCUtil {
-    public static final String CDC_INDEX_PREFIX = "__CDC__";
+    public static final String CDC_INDEX_PREFIX = "PHOENIX_CDC_INDEX";
 
     /**
      * Make a set of CDC change scope enums from the given string containing comma separated scope
@@ -122,25 +121,33 @@ public class CDCUtil {
 
     public static Object getColumnEncodedValue(Object value, PDataType dataType) {
         if (value != null) {
-            // TODO: Need suport for DECIMAL, NUMERIC and array types.
             if (dataType.getSqlType() == PDataType.BSON_TYPE) {
                 value = Bytes.toBytes(((RawBsonDocument) value).getByteBuffer().asNIO());
-            } else if (dataType.getSqlType() == Types.BINARY ||
-                    dataType.getSqlType() == Types.VARBINARY
-                    || dataType.getSqlType() == Types.LONGVARBINARY) {
+            } else if (isBinaryType(dataType)) {
                 // Unfortunately, Base64.Encoder has no option to specify offset and length so can't
                 // avoid copying bytes.
                 value = Base64.getEncoder().encodeToString((byte[]) value);
             } else {
-                if (dataType.getSqlType() == Types.DATE
-                        || dataType.getSqlType() == Types.TIMESTAMP
-                        || dataType.getSqlType() == Types.TIME
-                        || dataType.getSqlType() == Types.TIME_WITH_TIMEZONE
-                        || dataType.getSqlType() == Types.TIMESTAMP_WITH_TIMEZONE) {
+                int sqlType = dataType.getSqlType();
+                if (sqlType == Types.DATE
+                        || sqlType == Types.TIMESTAMP
+                        || sqlType == Types.TIME
+                        || sqlType == Types.TIME_WITH_TIMEZONE
+                        || dataType.isArrayType()
+                        || sqlType == PDataType.JSON_TYPE
+                        || sqlType == Types.TIMESTAMP_WITH_TIMEZONE) {
                     value = value.toString();
                 }
             }
         }
         return value;
+    }
+
+    public static boolean isBinaryType(PDataType dataType) {
+        int sqlType = dataType.getSqlType();
+        return (sqlType == Types.BINARY
+                || sqlType == Types.VARBINARY
+                || sqlType == Types.LONGVARBINARY
+                || dataType.getSqlType() == PDataType.VARBINARY_ENCODED_TYPE);
     }
 }

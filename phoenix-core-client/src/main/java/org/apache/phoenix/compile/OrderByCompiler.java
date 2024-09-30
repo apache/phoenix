@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderPreservingTracker.Ordering;
@@ -32,16 +33,13 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.OrderedResultIterator;
 import org.apache.phoenix.parse.HintNode.Hint;
-import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
-import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotAllowedInQueryException;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
-import org.apache.phoenix.schema.types.PInteger;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -105,6 +103,10 @@ public class OrderByCompiler {
             }
             return new OrderBy(newOrderByExpressions);
         }
+
+        public static boolean equalsForOutputOrderBy(OrderBy orderBy1, OrderBy orderBy2) {
+            return Objects.equals(orderBy1.orderByExpressions, orderBy2.orderByExpressions);
+        }
     }
     /**
      * Gets a list of columns in the ORDER BY clause
@@ -150,10 +152,14 @@ public class OrderByCompiler {
 
         LinkedHashSet<OrderByExpression> orderByExpressions = Sets.newLinkedHashSetWithExpectedSize(orderByNodes.size());
         for (OrderByNode node : orderByNodes) {
-            ParseNode parseNode = node.getNode();
             Expression expression = null;
-            if (parseNode instanceof LiteralParseNode && ((LiteralParseNode)parseNode).getType() == PInteger.INSTANCE){
-                Integer index = (Integer)((LiteralParseNode)parseNode).getValue();
+            if (node.isIntegerLiteral()) {
+                if (rowProjector == null) {
+                    throw new IllegalStateException(
+                            "rowProjector is null when there is LiteralParseNode in orderByNodes");
+                }
+                Integer index = node.getValueIfIntegerLiteral();
+                assert index != null;
                 int size = rowProjector.getColumnProjectors().size();
                 if (index > size || index <= 0 ) {
                     throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARAM_INDEX_OUT_OF_BOUND)

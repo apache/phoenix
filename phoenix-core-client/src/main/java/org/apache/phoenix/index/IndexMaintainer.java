@@ -105,6 +105,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -156,8 +157,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         IndexMaintainer maintainer = new IndexMaintainer(dataTable, cdcTable, index, connection);
         return maintainer;
     }
-    
-    private static boolean sendIndexMaintainer(PTable index) {
+
+    /**
+     * Determines whether the client should send IndexMaintainer for the given Index table.
+     *
+     * @param index PTable for the index table.
+     * @return True if the client needs to send IndexMaintainer for the given Index.
+     */
+    public static boolean sendIndexMaintainer(PTable index) {
         PIndexState indexState = index.getIndexState();
         return ! ( indexState.isDisabled() || PIndexState.PENDING_ACTIVE == indexState );
     }
@@ -397,6 +404,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     private RowKeyMetaData rowKeyMetaData;
     private byte[] indexTableName;
     private int nIndexSaltBuckets;
+    private int nDataTableSaltBuckets;
     private byte[] dataEmptyKeyValueCF;
     private ImmutableBytesPtr emptyKeyValueCFPtr;
     private int nDataCFs;
@@ -470,6 +478,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.immutableStorageScheme = index.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : index.getImmutableStorageScheme();
         this.dataEncodingScheme = dataTable.getEncodingScheme() == null ? QualifierEncodingScheme.NON_ENCODED_QUALIFIERS : dataTable.getEncodingScheme();
         this.dataImmutableStorageScheme = dataTable.getImmutableStorageScheme() == null ? ImmutableStorageScheme.ONE_CELL_PER_COLUMN : dataTable.getImmutableStorageScheme();
+        this.nDataTableSaltBuckets = isDataTableSalted ? dataTable.getBucketNum() : PTable.NO_SALTING;
 
         byte[] indexTableName = index.getPhysicalName().getBytes();
         // Use this for the nDataSaltBuckets as we need this for local indexes
@@ -538,7 +547,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.indexedColumnTypes = Lists.<PDataType>newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.indexedExpressions = Lists.newArrayListWithExpectedSize(nIndexPKColumns-nDataPKColumns);
         this.coveredColumnsMap = Maps.newHashMapWithExpectedSize(nIndexColumns - nIndexPKColumns);
-        this.nIndexSaltBuckets  = nIndexSaltBuckets == null ? 0 : nIndexSaltBuckets;
+        this.nIndexSaltBuckets  = nIndexSaltBuckets == null ? PTable.NO_SALTING : nIndexSaltBuckets;
         this.dataEmptyKeyValueCF = SchemaUtil.getEmptyColumnFamily(dataTable);
         this.emptyKeyValueCFPtr = SchemaUtil.getEmptyColumnFamilyPtr(index);
         this.nDataCFs = dataTable.getColumnFamilies().size();
@@ -737,7 +746,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 dataRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
-                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength()==0, dataRowKeySchema.getField(dataPosOffset)));
+                    output.write(SchemaUtil.getSeparatorBytes(
+                        dataRowKeySchema.getField(dataPosOffset).getDataType(),
+                        rowKeyOrderOptimizable,
+                        ptr.getLength() == 0,
+                        dataRowKeySchema.getField(dataPosOffset).getSortOrder()));
                 }
                 dataPosOffset++;
             }
@@ -762,6 +775,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
             Iterator<Expression> expressionIterator = indexedExpressions.iterator();
             int trailingVariableWidthColumnNum = 0;
+            PDataType[] indexedColumnDataTypes = new PDataType[nIndexedColumns];
             for (int i = 0; i < nIndexedColumns; i++) {
                 PDataType dataColumnType;
                 boolean isNullable;
@@ -782,6 +796,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
                 boolean isDataColumnInverted = dataSortOrder != SortOrder.ASC;
                 PDataType indexColumnType = IndexUtil.getIndexColumnDataType(isNullable, dataColumnType);
+                indexedColumnDataTypes[i] = indexColumnType;
                 boolean isBytesComparable = dataColumnType.isBytesComparableWith(indexColumnType);
                 boolean isIndexColumnDesc = descIndexColumnBitSet.get(i);
                 if (isBytesComparable && isDataColumnInverted == isIndexColumnDesc) {
@@ -798,8 +813,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 }
 
                 if (!indexColumnType.isFixedWidth()) {
-                    byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC);
-                    output.writeByte(sepByte);
+                    output.write(
+                        SchemaUtil.getSeparatorBytes(indexColumnType,
+                            rowKeyOrderOptimizable,
+                            ptr.getLength() == 0,
+                            isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC));
                     trailingVariableWidthColumnNum++;
                 } else {
                     trailingVariableWidthColumnNum = 0;
@@ -811,9 +829,28 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int minLength = length - maxTrailingNulls;
             // The existing code does not eliminate the separator if the data type is not nullable. It not clear why.
             // The actual bug is in the calculation of maxTrailingNulls with view indexes. So, in order not to impact some other cases, we should keep minLength check here.
-            while (trailingVariableWidthColumnNum > 0 && length > minLength && indexRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
-                length--;
+            int indexColumnIdx = nIndexedColumns - 1;
+            while (trailingVariableWidthColumnNum > 0 && length > minLength) {
+                if (indexColumnIdx < 0) {
+                    break;
+                }
+                if (indexedColumnDataTypes[indexColumnIdx] != PVarbinaryEncoded.INSTANCE) {
+                    if (indexRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
+                        length--;
+                    } else {
+                        break;
+                    }
+                } else {
+                    byte[] sepBytes = QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES;
+                    if (length >= 2 && indexRowKey[length - 1] == sepBytes[1]
+                        && indexRowKey[length - 2] == sepBytes[0]) {
+                        length -= 2;
+                    } else {
+                        break;
+                    }
+                }
                 trailingVariableWidthColumnNum--;
+                indexColumnIdx--;
             }
 
             if (isIndexSalted) {
@@ -859,7 +896,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexRowKeySchema.next(ptr, indexPosOffset, maxRowKeyOffset);
                 output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
                 if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
-                    output.writeByte(SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(dataPosOffset)));
+                    output.write(SchemaUtil.getSeparatorBytes(
+                        dataRowKeySchema.getField(dataPosOffset).getDataType(),
+                        rowKeyOrderOptimizable,
+                        ptr.getLength() == 0,
+                        dataRowKeySchema.getField(dataPosOffset).getSortOrder()));
                 }
                 indexPosOffset++;
                 dataPosOffset++;
@@ -902,10 +943,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                         }
                     }
                 }
-                // Write separator byte if variable length
-                byte sepByte = SchemaUtil.getSeparatorByte(rowKeyOrderOptimizable, ptr.getLength() == 0, dataRowKeySchema.getField(i));
-                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()){
-                    output.writeByte(sepByte);
+                // Write separator byte(s) if variable length
+                if (!dataRowKeySchema.getField(i).getDataType().isFixedWidth()) {
+                    output.write(
+                        SchemaUtil.getSeparatorBytes(dataRowKeySchema.getField(i).getDataType(),
+                            rowKeyOrderOptimizable,
+                            ptr.getLength() == 0,
+                            dataRowKeySchema.getField(i).getSortOrder()));
                     trailingVariableWidthColumnNum++;
                 } else {
                     trailingVariableWidthColumnNum = 0;
@@ -914,18 +958,32 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             int length = stream.size();
             byte[] dataRowKey = stream.getBuffer();
             // Remove trailing nulls
-            while (trailingVariableWidthColumnNum > 0 && dataRowKey[length-1] == QueryConstants.SEPARATOR_BYTE) {
-                length--;
+            int indexColumnIdx = dataRowKeySchema.getFieldCount() - 1;
+            while (trailingVariableWidthColumnNum > 0) {
+                PDataType<?> dataType = dataRowKeySchema.getField(indexColumnIdx).getDataType();
+                if (dataType != PVarbinaryEncoded.INSTANCE) {
+                    if (dataRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
+                        length--;
+                    } else {
+                        break;
+                    }
+                } else {
+                    byte[] sepBytes = QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES;
+                    if (length >= 2 && dataRowKey[length - 1] == sepBytes[1]
+                        && dataRowKey[length - 2] == sepBytes[0]) {
+                        length -= 2;
+                    } else {
+                        break;
+                    }
+                }
                 trailingVariableWidthColumnNum--;
+                indexColumnIdx--;
             }
-            // TODO: need to capture nDataSaltBuckets instead of just a boolean. For now,
-            // we store this in nIndexSaltBuckets, as we only use this function for local indexes
-            // in which case nIndexSaltBuckets would never be used. Note that when we do add this
-            // to be serialized, we have to add it at the end and allow for the value not being
-            // there to maintain compatibility between an old client and a new server.
             if (isDataTableSalted) {
                 // Set salt byte
-                byte saltByte = SaltingUtil.getSaltingByte(dataRowKey, SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES, nIndexSaltBuckets);
+                byte saltByte = SaltingUtil.getSaltingByte(dataRowKey,
+                        SaltingUtil.NUM_SALTING_BYTES, length-SaltingUtil.NUM_SALTING_BYTES,
+                        nDataTableSaltBuckets);
                 dataRowKey[0] = saltByte;
             }
             return dataRowKey.length == length ? dataRowKey : Arrays.copyOf(dataRowKey, length);
@@ -1789,6 +1847,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         } else {
             maintainer.isCDCIndex = false;
         }
+        maintainer.nDataTableSaltBuckets = proto.hasDataTableSaltBuckets() ?
+                proto.getDataTableSaltBuckets() : -1;
         maintainer.initCachedState();
         return maintainer;
     }
@@ -1933,6 +1993,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
         }
         builder.setIsCDCIndex(maintainer.isCDCIndex);
+        if (maintainer.isDataTableSalted) {
+            builder.setDataTableSaltBuckets(maintainer.nDataTableSaltBuckets);
+        }
         return builder.build();
     }
 
