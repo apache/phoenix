@@ -1812,6 +1812,47 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test that last_ddl_timestamp validation is skipped when client's operation involves
+     * a table with 0<UCF<Long.MAX_VALUE.
+     */
+    @Test
+    public void testNoDDLTimestampValidationWithTableUCF() throws Exception {
+        String tableName = generateUniqueName();
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String url1 = QueryUtil.getConnectionUrl(props, config, "client1");
+        String url2 = QueryUtil.getConnectionUrl(props, config, "client2");
+        ConnectionQueryServices cqs1 = driver.getConnectionQueryServices(url1, props);
+        ConnectionQueryServices cqs2 = driver.getConnectionQueryServices(url2, props);
+        MetricsMetadataCachingSource metricsSource
+                = MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
+        //take a snapshot of current metric values
+        MetricsMetadataCachingSource.MetadataCachingMetricValues oldMetricValues
+                = metricsSource.getCurrentMetricValues();
+
+        try (Connection conn1 = cqs1.connect(url1, props);
+             Connection conn2 = cqs2.connect(url2, props)) {
+
+            // client-1 creates table with UCF=2days
+            createTableWithUCF(conn1, tableName, 2*24*60*60*1000L);
+
+            // query/upsert a few times with same and different client
+            for (int i=0; i<3; i++) {
+                query(conn2, tableName);
+                upsert(conn2, tableName, true);
+                query(conn1, tableName);
+                upsert(conn1, tableName, true);
+            }
+
+            MetricsMetadataCachingSource.MetadataCachingMetricValues newMetricValues
+                    = metricsSource.getCurrentMetricValues();
+
+            assertEquals("There should have been no timestamp validation requests.",
+                    0,
+                    newMetricValues.getValidateDDLTimestampRequestsCount()
+                            - oldMetricValues.getValidateDDLTimestampRequestsCount());
+        }
+    }
 
     //Helper methods
     public static void assertNumGetTableRPC(ConnectionQueryServices spyCqs, String tableName, int numExpectedRPCs) throws SQLException {
@@ -1838,6 +1879,12 @@ public class ServerMetadataCacheIT extends ParallelStatsDisabledIT {
     private void createTable(Connection conn, String tableName) throws SQLException {
         conn.createStatement().execute("CREATE TABLE " + tableName
                 + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER)");
+    }
+
+    private void createTableWithUCF(Connection conn, String tableName, long ucf) throws SQLException {
+        conn.createStatement().execute("CREATE TABLE " + tableName
+                + "(k INTEGER NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER) "
+                + "UPDATE_CACHE_FREQUENCY=" + ucf);
     }
 
     private void createView(Connection conn, String parentName, String viewName) throws SQLException {
