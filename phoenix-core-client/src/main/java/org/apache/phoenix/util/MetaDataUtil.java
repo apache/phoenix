@@ -33,6 +33,7 @@ import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SequenceKey;
 import org.apache.phoenix.schema.SortOrder;
@@ -1195,5 +1196,12 @@ public class MetaDataUtil {
         Preconditions.checkNotNull(conf);
         return maxLookbackAge != null ? maxLookbackAge :
                 BaseScannerRegionObserverConstants.getMaxLookbackInMillis(conf);
+    }
+
+    public static boolean avoidMetadataRPC(PhoenixConnection connection, PTable table,
+                                           PTableRef tableRef, long effectiveUpdateCacheFreq) {
+        return table.getRowTimestampColPos() == -1 &&
+                connection.getMetaDataCache().getAge(tableRef) <
+                        effectiveUpdateCacheFreq;
     }
 }

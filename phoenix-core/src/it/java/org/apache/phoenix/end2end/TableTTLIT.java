@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
@@ -172,6 +173,7 @@ public class TableTTLIT extends BaseTest {
             conn.commit();
             String noCompactTableName = generateUniqueName();
             createTable(noCompactTableName);
+            conn.createStatement().execute("ALTER TABLE " + noCompactTableName + " set MAX_LOOKBACK_AGE = " + maxLookbackAge * 1000);
             conn.commit();
             long startTime = System.currentTimeMillis() + 1000;
             startTime = (startTime / 1000) * 1000;
@@ -245,7 +247,7 @@ public class TableTTLIT extends BaseTest {
     }
 
     @Test
-    public void testFlushesAndMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
+    public void testMinorCompactionShouldNotRetainCellsWhenMaxLookbackIsDisabled()
             throws Exception {
         final int maxLookbackAge = tableLevelMaxLooback != null
                 ? tableLevelMaxLooback : MAX_LOOKBACK_AGE;
@@ -255,36 +257,29 @@ public class TableTTLIT extends BaseTest {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
             String tableName = generateUniqueName();
             createTable(tableName);
-            conn.createStatement().execute("Alter Table " + tableName + " set \"phoenix.max.lookback.age.seconds\" = 0");
             conn.commit();
             final int flushCount = 10;
             byte[] row = Bytes.toBytes("a");
+            int rowUpdateCounter = 0;
             for (int i = 0; i < flushCount; i++) {
                 // Generate more row versions than the maximum cell versions for the table
                 int updateCount = RAND.nextInt(10) + versions;
+                rowUpdateCounter += updateCount;
                 for (int j = 0; j < updateCount; j++) {
                     updateRow(conn, tableName, "a");
                 }
                 flush(TableName.valueOf(tableName));
-                // At every flush, extra cell versions should be removed.
-                // MAX_COLUMN_INDEX table columns and one empty column will be retained for
-                // each row version.
-                assertTrue(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row)
-                        <= (i + 1) * (MAX_COLUMN_INDEX + 1) * versions);
+                // Flushes dump and retain all the cells to HFile.
+                // Doing MAX_COLUMN_INDEX + 1 to account for empty cells
+                assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row),
+                        rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
             }
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
             // Run one minor compaction (in case no minor compaction has happened yet)
-            Admin admin = utility.getAdmin();
-            admin.compact(TableName.valueOf(tableName));
-            int waitCount = 0;
-            while (TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
-                    Bytes.toBytes("a")) >= flushCount * (MAX_COLUMN_INDEX + 1) * versions) {
-                // Wait for minor compactions to happen
-                Thread.sleep(1000);
-                waitCount++;
-                if (waitCount > 30) {
-                    Assert.fail();
-                }
-            }
+            TestUtil.minorCompact(utility, TableName.valueOf(tableName));
+            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+            assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), Bytes.toBytes("a")),
+                    (MAX_COLUMN_INDEX + 1) * versions);
         }
     }
 

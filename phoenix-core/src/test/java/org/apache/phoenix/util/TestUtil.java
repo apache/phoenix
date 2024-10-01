@@ -98,6 +98,7 @@ import org.apache.phoenix.compile.StatementNormalizer;
 import org.apache.phoenix.compile.SubqueryRewriter;
 import org.apache.phoenix.compile.SubselectRewriter;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
+import org.apache.phoenix.coprocessor.CompactionScanner;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.ClearCacheResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
@@ -815,6 +816,26 @@ public class TestUtil {
         admin.flush(table);
     }
 
+    public static void minorCompact(HBaseTestingUtility utility, TableName table)
+            throws IOException, InterruptedException {
+        try {
+            CompactionScanner.setForceMinorCompaction(true);
+            Admin admin = utility.getAdmin();
+            admin.compact(table);
+            int waitForCompactionToCompleteCounter = 0;
+            while (CompactionScanner.getForceMinorCompaction()) {
+                waitForCompactionToCompleteCounter++;
+                if (waitForCompactionToCompleteCounter > 20) {
+                    Assert.fail();
+                }
+                Thread.sleep(1000);
+            }
+        }
+        finally {
+            CompactionScanner.setForceMinorCompaction(false);
+        }
+    }
+
     public static void majorCompact(HBaseTestingUtility utility, TableName table)
         throws IOException, InterruptedException {
         long compactionRequestedSCN = EnvironmentEdgeManager.currentTimeMillis();
@@ -933,11 +954,12 @@ public class TestUtil {
         int cellCount = 0;
         int rowCount = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
-            Result result = null;
+            Result result;
             while ((result = scanner.next()) != null) {
                 rowCount++;
+                System.out.println("Row count: " + rowCount);
                 CellScanner cellScanner = result.cellScanner();
-                Cell current = null;
+                Cell current;
                 while (cellScanner.advance()) {
                     current = cellScanner.current();
                     System.out.println(current + " column= " +
@@ -951,24 +973,17 @@ public class TestUtil {
     }
 
     public static int getRawRowCount(Table table) throws IOException {
+        dumpTable(table);
         return getRowCount(table, true);
     }
 
     public static int getRowCount(Table table, boolean isRaw) throws IOException {
         Scan s = new Scan();
         s.setRaw(isRaw);
-        ;
-        s.readAllVersions();
         int rows = 0;
         try (ResultScanner scanner = table.getScanner(s)) {
-            Result result = null;
-            while ((result = scanner.next()) != null) {
+            while (scanner.next() != null) {
                 rows++;
-                CellScanner cellScanner = result.cellScanner();
-                Cell current = null;
-                while (cellScanner.advance()) {
-                    current = cellScanner.current();
-                }
             }
         }
         return rows;
@@ -1367,6 +1382,12 @@ public class TestUtil {
         ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
         int count = TestUtil.getRawRowCount(cqs.getTable(table.getName()));
         assertEquals(expectedRowCount, count);
+    }
+
+    public static int getRawRowCount(Connection conn, TableName table)
+            throws SQLException, IOException {
+        ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
+        return TestUtil.getRawRowCount(cqs.getTable(table.getName()));
     }
 
     public static int getRawCellCount(Connection conn, TableName tableName, byte[] row)
