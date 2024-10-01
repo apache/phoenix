@@ -44,4 +44,12 @@ public class ScannerContextUtil {
             }
         }
     }
+
+    public static ScannerContext copyNoLimitScanner(ScannerContext sc) {
+        return new ScannerContext(sc.keepProgress, null, sc.isTrackingMetrics());
+    }
+
+    public static void updateTimeProgress(ScannerContext sc) {
+        sc.updateTimeProgress();
+    }
 }

@@ -325,6 +325,10 @@ public abstract class RegionScannerFactory {
               return false;
           }
           // There is a scanattribute set to retrieve the specific array element
+          if (scannerContext != null) {
+            ScannerContextUtil.incrementSizeProgress(scannerContext, result);
+            ScannerContextUtil.updateTimeProgress(scannerContext);
+          }
           return next;
         } catch (Throwable t) {
           ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
