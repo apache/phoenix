@@ -813,7 +813,7 @@ public class MetaDataClient {
             if (overrideUcfToAlways) {
                 effectiveUpdateCacheFreq =
                     (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS");
-                ucfInfoForLogging = "index-level-override";
+                ucfInfoForLogging = "override-to-always";
             } else if (table.getUpdateCacheFrequency()
                     != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY) {
                 effectiveUpdateCacheFreq = table.getUpdateCacheFrequency();
