@@ -194,11 +194,14 @@ public class TTLRegionScanner extends BaseRegionScanner {
         return false;
     }
 
-    private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext) throws IOException {
+    private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
+            throws IOException {
         boolean hasMore;
         if (!isMaskingEnabled) {
             if (scannerContext != null) {
-                hasMore = raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
+                hasMore = raw
+                        ? delegate.nextRaw(result, scannerContext)
+                        : delegate.next(result, scannerContext);
             } else {
                 hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
             }
@@ -210,7 +213,9 @@ public class TTLRegionScanner extends BaseRegionScanner {
         }
 
         if (scannerContext != null) {
-            hasMore = raw ? delegate.nextRaw(result, scannerContext) : delegate.next(result, scannerContext);
+            hasMore = raw
+                    ? delegate.nextRaw(result, scannerContext)
+                    : delegate.next(result, scannerContext);
         } else {
             hasMore = raw ? delegate.nextRaw(result) : delegate.next(result);
         }

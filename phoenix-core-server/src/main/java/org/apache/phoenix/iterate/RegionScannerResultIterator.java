@@ -47,7 +47,9 @@ public class RegionScannerResultIterator extends BaseResultIterator {
     private final QualifierEncodingScheme encodingScheme;
     private final ScannerContext regionScannerContext;
     
-    public RegionScannerResultIterator(Scan scan, RegionScanner scanner, Pair<Integer, Integer> minMaxQualifiers, QualifierEncodingScheme encodingScheme) {
+    public RegionScannerResultIterator(Scan scan, RegionScanner scanner,
+                                       Pair<Integer, Integer> minMaxQualifiers,
+                                       QualifierEncodingScheme encodingScheme) {
         this.scanner = scanner;
         this.useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
         this.minMaxQualifiers = minMaxQualifiers;

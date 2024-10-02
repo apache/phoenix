@@ -209,7 +209,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 env.getConfiguration()
                         .getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
-        IteratorAndContext ic = deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
+        IteratorAndContext ic
+                = deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
         final OrderedResultIterator iterator = ic.getIterator();
         if (iterator == null) {
             return innerScanner;
@@ -301,7 +302,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     EncodedColumnsUtil.getQualifierEncodingScheme(scan);
             RegionScannerResultIterator inner = new RegionScannerResultIterator(scan, s,
                     EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
-            OrderedResultIterator iterator = new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
+            OrderedResultIterator iterator
+                    = new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
                     thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
                     getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
             return new IteratorAndContext(inner.getRegionScannerContext(), iterator);
@@ -320,7 +322,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         private ScannerContext scannerContext;
         private OrderedResultIterator iterator;
 
-        public IteratorAndContext(ScannerContext sc, OrderedResultIterator ori) {
+        IteratorAndContext(ScannerContext sc, OrderedResultIterator ori) {
             this.scannerContext = sc;
             this.iterator = ori;
         }
@@ -475,7 +477,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
 
             @Override
-            public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+            public boolean next(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
                 try {
                     if (isFilterDone()) {
                         return false;
@@ -522,7 +525,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
 
             @Override
-            public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+            public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
                 return next(results, scannerContext);
             }
 
@@ -580,8 +584,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
      *  since after this everything is held in memory
      */
     private RegionScanner getTopNScanner(RegionCoprocessorEnvironment env, final RegionScanner s,
-                                         final OrderedResultIterator iterator, ImmutableBytesPtr tenantId,
-                                         ScannerContext sc) throws Throwable {
+                                         final OrderedResultIterator iterator,
+                                         ImmutableBytesPtr tenantId, ScannerContext sc)
+            throws Throwable {
 
         final Tuple firstTuple;
         TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
@@ -617,7 +622,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
 
             @Override
-            public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+            public boolean next(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
                 try {
                     if (isFilterDone()) {
                         return false;
@@ -642,7 +648,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
 
             @Override
-            public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+            public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
                 return next(results, scannerContext);
             }
 

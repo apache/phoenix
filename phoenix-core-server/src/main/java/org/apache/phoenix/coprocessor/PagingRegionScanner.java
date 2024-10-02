@@ -131,14 +131,16 @@ public class PagingRegionScanner extends BaseRegionScanner {
         private boolean hasMore() {
             return lookupPosition < pointLookupRanges.size();
         }
-        private boolean next(List<Cell> results, boolean raw, RegionScanner scanner, ScannerContext scannerContext)
-                throws IOException {
+        private boolean next(List<Cell> results, boolean raw, RegionScanner scanner,
+                             ScannerContext scannerContext) throws IOException {
             try {
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 while (true) {
                     boolean hasMore;
                     if (scannerContext != null) {
-                        hasMore = raw ? scanner.nextRaw(results, scannerContext) : scanner.next(results, scannerContext);
+                        hasMore = raw
+                                ? scanner.nextRaw(results, scannerContext)
+                                : scanner.next(results, scannerContext);
                     } else {
                         hasMore = raw ? scanner.nextRaw(results) : scanner.next(results);
                     }
@@ -204,7 +206,8 @@ public class PagingRegionScanner extends BaseRegionScanner {
         initialized = true;
     }
 
-    private boolean next(List<Cell> results, boolean raw, ScannerContext scannerContext) throws IOException {
+    private boolean next(List<Cell> results, boolean raw, ScannerContext scannerContext)
+            throws IOException {
         init();
         if (pagingFilter != null) {
             pagingFilter.init();
@@ -251,7 +254,9 @@ public class PagingRegionScanner extends BaseRegionScanner {
         }
         boolean hasMore;
         if (scannerContext != null) {
-            hasMore = raw ? delegate.nextRaw(results, scannerContext) : delegate.next(results, scannerContext);
+            hasMore = raw
+                    ? delegate.nextRaw(results, scannerContext)
+                    : delegate.next(results, scannerContext);
         } else {
             hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
         }

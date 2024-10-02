@@ -573,7 +573,8 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     }
 
     @Override
-    public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext) throws IOException {
+    public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext)
+            throws IOException {
         boolean hasMore;
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
         Configuration conf = env.getConfiguration();

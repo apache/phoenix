@@ -42,7 +42,8 @@ public abstract class BaseRegionScanner extends DelegateRegionScanner {
     public abstract boolean next(List<Cell> results) throws IOException;
 
     @Override
-    public abstract boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException;
+    public abstract boolean next(List<Cell> result, ScannerContext scannerContext)
+            throws IOException;
 
     @Override
     public boolean reseek(byte[] row) throws IOException {

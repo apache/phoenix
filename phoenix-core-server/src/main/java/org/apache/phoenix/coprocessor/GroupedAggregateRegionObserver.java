@@ -353,7 +353,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             return new BaseRegionScanner(s) {
                 private int index = 0;
 
-                public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+                public boolean next(List<Cell> result, ScannerContext scannerContext)
+                        throws IOException {
                     return next(result);
                 }
 
@@ -488,7 +489,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         @Override
-        public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+        public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                throws IOException {
             return next(results, scannerContext);
         }
 
@@ -498,7 +500,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         @Override
-        public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext) throws IOException {
+        public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext)
+                throws IOException {
             if (firstScan && actualScanStartRowKey != null) {
                 if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
                     if (hasRegionMoved()) {
@@ -624,7 +627,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
          * @return true if more rows exist after this one, false if scanner is done.
          * @throws IOException if something goes wrong.
          */
-        private boolean nextInternal(List<Cell> resultsToReturn, ScannerContext scannerContext) throws IOException {
+        private boolean nextInternal(List<Cell> resultsToReturn, ScannerContext scannerContext)
+                throws IOException {
             boolean hasMore;
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             long now;
@@ -797,7 +801,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         @Override
-        public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+        public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                throws IOException {
             return next(results, scannerContext);
         }
 

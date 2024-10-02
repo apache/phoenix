@@ -349,8 +349,9 @@ public class HashJoinRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new DelegateRegionScanner.ScannerContextNextNotImplementedException
-                ("Next with scannerContext should not be called in Phoenix environment");
+        throw new DelegateRegionScanner
+                .ScannerContextNextNotImplementedException("Next with scannerContext should not " +
+                "be called in Phoenix environment");
     }
 
     @Override

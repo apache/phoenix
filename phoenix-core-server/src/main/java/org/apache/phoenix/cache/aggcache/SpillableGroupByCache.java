@@ -366,7 +366,8 @@ public class SpillableGroupByCache implements GroupByCache {
                 }
             }
 
-            public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+            public boolean next(List<Cell> result, ScannerContext scannerContext)
+                    throws IOException {
                 return next(result);
             }
 

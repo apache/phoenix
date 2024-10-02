@@ -252,7 +252,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             return true;
         }
 
-        public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext) throws IOException {
+        public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
+                throws IOException {
             try {
                 if (!initialized) {
                     init();
@@ -302,7 +303,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
 
         @Override
         public boolean next(List<Cell> result) throws IOException {
-           return next(result, false, null);
+            return next(result, false, null);
         }
 
         @Override

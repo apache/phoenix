@@ -224,7 +224,9 @@ public abstract class RegionScannerFactory {
       @Override
       public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
         try {
-          boolean next = (scannerContext == null) ? s.next(results) : s.next(results, scannerContext);
+          boolean next = (scannerContext == null)
+                  ? s.next(results)
+                  : s.next(results, scannerContext);
           if (ScanUtil.isDummy(results)) {
             return true;
           }
@@ -269,7 +271,9 @@ public abstract class RegionScannerFactory {
       @Override
       public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
         try {
-          boolean next = (scannerContext == null) ? s.nextRaw(result) : s.nextRaw(result, scannerContext);
+          boolean next = (scannerContext == null)
+                  ? s.nextRaw(result)
+                  : s.nextRaw(result, scannerContext);
           if (ScanUtil.isDummy(result)) {
             return true;
           }
