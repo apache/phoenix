@@ -27,6 +27,8 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 
+import static org.apache.phoenix.util.ScanUtil.isDummy;
+
 public class DelegateRegionScanner implements RegionScanner {
 
     protected RegionScanner delegate;
@@ -71,6 +73,11 @@ public class DelegateRegionScanner implements RegionScanner {
                         .copyNoLimitScanner(scannerContext);
                 boolean hasMore = delegate.next(result, noLimitContext);
                 if (scannerContext != null) {
+                    if (isDummy(result)) {
+                        // when a dummy row is returned by a lower layer, increment the heapSize
+                        // progress to a large value to force HBase to return a response to the client
+                        ScannerContextUtil.incrementHeapProgressForPaging(scannerContext);
+                    }
                     ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
                 }
                 return hasMore;
@@ -101,6 +108,11 @@ public class DelegateRegionScanner implements RegionScanner {
                         .copyNoLimitScanner(scannerContext);
                 boolean hasMore = delegate.nextRaw(result, noLimitContext);
                 if (scannerContext != null) {
+                    if (isDummy(result)) {
+                        // when a dummy row is returned by a lower layer, increment the heapSize
+                        // progress to a large value to force HBase to return a response to the client
+                        ScannerContextUtil.incrementHeapProgressForPaging(scannerContext);
+                    }
                     ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
                 }
                 return hasMore;

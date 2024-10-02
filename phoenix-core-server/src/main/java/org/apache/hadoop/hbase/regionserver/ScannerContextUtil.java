@@ -52,4 +52,12 @@ public class ScannerContextUtil {
     public static void updateTimeProgress(ScannerContext sc) {
         sc.updateTimeProgress();
     }
+
+    /**
+     * Increment the heapSize progress to a large value for server paging.
+     * Not using Long.MAX_VALUE since that can cause overflow.
+     */
+    public static void incrementHeapProgressForPaging(ScannerContext sc) {
+        sc.incrementSizeProgress(0, Long.MAX_VALUE/2);
+    }
 }
