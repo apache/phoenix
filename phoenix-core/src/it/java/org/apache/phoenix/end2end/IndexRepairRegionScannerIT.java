@@ -219,13 +219,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
     }
 
-    private void dumpIndexToolMRJobCounters(IndexTool indexTool) throws IOException {
-        CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
-        for (Counter counter : mrJobCounters) {
-            LOGGER.info(String.format("%s=%d", counter.getName(), counter.getValue()));
-        }
-    }
-
     private void assertExtraCounters(IndexTool indexTool, long extraVerified, long extraUnverified,
             boolean isBefore) throws IOException {
         CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
@@ -260,7 +253,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         try {
             assertExtraCounters(tool, expectedExtraRows, 0, true);
         } catch (AssertionError e) {
-            dumpIndexToolMRJobCounters(tool);
+            IndexToolIT.dumpMRJobCounters(tool);
             throw e;
         }
 
@@ -894,6 +887,73 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
             assertEquals(2,
                     mrJobCounters.findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT.name()).getValue());
             assertEquals(2, mrJobCounters.findCounter(REBUILT_INDEX_ROW_COUNT.name()).getValue());
+        }
+    }
+
+    @Test
+    public void testConditionalTTL() throws Exception {
+        if (!mutable) {
+            return;
+        }
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            String schemaName = generateUniqueName();
+            String dataTableName = "T_" + generateUniqueName();
+            String dataTableFullName = SchemaUtil.getTableName(schemaName, dataTableName);
+            String viewName1 = "GV_" + generateUniqueName();
+            String viewFullName1 = SchemaUtil.getTableName(schemaName, viewName1);
+            String viewName2 = "GV_" + generateUniqueName();
+            String viewFullName2 = SchemaUtil.getTableName(schemaName, viewName2);
+            String indexTableName1 = "I_" + generateUniqueName();
+            String indexTableFullName1 = SchemaUtil.getTableName(schemaName, indexTableName1);
+            String indexTableName2 = "I_" + generateUniqueName();
+            String indexTableFullName2 = SchemaUtil.getTableName(schemaName, indexTableName2);
+
+            String ddl = String.format("CREATE TABLE %s " +
+                    "(ID1 INTEGER NOT NULL, ID2 INTEGER NOT NULL, VAL1 INTEGER, VAL2 INTEGER " +
+                    "CONSTRAINT PK PRIMARY KEY(ID1, ID2)) %s", dataTableFullName, tableDDLOptions);
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            ddl = String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1=1",
+                    viewFullName1, dataTableFullName);
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            // define a conditional ttl on view 2
+            ddl = String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1=2 TTL='VAL2 = -1'",
+                    viewFullName2, dataTableFullName);
+            conn.createStatement().execute(ddl);
+            conn.commit();
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName1, viewFullName1));
+            conn.createStatement().execute(String.format(
+                    "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName2, viewFullName2));
+            // Insert a row
+            for (String viewName : new String[]{viewFullName1, viewFullName2}) {
+                conn.createStatement().execute(String.format(
+                        "UPSERT INTO %s (ID2, VAL1, VAL2) values (1, 2, 4)", viewName));
+            }
+            conn.commit();
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+            for (String viewName : new String[]{viewFullName1, viewFullName2}) {
+                conn.createStatement().execute(String.format(
+                        "UPSERT INTO %s (ID2, VAL1, VAL2) values (2, 0, 4)", viewName));
+                conn.createStatement().execute(String.format(
+                        "UPSERT INTO %s (ID2, VAL1, VAL2) values (3, 5, -1)", viewName));
+                commitWithException(conn);
+            }
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+            setIndexRowStatusesToVerified(conn, viewFullName1, indexTableFullName1);
+
+            IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, viewName1,
+                    indexTableName1, null, 0, IndexTool.IndexVerifyType.BEFORE, "-fi");
+            assertExtraCounters(indexTool, 2, 0, true);
+
+            indexTool = IndexToolIT.runIndexTool(false, schemaName, viewName2,
+                    indexTableName2, null, 0, IndexTool.IndexVerifyType.BEFORE, "-fi");
+            assertExtraCounters(indexTool, 1, 0, true); // 1 expired row should be masked
+
+        } finally {
+            IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
         }
     }
 }

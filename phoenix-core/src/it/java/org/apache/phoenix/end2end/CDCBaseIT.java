@@ -33,6 +33,7 @@ import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBinaryBase;
 import org.apache.phoenix.schema.types.PChar;
@@ -78,6 +79,7 @@ import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexPhysicalName;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -219,6 +221,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 CDCUtil.getCDCIndexName(cdcName));
         assertEquals(cdcTable.getPhysicalName().getString(), tableName == datatableName ?
                 indexFullName : getViewIndexPhysicalName(datatableName));
+        PTable cdcIndexTable = PhoenixRuntime.getTable(conn, indexFullName);
+        assertEquals(cdcIndexTable.getTTLExpression(), TTL_EXPRESSION_FOREVER);
     }
 
     protected void assertSaltBuckets(Connection conn, String tableName, Integer nbuckets)
