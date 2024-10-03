@@ -58,6 +58,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -514,7 +515,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         validate(true, false);
 
         // test with input file parameter
-        Path inputPath = Files.createTempFile(tmpDir, "index_upgrade_", null);
+        Path inputPath = Paths.get(tmpDir.toString(), "input_file_index_upgrade.csv");
         BufferedWriter writer = new BufferedWriter(new FileWriter(inputPath.toFile()));
         writer.write(INPUT_LIST);
         writer.close();

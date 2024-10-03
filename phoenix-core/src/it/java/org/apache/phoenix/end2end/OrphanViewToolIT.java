@@ -155,7 +155,7 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     public static synchronized void cleanUp() throws Exception {
         boolean refCountLeaked = isAnyStoreRefCountLeaked();
         for (int i = OrphanViewTool.VIEW; i < OrphanViewTool.ORPHAN_TYPE_COUNT; i++) {
-            File file = new File(Paths.get(tmpDir, OrphanViewTool.fileName[i]).toString());
+            File file = Paths.get(tmpDir, OrphanViewTool.fileName[i]).toFile();
             if (file.exists()) {
                 file.delete();
             }
