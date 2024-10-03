@@ -54,10 +54,10 @@ public class ScannerContextUtil {
     }
 
     /**
-     * Increment the heapSize progress to a large value for server paging.
-     * Not using Long.MAX_VALUE since that can cause overflow.
+     * Set returnImmediately on the ScannerContext to true, it will have the same behavior
+     * as reaching the time limit. Use this to make RSRpcService.scan return immediately.
      */
-    public static void incrementHeapProgressForPaging(ScannerContext sc) {
-        sc.incrementSizeProgress(0, Long.MAX_VALUE/2);
+    public static void setReturnImmediately(ScannerContext sc) {
+        sc.returnImmediately();
     }
 }

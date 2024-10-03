@@ -74,9 +74,9 @@ public class DelegateRegionScanner implements RegionScanner {
                 boolean hasMore = delegate.next(result, noLimitContext);
                 if (scannerContext != null) {
                     if (isDummy(result)) {
-                        // when a dummy row is returned by a lower layer, increment the heapSize
-                        // progress to a large value to force HBase to return a response to the client
-                        ScannerContextUtil.incrementHeapProgressForPaging(scannerContext);
+                        // when a dummy row is returned by a lower layer, set returnImmediately
+                        // on the ScannerContext to force HBase to return a response to the client
+                        ScannerContextUtil.setReturnImmediately(scannerContext);
                     }
                     ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
                 }
@@ -109,9 +109,9 @@ public class DelegateRegionScanner implements RegionScanner {
                 boolean hasMore = delegate.nextRaw(result, noLimitContext);
                 if (scannerContext != null) {
                     if (isDummy(result)) {
-                        // when a dummy row is returned by a lower layer, increment the heapSize
-                        // progress to a large value to force HBase to return a response to the client
-                        ScannerContextUtil.incrementHeapProgressForPaging(scannerContext);
+                        // when a dummy row is returned by a lower layer, set returnImmediately
+                        // on the ScannerContext to force HBase to return a response to the client
+                        ScannerContextUtil.setReturnImmediately(scannerContext);
                     }
                     ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
                 }
