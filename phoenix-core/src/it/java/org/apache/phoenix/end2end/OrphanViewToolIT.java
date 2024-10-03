@@ -31,6 +31,9 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.LineNumberReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -68,11 +71,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     private static final long grandChildCount = fanout * fanout;
     private static final long grandGrandChildCount = fanout * fanout * fanout;
 
-    private static final String filePath = "/tmp/";
-    private static final String viewFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.VIEW];
-    private static final String physicalLinkFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK];
-    private static final String parentLinkFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK];
-    private static final String childLinkFileName = "/tmp/" + OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK];
+    private static String tmpDir;
+    private static String viewFileName;
+    private static String physicalLinkFileName;
+    private static String parentLinkFileName;
+    private static String childLinkFileName;
 
     protected static String SCHEMA1 = "SCHEMA1";
     protected static String SCHEMA2 = "SCHEMA2";
@@ -134,13 +137,25 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
         setUpTestDriver(ReadOnlyProps.EMPTY_PROPS);
+        //Create these after the minicluster has started, and overwritten java.io.tmpdir
+        tmpDir = Files.createTempDirectory(OrphanViewToolIT.class.getCanonicalName()).toString();
+        viewFileName = Paths.get(tmpDir, OrphanViewTool.fileName[OrphanViewTool.VIEW]).toString();
+        physicalLinkFileName =
+                Paths.get(tmpDir, OrphanViewTool.fileName[OrphanViewTool.PHYSICAL_TABLE_LINK])
+                        .toString();
+        parentLinkFileName =
+                Paths.get(tmpDir, OrphanViewTool.fileName[OrphanViewTool.PARENT_TABLE_LINK])
+                        .toString();
+        childLinkFileName =
+                Paths.get(tmpDir, OrphanViewTool.fileName[OrphanViewTool.CHILD_TABLE_LINK])
+                        .toString();
     }
 
     @AfterClass
     public static synchronized void cleanUp() throws Exception {
         boolean refCountLeaked = isAnyStoreRefCountLeaked();
         for (int i = OrphanViewTool.VIEW; i < OrphanViewTool.ORPHAN_TYPE_COUNT; i++) {
-            File file = new File(filePath + OrphanViewTool.fileName[i]);
+            File file = Paths.get(tmpDir, OrphanViewTool.fileName[i]).toFile();
             if (file.exists()) {
                 file.delete();
             }
@@ -454,11 +469,11 @@ public class OrphanViewToolIT extends BaseOwnClusterIT {
         final List<String> args = Lists.newArrayList();
         if (outputPath) {
             args.add("-op");
-            args.add(filePath);
+            args.add(tmpDir);
         }
         if (inputPath) {
             args.add("-ip");
-            args.add(filePath);
+            args.add(tmpDir);
         }
         if (clean) {
             args.add("-c");

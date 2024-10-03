@@ -56,6 +56,9 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -89,7 +92,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private static final String [] TRANSACTIONAL_TABLE_LIST = new String[1];
 
     private static String INPUT_LIST = "";
-    private static final String INPUT_FILE = "/tmp/input_file_index_upgrade.csv";
+    private Path tmpDir;
 
     private static Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(1),
             clientProps = Maps.newHashMapWithExpectedSize(1);
@@ -105,7 +108,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
     private Connection connTenant;
     private Admin admin;
     private IndexUpgradeTool iut;
-    private static String tmpDir = System.getProperty("java.io.tmpdir");;
+    private static String systemTmpDir = System.getProperty("java.io.tmpdir");;
 
     @Mock
     private IndexTool indexToolMock;
@@ -115,7 +118,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
 
     @BeforeClass
     public static synchronized void saveTmp () throws Exception {
-        tmpDir = System.getProperty("java.io.tmpdir");
+        //The JVM will exit, so we don't need to restore after
+        systemTmpDir = System.getProperty("java.io.tmpdir");
     }
 
     @Before
@@ -144,6 +148,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             optionsBuilder.append(" IMMUTABLE_ROWS=true");
         }
         tableDDLOptions = optionsBuilder.toString();
+        tmpDir = Files.createTempDirectory(ParameterizedIndexUpgradeToolIT.class.getCanonicalName());
     }
 
     private void setClusterProperties() {
@@ -153,7 +158,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 || Boolean.toString(!isNamespaceEnabled).equals(serverProps
                 .get(QueryServices.IS_NAMESPACE_MAPPING_ENABLED))) {
             tearDownMiniCluster(1);
-            System.setProperty("java.io.tmpdir", tmpDir);
+            System.setProperty("java.io.tmpdir", systemTmpDir);
         }
         //setting up properties for namespace
         clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
@@ -167,7 +172,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
                 Boolean.toString(!upgrade));
     }
 
-    private void prepareFullSetup() throws SQLException {
+    private void prepareFullSetup() throws SQLException, IOException {
         clearOldTableNames();
         String mockTableOne = "TEST." + generateUniqueName();
         TABLE_LIST[0] = mockTableOne;
@@ -305,7 +310,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         conn.createStatement().execute("ALTER INDEX " + indexTwoMockOne + " ON " + mockTableOne +
             " DISABLE");
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+            null, Files.createTempFile(tmpDir, "index_upgrade_", null).toString(),
             true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);
@@ -323,7 +328,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         Arrays.fill(TRANSACTIONAL_INDEXES_LIST, null);
         Arrays.fill(TRANSACTIONAL_TABLE_LIST, null);
     }
-    private void prepareSimplifiedSetup() throws SQLException {
+    private void prepareSimplifiedSetup() throws SQLException, IOException {
         clearOldTableNames();
         String mockTableOne = "TEST." + generateUniqueName();
         INPUT_LIST = mockTableOne;
@@ -348,7 +353,7 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
             " (sal, a.name)");
         conn.commit();
         iut = new IndexUpgradeTool(upgrade ? UPGRADE_OP : ROLLBACK_OP, INPUT_LIST,
-            null, "/tmp/index_upgrade_" + UUID.randomUUID().toString(),
+            null,Files.createTempFile(tmpDir, "index_upgrade_", null).toString(),
             true, indexToolMock, rebuild);
         iut.setConf(getUtility().getConfiguration());
         iut.setTest(true);
@@ -510,12 +515,13 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         validate(true, false);
 
         // test with input file parameter
-        BufferedWriter writer = new BufferedWriter(new FileWriter(new File(INPUT_FILE)));
+        Path inputPath = Paths.get(tmpDir.toString(), "input_file_index_upgrade.csv");
+        BufferedWriter writer = new BufferedWriter(new FileWriter(inputPath.toFile()));
         writer.write(INPUT_LIST);
         writer.close();
 
         iut.setInputTables(null);
-        iut.setInputFile(INPUT_FILE);
+        iut.setInputFile(inputPath.toString());
         iut.prepareToolSetup();
         status = iut.executeTool();
         Assert.assertEquals(0, status);
