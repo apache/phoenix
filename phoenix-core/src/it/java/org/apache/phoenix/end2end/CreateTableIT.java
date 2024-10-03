@@ -1665,7 +1665,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             // Now roll back to the old indexing
             IndexUpgradeTool iut =
                     new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
-                            "/tmp/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                        File.createTempFile("index_upgrade_", null).toString(), false, null,
                             false);
             iut.setConf(getUtility().getConfiguration());
             iut.prepareToolSetup();
@@ -1712,7 +1712,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
             // Now roll back to the old indexing
             IndexUpgradeTool iut =
                     new IndexUpgradeTool(ROLLBACK_OP, tableName, null,
-                            "/tmp/index_upgrade_" + UUID.randomUUID().toString(), false, null,
+                        File.createTempFile("index_upgrade_", null).toString(), false, null,
                             false);
             iut.setConf(getUtility().getConfiguration());
             iut.prepareToolSetup();

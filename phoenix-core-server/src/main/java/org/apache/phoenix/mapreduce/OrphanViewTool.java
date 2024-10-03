@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -824,7 +825,7 @@ public class OrphanViewTool extends Configured implements Tool {
     private void readOrphanViews() throws Exception {
         String aLine;
         reader[VIEW] = new BufferedReader(new InputStreamReader(
-                new FileInputStream(inputPath + fileName[VIEW]), StandardCharsets.UTF_8));
+                new FileInputStream(Paths.get(inputPath, fileName[VIEW]).toFile()), StandardCharsets.UTF_8));
         while ((aLine = reader[VIEW].readLine()) != null) {
             Key key = new Key(aLine);
             orphanViewSet.put(key, new View(key));
@@ -835,7 +836,7 @@ public class OrphanViewTool extends Configured implements Tool {
         String aLine;
         for (byte i = VIEW+1; i < ORPHAN_TYPE_COUNT; i++) {
             reader[i] = new BufferedReader(new InputStreamReader(
-                    new FileInputStream(inputPath + fileName[i]), StandardCharsets.UTF_8));
+                    new FileInputStream(Paths.get(inputPath, fileName[i]).toFile()), StandardCharsets.UTF_8));
             while ((aLine = reader[i].readLine()) != null) {
                 String ends[] = aLine.split("-->");
                 removeLink(phoenixConnection, new Key(ends[0]), new Key(ends[1]), getLinkType(i));
@@ -893,7 +894,7 @@ public class OrphanViewTool extends Configured implements Tool {
             if (outputPath != null) {
                 // Create files to log orphan views and links
                 for (int i = VIEW; i < ORPHAN_TYPE_COUNT; i++) {
-                    File file = new File(outputPath + fileName[i]);
+                    File file = Paths.get(outputPath, fileName[i]).toFile();
                     if (file.exists()) {
                         file.delete();
                     }
