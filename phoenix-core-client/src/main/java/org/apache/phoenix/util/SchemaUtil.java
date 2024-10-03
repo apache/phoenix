@@ -64,8 +64,10 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
+import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -158,7 +160,12 @@ public class SchemaUtil {
     public static boolean isPKColumn(PColumn column) {
         return column.getFamilyName() == null;
     }
-  
+
+    public static boolean isPKColumn(PrimaryKeyConstraint pkConstraint, ColumnDef colDef) {
+        return colDef.isPK() ||
+                (pkConstraint != null && pkConstraint.contains(colDef.getColumnDefName()));
+    }
+
     /**
      * Imperfect estimate of row size given a PTable
      * TODO: keep row count in stats table and use total size / row count instead

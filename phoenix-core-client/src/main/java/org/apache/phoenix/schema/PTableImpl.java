@@ -32,7 +32,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
@@ -49,6 +48,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTION_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -133,7 +133,6 @@ import javax.annotation.Nonnull;
 
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
-
 import org.apache.phoenix.util.CDCUtil;
 
 /**
@@ -210,7 +209,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
-    private final int ttl;
+    private final TTLExpression ttl;
     private final BitSet viewModifiedPropSet;
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
@@ -292,7 +291,7 @@ public class PTableImpl implements PTable {
         private String indexWhere;
         private Long maxLookbackAge;
         private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
-        private int ttl;
+        private TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         private byte[] rowKeyMatcher;
 
         // Used to denote which properties a view has explicitly modified
@@ -628,8 +627,10 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setTTL(int ttl) {
-            propertyValues.put(TTL, String.valueOf(ttl));
+        public Builder setTTL(TTLExpression ttl) {
+            if (ttl != null) {
+                propertyValues.put(TTL, ttl.getTTLExpression());
+            }
             this.ttl = ttl;
             return this;
         }
@@ -1113,7 +1114,7 @@ public class PTableImpl implements PTable {
                 .setMaxLookbackAge(table.getMaxLookbackAge())
                 .setCDCIncludeScopes(table.getCDCIncludeScopes())
                 .setAncestorLastDDLTimestampMap(table.getAncestorLastDDLTimestampMap())
-                .setTTL(table.getTTL())
+                .setTTL(table.getTTLExpression())
                 .setRowKeyMatcher(table.getRowKeyMatcher());
     }
 
@@ -2079,10 +2080,10 @@ public class PTableImpl implements PTable {
             cdcIncludeScopesStr = table.getCDCIncludeScopes();
         }
 
-        Integer ttl = TTL_NOT_DEFINED;
+        TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         if (table.hasTtl()) {
-            String ttlStr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
-            ttl = Integer.parseInt(ttlStr);
+            String ttlExpr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
+            ttl = TTLExpressionFactory.create(ttlExpr);
         }
 
         byte[] rowKeyMatcher = null;
@@ -2315,9 +2316,10 @@ public class PTableImpl implements PTable {
         builder.setCDCIncludeScopes(CDCUtil.makeChangeScopeStringFromEnums(
                 table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
                 : Collections.EMPTY_SET));
-
-        builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(String.valueOf(table.getTTL()))));
-
+        if (table.getTTLExpression() != null) {
+            builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
+                    table.getTTLExpression().getTTLExpression())));
+        }
         if (table.getRowKeyMatcher() != null) {
             builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
         }
@@ -2417,8 +2419,19 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public int getTTL() {
+    public TTLExpression getTTLExpression() {
         return ttl;
+    }
+
+    @Override
+    public CompiledTTLExpression getCompiledTTLExpression(PhoenixConnection connection)
+            throws SQLException {
+        return ttl.compileTTLExpression(connection, this);
+    }
+
+    @Override
+    public boolean hasConditionalTTL() {
+        return ttl instanceof ConditionalTTLExpression;
     }
 
     @Override public boolean hasViewModifiedUpdateCacheFrequency() {
