@@ -49,6 +49,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTION_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -197,6 +198,8 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
+import com.google.protobuf.ByteString;
+
 /**
  *
  * Base class for PTable implementors.  Provides abstraction for
@@ -271,7 +274,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
-    private final int ttl;
+    private final TTLExpression ttl;
     private final BitSet viewModifiedPropSet;
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
@@ -353,7 +356,7 @@ public class PTableImpl implements PTable {
         private String indexWhere;
         private Long maxLookbackAge;
         private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
-        private int ttl;
+        private TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         private byte[] rowKeyMatcher;
 
         // Used to denote which properties a view has explicitly modified
@@ -689,8 +692,10 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setTTL(int ttl) {
-            propertyValues.put(TTL, String.valueOf(ttl));
+        public Builder setTTL(TTLExpression ttl) {
+            if (ttl != null) {
+                propertyValues.put(TTL, ttl.getTTLExpression());
+            }
             this.ttl = ttl;
             return this;
         }
@@ -2140,10 +2145,10 @@ public class PTableImpl implements PTable {
             cdcIncludeScopesStr = table.getCDCIncludeScopes();
         }
 
-        Integer ttl = TTL_NOT_DEFINED;
+        TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         if (table.hasTtl()) {
-            String ttlStr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
-            ttl = Integer.parseInt(ttlStr);
+            String ttlExpr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
+            ttl = TTLExpression.create(ttlExpr);
         }
 
         byte[] rowKeyMatcher = null;
@@ -2357,9 +2362,10 @@ public class PTableImpl implements PTable {
         builder.setCDCIncludeScopes(CDCUtil.makeChangeScopeStringFromEnums(
                 table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
                 : Collections.EMPTY_SET));
-
-        builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(String.valueOf(table.getTTL()))));
-
+        if (table.getTTL() != null) {
+            builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
+                    table.getTTL().getTTLExpression())));
+        }
         if (table.getRowKeyMatcher() != null) {
             builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
         }
@@ -2459,7 +2465,7 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public int getTTL() {
+    public TTLExpression getTTL() {
         return ttl;
     }
 

@@ -147,6 +147,7 @@ import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
@@ -1354,14 +1355,15 @@ public class TestUtil {
 
     public static void assertTableHasTtl(Connection conn, TableName tableName, int ttl, boolean phoenixTTLEnabled)
         throws SQLException, IOException {
-        long tableTTL = -1;
+        TTLExpression tableTTL;
         if (phoenixTTLEnabled) {
             tableTTL = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
                     tableName.getNameAsString())).getTTL();
         } else {
-            tableTTL = getColumnDescriptor(conn, tableName).getTimeToLive();
+            tableTTL = TTLExpression.create(getColumnDescriptor(conn, tableName).getTimeToLive());
         }
-        Assert.assertEquals(ttl, tableTTL);
+        TTLExpression expectedTTL = TTLExpression.create(ttl);
+        Assert.assertEquals(expectedTTL, tableTTL);
     }
 
     public static void assertTableHasVersions(Connection conn, TableName tableName, int versions)

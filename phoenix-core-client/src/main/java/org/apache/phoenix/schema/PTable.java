@@ -935,7 +935,7 @@ public interface PTable extends PMetaDataEntity {
     /**
      * @return The TTL duration associated with the entity when Phoenix level TTL is enabled.
      */
-    int getTTL();
+    TTLExpression getTTL();
 
     /**
      * @return the last timestamp at which this entity had its data shape created or modified (e

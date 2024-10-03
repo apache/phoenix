@@ -101,6 +101,8 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
@@ -109,8 +111,8 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1152,7 +1154,9 @@ public class ScanUtil {
         if (phoenixTTL == null) {
             return DEFAULT_TTL;
         }
-        return Bytes.readAsInt(phoenixTTL, 0, phoenixTTL.length);
+        String ttlStr = (String) PVarchar.INSTANCE.toObject(phoenixTTL);
+        LiteralTTLExpression literal = (LiteralTTLExpression) TTLExpression.create(ttlStr);
+        return literal.getTTLValue();
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
@@ -1424,7 +1428,9 @@ public class ScanUtil {
                 return;
             }
         }
-        if (dataTable.getTTL() != 0) {
+        TTLExpression ttlExpr = dataTable.getTTL();
+        String ttlForScan = ttlExpr.getTTLForScanAttribute();
+        if (ttlForScan != null) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
@@ -1434,8 +1440,7 @@ public class ScanUtil {
                     Bytes.toBytes(tableName));
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
-                    Bytes.toBytes(Integer.valueOf(dataTable.getTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, Bytes.toBytes(ttlForScan));
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
                 scan.setAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
