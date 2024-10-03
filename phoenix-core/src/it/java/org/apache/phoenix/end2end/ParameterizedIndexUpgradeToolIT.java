@@ -513,9 +513,8 @@ public class ParameterizedIndexUpgradeToolIT extends BaseTest {
         Assert.assertEquals(-1, status);
         validate(true, false);
 
-        Path inputPath = Files.createTempFile(tmpDir, "index_upgrade_", null);
-        
         // test with input file parameter
+        Path inputPath = Files.createTempFile(tmpDir, "index_upgrade_", null);
         BufferedWriter writer = new BufferedWriter(new FileWriter(inputPath.toFile()));
         writer.write(INPUT_LIST);
         writer.close();
