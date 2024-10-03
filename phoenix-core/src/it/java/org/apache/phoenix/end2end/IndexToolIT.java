@@ -69,6 +69,7 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -836,6 +837,17 @@ public class IndexToolIT extends BaseTest {
 
     public static CounterGroup getMRJobCounters(IndexTool indexTool) throws IOException {
         return indexTool.getJob().getCounters().getGroup(PhoenixIndexToolJobCounters.class.getName());
+    }
+
+    public static void dumpMRJobCounters(IndexTool indexTool) throws IOException {
+        CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
+        dumpMRJobCounters(mrJobCounters);
+    }
+
+    public static void dumpMRJobCounters(CounterGroup mrJobCounters) {
+        for (Counter cntr : mrJobCounters) {
+            LOGGER.info(String.format("%s=%d", cntr.getName(), cntr.getValue()));
+        }
     }
 
     private static List<String> getArgList (boolean useSnapshot, String schemaName,

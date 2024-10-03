@@ -934,9 +934,15 @@ public interface PTable extends PMetaDataEntity {
     Map<String, String> getDefaultPropertyValues();
 
     /**
-     * @return The TTL duration associated with the entity when Phoenix level TTL is enabled.
+     * @return The TTL expression associated with the entity when Phoenix level TTL is enabled.
+     * The expression can be a Literal value or a boolean Condition.
      */
-    int getTTL();
+    TTLExpression getTTL();
+
+    /**
+     * @return Returns true if table has conditional TTL set
+     */
+    boolean hasConditionalTTL();
 
     /**
      * @return the last timestamp at which this entity had its data shape created or modified (e

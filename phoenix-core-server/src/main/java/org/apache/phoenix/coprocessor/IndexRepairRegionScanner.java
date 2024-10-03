@@ -89,11 +89,6 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
 
         byte[] dataTableName = scan.getAttribute(PHYSICAL_DATA_TABLE_NAME);
         dataHTable = hTableFactory.getTable(new ImmutableBytesPtr(dataTableName));
-        if (BaseScannerRegionObserver.isPhoenixTableTTLEnabled(env.getConfiguration())) {
-            indexTableTTL = ScanUtil.getTTL(scan);
-        } else {
-            indexTableTTL = indexHTable.getDescriptor().getColumnFamilies()[0].getTimeToLive();
-        }
         try (org.apache.hadoop.hbase.client.Connection connection =
                      HBaseFactoryProvider.getHConnectionFactory().createConnection(env.getConfiguration())) {
             regionEndKeys = connection.getRegionLocator(dataHTable.getName()).getEndKeys();

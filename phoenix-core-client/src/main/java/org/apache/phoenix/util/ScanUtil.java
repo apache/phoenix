@@ -40,6 +40,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.TreeMap;
 
 import org.apache.hadoop.conf.Configuration;
@@ -80,6 +81,7 @@ import org.apache.phoenix.filter.EncodedQualifiersColumnProjectionFilter;
 import org.apache.phoenix.filter.MultiEncodedCQKeyValueComparisonFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.CDCTableInfo;
@@ -91,6 +93,7 @@ import org.apache.phoenix.query.KeyRange.Bound;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
@@ -101,6 +104,8 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
@@ -109,7 +114,6 @@ import org.apache.phoenix.schema.transform.TransformClient;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1147,12 +1151,25 @@ public class ScanUtil {
     }
 
 
-    public static int getTTL(Scan scan) {
+    public static int getTTL(Scan scan) throws IOException {
         byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
         if (phoenixTTL == null) {
             return DEFAULT_TTL;
         }
-        return Bytes.readAsInt(phoenixTTL, 0, phoenixTTL.length);
+        TTLExpression ttlExpression = TTLExpression.create(phoenixTTL);
+        if (ttlExpression instanceof  LiteralTTLExpression) {
+            LiteralTTLExpression literal = (LiteralTTLExpression)ttlExpression;
+            return literal.getTTLValue();
+        }
+        return DEFAULT_TTL;
+    }
+
+    public static TTLExpression getTTLExpression(Scan scan) throws IOException {
+        byte[] phoenixTTL = scan.getAttribute(BaseScannerRegionObserverConstants.TTL);
+        if (phoenixTTL == null) {
+            return TTLExpression.TTL_EXPRESSION_FORVER;
+        }
+        return TTLExpression.create(phoenixTTL);
     }
 
     public static boolean isPhoenixTableTTLEnabled(Configuration conf) {
@@ -1193,7 +1210,7 @@ public class ScanUtil {
         return maxTs;
     }
 
-    public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) {
+    public static boolean isTTLExpired(Cell cell, Scan scan, long nowTS) throws IOException {
         long ts = cell.getTimestamp();
         int ttl = ScanUtil.getTTL(scan);
         return ts + ttl < nowTS;
@@ -1424,7 +1441,9 @@ public class ScanUtil {
                 return;
             }
         }
-        if (dataTable.getTTL() != 0) {
+        TTLExpression ttlExpr = table.getTTL();
+        byte[] ttlForScan = ttlExpr.getTTLForScanAttribute(phoenixConnection, table);
+        if (ttlForScan != null) {
             byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
             byte[] emptyColumnName =
                     table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS ?
@@ -1434,8 +1453,7 @@ public class ScanUtil {
                     Bytes.toBytes(tableName));
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyColumnFamilyName);
             scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyColumnName);
-            scan.setAttribute(BaseScannerRegionObserverConstants.TTL,
-                    Bytes.toBytes(Integer.valueOf(dataTable.getTTL())));
+            scan.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
             if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
                 scan.setAttribute(BaseScannerRegionObserverConstants.MASK_PHOENIX_TTL_EXPIRED, PDataType.TRUE_BYTES);
             }
@@ -1448,6 +1466,35 @@ public class ScanUtil {
                         HConstants.EMPTY_BYTE_ARRAY,
                         scan.getStartRow(), scan.getStopRow());
             }
+        }
+    }
+
+    public static void addConditionalTTLColumnsToScan(Scan scan,
+                                                      PhoenixConnection connection,
+                                                      PTable table) throws SQLException {
+        //If entity is a view and phoenix.view.ttl.enabled is false then don't
+        // set TTL scan attribute.
+        if ((table.getType() == PTableType.VIEW) &&
+                !connection.getQueryServices().getConfiguration().getBoolean(
+                        QueryServices.PHOENIX_VIEW_TTL_ENABLED,
+                        QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED)) {
+            return;
+        }
+
+        // If Phoenix level TTL is not enabled OR is a system table then return.
+        if (!isPhoenixTableTTLEnabled(connection.getQueryServices().getConfiguration())) {
+            return;
+        }
+
+        if (!table.hasConditionalTTL()) {
+            return;
+        }
+
+        ConditionalTTLExpression ttlExpr = (ConditionalTTLExpression) table.getTTL();
+        Set<ColumnReference> colsReferenced = ttlExpr.getColumnsReferenced(connection, table);
+        for (ColumnReference colref : colsReferenced) {
+            // TODO Single Cell
+            scan.addColumn(colref.getFamily(), colref.getQualifier());
         }
     }
 

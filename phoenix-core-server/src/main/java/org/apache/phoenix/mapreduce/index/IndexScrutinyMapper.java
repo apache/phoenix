@@ -35,6 +35,7 @@ import java.util.Set;
 
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.conf.Configuration;
@@ -69,7 +70,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_TTL;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 
 /**
  * Mapper that reads from the data table and checks the rows against the index table
@@ -344,8 +345,8 @@ public class IndexScrutinyMapper extends Mapper<NullWritable, PhoenixIndexDBWrit
                 SchemaUtil.isNamespaceMappingEnabled(null, cqsi.getProps()));
         if (configuration.getBoolean(QueryServices.PHOENIX_TABLE_TTL_ENABLED,
                 QueryServicesOptions.DEFAULT_PHOENIX_TABLE_TTL_ENABLED)) {
-            return pSourceTable.getTTL() == TTL_NOT_DEFINED ? DEFAULT_TTL
-                    : pSourceTable.getTTL();
+            return pSourceTable.getTTL() == TTL_EXPRESSION_NOT_DEFINED ? DEFAULT_TTL
+                    : ((LiteralTTLExpression) pSourceTable.getTTL()).getTTLValue(); // TODO
         } else {
             TableDescriptor tableDesc;
             try (Admin admin = cqsi.getAdmin()) {

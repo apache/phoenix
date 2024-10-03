@@ -111,7 +111,6 @@ import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.stats.GuidePostsInfo;
 import org.apache.phoenix.schema.stats.GuidePostsKey;
 import org.apache.phoenix.schema.stats.StatisticsUtil;
-import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -201,6 +200,13 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
                 .getConfiguration().getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB,
                         DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
         PTable table = tableRef.getTable();
+
+        // If the table has Conditional TTL set, then we need to add all the non PK columns
+        // referenced in the conditional TTL expression to the scan. This can influence the
+        // filters that are applied to the scan so do this before the filter analysis.
+        if (table.hasConditionalTTL()) {
+            ScanUtil.addConditionalTTLColumnsToScan(scan, context.getConnection(), table);
+        }
 
         Map<byte [], NavigableSet<byte []>> familyMap = scan.getFamilyMap();
         // Hack for PHOENIX-2067 to force raw scan over all KeyValues to fix their row keys

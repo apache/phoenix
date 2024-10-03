@@ -32,7 +32,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAX_LOOKBACK_AGE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MULTI_TENANT;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
@@ -49,6 +48,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TRANSACTION_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.schema.SaltingUtil.SALTING_COLUMN;
+import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.schema.TableProperty.DEFAULT_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
@@ -122,7 +122,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -130,72 +129,9 @@ import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nonnull;
 
-import javax.annotation.Nonnull;
-
-import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.ByteStringer;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ExpressionCompiler;
-import org.apache.phoenix.compile.FromCompiler;
-import org.apache.phoenix.compile.QueryPlan;
-import org.apache.phoenix.compile.StatementContext;
-import org.apache.phoenix.coprocessor.generated.DynamicColumnMetaDataProtos;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
-import org.apache.phoenix.exception.DataExceedsCapacityException;
-import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.expression.LiteralExpression;
-import org.apache.phoenix.expression.SingleCellConstructorExpression;
-import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
-import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
-import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.index.IndexMaintainer;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SQLParser;
-import org.apache.phoenix.protobuf.ProtobufUtil;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
-import org.apache.phoenix.schema.transform.TransformMaintainer;
-import org.apache.phoenix.schema.types.PBinary;
-import org.apache.phoenix.schema.types.PChar;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.schema.types.PFloat;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
-import org.apache.phoenix.schema.types.PVarchar;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.base.Objects;
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableSortedMap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
-import org.apache.phoenix.transaction.TransactionFactory;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
-import org.apache.phoenix.util.EncodedColumnsUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.SizedUtil;
-import org.apache.phoenix.util.TrustedByteArrayOutputStream;
 
 /**
  *
@@ -271,7 +207,7 @@ public class PTableImpl implements PTable {
     private final QualifierEncodingScheme qualifierEncodingScheme;
     private final EncodedCQCounter encodedCQCounter;
     private final Boolean useStatsForParallelization;
-    private final int ttl;
+    private final TTLExpression ttl;
     private final BitSet viewModifiedPropSet;
     private final Long lastDDLTimestamp;
     private final boolean isChangeDetectionEnabled;
@@ -353,7 +289,7 @@ public class PTableImpl implements PTable {
         private String indexWhere;
         private Long maxLookbackAge;
         private Map<PTableKey, Long> ancestorLastDDLTimestampMap = new HashMap<>();
-        private int ttl;
+        private TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         private byte[] rowKeyMatcher;
 
         // Used to denote which properties a view has explicitly modified
@@ -689,8 +625,10 @@ public class PTableImpl implements PTable {
             return this;
         }
 
-        public Builder setTTL(int ttl) {
-            propertyValues.put(TTL, String.valueOf(ttl));
+        public Builder setTTL(TTLExpression ttl) {
+            if (ttl != null) {
+                propertyValues.put(TTL, ttl.getTTLExpression());
+            }
             this.ttl = ttl;
             return this;
         }
@@ -2140,10 +2078,10 @@ public class PTableImpl implements PTable {
             cdcIncludeScopesStr = table.getCDCIncludeScopes();
         }
 
-        Integer ttl = TTL_NOT_DEFINED;
+        TTLExpression ttl = TTL_EXPRESSION_NOT_DEFINED;
         if (table.hasTtl()) {
-            String ttlStr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
-            ttl = Integer.parseInt(ttlStr);
+            String ttlExpr = (String) PVarchar.INSTANCE.toObject(table.getTtl().toByteArray());
+            ttl = TTLExpression.create(ttlExpr);
         }
 
         byte[] rowKeyMatcher = null;
@@ -2357,9 +2295,10 @@ public class PTableImpl implements PTable {
         builder.setCDCIncludeScopes(CDCUtil.makeChangeScopeStringFromEnums(
                 table.getCDCIncludeScopes() != null ? table.getCDCIncludeScopes()
                 : Collections.EMPTY_SET));
-
-        builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(String.valueOf(table.getTTL()))));
-
+        if (table.getTTL() != null) {
+            builder.setTtl(ByteStringer.wrap(PVarchar.INSTANCE.toBytes(
+                    table.getTTL().getTTLExpression())));
+        }
         if (table.getRowKeyMatcher() != null) {
             builder.setRowKeyMatcher(ByteStringer.wrap(table.getRowKeyMatcher()));
         }
@@ -2459,8 +2398,13 @@ public class PTableImpl implements PTable {
     }
 
     @Override
-    public int getTTL() {
+    public TTLExpression getTTL() {
         return ttl;
+    }
+
+    @Override
+    public boolean hasConditionalTTL() {
+        return ttl instanceof ConditionalTTLExpression;
     }
 
     @Override public boolean hasViewModifiedUpdateCacheFrequency() {

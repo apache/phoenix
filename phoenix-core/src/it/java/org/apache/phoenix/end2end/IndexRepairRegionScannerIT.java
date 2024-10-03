@@ -219,13 +219,6 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
     }
 
-    private void dumpIndexToolMRJobCounters(IndexTool indexTool) throws IOException {
-        CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
-        for (Counter counter : mrJobCounters) {
-            LOGGER.info(String.format("%s=%d", counter.getName(), counter.getValue()));
-        }
-    }
-
     private void assertExtraCounters(IndexTool indexTool, long extraVerified, long extraUnverified,
             boolean isBefore) throws IOException {
         CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(indexTool);
@@ -260,7 +253,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         try {
             assertExtraCounters(tool, expectedExtraRows, 0, true);
         } catch (AssertionError e) {
-            dumpIndexToolMRJobCounters(tool);
+            IndexToolIT.dumpMRJobCounters(tool);
             throw e;
         }
 

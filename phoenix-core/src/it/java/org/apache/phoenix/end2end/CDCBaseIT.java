@@ -33,6 +33,7 @@ import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.types.PBinaryBase;
 import org.apache.phoenix.schema.types.PChar;
@@ -219,6 +220,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 CDCUtil.getCDCIndexName(cdcName));
         assertEquals(cdcTable.getPhysicalName().getString(), tableName == datatableName ?
                 indexFullName : getViewIndexPhysicalName(datatableName));
+        PTable cdcIndexTable = PhoenixRuntime.getTable(conn, indexFullName);
+        assertEquals(cdcIndexTable.getTTL(), TTLExpression.TTL_EXPRESSION_FORVER);
     }
 
     protected void assertSaltBuckets(Connection conn, String tableName, Integer nbuckets)
