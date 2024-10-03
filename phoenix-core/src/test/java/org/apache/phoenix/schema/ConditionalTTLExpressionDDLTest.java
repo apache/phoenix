@@ -19,12 +19,14 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
 import org.apache.phoenix.exception.PhoenixParserException;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -33,8 +35,12 @@ import org.junit.Test;
 public class ConditionalTTLExpressionDDLTest extends BaseConnectionlessQueryTest {
 
     private static void assertConditonTTL(Connection conn, String tableName, String ttlExpr) throws SQLException {
-        PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
         TTLExpression expected = new ConditionTTLExpression(ttlExpr);
+        assertConditonTTL(conn, tableName, expected);
+    }
+
+    private static void assertConditonTTL(Connection conn, String tableName, TTLExpression expected) throws SQLException {
+        PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
         assertEquals(expected, table.getTTL());
     }
 
@@ -85,6 +91,24 @@ public class ConditionalTTLExpressionDDLTest extends BaseConnectionlessQueryTest
         String ddl = String.format(ddlTemplate, tableName, ttl);
         try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
+        }
+    }
+
+    @Test
+    public void testAggregateExpressionNotAllowed() throws SQLException {
+        String ddlTemplate = "create table %s (k1 bigint not null, k2 bigint not null, col1 varchar, col2 date " +
+                "constraint pk primary key (k1,k2 desc)) TTL = '%s'";
+        String ttl = "SUM(k2) > 23";
+        String tableName = generateUniqueName();
+        String ddl = String.format(ddlTemplate, tableName, ttl);
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            conn.createStatement().execute(ddl);
+            fail();
+        } catch (SQLException e) {
+            assertEquals(SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_TTL_EXPRESSION.getErrorCode(),
+                    e.getErrorCode());
+        } catch (Exception e) {
+            fail("Unknown exception " + e);
         }
     }
 
@@ -151,6 +175,47 @@ public class ConditionalTTLExpressionDDLTest extends BaseConnectionlessQueryTest
         try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             conn.createStatement().execute(ddl);
             assertConditonTTL(conn, tableName, expectedTTLExpr);
+        }
+    }
+
+    @Test
+    public void testCondTTLOnTopLevelView() throws SQLException {
+        String ddlTemplate = "create table %s (k1 bigint not null primary key," +
+                "k2 bigint, col1 varchar, status char(1))";
+        String tableName = generateUniqueName();
+        String viewName = generateUniqueName();
+        String viewTemplate = "create view %s (k3 smallint) as select * from %s WHERE k1=7 TTL = '%s'";
+        String ttl = "k2 = 34 and k3 = -1";
+        String ddl = String.format(ddlTemplate, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            conn.createStatement().execute(ddl);
+            ddl = String.format(viewTemplate, viewName, tableName, ttl);
+            conn.createStatement().execute(ddl);
+            assertConditonTTL(conn, tableName, TTLExpression.TTL_EXPRESSION_NOT_DEFINED);
+            assertConditonTTL(conn, viewName, ttl);
+        }
+    }
+
+    @Test
+    public void testCondTTLOnMultiLevelView() throws SQLException {
+        String ddlTemplate = "create table %s (k1 bigint not null primary key," +
+                "k2 bigint, col1 varchar, status char(1))";
+        String tableName = generateUniqueName();
+        String parentView = generateUniqueName();
+        String childView = generateUniqueName();
+        String parentViewTemplate = "create view %s (k3 smallint) as select * from %s WHERE k1=7";
+        String childViewTemplate = "create view %s as select * from %s TTL = '%s'";
+        String ttl = "k2 = 34 and k3 = -1";
+        String ddl = String.format(ddlTemplate, tableName);
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            conn.createStatement().execute(ddl);
+            ddl = String.format(parentViewTemplate, parentView, tableName);
+            conn.createStatement().execute(ddl);
+            ddl = String.format(childViewTemplate, childView, parentView, ttl);
+            conn.createStatement().execute(ddl);
+            assertConditonTTL(conn, tableName, TTLExpression.TTL_EXPRESSION_NOT_DEFINED);
+            assertConditonTTL(conn, parentView, TTLExpression.TTL_EXPRESSION_NOT_DEFINED);
+            assertConditonTTL(conn, childView, ttl);
         }
     }
 }

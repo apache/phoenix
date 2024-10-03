@@ -206,7 +206,8 @@ public enum SQLExceptionCode {
     INVALID_JSON_DATA(540, "42916", "Invalid json data."),
     JSON_FRAGMENT_NOT_ALLOWED_IN_INDEX_EXPRESSION(541, "42917",
             "Functions returning JSON fragments are not allowed in Index Expression."),
-
+    AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_TTL_EXPRESSION(542, "42918",
+            "Aggregate expression not allowed in an TTL Expression."),
     /**
      * HBase and Phoenix specific implementation defined sub-classes.
      * Column family related exceptions.

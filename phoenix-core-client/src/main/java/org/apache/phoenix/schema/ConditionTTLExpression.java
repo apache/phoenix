@@ -32,6 +32,8 @@ import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -99,10 +101,7 @@ public class ConditionTTLExpression extends TTLExpression {
         VerifyCreateConditionalTTLExpression condTTLVisitor =
                 new VerifyCreateConditionalTTLExpression(conn, ttlValidationContext, create);
         Expression ttlExpression = ttlCondition.accept(condTTLVisitor);
-        if (ttlExpression.getDataType() != PBoolean.INSTANCE) {
-            throw TypeMismatchException.newException(PBoolean.INSTANCE,
-                    ttlExpression.getDataType(), ttlExpression.toString());
-        }
+        validateTTLExpression(ttlExpression, condTTLVisitor);
     }
 
     @Override
@@ -112,10 +111,7 @@ public class ConditionTTLExpression extends TTLExpression {
         StatementContext context = new StatementContext(new PhoenixStatement(conn), resolver);
         ExpressionCompiler expressionCompiler = new ExpressionCompiler(context);
         Expression ttlExpression = ttlCondition.accept(expressionCompiler);
-        if (ttlExpression.getDataType() != PBoolean.INSTANCE) {
-            throw TypeMismatchException.newException(PBoolean.INSTANCE,
-                    ttlExpression.getDataType(), ttlExpression.toString());
-        }
+        validateTTLExpression(ttlExpression, expressionCompiler);
     }
 
     @Override
@@ -210,5 +206,19 @@ public class ConditionTTLExpression extends TTLExpression {
                 .setFamilies(Collections.EMPTY_LIST)
                 .setIndexes(Collections.EMPTY_LIST)
                 .build();
+    }
+
+    private void validateTTLExpression(Expression ttlExpression,
+                                       ExpressionCompiler expressionCompiler) throws SQLException {
+
+        if (expressionCompiler.isAggregate()) {
+            throw new SQLExceptionInfo.Builder(
+                    SQLExceptionCode.AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_TTL_EXPRESSION).build().buildException();
+        }
+
+        if (ttlExpression.getDataType() != PBoolean.INSTANCE) {
+            throw TypeMismatchException.newException(PBoolean.INSTANCE,
+                    ttlExpression.getDataType(), ttlExpression.toString());
+        }
     }
 }
