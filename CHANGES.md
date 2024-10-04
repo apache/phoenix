@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.2.1 - Unreleased (as of 2024-10-02)
+## Release 5.2.1 - Unreleased (as of 2024-10-04)
 
 
 
@@ -26,6 +26,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7416](https://issues.apache.org/jira/browse/PHOENIX-7416) | Bump Avro dependency version to 1.11.4 |  Major | . |
 | [PHOENIX-7395](https://issues.apache.org/jira/browse/PHOENIX-7395) | Metadata Cache metrics at server and client side |  Major | . |
 | [PHOENIX-7397](https://issues.apache.org/jira/browse/PHOENIX-7397) | Optimize ClientAggregatePlan/ClientScanPlan when inner query is UnionPlan |  Major | core |
 | [PHOENIX-7404](https://issues.apache.org/jira/browse/PHOENIX-7404) | Build the HBase 2.5+ profiles with Hadoop 3.3.6 |  Major | . |
