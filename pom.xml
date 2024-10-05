@@ -123,7 +123,7 @@
     <snappy.version>0.5</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
-    <collections.version>3.2.2</collections.version>
+    <collections.version>4.4</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.31</joni.version>
     <omid.version>1.1.2</omid.version>
@@ -550,6 +550,13 @@
                     <reason>Use commons lang 3</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.lang.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Use commons collections 4</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.collections.**</bannedImport>
                     </bannedImports>
                   </RestrictImports>
                   <RestrictImports>
@@ -1678,8 +1685,8 @@
         <version>${commons-codec.version}</version>
       </dependency>
       <dependency>
-        <groupId>commons-collections</groupId>
-        <artifactId>commons-collections</artifactId>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-collections4</artifactId>
         <version>${collections.version}</version>
       </dependency>
       <!-- Update transitive dependency to a one without CVEs -->
