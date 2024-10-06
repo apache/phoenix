@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -41,201 +41,206 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
-
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.collect.MapMaker;
 
 public class UDFExpression extends ScalarFunction {
-    
-    private static Configuration config = HBaseConfiguration.create();
 
-    private static final ConcurrentMap<PName, DynamicClassLoader> tenantIdSpecificCls =
-            new MapMaker().concurrencyLevel(3).weakValues().makeMap();
+  private static Configuration config = HBaseConfiguration.create();
 
-    private static final ConcurrentMap<String, DynamicClassLoader> pathSpecificCls =
-            new MapMaker().concurrencyLevel(3).weakValues().makeMap();
+  private static final ConcurrentMap<PName, DynamicClassLoader> tenantIdSpecificCls =
+    new MapMaker().concurrencyLevel(3).weakValues().makeMap();
 
-    private PName tenantId;
-    private String functionClassName;
-    private String jarPath;
-    private ScalarFunction udfFunction;
-    
-    public UDFExpression() {
-    }
+  private static final ConcurrentMap<String, DynamicClassLoader> pathSpecificCls =
+    new MapMaker().concurrencyLevel(3).weakValues().makeMap();
 
-    public UDFExpression(List<Expression> children,PFunction functionInfo) {
-        super(children);
-        this.tenantId =
-                functionInfo.getTenantId() == null ? PName.EMPTY_NAME : functionInfo.getTenantId();
-        this.functionClassName = functionInfo.getClassName();
-        this.jarPath = functionInfo.getJarPath();
-        constructUDFFunction();
-    }
+  private PName tenantId;
+  private String functionClassName;
+  private String jarPath;
+  private ScalarFunction udfFunction;
 
-    public UDFExpression(List<Expression> children, PName tenantId, String functionClassName,
-            String jarPath, ScalarFunction udfFunction) {
-        super(children);
-        this.tenantId = tenantId;
-        this.functionClassName = functionClassName;
-        this.jarPath = jarPath;
-        if(udfFunction != null) {
-            this.udfFunction = udfFunction;
-        } else {
-            constructUDFFunction();
-        }
-    }
+  public UDFExpression() {
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        return udfFunction.evaluate(tuple, ptr);
-    }
+  public UDFExpression(List<Expression> children, PFunction functionInfo) {
+    super(children);
+    this.tenantId =
+      functionInfo.getTenantId() == null ? PName.EMPTY_NAME : functionInfo.getTenantId();
+    this.functionClassName = functionInfo.getClassName();
+    this.jarPath = functionInfo.getJarPath();
+    constructUDFFunction();
+  }
 
-    @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
-        return udfFunction.accept(visitor);
+  public UDFExpression(List<Expression> children, PName tenantId, String functionClassName,
+    String jarPath, ScalarFunction udfFunction) {
+    super(children);
+    this.tenantId = tenantId;
+    this.functionClassName = functionClassName;
+    this.jarPath = jarPath;
+    if (udfFunction != null) {
+      this.udfFunction = udfFunction;
+    } else {
+      constructUDFFunction();
     }
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return udfFunction.getDataType();
-    }
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    return udfFunction.evaluate(tuple, ptr);
+  }
 
-    @Override
-    public String getName() {
-        return udfFunction.getName();
-    }
+  @Override
+  public <T> T accept(ExpressionVisitor<T> visitor) {
+    return udfFunction.accept(visitor);
+  }
 
-    @Override
-    public OrderPreserving preservesOrder() {
-        return udfFunction.preservesOrder();
-    }
+  @Override
+  public PDataType getDataType() {
+    return udfFunction.getDataType();
+  }
 
-    @Override
-    public KeyPart newKeyPart(KeyPart childPart) {
-        return udfFunction.newKeyPart(childPart);
-    }
+  @Override
+  public String getName() {
+    return udfFunction.getName();
+  }
 
-    @Override
-    public int getKeyFormationTraversalIndex() {
-        return udfFunction.getKeyFormationTraversalIndex();
-    }
+  @Override
+  public OrderPreserving preservesOrder() {
+    return udfFunction.preservesOrder();
+  }
 
-    public PName getTenantId() {
-        return tenantId;
-    }
+  @Override
+  public KeyPart newKeyPart(KeyPart childPart) {
+    return udfFunction.newKeyPart(childPart);
+  }
 
-    public String getFunctionClassName() {
-        return functionClassName;
-    }
+  @Override
+  public int getKeyFormationTraversalIndex() {
+    return udfFunction.getKeyFormationTraversalIndex();
+  }
 
-    public String getJarPath() {
-        return jarPath;
-    }
+  public PName getTenantId() {
+    return tenantId;
+  }
 
-    public ScalarFunction getUdfFunction() {
-        return udfFunction;
-    }
+  public String getFunctionClassName() {
+    return functionClassName;
+  }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-        WritableUtils.writeString(output, tenantId.getString());
-        WritableUtils.writeString(output, this.functionClassName);
-        if(this.jarPath == null) {
-            WritableUtils.writeString(output, "");
-        } else {
-            WritableUtils.writeString(output, this.jarPath);
-        }
-    }
-    
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        this.tenantId = PNameFactory.newName(WritableUtils.readString(input));
-        this.functionClassName = WritableUtils.readString(input);
-        String str = WritableUtils.readString(input);
-        this.jarPath = str.length() == 0 ? null: str;
-        constructUDFFunction();
-    }
+  public String getJarPath() {
+    return jarPath;
+  }
 
-    private void constructUDFFunction() {
-        try {
-            DynamicClassLoader classLoader = getClassLoader(this.tenantId, this.jarPath);
-            Class<?> clazz = classLoader.loadClass(this.functionClassName);
-            Constructor<?> constructor = clazz.getConstructor(List.class);
-            udfFunction = (ScalarFunction)constructor.newInstance(this.children);
-        } catch (ClassNotFoundException | NoSuchMethodException | SecurityException
-                | InstantiationException | IllegalAccessException | IllegalArgumentException
-                | InvocationTargetException e) {
-            throw new RuntimeException(e);
-        }
-    }
+  public ScalarFunction getUdfFunction() {
+    return udfFunction;
+  }
 
-    public static DynamicClassLoader getClassLoader(final PName tenantId, final String jarPath) {
-        DynamicClassLoader cl = tenantIdSpecificCls.get(tenantId);
-        Path parent = null;
-        if (cl != null) return cl;
-        if(jarPath != null && !jarPath.isEmpty()) {
-            cl = pathSpecificCls.get(jarPath);
-            if (cl != null) return cl;
-            parent = getPathForParent(jarPath);
-        }
-        // Parse the DYNAMIC_JARS_DIR_KEY value as a Path if it's present in the configuration
-        Path allowedDynamicJarsPath = config.get(DYNAMIC_JARS_DIR_KEY) != null ? new Path(config.get(DYNAMIC_JARS_DIR_KEY)) : null;
-        // The case jarPath is not provided, or it is provided and the jar is inside hbase.dynamic.jars.dir
-        if (jarPath == null || jarPath.isEmpty()
-                || (allowedDynamicJarsPath != null && parent != null && parent.equals(allowedDynamicJarsPath))) {
-            cl = tenantIdSpecificCls.get(tenantId);
-            if (cl == null) {
-                cl = new DynamicClassLoader(config, UDFExpression.class.getClassLoader());
-            }
-            // Cache class loader as a weak value, will be GC'ed when no reference left
-            DynamicClassLoader prev = tenantIdSpecificCls.putIfAbsent(tenantId, cl);
-            if (prev != null) {
-                cl = prev;
-            }
-            return cl;
-        } else {
-            //The case jarPath is provided as not part of DYNAMIC_JARS_DIR_KEY
-            //As per PHOENIX-4231, DYNAMIC_JARS_DIR_KEY is the only place where loading a udf jar is allowed
-            throw new SecurityException("Loading jars from " + jarPath + " is not allowed. The only location that is allowed is "+ config.get(DYNAMIC_JARS_DIR_KEY));
-        }
+  @Override
+  public void write(DataOutput output) throws IOException {
+    super.write(output);
+    WritableUtils.writeString(output, tenantId.getString());
+    WritableUtils.writeString(output, this.functionClassName);
+    if (this.jarPath == null) {
+      WritableUtils.writeString(output, "");
+    } else {
+      WritableUtils.writeString(output, this.jarPath);
     }
+  }
 
-    public static Path getPathForParent(String jarPath) {
-        Path path = new Path(jarPath);
-        if (jarPath.endsWith(".jar")) {
-            return path.getParent();
-        }
-        return path;
-    }
-    
-    @VisibleForTesting
-    public static void setConfig(Configuration conf) {
-        config = conf;
-    }
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    this.tenantId = PNameFactory.newName(WritableUtils.readString(input));
+    this.functionClassName = WritableUtils.readString(input);
+    String str = WritableUtils.readString(input);
+    this.jarPath = str.length() == 0 ? null : str;
+    constructUDFFunction();
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (!(obj instanceof UDFExpression)) {
-			return false;
-		}
-		UDFExpression that = (UDFExpression) obj;
-		if (!this.udfFunction.getName().equals(that.udfFunction.getName())) {
-			return false;
-		}
-		if (!this.udfFunction.getChildren().equals(
-				that.udfFunction.getChildren())) {
-			return false;
-		}
-		if (!functionClassName.equals(that.functionClassName)) {
-			return false;
-		}
-		if (!jarPath.equals(that.jarPath)) {
-			return false;
-		}
-		return true;
+  private void constructUDFFunction() {
+    try {
+      DynamicClassLoader classLoader = getClassLoader(this.tenantId, this.jarPath);
+      Class<?> clazz = classLoader.loadClass(this.functionClassName);
+      Constructor<?> constructor = clazz.getConstructor(List.class);
+      udfFunction = (ScalarFunction) constructor.newInstance(this.children);
+    } catch (ClassNotFoundException | NoSuchMethodException | SecurityException
+      | InstantiationException | IllegalAccessException | IllegalArgumentException
+      | InvocationTargetException e) {
+      throw new RuntimeException(e);
     }
+  }
+
+  public static DynamicClassLoader getClassLoader(final PName tenantId, final String jarPath) {
+    DynamicClassLoader cl = tenantIdSpecificCls.get(tenantId);
+    Path parent = null;
+    if (cl != null) return cl;
+    if (jarPath != null && !jarPath.isEmpty()) {
+      cl = pathSpecificCls.get(jarPath);
+      if (cl != null) return cl;
+      parent = getPathForParent(jarPath);
+    }
+    // Parse the DYNAMIC_JARS_DIR_KEY value as a Path if it's present in the configuration
+    Path allowedDynamicJarsPath =
+      config.get(DYNAMIC_JARS_DIR_KEY) != null ? new Path(config.get(DYNAMIC_JARS_DIR_KEY)) : null;
+    // The case jarPath is not provided, or it is provided and the jar is inside
+    // hbase.dynamic.jars.dir
+    if (
+      jarPath == null || jarPath.isEmpty()
+        || (allowedDynamicJarsPath != null && parent != null
+          && parent.equals(allowedDynamicJarsPath))
+    ) {
+      cl = tenantIdSpecificCls.get(tenantId);
+      if (cl == null) {
+        cl = new DynamicClassLoader(config, UDFExpression.class.getClassLoader());
+      }
+      // Cache class loader as a weak value, will be GC'ed when no reference left
+      DynamicClassLoader prev = tenantIdSpecificCls.putIfAbsent(tenantId, cl);
+      if (prev != null) {
+        cl = prev;
+      }
+      return cl;
+    } else {
+      // The case jarPath is provided as not part of DYNAMIC_JARS_DIR_KEY
+      // As per PHOENIX-4231, DYNAMIC_JARS_DIR_KEY is the only place where loading a udf jar is
+      // allowed
+      throw new SecurityException(
+        "Loading jars from " + jarPath + " is not allowed. The only location that is allowed is "
+          + config.get(DYNAMIC_JARS_DIR_KEY));
+    }
+  }
+
+  public static Path getPathForParent(String jarPath) {
+    Path path = new Path(jarPath);
+    if (jarPath.endsWith(".jar")) {
+      return path.getParent();
+    }
+    return path;
+  }
+
+  @VisibleForTesting
+  public static void setConfig(Configuration conf) {
+    config = conf;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (!(obj instanceof UDFExpression)) {
+      return false;
+    }
+    UDFExpression that = (UDFExpression) obj;
+    if (!this.udfFunction.getName().equals(that.udfFunction.getName())) {
+      return false;
+    }
+    if (!this.udfFunction.getChildren().equals(that.udfFunction.getChildren())) {
+      return false;
+    }
+    if (!functionClassName.equals(that.functionClassName)) {
+      return false;
+    }
+    if (!jarPath.equals(that.jarPath)) {
+      return false;
+    }
+    return true;
+  }
 }

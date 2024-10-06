@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,63 +21,53 @@ import java.sql.SQLException;
 
 import org.apache.phoenix.compile.ColumnResolver;
 
-
-
 /**
- * 
  * Node representing a bind variable in a SQL expression
- *
- * 
  * @since 0.1
  */
 public class BindParseNode extends NamedParseNode {
-    private final int index;
-    
-    BindParseNode(String name) {
-        super(name);
-        index = Integer.parseInt(name);
-    }
-    
-    public int getIndex() {
-        return index-1;
-    }
+  private final int index;
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        return visitor.visit(this);
-    }
+  BindParseNode(String name) {
+    super(name);
+    index = Integer.parseInt(name);
+  }
 
-    
-    @Override
-    public boolean isStateless() {
-        return true;
-    }
-    
-	@Override
-	public int hashCode() {
-		final int prime = 31;
-		int result = super.hashCode();
-		result = prime * result + index;
-		return result;
-	}
+  public int getIndex() {
+    return index - 1;
+  }
 
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (!super.equals(obj))
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		BindParseNode other = (BindParseNode) obj;
-		if (index != other.index)
-			return false;
-		return true;
-	}
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    return visitor.visit(this);
+  }
 
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        buf.append(':');
-        buf.append(index);
-    }
+  @Override
+  public boolean isStateless() {
+    return true;
+  }
+
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = super.hashCode();
+    result = prime * result + index;
+    return result;
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (!super.equals(obj)) return false;
+    if (getClass() != obj.getClass()) return false;
+    BindParseNode other = (BindParseNode) obj;
+    if (index != other.index) return false;
+    return true;
+  }
+
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    buf.append(':');
+    buf.append(index);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,62 +34,61 @@ import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.DateUtil;
 
 /**
- * 
  * Class to encapsulate addition arithmetic for {@link org.apache.phoenix.schema.types.PTimestamp}.
- *
- * 
  * @since 2.1.3
  */
 
 public class TimestampAddExpression extends AddExpression {
 
-    public TimestampAddExpression() {
-    }
+  public TimestampAddExpression() {
+  }
 
-    public TimestampAddExpression(List<Expression> children) {
-        super(children);
-    }
+  public TimestampAddExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        BigDecimal finalResult = BigDecimal.ZERO;
-        
-        for(int i=0; i<children.size(); i++) {
-            if (!children.get(i).evaluate(tuple, ptr)) {
-                return false;
-            }
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            BigDecimal value;
-            PDataType type = children.get(i).getDataType();
-            SortOrder sortOrder = children.get(i).getSortOrder();
-            if(type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
-                value = (BigDecimal)(PDecimal.INSTANCE.toObject(ptr, type, sortOrder));
-            } else if (type.isCoercibleTo(PDecimal.INSTANCE)) {
-                value = (((BigDecimal) PDecimal.INSTANCE.toObject(ptr, type, sortOrder)).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
-            } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
-                value = ((BigDecimal.valueOf(type.getCodec().decodeDouble(ptr, sortOrder))).multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
-            } else {
-                value = BigDecimal.valueOf(type.getCodec().decodeLong(ptr, sortOrder));
-            } 
-            finalResult = finalResult.add(value);
-        }
-        Timestamp ts = DateUtil.getTimestamp(finalResult);
-        byte[] resultPtr = new byte[getDataType().getByteSize()];
-        PTimestamp.INSTANCE.toBytes(ts, resultPtr, 0);
-        ptr.set(resultPtr);
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    BigDecimal finalResult = BigDecimal.ZERO;
+
+    for (int i = 0; i < children.size(); i++) {
+      if (!children.get(i).evaluate(tuple, ptr)) {
+        return false;
+      }
+      if (ptr.getLength() == 0) {
         return true;
+      }
+      BigDecimal value;
+      PDataType type = children.get(i).getDataType();
+      SortOrder sortOrder = children.get(i).getSortOrder();
+      if (type == PTimestamp.INSTANCE || type == PUnsignedTimestamp.INSTANCE) {
+        value = (BigDecimal) (PDecimal.INSTANCE.toObject(ptr, type, sortOrder));
+      } else if (type.isCoercibleTo(PDecimal.INSTANCE)) {
+        value = (((BigDecimal) PDecimal.INSTANCE.toObject(ptr, type, sortOrder))
+          .multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
+      } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
+        value = ((BigDecimal.valueOf(type.getCodec().decodeDouble(ptr, sortOrder)))
+          .multiply(QueryConstants.BD_MILLIS_IN_DAY)).setScale(6, RoundingMode.HALF_UP);
+      } else {
+        value = BigDecimal.valueOf(type.getCodec().decodeLong(ptr, sortOrder));
+      }
+      finalResult = finalResult.add(value);
     }
+    Timestamp ts = DateUtil.getTimestamp(finalResult);
+    byte[] resultPtr = new byte[getDataType().getByteSize()];
+    PTimestamp.INSTANCE.toBytes(ts, resultPtr, 0);
+    ptr.set(resultPtr);
+    return true;
+  }
 
-    @Override
-    public final PDataType getDataType() {
-        return PTimestamp.INSTANCE;
-    }
+  @Override
+  public final PDataType getDataType() {
+    return PTimestamp.INSTANCE;
+  }
 
-    @Override
-    public ArithmeticExpression clone(List<Expression> children) {
-        return new TimestampAddExpression(children);
-    }
+  @Override
+  public ArithmeticExpression clone(List<Expression> children) {
+    return new TimestampAddExpression(children);
+  }
 
 }

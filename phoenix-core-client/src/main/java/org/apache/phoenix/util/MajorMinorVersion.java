@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.util;
 
 /**
@@ -23,41 +22,41 @@ package org.apache.phoenix.util;
  */
 class MajorMinorVersion {
 
-    private final int majorVersion;
-    private final int minorVersion;
+  private final int majorVersion;
+  private final int minorVersion;
 
-    public MajorMinorVersion(int majorVersion, int minorVersion) {
-        this.majorVersion = majorVersion;
-        this.minorVersion = minorVersion;
-    }
+  public MajorMinorVersion(int majorVersion, int minorVersion) {
+    this.majorVersion = majorVersion;
+    this.minorVersion = minorVersion;
+  }
 
-    public int getMajorVersion() {
-        return majorVersion;
-    }
+  public int getMajorVersion() {
+    return majorVersion;
+  }
 
-    public int getMinorVersion() {
-        return minorVersion;
-    }
+  public int getMinorVersion() {
+    return minorVersion;
+  }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        MajorMinorVersion version = (MajorMinorVersion) o;
-        if (majorVersion != version.majorVersion) {
-            return false;
-        }
-        return minorVersion == version.minorVersion;
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
     }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    MajorMinorVersion version = (MajorMinorVersion) o;
+    if (majorVersion != version.majorVersion) {
+      return false;
+    }
+    return minorVersion == version.minorVersion;
+  }
 
-    @Override
-    public int hashCode() {
-        int result = majorVersion;
-        result = 31 * result + minorVersion;
-        return result;
-    }
+  @Override
+  public int hashCode() {
+    int result = majorVersion;
+    result = 31 * result + minorVersion;
+    return result;
+  }
 }

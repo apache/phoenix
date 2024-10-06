@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,88 +40,83 @@ import org.apache.phoenix.schema.types.PUnsignedDouble;
 import org.apache.phoenix.schema.types.PUnsignedFloat;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.junit.Test;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.junit.Test;
 
 /**
  * Unit tests for {@link CbrtFunction}
  */
 public class CbrtFunctionTest {
 
-    private static void testExpression(LiteralExpression literal, double expected)
-            throws SQLException {
-        List<Expression> expressions = Lists.newArrayList((Expression) literal);
-        Expression cbrtFunction = new CbrtFunction(expressions);
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        cbrtFunction.evaluate(null, ptr);
-        Double result =
-                (Double) cbrtFunction.getDataType().toObject(ptr, cbrtFunction.getSortOrder());
-        assertTrue(Math.abs(result.doubleValue() - expected) <= 1e-9);
+  private static void testExpression(LiteralExpression literal, double expected)
+    throws SQLException {
+    List<Expression> expressions = Lists.newArrayList((Expression) literal);
+    Expression cbrtFunction = new CbrtFunction(expressions);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    cbrtFunction.evaluate(null, ptr);
+    Double result = (Double) cbrtFunction.getDataType().toObject(ptr, cbrtFunction.getSortOrder());
+    assertTrue(Math.abs(result.doubleValue() - expected) <= 1e-9);
+  }
+
+  private static void test(Number value, PNumericType dataType, double expected)
+    throws SQLException {
+    LiteralExpression literal;
+    literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+    testExpression(literal, expected);
+    literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+    testExpression(literal, expected);
+  }
+
+  private static void testBatch(Number[] value, PNumericType dataType) throws SQLException {
+    double[] expected = new double[value.length];
+    for (int i = 0; i < expected.length; ++i) {
+      expected[i] = Math.cbrt(value[i].doubleValue());
     }
-
-    private static void test(Number value, PNumericType dataType, double expected)
-            throws SQLException {
-        LiteralExpression literal;
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
-        testExpression(literal, expected);
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
-        testExpression(literal, expected);
+    assertEquals(value.length, expected.length);
+    for (int i = 0; i < value.length; ++i) {
+      test(value[i], dataType, expected[i]);
     }
+  }
 
-    private static void testBatch(Number[] value, PNumericType dataType) throws SQLException {
-        double[] expected = new double[value.length];
-        for (int i = 0; i < expected.length; ++i) {
-            expected[i] = Math.cbrt(value[i].doubleValue());
-        }
-        assertEquals(value.length, expected.length);
-        for (int i = 0; i < value.length; ++i) {
-            test(value[i], dataType, expected[i]);
-        }
-    }
+  @Test
+  public void testCbrtFunction() throws Exception {
+    Random random = new Random();
 
-    @Test
-    public void testCbrtFunction() throws Exception {
-        Random random = new Random();
+    testBatch(
+      new BigDecimal[] { BigDecimal.valueOf(1.0), BigDecimal.valueOf(0.0), BigDecimal.valueOf(-1.0),
+        BigDecimal.valueOf(123.1234), BigDecimal.valueOf(-123.1234),
+        BigDecimal.valueOf(random.nextDouble()), BigDecimal.valueOf(random.nextDouble()) },
+      PDecimal.INSTANCE);
 
-        testBatch(
-            new BigDecimal[] { BigDecimal.valueOf(1.0), BigDecimal.valueOf(0.0),
-                    BigDecimal.valueOf(-1.0), BigDecimal.valueOf(123.1234),
-                    BigDecimal.valueOf(-123.1234), BigDecimal.valueOf(random.nextDouble()),
-                    BigDecimal.valueOf(random.nextDouble()) }, PDecimal.INSTANCE);
+    testBatch(new Float[] { 1.0f, 0.0f, -1.0f, 123.1234f, -123.1234f, random.nextFloat(),
+      random.nextFloat() }, PFloat.INSTANCE);
 
-        testBatch(new Float[] { 1.0f, 0.0f, -1.0f, 123.1234f, -123.1234f, random.nextFloat(),
-                random.nextFloat() }, PFloat.INSTANCE);
+    testBatch(new Float[] { 1.0f, 0.0f, 123.1234f, }, PUnsignedFloat.INSTANCE);
 
-        testBatch(new Float[] { 1.0f, 0.0f, 123.1234f, }, PUnsignedFloat.INSTANCE);
+    testBatch(new Double[] { 1.0, 0.0, -1.0, 123.1234, -123.1234, random.nextDouble(),
+      random.nextDouble() }, PDouble.INSTANCE);
 
-        testBatch(
-            new Double[] { 1.0, 0.0, -1.0, 123.1234, -123.1234, random.nextDouble(),
-                    random.nextDouble() }, PDouble.INSTANCE);
+    testBatch(new Double[] { 1.0, 0.0, 123.1234, }, PUnsignedDouble.INSTANCE);
 
-        testBatch(new Double[] { 1.0, 0.0, 123.1234, }, PUnsignedDouble.INSTANCE);
+    testBatch(new Long[] { 1L, 0L, -1L, Long.MAX_VALUE, Long.MIN_VALUE, 123L, -123L,
+      random.nextLong(), random.nextLong() }, PLong.INSTANCE);
 
-        testBatch(
-            new Long[] { 1L, 0L, -1L, Long.MAX_VALUE, Long.MIN_VALUE, 123L, -123L,
-                    random.nextLong(), random.nextLong() }, PLong.INSTANCE);
+    testBatch(new Long[] { 1L, 0L, Long.MAX_VALUE, 123L }, PUnsignedLong.INSTANCE);
 
-        testBatch(new Long[] { 1L, 0L, Long.MAX_VALUE, 123L }, PUnsignedLong.INSTANCE);
+    testBatch(new Integer[] { 1, 0, -1, Integer.MAX_VALUE, Integer.MIN_VALUE, 123, -123,
+      random.nextInt(), random.nextInt() }, PInteger.INSTANCE);
 
-        testBatch(
-            new Integer[] { 1, 0, -1, Integer.MAX_VALUE, Integer.MIN_VALUE, 123, -123,
-                    random.nextInt(), random.nextInt() }, PInteger.INSTANCE);
+    testBatch(new Integer[] { 1, 0, Integer.MAX_VALUE, 123 }, PUnsignedInt.INSTANCE);
 
-        testBatch(new Integer[] { 1, 0, Integer.MAX_VALUE, 123 }, PUnsignedInt.INSTANCE);
+    testBatch(new Short[] { (short) 1, (short) 0, (short) -1, Short.MAX_VALUE, Short.MIN_VALUE,
+      (short) 123, (short) -123 }, PSmallint.INSTANCE);
 
-        testBatch(new Short[] { (short) 1, (short) 0, (short) -1, Short.MAX_VALUE, Short.MIN_VALUE,
-                (short) 123, (short) -123 }, PSmallint.INSTANCE);
+    testBatch(new Short[] { (short) 1, (short) 0, Short.MAX_VALUE, (short) 123 },
+      PSmallint.INSTANCE);
 
-        testBatch(new Short[] { (short) 1, (short) 0, Short.MAX_VALUE, (short) 123 },
-            PSmallint.INSTANCE);
+    testBatch(new Byte[] { (byte) 1, (byte) 0, (byte) -1, Byte.MAX_VALUE, Byte.MIN_VALUE,
+      (byte) 123, (byte) -123 }, PTinyint.INSTANCE);
 
-        testBatch(new Byte[] { (byte) 1, (byte) 0, (byte) -1, Byte.MAX_VALUE, Byte.MIN_VALUE,
-                (byte) 123, (byte) -123 }, PTinyint.INSTANCE);
-
-        testBatch(new Byte[] { (byte) 1, (byte) 0, Byte.MAX_VALUE, (byte) 123 }, PTinyint.INSTANCE);
-    }
+    testBatch(new Byte[] { (byte) 1, (byte) 0, Byte.MAX_VALUE, (byte) 123 }, PTinyint.INSTANCE);
+  }
 }

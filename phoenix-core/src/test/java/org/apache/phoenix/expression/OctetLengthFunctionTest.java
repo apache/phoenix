@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,44 +29,42 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBinaryBase;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.junit.Test;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.junit.Test;
 
 /**
  * Unit tests for {@link OctetLengthFunction}
  */
 public class OctetLengthFunctionTest {
-    private void testOctetLengthExpression(Expression data, int expected) throws SQLException {
-        List<Expression> expressions = Lists.newArrayList(data);
-        Expression octetLengthFunction = new OctetLengthFunction(expressions);
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        octetLengthFunction.evaluate(null, ptr);
-        Integer result =
-                (Integer) octetLengthFunction.getDataType().toObject(ptr,
-                    octetLengthFunction.getSortOrder());
-        if (expected == 0) {
-            assertNull(result);
-        } else {
-            assertEquals(expected, result.intValue());
-        }
+  private void testOctetLengthExpression(Expression data, int expected) throws SQLException {
+    List<Expression> expressions = Lists.newArrayList(data);
+    Expression octetLengthFunction = new OctetLengthFunction(expressions);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    octetLengthFunction.evaluate(null, ptr);
+    Integer result =
+      (Integer) octetLengthFunction.getDataType().toObject(ptr, octetLengthFunction.getSortOrder());
+    if (expected == 0) {
+      assertNull(result);
+    } else {
+      assertEquals(expected, result.intValue());
     }
+  }
 
-    private void testOctetLength(byte[] bytes, PBinaryBase dataType, int expected)
-            throws SQLException {
-        LiteralExpression dataExpr;
-        dataExpr = LiteralExpression.newConstant(bytes, dataType, SortOrder.ASC);
-        testOctetLengthExpression(dataExpr, expected);
-        dataExpr = LiteralExpression.newConstant(bytes, dataType, SortOrder.DESC);
-        testOctetLengthExpression(dataExpr, expected);
-    }
+  private void testOctetLength(byte[] bytes, PBinaryBase dataType, int expected)
+    throws SQLException {
+    LiteralExpression dataExpr;
+    dataExpr = LiteralExpression.newConstant(bytes, dataType, SortOrder.ASC);
+    testOctetLengthExpression(dataExpr, expected);
+    dataExpr = LiteralExpression.newConstant(bytes, dataType, SortOrder.DESC);
+    testOctetLengthExpression(dataExpr, expected);
+  }
 
-    @Test
-    public void testByteBatch() throws SQLException {
-        for (int len = 0; len < 300; ++len) {
-            byte[] bytes = new byte[len];
-            testOctetLength(bytes, PBinary.INSTANCE, bytes.length);
-            testOctetLength(bytes, PVarbinary.INSTANCE, bytes.length);
-        }
+  @Test
+  public void testByteBatch() throws SQLException {
+    for (int len = 0; len < 300; ++len) {
+      byte[] bytes = new byte[len];
+      testOctetLength(bytes, PBinary.INSTANCE, bytes.length);
+      testOctetLength(bytes, PVarbinary.INSTANCE, bytes.length);
     }
+  }
 }

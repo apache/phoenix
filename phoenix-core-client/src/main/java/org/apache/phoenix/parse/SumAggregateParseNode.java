@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,15 +25,15 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.function.FunctionExpression;
 import org.apache.phoenix.expression.function.SumAggregateFunction;
 
-
 public class SumAggregateParseNode extends DelegateConstantToCountParseNode {
 
-    public SumAggregateParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
-        super(name, children, info);
-    }
-    
-    @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        return new SumAggregateFunction(children, getDelegateFunction(children,context));
-    }
+  public SumAggregateParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
+
+  @Override
+  public FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    return new SumAggregateFunction(children, getDelegateFunction(children, context));
+  }
 }

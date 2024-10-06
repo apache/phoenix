@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,9 +23,9 @@ import org.apache.hadoop.hbase.ipc.DelegatingHBaseRpcController;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.util.IndexUtil;
 
 import com.google.protobuf.RpcController;
-import org.apache.phoenix.util.IndexUtil;
 
 /**
  * {@link RpcController} that sets the appropriate priority of RPC calls destined for Phoenix index
@@ -33,25 +33,23 @@ import org.apache.phoenix.util.IndexUtil;
  */
 class IndexRpcController extends DelegatingHBaseRpcController {
 
-    private final int priority;
-    private final String tracingTableName;
-    
-    public IndexRpcController(HBaseRpcController delegate, Configuration conf) {
-        super(delegate);
-        this.priority = IndexUtil.getIndexPriority(conf);
-        this.tracingTableName = conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
-                QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+  private final int priority;
+  private final String tracingTableName;
+
+  public IndexRpcController(HBaseRpcController delegate, Configuration conf) {
+    super(delegate);
+    this.priority = IndexUtil.getIndexPriority(conf);
+    this.tracingTableName = conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
+      QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+  }
+
+  @Override
+  public void setPriority(final TableName tn) {
+    if (!tn.isSystemTable() && !tn.getNameAsString().equals(tracingTableName)) {
+      setPriority(this.priority);
+    } else {
+      super.setPriority(tn);
     }
-    
-    @Override
-    public void setPriority(final TableName tn) {
-		if (!tn.isSystemTable() && !tn.getNameAsString().equals(tracingTableName)) {
-			setPriority(this.priority);
-		}  
-        else {
-            super.setPriority(tn);
-        }
-    }
-    
+  }
 
 }

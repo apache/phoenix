@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,44 +31,48 @@ import org.apache.phoenix.schema.PTableType;
 
 public interface MetaDataEndpointObserver extends Coprocessor {
 
-    void preGetTable( ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,  String tenantId,String tableName,
-             TableName physicalTableName) throws IOException;
+  void preGetTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
+    String tableName, TableName physicalTableName) throws IOException;
 
-    void preCreateTable(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tenantId,
-            String tableName, TableName physicalTableName, final TableName parentPhysicalTableName,
-            PTableType tableType, final Set<byte[]> familySet, Set<TableName> indexes) throws IOException;
+  void preCreateTable(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tenantId, String tableName, TableName physicalTableName,
+    final TableName parentPhysicalTableName, PTableType tableType, final Set<byte[]> familySet,
+    Set<TableName> indexes) throws IOException;
 
-    void preDropTable(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tenantId,
-            final String tableName,TableName physicalTableName, TableName parentPhysicalTableName, PTableType tableType, List<PTable> indexes) throws IOException;
+  void preDropTable(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tenantId, final String tableName, TableName physicalTableName,
+    TableName parentPhysicalTableName, PTableType tableType, List<PTable> indexes)
+    throws IOException;
 
-    void preAlterTable(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tenantId,final String tableName,
-            final TableName physicalTableName,final TableName parentPhysicalTableName, PTableType type) throws IOException;
+  void preAlterTable(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tenantId, final String tableName, final TableName physicalTableName,
+    final TableName parentPhysicalTableName, PTableType type) throws IOException;
 
-    void preGetSchema(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String schemaName)
-            throws IOException;
+  void preGetSchema(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String schemaName) throws IOException;
 
-    void preCreateSchema(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String schemaName)
-            throws IOException;
+  void preCreateSchema(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String schemaName) throws IOException;
 
-    void preDropSchema(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String schemaName)
-            throws IOException;
+  void preDropSchema(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String schemaName) throws IOException;
 
-    void preCreateFunction(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tenantId,
-            final String functionName) throws IOException;
+  void preCreateFunction(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tenantId, final String functionName) throws IOException;
 
-    void preDropFunction(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tenantId,
-            final String functionName) throws IOException;
+  void preDropFunction(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tenantId, final String functionName) throws IOException;
 
-    void preGetFunctions(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tenantId,
-            final String functionName) throws IOException;
+  void preGetFunctions(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tenantId, final String functionName) throws IOException;
 
-    void preIndexUpdate(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
-            String indexName, TableName physicalTableName, TableName parentPhysicalTableName, PIndexState newState) throws IOException;
+  void preIndexUpdate(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
+    String indexName, TableName physicalTableName, TableName parentPhysicalTableName,
+    PIndexState newState) throws IOException;
 
-    void preCreateViewAddChildLink(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
-            final String tableName) throws IOException;
+  void preCreateViewAddChildLink(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tableName) throws IOException;
 
-    void preUpsertTaskDetails(
-          ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
-          String tableName) throws IOException;
+  void preUpsertTaskDetails(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tableName) throws IOException;
 }

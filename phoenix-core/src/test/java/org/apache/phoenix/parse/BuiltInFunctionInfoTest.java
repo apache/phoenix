@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,89 +34,88 @@ import org.junit.Test;
 
 public class BuiltInFunctionInfoTest {
 
-    private static BuiltInFunctionInfo getBuiltInFunctionInfo(Class<? extends ScalarFunction> funcClass) {
-        return new BuiltInFunctionInfo(funcClass, funcClass.getAnnotation(BuiltInFunction.class));
+  private static BuiltInFunctionInfo
+    getBuiltInFunctionInfo(Class<? extends ScalarFunction> funcClass) {
+    return new BuiltInFunctionInfo(funcClass, funcClass.getAnnotation(BuiltInFunction.class));
+  }
+
+  @Test
+  public void testConstruct_NoDefaultArgs() {
+    BuiltInFunctionInfo funcInfo = getBuiltInFunctionInfo(NoDefaultArgsFunction.class);
+    assertEquals(2, funcInfo.getArgs().length);
+    assertEquals(2, funcInfo.getRequiredArgCount());
+    assertEquals("NO_DEFAULT_ARGS", funcInfo.getName());
+  }
+
+  @Test
+  public void testConstruct_WithOneDefaultArg() {
+    BuiltInFunctionInfo funcInfo = getBuiltInFunctionInfo(WithOneDefaultArg.class);
+    assertEquals(3, funcInfo.getArgs().length);
+    assertEquals(2, funcInfo.getRequiredArgCount());
+    assertEquals("WITH_ONE_DEFAULT_ARG", funcInfo.getName());
+  }
+
+  @Test
+  public void testConstruct_WithMultipleDefaultArgs() {
+    BuiltInFunctionInfo funcInfo = getBuiltInFunctionInfo(WithMultipleDefaultArgs.class);
+    assertEquals(3, funcInfo.getArgs().length);
+    assertEquals(1, funcInfo.getRequiredArgCount());
+    assertEquals("WITH_MULTIPLE_DEFAULT_ARGS", funcInfo.getName());
+  }
+
+  private static class BaseFunctionAdapter extends ScalarFunction {
+
+    private final String name;
+
+    BaseFunctionAdapter(String name) {
+      this.name = name;
     }
 
-    @Test
-    public void testConstruct_NoDefaultArgs() {
-        BuiltInFunctionInfo funcInfo = getBuiltInFunctionInfo(NoDefaultArgsFunction.class);
-        assertEquals(2, funcInfo.getArgs().length);
-        assertEquals(2, funcInfo.getRequiredArgCount());
-        assertEquals("NO_DEFAULT_ARGS", funcInfo.getName());
+    @Override
+    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+      throw new UnsupportedOperationException("Can't evalulate a BaseTestFunction");
     }
 
-    @Test
-    public void testConstruct_WithOneDefaultArg() {
-        BuiltInFunctionInfo funcInfo = getBuiltInFunctionInfo(WithOneDefaultArg.class);
-        assertEquals(3, funcInfo.getArgs().length);
-        assertEquals(2, funcInfo.getRequiredArgCount());
-        assertEquals("WITH_ONE_DEFAULT_ARG", funcInfo.getName());
+    @Override
+    public PDataType getDataType() {
+      return PVarchar.INSTANCE;
     }
 
-    @Test
-    public void testConstruct_WithMultipleDefaultArgs() {
-        BuiltInFunctionInfo funcInfo = getBuiltInFunctionInfo(WithMultipleDefaultArgs.class);
-        assertEquals(3, funcInfo.getArgs().length);
-        assertEquals(1, funcInfo.getRequiredArgCount());
-        assertEquals("WITH_MULTIPLE_DEFAULT_ARGS", funcInfo.getName());
+    @Override
+    public String getName() {
+      return name;
+    }
+  }
+
+  @BuiltInFunction(name = "NO_DEFAULT_ARGS", args = { @Argument(allowedTypes = { PVarchar.class }),
+    @Argument(allowedTypes = { PVarchar.class }) })
+  static class NoDefaultArgsFunction extends BaseFunctionAdapter {
+
+    public NoDefaultArgsFunction(List<Expression> ignoreChildren) {
+      super("NO_DEFAULT_ARGS");
     }
 
-    private static class BaseFunctionAdapter extends ScalarFunction {
+  }
 
+  @BuiltInFunction(name = "WITH_ONE_DEFAULT_ARG",
+      args = { @Argument(allowedTypes = { PVarchar.class }),
+        @Argument(allowedTypes = { PVarchar.class }),
+        @Argument(allowedTypes = { PVarchar.class }, defaultValue = "'a'") })
+  static class WithOneDefaultArg extends BaseFunctionAdapter {
 
-        private final String name;
-
-        BaseFunctionAdapter(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-            throw new UnsupportedOperationException("Can't evalulate a BaseTestFunction");
-        }
-
-        @Override
-        public PDataType getDataType() {
-            return PVarchar.INSTANCE;
-        }
-
-        @Override
-        public String getName() {
-            return name;
-        }
+    public WithOneDefaultArg(List<Expression> ignoreChildren) {
+      super("WITH_ONE_DEFAULT_ARG");
     }
+  }
 
-    @BuiltInFunction(name="NO_DEFAULT_ARGS", args={
-            @Argument(allowedTypes={PVarchar.class}),
-            @Argument(allowedTypes={PVarchar.class})})
-    static class NoDefaultArgsFunction extends BaseFunctionAdapter {
+  @BuiltInFunction(name = "WITH_MULTIPLE_DEFAULT_ARGS",
+      args = { @Argument(allowedTypes = { PVarchar.class }),
+        @Argument(allowedTypes = { PVarchar.class }, defaultValue = "'a'"),
+        @Argument(allowedTypes = { PVarchar.class }, defaultValue = "'b'") })
+  static class WithMultipleDefaultArgs extends BaseFunctionAdapter {
 
-        public NoDefaultArgsFunction(List<Expression> ignoreChildren) {
-            super("NO_DEFAULT_ARGS");
-        }
-
+    public WithMultipleDefaultArgs(List<Expression> ignoreChildren) {
+      super("WITH_MULTIPLE_DEFAULT_ARGS");
     }
-
-    @BuiltInFunction(name="WITH_ONE_DEFAULT_ARG", args={
-            @Argument(allowedTypes={PVarchar.class}),
-            @Argument(allowedTypes={PVarchar.class}),
-            @Argument(allowedTypes={PVarchar.class}, defaultValue = "'a'") })
-    static class WithOneDefaultArg extends BaseFunctionAdapter {
-
-        public WithOneDefaultArg(List<Expression> ignoreChildren) {
-            super("WITH_ONE_DEFAULT_ARG");
-        }
-    }
-
-    @BuiltInFunction(name="WITH_MULTIPLE_DEFAULT_ARGS", args={
-            @Argument(allowedTypes={PVarchar.class}),
-            @Argument(allowedTypes={PVarchar.class}, defaultValue = "'a'"),
-            @Argument(allowedTypes={PVarchar.class}, defaultValue = "'b'") })
-    static class WithMultipleDefaultArgs extends BaseFunctionAdapter {
-
-        public WithMultipleDefaultArgs(List<Expression> ignoreChildren) {
-            super("WITH_MULTIPLE_DEFAULT_ARGS");
-        }
-    }
+  }
 }

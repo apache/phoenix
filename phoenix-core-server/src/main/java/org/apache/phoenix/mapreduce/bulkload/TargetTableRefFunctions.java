@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,82 +26,86 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.util.JacksonUtil;
 
 /**
-  * Utility functions to get/put json.
-  *
-  */
+ * Utility functions to get/put json.
+ */
 public class TargetTableRefFunctions {
 
-     public static final Function<TargetTableRef,String> TO_JSON =  new Function<TargetTableRef,String>() {
+  public static final Function<TargetTableRef, String> TO_JSON =
+    new Function<TargetTableRef, String>() {
 
-         @Override
-         public String apply(TargetTableRef input) {
-             try {
-                 return JacksonUtil.getObjectWriter().writeValueAsString(input);
-             } catch (IOException e) {
-                 throw new RuntimeException(e);
-             }
-
-         }
-     };
-
-     public static final Function<String,TargetTableRef> FROM_JSON =  new Function<String,TargetTableRef>() {
-
-         @Override
-         public TargetTableRef apply(String json) {
-             try {
-                 return JacksonUtil.getObjectReader(TargetTableRef.class).readValue(json);
-             } catch (IOException e) {
-                 throw new RuntimeException(e);
-             }
-
-         }
-     };
-
-     public static final Function<List<TargetTableRef>,String> NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
-
-         @Override
-         public String apply(List<TargetTableRef> input) {
-             try {
-                 List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
-                 for(TargetTableRef table : input) {
-                     tableNames.add(table.getPhysicalName());
-                 }
-                 return JacksonUtil.getObjectWriter().writeValueAsString(tableNames);
-             } catch (IOException e) {
-                 throw new RuntimeException(e);
-             }
-
-         }
-     };
-
-    public static final Function<List<TargetTableRef>,String> LOGICAL_NAMES_TO_JSON =  new Function<List<TargetTableRef>,String>() {
-
-        @Override
-        public String apply(List<TargetTableRef> input) {
-            try {
-                List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
-                for(TargetTableRef table : input) {
-                    tableNames.add(table.getLogicalName());
-                }
-                return JacksonUtil.getObjectWriter().writeValueAsString(tableNames);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-
+      @Override
+      public String apply(TargetTableRef input) {
+        try {
+          return JacksonUtil.getObjectWriter().writeValueAsString(input);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
         }
+
+      }
     };
 
-    public static final Function<String,List<String>> NAMES_FROM_JSON =  new Function<String,List<String>>() {
+  public static final Function<String, TargetTableRef> FROM_JSON =
+    new Function<String, TargetTableRef>() {
 
-         @SuppressWarnings("unchecked")
-         @Override
-         public List<String> apply(String json) {
-             try {
-                 return JacksonUtil.getObjectReader(ArrayList.class).readValue(json);
-             } catch (IOException e) {
-                 throw new RuntimeException(e);
-             }
+      @Override
+      public TargetTableRef apply(String json) {
+        try {
+          return JacksonUtil.getObjectReader(TargetTableRef.class).readValue(json);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
 
-         }
-     };
+      }
+    };
+
+  public static final Function<List<TargetTableRef>, String> NAMES_TO_JSON =
+    new Function<List<TargetTableRef>, String>() {
+
+      @Override
+      public String apply(List<TargetTableRef> input) {
+        try {
+          List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
+          for (TargetTableRef table : input) {
+            tableNames.add(table.getPhysicalName());
+          }
+          return JacksonUtil.getObjectWriter().writeValueAsString(tableNames);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+
+      }
+    };
+
+  public static final Function<List<TargetTableRef>, String> LOGICAL_NAMES_TO_JSON =
+    new Function<List<TargetTableRef>, String>() {
+
+      @Override
+      public String apply(List<TargetTableRef> input) {
+        try {
+          List<String> tableNames = Lists.newArrayListWithCapacity(input.size());
+          for (TargetTableRef table : input) {
+            tableNames.add(table.getLogicalName());
+          }
+          return JacksonUtil.getObjectWriter().writeValueAsString(tableNames);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+
+      }
+    };
+
+  public static final Function<String, List<String>> NAMES_FROM_JSON =
+    new Function<String, List<String>>() {
+
+      @SuppressWarnings("unchecked")
+      @Override
+      public List<String> apply(String json) {
+        try {
+          return JacksonUtil.getObjectReader(ArrayList.class).readValue(json);
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+
+      }
+    };
 }

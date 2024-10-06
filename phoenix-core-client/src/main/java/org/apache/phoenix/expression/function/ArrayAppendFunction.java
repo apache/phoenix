@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,27 +30,32 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayAppendFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
-        @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class})})
+@FunctionParseNode.BuiltInFunction(name = ArrayAppendFunction.NAME,
+    nodeClass = ArrayModifierParseNode.class,
+    args = {
+      @FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PVarbinary.class }) })
 public class ArrayAppendFunction extends ArrayModifierFunction {
 
-    public static final String NAME = "ARRAY_APPEND";
+  public static final String NAME = "ARRAY_APPEND";
 
-    public ArrayAppendFunction() {
-    }
+  public ArrayAppendFunction() {
+  }
 
-    public ArrayAppendFunction(List<Expression> children) throws TypeMismatchException {
-        super(children);
-    }
+  public ArrayAppendFunction(List<Expression> children) throws TypeMismatchException {
+    super(children);
+  }
 
-    @Override
-    protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset, byte[] arrayBytes, PDataType baseDataType, int arrayLength, Integer maxLength, Expression arrayExp) {
-        return PArrayDataType.appendItemToArray(ptr, len, offset, arrayBytes, baseDataType, arrayLength, getMaxLength(), arrayExp.getSortOrder());
-    }
+  @Override
+  protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset,
+    byte[] arrayBytes, PDataType baseDataType, int arrayLength, Integer maxLength,
+    Expression arrayExp) {
+    return PArrayDataType.appendItemToArray(ptr, len, offset, arrayBytes, baseDataType, arrayLength,
+      getMaxLength(), arrayExp.getSortOrder());
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 }

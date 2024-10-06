@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,10 +24,10 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.ipc.DelegatingHBaseRpcController;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.SchemaUtil;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 import com.google.protobuf.RpcController;
 
 /**
@@ -36,39 +36,37 @@ import com.google.protobuf.RpcController;
  */
 class MetadataRpcController extends DelegatingHBaseRpcController {
 
-	private int priority;
-	// list of system tables
-	private static final List<String> SYSTEM_TABLE_NAMES = new ImmutableList.Builder<String>()
-			.add(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME)
-			.add(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
-			.add(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)
-			.add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME)
-			.add(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME)
-            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true)
-                    .getNameAsString())
-            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, true)
-                    .getNameAsString())
-            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true)
-                    .getNameAsString())
-            .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES, true)
-                    .getNameAsString())
-			.add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, true)
-					.getNameAsString())
-            .build();
+  private int priority;
+  // list of system tables
+  private static final List<String> SYSTEM_TABLE_NAMES = new ImmutableList.Builder<String>()
+    .add(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME).add(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME)
+    .add(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)
+    .add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME)
+    .add(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME)
+    .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, true)
+      .getNameAsString())
+    .build();
 
-	public MetadataRpcController(HBaseRpcController delegate,
-			Configuration conf) {
-		super(delegate);
-		this.priority = IndexUtil.getMetadataPriority(conf);
-	}
+  public MetadataRpcController(HBaseRpcController delegate, Configuration conf) {
+    super(delegate);
+    this.priority = IndexUtil.getMetadataPriority(conf);
+  }
 
-	@Override
-	public void setPriority(final TableName tn) {
-		if (SYSTEM_TABLE_NAMES.contains(tn.getNameAsString())) {
-			setPriority(this.priority);
-		} else {
-			super.setPriority(tn);
-		}
-	}
+  @Override
+  public void setPriority(final TableName tn) {
+    if (SYSTEM_TABLE_NAMES.contains(tn.getNameAsString())) {
+      setPriority(this.priority);
+    } else {
+      super.setPriority(tn);
+    }
+  }
 
 }

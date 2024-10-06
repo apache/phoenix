@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,35 +28,35 @@ import org.apache.phoenix.monitoring.MetricType;
 /**
  * ConnectionQueryServicesMetricsManager will be replaced by this class when
  * {@link org.apache.phoenix.query.QueryServices#CONNECTION_QUERY_SERVICE_METRICS_ENABLED} flag is
- * set to  false.
+ * set to false.
  */
-public class NoOpConnectionQueryServicesMetricsManager extends ConnectionQueryServicesMetricsManager {
+public class NoOpConnectionQueryServicesMetricsManager
+  extends ConnectionQueryServicesMetricsManager {
 
-    public static final NoOpConnectionQueryServicesMetricsManager NO_OP_CONN_QUERY_SERVICES_METRICS_MANAGER =
-            new NoOpConnectionQueryServicesMetricsManager();
+  public static final NoOpConnectionQueryServicesMetricsManager NO_OP_CONN_QUERY_SERVICES_METRICS_MANAGER =
+    new NoOpConnectionQueryServicesMetricsManager();
 
-    private NoOpConnectionQueryServicesMetricsManager() {
-        super();
-    }
+  private NoOpConnectionQueryServicesMetricsManager() {
+    super();
+  }
 
-    void updateMetricsValue(String connectionQueryServiceName, MetricType type,
-            long value) {
-    }
+  void updateMetricsValue(String connectionQueryServiceName, MetricType type, long value) {
+  }
 
-    Map<String, List<ConnectionQueryServicesMetric>> getConnectionQueryServicesMetrics() {
-        return Collections.emptyMap();
-    }
+  Map<String, List<ConnectionQueryServicesMetric>> getConnectionQueryServicesMetrics() {
+    return Collections.emptyMap();
+  }
 
-    Map<String, List<HistogramDistribution>> getHistogramsForConnectionQueryServices() {
-        return Collections.emptyMap();
-    }
+  Map<String, List<HistogramDistribution>> getHistogramsForConnectionQueryServices() {
+    return Collections.emptyMap();
+  }
 
-    void clearConnectionQueryServiceMetrics() {
+  void clearConnectionQueryServiceMetrics() {
 
-    }
+  }
 
-    ConnectionQueryServicesMetrics getConnectionQueryServiceMetricsInstance(
-            String connectionQueryServiceName) {
-        return null;
-    }
+  ConnectionQueryServicesMetrics
+    getConnectionQueryServiceMetricsInstance(String connectionQueryServiceName) {
+    return null;
+  }
 }

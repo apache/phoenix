@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,41 +22,37 @@ import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
-import java.util.EnumSet;
-
-
 public enum ActivityLogInfo {
 
-    START_TIME("s", LogLevel.INFO,PTimestamp.INSTANCE),
-    OP_TIME("u", LogLevel.INFO,PTimestamp.INSTANCE),
-    TENANT_ID("t", LogLevel.INFO,PVarchar.INSTANCE),
-    CQS_NAME("p", LogLevel.INFO,PVarchar.INSTANCE),
-    REQUEST_ID("r", LogLevel.INFO,PVarchar.INSTANCE),
-    TABLE_NAME("n", LogLevel.INFO,PVarchar.INSTANCE),
-    OP_NAME("o", LogLevel.INFO,PVarchar.INSTANCE),
-    OP_STMTS("#", LogLevel.INFO, PInteger.INSTANCE);
+  START_TIME("s", LogLevel.INFO, PTimestamp.INSTANCE),
+  OP_TIME("u", LogLevel.INFO, PTimestamp.INSTANCE),
+  TENANT_ID("t", LogLevel.INFO, PVarchar.INSTANCE),
+  CQS_NAME("p", LogLevel.INFO, PVarchar.INSTANCE),
+  REQUEST_ID("r", LogLevel.INFO, PVarchar.INSTANCE),
+  TABLE_NAME("n", LogLevel.INFO, PVarchar.INSTANCE),
+  OP_NAME("o", LogLevel.INFO, PVarchar.INSTANCE),
+  OP_STMTS("#", LogLevel.INFO, PInteger.INSTANCE);
 
-    public final String shortName;
-    public final LogLevel logLevel;
-    public final PDataType dataType;
+  public final String shortName;
+  public final LogLevel logLevel;
+  public final PDataType dataType;
 
-    private ActivityLogInfo(String shortName, LogLevel logLevel, PDataType dataType) {
-        this.shortName = shortName;
-        this.logLevel=logLevel;
-        this.dataType=dataType;
-    }
+  private ActivityLogInfo(String shortName, LogLevel logLevel, PDataType dataType) {
+    this.shortName = shortName;
+    this.logLevel = logLevel;
+    this.dataType = dataType;
+  }
 
-    public String getShortName() {
-        return shortName;
-    }
+  public String getShortName() {
+    return shortName;
+  }
 
-    public LogLevel getLogLevel() {
-        return logLevel;
-    }
+  public LogLevel getLogLevel() {
+    return logLevel;
+  }
 
-    public PDataType getDataType() {
-        return dataType;
-    }
-    
+  public PDataType getDataType() {
+    return dataType;
+  }
 
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,49 +31,47 @@ import org.joda.time.DateTime;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * Implementation of DayOfYearFunction(Date/Timestamp)
- *
- * Returns an integer from 1 to 365 (for each day of the week). Returns 366 in a leap year.
- *
+ * Implementation of DayOfYearFunction(Date/Timestamp) Returns an integer from 1 to 365 (for each
+ * day of the week). Returns 366 in a leap year.
  */
-@BuiltInFunction(name=DayOfYearFunction.NAME,
-        args={@Argument(allowedTypes={PTimestamp.class})})
+@BuiltInFunction(name = DayOfYearFunction.NAME,
+    args = { @Argument(allowedTypes = { PTimestamp.class }) })
 public class DayOfYearFunction extends DateScalarFunction {
-    public static final String NAME = "DAYOFYEAR";
+  public static final String NAME = "DAYOFYEAR";
 
-    public DayOfYearFunction() {
-    }
+  public DayOfYearFunction() {
+  }
 
-    public DayOfYearFunction(List<Expression> children) {
-        super(children);
-    }
+  public DayOfYearFunction(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression arg = getChildren().get(0);
-        if (!arg.evaluate(tuple,ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
-        DateTime jodaDT = new DateTime(dateTime, GJChronology.getInstanceUTC());
-        int day = jodaDT.getDayOfYear();
-        PDataType returnDataType = getDataType();
-        byte[] byteValue = new byte[returnDataType.getByteSize()];
-        returnDataType.getCodec().encodeInt(day, byteValue, 0);
-        ptr.set(byteValue);
-        return true;
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression arg = getChildren().get(0);
+    if (!arg.evaluate(tuple, ptr)) {
+      return false;
     }
+    if (ptr.getLength() == 0) {
+      return true;
+    }
+    long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
+    DateTime jodaDT = new DateTime(dateTime, GJChronology.getInstanceUTC());
+    int day = jodaDT.getDayOfYear();
+    PDataType returnDataType = getDataType();
+    byte[] byteValue = new byte[returnDataType.getByteSize()];
+    returnDataType.getCodec().encodeInt(day, byteValue, 0);
+    ptr.set(byteValue);
+    return true;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PInteger.INSTANCE;
-    }
+  @Override
+  public PDataType getDataType() {
+    return PInteger.INSTANCE;
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,20 +18,20 @@
 package org.apache.phoenix.parse;
 
 public abstract class SingleTableStatement extends MutableStatement {
-    private final NamedTableNode table;
-    private final int bindCount;
+  private final NamedTableNode table;
+  private final int bindCount;
 
-    public SingleTableStatement(NamedTableNode table, int bindCount) {
-        this.table = table;
-        this.bindCount = bindCount;
-    }
-    
-    public NamedTableNode getTable() {
-        return table;
-    }
+  public SingleTableStatement(NamedTableNode table, int bindCount) {
+    this.table = table;
+    this.bindCount = bindCount;
+  }
 
-    @Override
-    public int getBindCount() {
-        return bindCount;
-    }
+  public NamedTableNode getTable() {
+    return table;
+  }
+
+  @Override
+  public int getBindCount() {
+    return bindCount;
+  }
 }

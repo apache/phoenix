@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,19 +29,18 @@ import org.apache.phoenix.schema.types.PDataType;
 
 public class BsonUpdateExpressionParseNode extends FunctionParseNode {
 
-    public BsonUpdateExpressionParseNode(String name, List<ParseNode> children,
-        BuiltInFunctionInfo info) {
-        super(name, children, info);
-    }
+  public BsonUpdateExpressionParseNode(String name, List<ParseNode> children,
+    BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
 
-    @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context)
-            throws SQLException {
-        PDataType<?> dataType = children.get(0).getDataType();
-        if (!dataType.isCoercibleTo(PBson.INSTANCE)) {
-            throw new SQLException(
-                dataType + " type is unsupported for BSON_CONDITION_EXPRESSION().");
-        }
-        return new BsonUpdateExpressionFunction(children);
+  @Override
+  public FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    PDataType<?> dataType = children.get(0).getDataType();
+    if (!dataType.isCoercibleTo(PBson.INSTANCE)) {
+      throw new SQLException(dataType + " type is unsupported for BSON_CONDITION_EXPRESSION().");
     }
+    return new BsonUpdateExpressionFunction(children);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,34 +27,35 @@ import org.apache.phoenix.schema.PName;
 
 public class QueryLoggerUtil {
 
+  public static void logInitialDetails(QueryLogger queryLogger, PName tenantId,
+    ConnectionQueryServices queryServices, String query, List<Object> bindParameters) {
+    try {
+      String clientIP;
+      try {
+        clientIP = InetAddress.getLocalHost().getHostAddress();
+      } catch (UnknownHostException e) {
+        clientIP = "UnknownHost";
+      }
 
-    public static void logInitialDetails(QueryLogger queryLogger, PName tenantId, ConnectionQueryServices queryServices,
-            String query, List<Object> bindParameters) {
-        try {
-            String clientIP;
-            try {
-                clientIP = InetAddress.getLocalHost().getHostAddress();
-            } catch (UnknownHostException e) {
-                clientIP = "UnknownHost";
-            }
+      if (clientIP != null) {
+        queryLogger.log(QueryLogInfo.CLIENT_IP_I, clientIP);
+      }
+      if (query != null) {
+        queryLogger.log(QueryLogInfo.QUERY_I, query);
+      }
+      if (bindParameters != null) {
+        queryLogger.log(QueryLogInfo.BIND_PARAMETERS_I, StringUtils.join(bindParameters, ","));
+      }
+      if (tenantId != null) {
+        queryLogger.log(QueryLogInfo.TENANT_ID_I, tenantId.getString());
+      }
 
-            if (clientIP != null) {
-                queryLogger.log(QueryLogInfo.CLIENT_IP_I, clientIP);
-            }
-            if (query != null) {
-                queryLogger.log(QueryLogInfo.QUERY_I, query);
-            }
-            if (bindParameters != null) {
-                queryLogger.log(QueryLogInfo.BIND_PARAMETERS_I, StringUtils.join(bindParameters, ","));
-            }
-            if (tenantId != null) {
-                queryLogger.log(QueryLogInfo.TENANT_ID_I, tenantId.getString());
-            }
-
-            queryLogger.log(QueryLogInfo.USER_I, queryServices.getUserName() != null ? queryServices.getUserName()
-                    : queryServices.getUser().getShortName());
-        } catch (Exception e) {
-            // Ignore
-        }
+      queryLogger.log(QueryLogInfo.USER_I,
+        queryServices.getUserName() != null
+          ? queryServices.getUserName()
+          : queryServices.getUser().getShortName());
+    } catch (Exception e) {
+      // Ignore
     }
+  }
 }

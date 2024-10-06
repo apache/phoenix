@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,13 +18,11 @@
 package org.apache.phoenix.hbase.index.covered.data;
 
 import java.util.Iterator;
-import java.util.SortedSet;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.IndexKeyValueSkipListSet;
 import org.apache.hadoop.hbase.regionserver.MemStore;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -40,20 +38,18 @@ import org.slf4j.LoggerFactory;
  * sizing (for right now). We still support the concurrent access (in case indexes are built in
  * parallel).
  * <p>
- * 
- We basically wrap a KeyValueSkipListSet, just like a regular MemStore, except we are:
+ * We basically wrap a KeyValueSkipListSet, just like a regular MemStore, except we are:
  * <ol>
- *  <li>not dealing with
- *    <ul>
- *      <li>space considerations</li>
- *      <li>a snapshot set</li>
- *    </ul>
- *  </li>
- *  <li>ignoring memstore timestamps in favor of deciding when we want to overwrite keys based on how
- *    we obtain them</li>
- *   <li>ignoring time range updates (so 
- *    ReseekableScanner#shouldUseScanner(Scan, SortedSet, long) isn't supported from
- *    {@link #getScanner()}).</li>
+ * <li>not dealing with
+ * <ul>
+ * <li>space considerations</li>
+ * <li>a snapshot set</li>
+ * </ul>
+ * </li>
+ * <li>ignoring memstore timestamps in favor of deciding when we want to overwrite keys based on how
+ * we obtain them</li>
+ * <li>ignoring time range updates (so ReseekableScanner#shouldUseScanner(Scan, SortedSet, long)
+ * isn't supported from {@link #getScanner()}).</li>
  * </ol>
  * <p>
  * We can ignore the memstore timestamps because we know that anything we get from the local region
@@ -67,9 +63,9 @@ import org.slf4j.LoggerFactory;
  * the previous implementation. Further, by being smart about how we manage the KVs, we can drop the
  * extra object creation we were doing to wrap the pending KVs (which we did previously to ensure
  * they sorted before the ones we got from the HRegion). We overwrite {@link KeyValue}s when we add
- * them from external sources #add(KeyValue, boolean), but then don't overwrite existing
- * keyvalues when read them from the underlying table (because pending keyvalues should always
- * overwrite current ones) - this logic is all contained in LocalTableState.
+ * them from external sources #add(KeyValue, boolean), but then don't overwrite existing keyvalues
+ * when read them from the underlying table (because pending keyvalues should always overwrite
+ * current ones) - this logic is all contained in LocalTableState.
  * @see LocalTableState
  */
 public class IndexMemStore implements KeyValueStore {
@@ -79,11 +75,11 @@ public class IndexMemStore implements KeyValueStore {
   private CellComparator comparator;
 
   public IndexMemStore() {
-    this(new DelegateComparator(new CellComparatorImpl()){
-        @Override
-        public int compare(Cell leftCell, Cell rightCell) {
-            return super.compare(leftCell, rightCell, true);
-        }
+    this(new DelegateComparator(new CellComparatorImpl()) {
+      @Override
+      public int compare(Cell leftCell, Cell rightCell) {
+        return super.compare(leftCell, rightCell, true);
+      }
     });
   }
 
@@ -126,8 +122,8 @@ public class IndexMemStore implements KeyValueStore {
   }
 
   private String toString(Cell kv) {
-    return kv.toString() + "/value=" + 
-        Bytes.toStringBinary(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+    return kv.toString() + "/value="
+      + Bytes.toStringBinary(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
   }
 
   @Override
@@ -146,7 +142,7 @@ public class IndexMemStore implements KeyValueStore {
   public ReseekableScanner getScanner() {
     return new MemStoreScanner();
   }
-  
+
   /*
    * MemStoreScanner implements the ReseekableScanner. It lets the caller scan the contents of a
    * memstore -- both current map and snapshot. This behaves as if it were a real scanner but does
@@ -238,7 +234,8 @@ public class IndexMemStore implements KeyValueStore {
        * Unfortunately the Java API does not offer a method to get it. So we remember the last keys
        * we iterated to and restore the reseeked set to at least that point.
        */
-      kvsetIt = kvsetAtCreation.tailSet(getHighest(PhoenixKeyValueUtil.maybeCopyCell(key), kvsetItRow)).iterator();
+      kvsetIt = kvsetAtCreation
+        .tailSet(getHighest(PhoenixKeyValueUtil.maybeCopyCell(key), kvsetItRow)).iterator();
       return seekInSubLists();
     }
 

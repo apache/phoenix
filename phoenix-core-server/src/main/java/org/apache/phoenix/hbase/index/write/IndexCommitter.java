@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,22 +17,22 @@
  */
 package org.apache.phoenix.hbase.index.write;
 
+import java.io.IOException;
+
 import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
-
-import java.io.IOException;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Write the index updates to the index tables
  */
 public interface IndexCommitter extends Stoppable {
 
-  void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name, boolean disableIndexOnFailure);
+  void setup(IndexWriter parent, RegionCoprocessorEnvironment env, String name,
+    boolean disableIndexOnFailure);
 
-  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates, int clientVersion)
-      throws IOException;
+  public void write(Multimap<HTableInterfaceReference, Mutation> toWrite, boolean allowLocalUpdates,
+    int clientVersion) throws IOException;
 }

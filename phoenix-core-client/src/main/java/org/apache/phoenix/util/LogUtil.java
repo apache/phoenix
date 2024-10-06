@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,40 +24,48 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 
 public class LogUtil {
 
-	private LogUtil() {
-    }
+  private LogUtil() {
+  }
 
-    public static String addCustomAnnotations(@Nullable String logLine, @Nullable PhoenixConnection con) {
-    	if (con == null || con.getCustomTracingAnnotations() == null || con.getCustomTracingAnnotations().isEmpty()) {
-            return logLine;
-    	} else {
-    		return customAnnotationsToString(con) + ' ' + logLine;
-    	}
+  public static String addCustomAnnotations(@Nullable String logLine,
+    @Nullable PhoenixConnection con) {
+    if (
+      con == null || con.getCustomTracingAnnotations() == null
+        || con.getCustomTracingAnnotations().isEmpty()
+    ) {
+      return logLine;
+    } else {
+      return customAnnotationsToString(con) + ' ' + logLine;
     }
-    
-    public static String addCustomAnnotations(@Nullable String logLine, @Nullable byte[] annotations) {
-    	if (annotations == null) {
-            return logLine;
-    	} else {
-    		return Bytes.toString(annotations) + ' ' + logLine;
-    	}
-    }
-    
-    public static String customAnnotationsToString(@Nullable PhoenixConnection con) {
-    	if (con == null || con.getCustomTracingAnnotations() == null || con.getCustomTracingAnnotations().isEmpty()) {
-            return null;
-        } else {
-        	return con.getCustomTracingAnnotations().toString();
-        }
-    }
+  }
 
-    public static String getCallerStackTrace() {
-        StackTraceElement[] st = Thread.currentThread().getStackTrace();
-        StringBuilder sb = new StringBuilder();
-        for (StackTraceElement element : st) {
-            sb.append(element.toString());
-            sb.append("\n");
-        }
-        return sb.toString();
+  public static String addCustomAnnotations(@Nullable String logLine,
+    @Nullable byte[] annotations) {
+    if (annotations == null) {
+      return logLine;
+    } else {
+      return Bytes.toString(annotations) + ' ' + logLine;
     }
+  }
+
+  public static String customAnnotationsToString(@Nullable PhoenixConnection con) {
+    if (
+      con == null || con.getCustomTracingAnnotations() == null
+        || con.getCustomTracingAnnotations().isEmpty()
+    ) {
+      return null;
+    } else {
+      return con.getCustomTracingAnnotations().toString();
+    }
+  }
+
+  public static String getCallerStackTrace() {
+    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+    StringBuilder sb = new StringBuilder();
+    for (StackTraceElement element : st) {
+      sb.append(element.toString());
+      sb.append("\n");
+    }
+    return sb.toString();
+  }
 }

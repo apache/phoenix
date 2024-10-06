@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,31 +22,29 @@ import java.util.List;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.util.regex.AbstractBasePattern;
 import org.apache.phoenix.expression.util.regex.JONIPattern;
-import org.joni.Option;
-import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
+import org.apache.phoenix.schema.types.PVarchar;
+import org.joni.Option;
 
-@BuiltInFunction(name=RegexpReplaceFunction.NAME,
-        args= {
-        @Argument(allowedTypes={PVarchar.class}),
-        @Argument(allowedTypes={PVarchar.class}),
-        @Argument(allowedTypes={PVarchar.class},defaultValue="null")},
-        classType = FunctionClassType.DERIVED
-)
+@BuiltInFunction(name = RegexpReplaceFunction.NAME,
+    args = { @Argument(allowedTypes = { PVarchar.class }),
+      @Argument(allowedTypes = { PVarchar.class }),
+      @Argument(allowedTypes = { PVarchar.class }, defaultValue = "null") },
+    classType = FunctionClassType.DERIVED)
 public class ByteBasedRegexpReplaceFunction extends RegexpReplaceFunction {
 
-    public ByteBasedRegexpReplaceFunction() {
-    }
+  public ByteBasedRegexpReplaceFunction() {
+  }
 
-    public ByteBasedRegexpReplaceFunction(List<Expression> children) {
-        super(children);
-    }
+  public ByteBasedRegexpReplaceFunction(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    protected AbstractBasePattern compilePatternSpec(String value) {
-        return new JONIPattern(value, Option.MULTILINE);
-    }
+  @Override
+  protected AbstractBasePattern compilePatternSpec(String value) {
+    return new JONIPattern(value, Option.MULTILINE);
+  }
 
 }

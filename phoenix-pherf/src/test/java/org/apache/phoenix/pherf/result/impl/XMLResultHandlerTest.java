@@ -1,12 +1,13 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to you under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,22 +33,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class XMLResultHandlerTest {
-    private static final Logger LOGGER = LoggerFactory.getLogger(XMLResultHandlerTest.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(XMLResultHandlerTest.class);
 
-    @Test
-    public void testDTDInResults() throws Exception {
-        URL resultsUrl = XMLConfigParserTest.class.getResource("/malicious_results_with_dtd.xml");
-        assertNotNull(resultsUrl);
-        File resultsFile = new File(resultsUrl.getFile());
-        XMLResultHandler handler = new XMLResultHandler();
-        try {
-          handler.readFromResultFile(resultsFile);
-          fail("Expected to see an exception parsing the results with a DTD");
-        } catch (UnmarshalException e) {
-          // If we don't parse the DTD, the variable 'name' won't be defined in the XML
-          LOGGER.debug("Caught expected exception", e);
-          Throwable cause = e.getLinkedException();
-          assertTrue("Cause was a " + cause.getClass(), cause instanceof XMLStreamException);
-        }
+  @Test
+  public void testDTDInResults() throws Exception {
+    URL resultsUrl = XMLConfigParserTest.class.getResource("/malicious_results_with_dtd.xml");
+    assertNotNull(resultsUrl);
+    File resultsFile = new File(resultsUrl.getFile());
+    XMLResultHandler handler = new XMLResultHandler();
+    try {
+      handler.readFromResultFile(resultsFile);
+      fail("Expected to see an exception parsing the results with a DTD");
+    } catch (UnmarshalException e) {
+      // If we don't parse the DTD, the variable 'name' won't be defined in the XML
+      LOGGER.debug("Caught expected exception", e);
+      Throwable cause = e.getLinkedException();
+      assertTrue("Cause was a " + cause.getClass(), cause instanceof XMLStreamException);
     }
+  }
 }

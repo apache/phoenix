@@ -1,12 +1,13 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to you under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,32 +27,31 @@ import org.apache.hadoop.hbase.ipc.RpcScheduler;
  * passing off the call to the delegate {@link RpcScheduler}.
  */
 public abstract class CompatPhoenixRpcScheduler extends RpcScheduler {
-    protected RpcScheduler delegate;
+  protected RpcScheduler delegate;
 
-    @Override
-    public boolean dispatch(CallRunner task) {
-        try {
-            return compatDispatch(task);
-        } catch (Exception e) {
-            //This never happens with Hbase 2.5
-            throw new RuntimeException(e);
-        }
+  @Override
+  public boolean dispatch(CallRunner task) {
+    try {
+      return compatDispatch(task);
+    } catch (Exception e) {
+      // This never happens with Hbase 2.5
+      throw new RuntimeException(e);
     }
+  }
 
-    public int getActiveRpcHandlerCount() {
-        return delegate.getActiveRpcHandlerCount();
-    }
+  public int getActiveRpcHandlerCount() {
+    return delegate.getActiveRpcHandlerCount();
+  }
 
-    @Override
-    public int getActiveBulkLoadRpcHandlerCount() {
-        return delegate.getActiveBulkLoadRpcHandlerCount();
-    }
+  @Override
+  public int getActiveBulkLoadRpcHandlerCount() {
+    return delegate.getActiveBulkLoadRpcHandlerCount();
+  }
 
-    @Override
-    public int getBulkLoadQueueLength() {
-        return delegate.getBulkLoadQueueLength();
-    }
+  @Override
+  public int getBulkLoadQueueLength() {
+    return delegate.getBulkLoadQueueLength();
+  }
 
-    public abstract boolean compatDispatch(CallRunner task)
-            throws IOException, InterruptedException;
+  public abstract boolean compatDispatch(CallRunner task) throws IOException, InterruptedException;
 }

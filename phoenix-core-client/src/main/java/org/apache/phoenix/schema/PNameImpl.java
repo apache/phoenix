@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,86 +25,86 @@ import org.apache.phoenix.util.SizedUtil;
 
 @Immutable
 public class PNameImpl implements PName {
+  /**
+   */
+  private static class PNameImplData {
+    /**  */
+    public String stringName;
+    /**  */
+    public byte[] bytesName;
+    /**  */
+    public volatile ImmutableBytesPtr ptr;
+
     /**
+     *
      */
-    private static class PNameImplData {
-        /**  */
-        public String stringName;
-        /**  */
-        public byte[] bytesName;
-        /**  */
-        public volatile ImmutableBytesPtr ptr;
-
-        /**
-         *
-         */
-        public PNameImplData() {
-        }
+    public PNameImplData() {
     }
-    private PNameImplData data = new PNameImplData();
+  }
 
+  private PNameImplData data = new PNameImplData();
 
-    @Override
-    public int getEstimatedSize() {
-        return SizedUtil.OBJECT_SIZE * 3 + SizedUtil.ARRAY_SIZE + SizedUtil.IMMUTABLE_BYTES_PTR_SIZE +
-                data.stringName.length() * SizedUtil.CHAR_SIZE + data.bytesName.length;
-    }
+  @Override
+  public int getEstimatedSize() {
+    return SizedUtil.OBJECT_SIZE * 3 + SizedUtil.ARRAY_SIZE + SizedUtil.IMMUTABLE_BYTES_PTR_SIZE
+      + data.stringName.length() * SizedUtil.CHAR_SIZE + data.bytesName.length;
+  }
 
-    PNameImpl(String name) {
-        this.data.stringName = name;
-        this.data.bytesName = Bytes.toBytes(name);
-    }
+  PNameImpl(String name) {
+    this.data.stringName = name;
+    this.data.bytesName = Bytes.toBytes(name);
+  }
 
-    PNameImpl(byte[] name) {
-        this.data.stringName = Bytes.toString(name);
-        this.data.bytesName = name;
-    }
+  PNameImpl(byte[] name) {
+    this.data.stringName = Bytes.toString(name);
+    this.data.bytesName = name;
+  }
 
-    @Override
-    public String getString() {
-        return data.stringName;
-    }
+  @Override
+  public String getString() {
+    return data.stringName;
+  }
 
-    @Override
-    public byte[] getBytes() {
-        return data.bytesName;
-    }
+  @Override
+  public byte[] getBytes() {
+    return data.bytesName;
+  }
 
-    @Override
-    public ImmutableBytesPtr getBytesPtr() {
+  @Override
+  public ImmutableBytesPtr getBytesPtr() {
+    if (data.ptr == null) {
+      synchronized (data.bytesName) {
         if (data.ptr == null) {
-            synchronized (data.bytesName) {
-                if (data.ptr == null) {
-                    this.data.ptr = new ImmutableBytesPtr(data.bytesName);
-                }
-            }
+          this.data.ptr = new ImmutableBytesPtr(data.bytesName);
         }
-        return this.data.ptr;
+      }
     }
+    return this.data.ptr;
+  }
 
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + data.stringName.hashCode();
-        return result;
-    }
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = 1;
+    result = prime * result + data.stringName.hashCode();
+    return result;
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (! (obj instanceof PName) ) return false;
-        PName other = (PName)obj;
-        if (hashCode() != other.hashCode()) return false;
-        // Compare normalized stringName for equality, since bytesName
-        // may differ since it remains case sensitive.
-        if (!getString().equals(other.getString())) return false;
-        return true;
-    }
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (obj == null) return false;
+    if (!(obj instanceof PName)) return false;
+    PName other = (PName) obj;
+    if (hashCode() != other.hashCode()) return false;
+    // Compare normalized stringName for equality, since bytesName
+    // may differ since it remains case sensitive.
+    if (!getString().equals(other.getString())) return false;
+    return true;
+  }
 
-    @Override
-    public String toString() {
-        return data.stringName;
-    }
+  @Override
+  public String toString() {
+    return data.stringName;
+  }
 }

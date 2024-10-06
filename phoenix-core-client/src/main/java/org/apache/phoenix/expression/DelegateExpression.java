@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,90 +24,90 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 
 public class DelegateExpression implements Expression {
-    private final Expression delegate;
-    
-    public DelegateExpression(Expression delegate) {
-        this.delegate = delegate;
-    }
+  private final Expression delegate;
 
-    @Override
-    public boolean isNullable() {
-        return delegate.isNullable();
-    }
+  public DelegateExpression(Expression delegate) {
+    this.delegate = delegate;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return delegate.getDataType();
-    }
+  @Override
+  public boolean isNullable() {
+    return delegate.isNullable();
+  }
 
-    @Override
-    public Integer getMaxLength() {
-        return delegate.getMaxLength();
-    }
+  @Override
+  public PDataType getDataType() {
+    return delegate.getDataType();
+  }
 
-    @Override
-    public Integer getScale() {
-        return delegate.getScale();
-    }
+  @Override
+  public Integer getMaxLength() {
+    return delegate.getMaxLength();
+  }
 
-    @Override
-    public SortOrder getSortOrder() {
-        return delegate.getSortOrder();
-    }
+  @Override
+  public Integer getScale() {
+    return delegate.getScale();
+  }
 
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        delegate.readFields(input);
-    }
+  @Override
+  public SortOrder getSortOrder() {
+    return delegate.getSortOrder();
+  }
 
-    @Override
-    public void write(DataOutput output) throws IOException {
-        delegate.write(output);
-    }
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    delegate.readFields(input);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        return delegate.evaluate(tuple, ptr);
-    }
+  @Override
+  public void write(DataOutput output) throws IOException {
+    delegate.write(output);
+  }
 
-    @Override
-    public <T> T accept(ExpressionVisitor<T> visitor) {
-        return delegate.accept(visitor);
-    }
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    return delegate.evaluate(tuple, ptr);
+  }
 
-    @Override
-    public List<Expression> getChildren() {
-        return delegate.getChildren();
-    }
+  @Override
+  public <T> T accept(ExpressionVisitor<T> visitor) {
+    return delegate.accept(visitor);
+  }
 
-    @Override
-    public void reset() {
-        delegate.reset();
-    }
+  @Override
+  public List<Expression> getChildren() {
+    return delegate.getChildren();
+  }
 
-    @Override
-    public boolean isStateless() {
-        return delegate.isStateless();
-    }
+  @Override
+  public void reset() {
+    delegate.reset();
+  }
 
-    @Override
-    public Determinism getDeterminism() {
-        return delegate.getDeterminism();
-    }
+  @Override
+  public boolean isStateless() {
+    return delegate.isStateless();
+  }
 
-    @Override
-    public boolean requiresFinalEvaluation() {
-        return delegate.requiresFinalEvaluation();
-    }
+  @Override
+  public Determinism getDeterminism() {
+    return delegate.getDeterminism();
+  }
 
-    @Override
-    public boolean isCloneExpression() {
-        return delegate.isCloneExpression();
-    }
+  @Override
+  public boolean requiresFinalEvaluation() {
+    return delegate.requiresFinalEvaluation();
+  }
+
+  @Override
+  public boolean isCloneExpression() {
+    return delegate.isCloneExpression();
+  }
 
 }

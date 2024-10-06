@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,8 +28,8 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.KeyValue.Type;
+import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -40,8 +40,8 @@ import org.junit.Test;
  */
 public class TestApplyAndFilterDeletesFilter {
 
-  private static final Set<ImmutableBytesPtr> EMPTY_SET = Collections
-      .<ImmutableBytesPtr> emptySet();
+  private static final Set<ImmutableBytesPtr> EMPTY_SET =
+    Collections.<ImmutableBytesPtr> emptySet();
   private byte[] row = Bytes.toBytes("row");
   private byte[] family = Bytes.toBytes("family");
   private byte[] qualifier = Bytes.toBytes("qualifier");
@@ -93,7 +93,8 @@ public class TestApplyAndFilterDeletesFilter {
     byte[] laterFamily = Bytes.toBytes("zfamily");
     filter = new ApplyAndFilterDeletesFilter(asSet(laterFamily));
     assertEquals(ReturnCode.SKIP, filter.filterCell(kv));
-    KeyValue expected = KeyValueUtil.createFirstOnRow(CellUtil.cloneRow(kv), laterFamily, new byte[0]);
+    KeyValue expected =
+      KeyValueUtil.createFirstOnRow(CellUtil.cloneRow(kv), laterFamily, new byte[0]);
     assertEquals("Didn't get a hint from a family delete", ReturnCode.SEEK_NEXT_USING_HINT,
       filter.filterCell(next));
     assertEquals("Didn't get correct next key with a next family", expected,
@@ -135,7 +136,6 @@ public class TestApplyAndFilterDeletesFilter {
 
   /**
    * Test that when we do a column delete at a given timestamp that we delete the entire column.
-   * @throws Exception
    */
   @Test
   public void testCoverForDeleteColumn() throws Exception {
@@ -148,7 +148,7 @@ public class TestApplyAndFilterDeletesFilter {
     // seek past the given put
     Cell seek = filter.getNextCellHint(put);
     assertTrue("Seeked key wasn't past the expected put - didn't skip the column",
-    CellComparator.getInstance().compare(seek, put) > 0);
+      CellComparator.getInstance().compare(seek, put) > 0);
   }
 
   /**

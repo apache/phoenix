@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,41 +29,41 @@ import org.apache.phoenix.util.ByteUtil;
 
 public abstract class JavaMathTwoArgumentFunction extends ScalarFunction {
 
-    public JavaMathTwoArgumentFunction() {
+  public JavaMathTwoArgumentFunction() {
+  }
+
+  public JavaMathTwoArgumentFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  protected abstract double compute(double firstArg, double secondArg);
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    PDataType returnType = getDataType();
+
+    Expression arg1Expr = children.get(0);
+    if (!arg1Expr.evaluate(tuple, ptr)) return false;
+    if (ptr.getLength() == 0) return true;
+    double arg1 = JavaMathOneArgumentFunction.getArg(arg1Expr, ptr);
+
+    Expression arg2Expr = (children.size() <= 1) ? null : children.get(1);
+    double arg2;
+    if (arg2Expr != null && !arg2Expr.evaluate(tuple, ptr)) return false;
+    if (arg2Expr == null || ptr.getLength() == 0) {
+      ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+      return true;
+    } else {
+      arg2 = JavaMathOneArgumentFunction.getArg(arg2Expr, ptr);
     }
 
-    public JavaMathTwoArgumentFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+    ptr.set(new byte[returnType.getByteSize()]);
+    returnType.getCodec().encodeDouble(compute(arg1, arg2), ptr);
+    return true;
+  }
 
-    protected abstract double compute(double firstArg, double secondArg);
-
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        PDataType returnType = getDataType();
-
-        Expression arg1Expr = children.get(0);
-        if (!arg1Expr.evaluate(tuple, ptr)) return false;
-        if (ptr.getLength() == 0) return true;
-        double arg1 = JavaMathOneArgumentFunction.getArg(arg1Expr, ptr);
-
-        Expression arg2Expr = (children.size() <= 1) ? null : children.get(1);
-        double arg2;
-        if (arg2Expr != null && !arg2Expr.evaluate(tuple, ptr)) return false;
-        if (arg2Expr == null || ptr.getLength() == 0) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return true;
-        } else {
-            arg2 = JavaMathOneArgumentFunction.getArg(arg2Expr, ptr);
-        }
-
-        ptr.set(new byte[returnType.getByteSize()]);
-        returnType.getCodec().encodeDouble(compute(arg1, arg2), ptr);
-        return true;
-    }
-
-    @Override
-    public PDataType getDataType() {
-        return PDouble.INSTANCE;
-    }
+  @Override
+  public PDataType getDataType() {
+    return PDouble.INSTANCE;
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,40 +25,36 @@ import org.apache.phoenix.util.PhoenixContextExecutor;
 
 /**
  * Creates {@link Configuration} instances that contain HBase/Hadoop settings.
- *
- * 
  * @since 2.0
  */
 public interface ConfigurationFactory {
-    /**
-     * @return Configuration containing HBase/Hadoop settings
-     */
-    Configuration getConfiguration();
+  /** Returns Configuration containing HBase/Hadoop settings */
+  Configuration getConfiguration();
 
-    Configuration getConfiguration(Configuration conf);
+  Configuration getConfiguration(Configuration conf);
 
-    /**
-     * Default implementation uses {@link org.apache.hadoop.hbase.HBaseConfiguration#create()}.
-     */
-    static class ConfigurationFactoryImpl implements ConfigurationFactory {
+  /**
+   * Default implementation uses {@link org.apache.hadoop.hbase.HBaseConfiguration#create()}.
+   */
+  static class ConfigurationFactoryImpl implements ConfigurationFactory {
+    @Override
+    public Configuration getConfiguration() {
+      return PhoenixContextExecutor.callWithoutPropagation(new Callable<Configuration>() {
         @Override
-        public Configuration getConfiguration() {
-            return PhoenixContextExecutor.callWithoutPropagation(new Callable<Configuration>() {
-                @Override
-                public Configuration call() throws Exception {
-                    return HBaseConfiguration.create();
-                }
-            });
+        public Configuration call() throws Exception {
+          return HBaseConfiguration.create();
         }
-
-        @Override
-        public Configuration getConfiguration(final Configuration conf) {
-            return PhoenixContextExecutor.callWithoutPropagation(new Callable<Configuration>() {
-                @Override
-                public Configuration call() throws Exception {
-                    return HBaseConfiguration.create(conf);
-                }
-            });
-        }
+      });
     }
+
+    @Override
+    public Configuration getConfiguration(final Configuration conf) {
+      return PhoenixContextExecutor.callWithoutPropagation(new Callable<Configuration>() {
+        @Override
+        public Configuration call() throws Exception {
+          return HBaseConfiguration.create(conf);
+        }
+      });
+    }
+  }
 }

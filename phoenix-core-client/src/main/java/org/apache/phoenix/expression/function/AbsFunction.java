@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,36 +31,36 @@ import org.apache.phoenix.schema.types.PNumericType;
 @BuiltInFunction(name = AbsFunction.NAME, args = { @Argument(allowedTypes = PDecimal.class) })
 public class AbsFunction extends ScalarFunction {
 
-    public static final String NAME = "ABS";
+  public static final String NAME = "ABS";
 
-    public AbsFunction() {
-    }
+  public AbsFunction() {
+  }
 
-    public AbsFunction(List<Expression> children) {
-        super(children);
-    }
+  public AbsFunction(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression childExpr = children.get(0);
-        PDataType dataType = childExpr.getDataType();
-        if (childExpr.evaluate(tuple, ptr)) {
-            byte[] bytes = ptr.get();
-            int offset = ptr.getOffset(), length = ptr.getLength();
-            ptr.set(new byte[getDataType().getByteSize()]);
-            ((PNumericType) dataType).abs(bytes, offset, length, childExpr.getSortOrder(), ptr);
-            return true;
-        }
-        return false;
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression childExpr = children.get(0);
+    PDataType dataType = childExpr.getDataType();
+    if (childExpr.evaluate(tuple, ptr)) {
+      byte[] bytes = ptr.get();
+      int offset = ptr.getOffset(), length = ptr.getLength();
+      ptr.set(new byte[getDataType().getByteSize()]);
+      ((PNumericType) dataType).abs(bytes, offset, length, childExpr.getSortOrder(), ptr);
+      return true;
     }
+    return false;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return children.get(0).getDataType();
-    }
+  @Override
+  public PDataType getDataType() {
+    return children.get(0).getDataType();
+  }
 
-    @Override
-    public String getName() {
-        return AbsFunction.NAME;
-    }
+  @Override
+  public String getName() {
+    return AbsFunction.NAME;
+  }
 }

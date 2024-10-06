@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,56 +15,56 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.parse;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-import org.apache.phoenix.compile.ColumnResolver;
+import java.util.Objects;
 
 import javax.annotation.Nullable;
-import java.util.Objects;
+
+import org.apache.phoenix.compile.ColumnResolver;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * ParseNode implementation for SHOW SCHEMAS sql.
  */
 public class ShowSchemasStatement extends ShowStatement {
-    @Nullable
-    private final String schemaPattern;
+  @Nullable
+  private final String schemaPattern;
 
-    public ShowSchemasStatement(String pattern) {
-        schemaPattern = pattern;
-    };
+  public ShowSchemasStatement(String pattern) {
+    schemaPattern = pattern;
+  };
 
-    @Nullable
-    protected String getSchemaPattern() {
-        return schemaPattern;
+  @Nullable
+  protected String getSchemaPattern() {
+    return schemaPattern;
+  }
+
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    Preconditions.checkNotNull(buf);
+    buf.append("SHOW SCHEMAS");
+    if (schemaPattern != null) {
+      buf.append(" LIKE ");
+      buf.append("'").append(schemaPattern).append("'");
     }
+  }
 
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        Preconditions.checkNotNull(buf);
-        buf.append("SHOW SCHEMAS");
-        if (schemaPattern != null) {
-            buf.append(" LIKE ");
-            buf.append("'").append(schemaPattern).append("'");
-        }
-    }
+  @Override
+  public String toString() {
+    StringBuilder buf = new StringBuilder();
+    toSQL(null, buf);
+    return buf.toString();
+  }
 
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder();
-        toSQL(null, buf);
-        return buf.toString();
-    }
+  @Override
+  public boolean equals(Object other) {
+    if (!(other instanceof ShowSchemasStatement)) return false;
+    ShowSchemasStatement stmt = (ShowSchemasStatement) other;
+    return Objects.equals(schemaPattern, stmt.getSchemaPattern());
+  }
 
-    @Override
-    public boolean equals(Object other) {
-        if (!(other instanceof ShowSchemasStatement)) return false;
-        ShowSchemasStatement stmt = (ShowSchemasStatement) other;
-        return Objects.equals(schemaPattern, stmt.getSchemaPattern());
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(schemaPattern);
-    }
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(schemaPattern);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,95 +40,96 @@ import org.apache.phoenix.util.ServerUtil.ConnectionType;
  */
 public class DelegateRegionCoprocessorEnvironment implements RegionCoprocessorEnvironment {
 
-    private final Configuration config;
-    private RegionCoprocessorEnvironment delegate;
-    private ConnectionType connectionType;
+  private final Configuration config;
+  private RegionCoprocessorEnvironment delegate;
+  private ConnectionType connectionType;
 
-    public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate, ConnectionType connectionType) {
-        this.delegate = delegate;
-        this.connectionType = connectionType;
-        this.config = ConnectionFactory.getTypeSpecificConfiguration(connectionType, delegate.getConfiguration());
-    }
+  public DelegateRegionCoprocessorEnvironment(RegionCoprocessorEnvironment delegate,
+    ConnectionType connectionType) {
+    this.delegate = delegate;
+    this.connectionType = connectionType;
+    this.config =
+      ConnectionFactory.getTypeSpecificConfiguration(connectionType, delegate.getConfiguration());
+  }
 
-    @Override
-    public int getVersion() {
-        return delegate.getVersion();
-    }
+  @Override
+  public int getVersion() {
+    return delegate.getVersion();
+  }
 
-    @Override
-    public String getHBaseVersion() {
-        return delegate.getHBaseVersion();
-    }
+  @Override
+  public String getHBaseVersion() {
+    return delegate.getHBaseVersion();
+  }
 
-    @Override
-    public int getPriority() {
-        return delegate.getPriority();
-    }
+  @Override
+  public int getPriority() {
+    return delegate.getPriority();
+  }
 
-    @Override
-    public int getLoadSequence() {
-        return delegate.getLoadSequence();
-    }
+  @Override
+  public int getLoadSequence() {
+    return delegate.getLoadSequence();
+  }
 
-    @Override
-    public Configuration getConfiguration() {
-        return config;
-    }
+  @Override
+  public Configuration getConfiguration() {
+    return config;
+  }
 
-    @Override
-    public ClassLoader getClassLoader() {
-        return delegate.getClassLoader();
-    }
+  @Override
+  public ClassLoader getClassLoader() {
+    return delegate.getClassLoader();
+  }
 
-    @Override
-    public Region getRegion() {
-        return delegate.getRegion();
-    }
+  @Override
+  public Region getRegion() {
+    return delegate.getRegion();
+  }
 
-    @Override
-    public RegionInfo getRegionInfo() {
-        return delegate.getRegionInfo();
-    }
+  @Override
+  public RegionInfo getRegionInfo() {
+    return delegate.getRegionInfo();
+  }
 
-    @Override
-    public ConcurrentMap<String, Object> getSharedData() {
-        return delegate.getSharedData();
-    }
+  @Override
+  public ConcurrentMap<String, Object> getSharedData() {
+    return delegate.getSharedData();
+  }
 
-    @Override
-    public RegionCoprocessor getInstance() {
-        return delegate.getInstance();
-    }
+  @Override
+  public RegionCoprocessor getInstance() {
+    return delegate.getInstance();
+  }
 
-    @Override
-    public OnlineRegions getOnlineRegions() {
-        return delegate.getOnlineRegions();
-    }
+  @Override
+  public OnlineRegions getOnlineRegions() {
+    return delegate.getOnlineRegions();
+  }
 
-    @Override
-    public ServerName getServerName() {
-        return delegate.getServerName();
-    }
+  @Override
+  public ServerName getServerName() {
+    return delegate.getServerName();
+  }
 
-    @Override
-    public Connection getConnection() {
-        return ConnectionFactory.getConnection(connectionType, delegate);
-    }
+  @Override
+  public Connection getConnection() {
+    return ConnectionFactory.getConnection(connectionType, delegate);
+  }
 
-    @Override
-    public MetricRegistry getMetricRegistryForRegionServer() {
-        return delegate.getMetricRegistryForRegionServer();
-    }
+  @Override
+  public MetricRegistry getMetricRegistryForRegionServer() {
+    return delegate.getMetricRegistryForRegionServer();
+  }
 
-    @Override
-    public Connection createConnection(Configuration conf) throws IOException {
-        return delegate.createConnection(conf);
-    }
+  @Override
+  public Connection createConnection(Configuration conf) throws IOException {
+    return delegate.createConnection(conf);
+  }
 
-    @Override
-    public RawCellBuilder getCellBuilder() {
-        return delegate.getCellBuilder();
-    }
-   
-    
+  @Override
+  public RawCellBuilder getCellBuilder() {
+    return delegate.getCellBuilder();
+  }
+
 }

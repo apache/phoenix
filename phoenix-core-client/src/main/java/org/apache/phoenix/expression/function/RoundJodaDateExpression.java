@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,45 +28,42 @@ import org.joda.time.DateTime;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * 
- * Base class for functions that use joda time. 
- * Used primarily by FLOOR , ROUND and CEIL on the time units WEEK,MONTH and YEAR. 
+ * Base class for functions that use joda time. Used primarily by FLOOR , ROUND and CEIL on the time
+ * units WEEK,MONTH and YEAR.
  */
-public abstract class RoundJodaDateExpression extends RoundDateExpression{
+public abstract class RoundJodaDateExpression extends RoundDateExpression {
 
-    public RoundJodaDateExpression(){}
-    
-    public RoundJodaDateExpression(List<Expression> children) {
-       super(children);
-    }
+  public RoundJodaDateExpression() {
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (children.get(0).evaluate(tuple, ptr)) {
-            if (ptr.getLength() == 0) {
-                return true; // child evaluated to null
-            }
-            PDataType dataType = getDataType();
-            long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-            DateTime dt = new DateTime(time, GJChronology.getInstanceUTC());
-            long value = roundDateTime(dt);
-            Date d = new Date(value);
-            byte[] byteValue = dataType.toBytes(d);
-            ptr.set(byteValue);
-            return true;
-        }
-        return false;
-    }
-    
-    /**
-     * @param dateTime
-     * @return Time in millis.
-     */
-    public abstract long roundDateTime(DateTime dateTime);
+  public RoundJodaDateExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    // We need a working roundTime() for the RowKey pushdown logic.
-    public long roundTime(long time) {
-        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (children.get(0).evaluate(tuple, ptr)) {
+      if (ptr.getLength() == 0) {
+        return true; // child evaluated to null
+      }
+      PDataType dataType = getDataType();
+      long time = dataType.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
+      DateTime dt = new DateTime(time, GJChronology.getInstanceUTC());
+      long value = roundDateTime(dt);
+      Date d = new Date(value);
+      byte[] byteValue = dataType.toBytes(d);
+      ptr.set(byteValue);
+      return true;
     }
+    return false;
+  }
+
+  /** Returns Time in millis. */
+  public abstract long roundDateTime(DateTime dateTime);
+
+  @Override
+  // We need a working roundTime() for the RowKey pushdown logic.
+  public long roundTime(long time) {
+    return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+  }
 }

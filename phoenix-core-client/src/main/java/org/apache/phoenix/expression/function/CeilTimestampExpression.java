@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,106 +25,101 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.parse.FunctionParseNode.Argument;
+import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
+import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDataType.PDataCodec;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.schema.types.PInteger;
-import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.parse.FunctionParseNode.Argument;
-import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
- * 
- * Class encapsulating the CEIL operation on {@link org.apache.phoenix.schema.types.PTimestamp}
- * This class only supports CEIL {@link TimeUnit#MILLISECOND}. If you want more options of CEIL like 
+ * Class encapsulating the CEIL operation on {@link org.apache.phoenix.schema.types.PTimestamp} This
+ * class only supports CEIL {@link TimeUnit#MILLISECOND}. If you want more options of CEIL like
  * using {@link TimeUnit#HOUR} use {@link CeilDateExpression}
- * 
- * 
  * @since 3.0.0
  */
 @BuiltInFunction(name = CeilFunction.NAME,
-        args = {
-                @Argument(allowedTypes={PTimestamp.class}),
-                @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
-                @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
-        },
-        classType = FunctionClassType.DERIVED
-)
+    args = { @Argument(allowedTypes = { PTimestamp.class }),
+      @Argument(allowedTypes = { PVarchar.class, PInteger.class }, defaultValue = "null",
+          isConstant = true),
+      @Argument(allowedTypes = { PInteger.class }, defaultValue = "1", isConstant = true) },
+    classType = FunctionClassType.DERIVED)
 public class CeilTimestampExpression extends CeilDateExpression {
-    
-    public CeilTimestampExpression() {}
-    
-    public CeilTimestampExpression(List<Expression> children) {
-        super(children);
-    }
-    
-    /**
-     * Creates a {@link CeilTimestampExpression} that uses {@link TimeUnit#MILLISECOND} 
-     * as the time unit for rounding. 
-     */
-    public static CeilTimestampExpression create(Expression expr, int multiplier) throws SQLException {
-        List<Expression> childExprs = Lists.newArrayList(expr, getTimeUnitExpr(TimeUnit.MILLISECOND), getMultiplierExpr(multiplier));
-        return new CeilTimestampExpression(childExprs); 
-    }
-    
-    public static Expression create(List<Expression> children) throws SQLException {
-        Expression firstChild = children.get(0);
-        PDataType firstChildDataType = firstChild.getDataType();
-        String timeUnit = (String)((LiteralExpression)children.get(1)).getValue();
-        if(TimeUnit.MILLISECOND.toString().equalsIgnoreCase(timeUnit)) {
-            return new CeilTimestampExpression(children);
-        }
-        // Coerce TIMESTAMP to DATE, as the nanos has no affect
-        List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size());
-        newChildren.add(CoerceExpression.create(firstChild, firstChildDataType == PTimestamp.INSTANCE ?
-            PDate.INSTANCE : PUnsignedDate.INSTANCE));
-        newChildren.addAll(children.subList(1, children.size()));
-        return CeilDateExpression.create(newChildren);
-    }
-    
-    /**
-     * Creates a {@link CeilTimestampExpression} that uses {@link TimeUnit#MILLISECOND} 
-     * as the time unit for rounding. 
-     */
-    public static CeilTimestampExpression create (Expression expr) throws SQLException {
-        return create(expr, 1);
-    }
 
-    @Override
-    protected PDataCodec getKeyRangeCodec(PDataType columnDataType) {
-        return columnDataType == PTimestamp.INSTANCE
-                ? PDate.INSTANCE.getCodec()
-                : columnDataType == PUnsignedTimestamp.INSTANCE
-                    ? PUnsignedDate.INSTANCE.getCodec()
-                    : super.getKeyRangeCodec(columnDataType);
+  public CeilTimestampExpression() {
+  }
+
+  public CeilTimestampExpression(List<Expression> children) {
+    super(children);
+  }
+
+  /**
+   * Creates a {@link CeilTimestampExpression} that uses {@link TimeUnit#MILLISECOND} as the time
+   * unit for rounding.
+   */
+  public static CeilTimestampExpression create(Expression expr, int multiplier)
+    throws SQLException {
+    List<Expression> childExprs = Lists.newArrayList(expr, getTimeUnitExpr(TimeUnit.MILLISECOND),
+      getMultiplierExpr(multiplier));
+    return new CeilTimestampExpression(childExprs);
+  }
+
+  public static Expression create(List<Expression> children) throws SQLException {
+    Expression firstChild = children.get(0);
+    PDataType firstChildDataType = firstChild.getDataType();
+    String timeUnit = (String) ((LiteralExpression) children.get(1)).getValue();
+    if (TimeUnit.MILLISECOND.toString().equalsIgnoreCase(timeUnit)) {
+      return new CeilTimestampExpression(children);
     }
-    
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (children.get(0).evaluate(tuple, ptr)) {
-            if (ptr.getLength() == 0) {
-                return true; // child evaluated to null
-            }
-            SortOrder sortOrder = children.get(0).getSortOrder();
-            PDataType dataType = getDataType();
-            int nanos = dataType.getNanos(ptr, sortOrder);
-            if (nanos > 0) {
-                long millis = dataType.getMillis(ptr, sortOrder); 
-                Timestamp roundedTs = new Timestamp(millis + 1);
-                byte[] byteValue = dataType.toBytes(roundedTs);
-                ptr.set(byteValue);
-            }
-            return true; // for timestamp we only support rounding up the milliseconds.
-        }
-        return false;
-    }   
+    // Coerce TIMESTAMP to DATE, as the nanos has no affect
+    List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size());
+    newChildren.add(CoerceExpression.create(firstChild,
+      firstChildDataType == PTimestamp.INSTANCE ? PDate.INSTANCE : PUnsignedDate.INSTANCE));
+    newChildren.addAll(children.subList(1, children.size()));
+    return CeilDateExpression.create(newChildren);
+  }
+
+  /**
+   * Creates a {@link CeilTimestampExpression} that uses {@link TimeUnit#MILLISECOND} as the time
+   * unit for rounding.
+   */
+  public static CeilTimestampExpression create(Expression expr) throws SQLException {
+    return create(expr, 1);
+  }
+
+  @Override
+  protected PDataCodec getKeyRangeCodec(PDataType columnDataType) {
+    return columnDataType == PTimestamp.INSTANCE ? PDate.INSTANCE.getCodec()
+      : columnDataType == PUnsignedTimestamp.INSTANCE ? PUnsignedDate.INSTANCE.getCodec()
+      : super.getKeyRangeCodec(columnDataType);
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (children.get(0).evaluate(tuple, ptr)) {
+      if (ptr.getLength() == 0) {
+        return true; // child evaluated to null
+      }
+      SortOrder sortOrder = children.get(0).getSortOrder();
+      PDataType dataType = getDataType();
+      int nanos = dataType.getNanos(ptr, sortOrder);
+      if (nanos > 0) {
+        long millis = dataType.getMillis(ptr, sortOrder);
+        Timestamp roundedTs = new Timestamp(millis + 1);
+        byte[] byteValue = dataType.toBytes(roundedTs);
+        ptr.set(byteValue);
+      }
+      return true; // for timestamp we only support rounding up the milliseconds.
+    }
+    return false;
+  }
 
 }

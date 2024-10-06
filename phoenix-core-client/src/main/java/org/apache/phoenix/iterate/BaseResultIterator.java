@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,32 +17,28 @@
  */
 package org.apache.phoenix.iterate;
 
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
-
 import java.sql.SQLException;
 import java.util.List;
 
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+
 /**
- * 
- * Abstract base class for ResultIterator implementations that
- * do nothing on close and have no explain plan steps
- *
- * 
+ * Abstract base class for ResultIterator implementations that do nothing on close and have no
+ * explain plan steps
  * @since 1.2
  */
 public abstract class BaseResultIterator implements ResultIterator {
-    
-    @Override
-    public void close() throws SQLException {
-    }
 
-    @Override
-    public void explain(List<String> planSteps) {
-    }
+  @Override
+  public void close() throws SQLException {
+  }
 
-    @Override
-    public void explain(List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-    }
+  @Override
+  public void explain(List<String> planSteps) {
+  }
+
+  @Override
+  public void explain(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+  }
 }

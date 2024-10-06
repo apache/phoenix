@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,126 +42,120 @@ import org.apache.phoenix.schema.types.PUnsignedDouble;
 import org.apache.phoenix.schema.types.PUnsignedFloat;
 import org.apache.phoenix.schema.types.PUnsignedInt;
 import org.apache.phoenix.schema.types.PUnsignedLong;
-import org.junit.Test;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.junit.Test;
 
 /**
  * Unit tests for {@link LnFunction} and {@link LogFunction}
  */
 public class LnLogFunctionTest {
-    private static final Expression THREE = LiteralExpression.newConstant(3);
-    private static final Expression DEFAULT_VALUE = LiteralExpression.newConstant(10.0);
+  private static final Expression THREE = LiteralExpression.newConstant(3);
+  private static final Expression DEFAULT_VALUE = LiteralExpression.newConstant(10.0);
 
-    private static boolean testExpression(LiteralExpression literal, LiteralExpression literal2,
-            LiteralExpression literal3, double exptForLn, double exptForLog10, double exptForLog3)
-            throws SQLException {
-        List<Expression> expressionsLn = Lists.newArrayList((Expression) literal);
-        List<Expression> expressionsLog10 = Lists.newArrayList(literal2, DEFAULT_VALUE);
-        List<Expression> expressionsLog3 = Lists.newArrayList(literal3, THREE);
+  private static boolean testExpression(LiteralExpression literal, LiteralExpression literal2,
+    LiteralExpression literal3, double exptForLn, double exptForLog10, double exptForLog3)
+    throws SQLException {
+    List<Expression> expressionsLn = Lists.newArrayList((Expression) literal);
+    List<Expression> expressionsLog10 = Lists.newArrayList(literal2, DEFAULT_VALUE);
+    List<Expression> expressionsLog3 = Lists.newArrayList(literal3, THREE);
 
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
-        Expression lnFunction = new LnFunction(expressionsLn);
-        boolean retLn = lnFunction.evaluate(null, ptr);
-        if (retLn) {
-            Double result =
-                    (Double) lnFunction.getDataType().toObject(ptr, lnFunction.getSortOrder());
-            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLn));
-        }
-
-        Expression log10Function = new LogFunction(expressionsLog10);
-        boolean retLog10 = log10Function.evaluate(null, ptr);
-        if (retLog10) {
-            Double result =
-                    (Double) log10Function.getDataType()
-                            .toObject(ptr, log10Function.getSortOrder());
-            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLog10));
-        }
-        assertEquals(retLn, retLog10);
-
-        Expression log3Function = new LogFunction(expressionsLog3);
-        boolean retLog3 = log3Function.evaluate(null, ptr);
-        if (retLog3) {
-            Double result =
-                    (Double) log3Function.getDataType().toObject(ptr, log3Function.getSortOrder());
-            assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLog3));
-        }
-        assertEquals(retLn, retLog3);
-        return retLn;
+    Expression lnFunction = new LnFunction(expressionsLn);
+    boolean retLn = lnFunction.evaluate(null, ptr);
+    if (retLn) {
+      Double result = (Double) lnFunction.getDataType().toObject(ptr, lnFunction.getSortOrder());
+      assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLn));
     }
 
-    private static void test(Number value, PNumericType dataType, double exptForLn,
-            double exptForLog10, double exptForLog3) throws SQLException {
-        LiteralExpression literal, literal2, literal3;
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
-        literal2 = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
-        literal3 = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
-        boolean ret1 =
-                testExpression(literal, literal2, literal3, exptForLn, exptForLog10, exptForLog3);
-        literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
-        literal2 = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
-        literal3 = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
-        boolean ret2 =
-                testExpression(literal, literal2, literal3, exptForLn, exptForLog10, exptForLog3);
-        assertEquals(ret1, ret2);
+    Expression log10Function = new LogFunction(expressionsLog10);
+    boolean retLog10 = log10Function.evaluate(null, ptr);
+    if (retLog10) {
+      Double result =
+        (Double) log10Function.getDataType().toObject(ptr, log10Function.getSortOrder());
+      assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLog10));
     }
+    assertEquals(retLn, retLog10);
 
-    private static void testBatch(Number[] value, PNumericType dataType) throws SQLException {
-        double[][] expected = new double[value.length][3];
-        for (int i = 0; i < expected.length; ++i) {
-            expected[i][0] = Math.log(value[i].doubleValue());
-            expected[i][1] = Math.log10(value[i].doubleValue());
-            expected[i][2] = Math.log10(value[i].doubleValue()) / Math.log10(3);
-        }
-        assertEquals(value.length, expected.length);
-        for (int i = 0; i < value.length; ++i) {
-            test(value[i], dataType, expected[i][0], expected[i][1], expected[i][2]);
-        }
+    Expression log3Function = new LogFunction(expressionsLog3);
+    boolean retLog3 = log3Function.evaluate(null, ptr);
+    if (retLog3) {
+      Double result =
+        (Double) log3Function.getDataType().toObject(ptr, log3Function.getSortOrder());
+      assertTrue(BaseTest.twoDoubleEquals(result.doubleValue(), exptForLog3));
     }
+    assertEquals(retLn, retLog3);
+    return retLn;
+  }
 
-    @Test
-    public void testLnLogFunction() throws Exception {
-        Random random = new Random();
+  private static void test(Number value, PNumericType dataType, double exptForLn,
+    double exptForLog10, double exptForLog3) throws SQLException {
+    LiteralExpression literal, literal2, literal3;
+    literal = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+    literal2 = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+    literal3 = LiteralExpression.newConstant(value, dataType, SortOrder.ASC);
+    boolean ret1 =
+      testExpression(literal, literal2, literal3, exptForLn, exptForLog10, exptForLog3);
+    literal = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+    literal2 = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+    literal3 = LiteralExpression.newConstant(value, dataType, SortOrder.DESC);
+    boolean ret2 =
+      testExpression(literal, literal2, literal3, exptForLn, exptForLog10, exptForLog3);
+    assertEquals(ret1, ret2);
+  }
 
-        testBatch(
-            new BigDecimal[] { BigDecimal.valueOf(1.0), BigDecimal.valueOf(0.0),
-                    BigDecimal.valueOf(-1.0), BigDecimal.valueOf(123.1234),
-                    BigDecimal.valueOf(-123.1234), BigDecimal.valueOf(random.nextDouble()),
-                    BigDecimal.valueOf(random.nextDouble()) }, PDecimal.INSTANCE);
-
-        testBatch(new Float[] { 1.0f, 0.0f, -1.0f, 123.1234f, -123.1234f, random.nextFloat(),
-                random.nextFloat() }, PFloat.INSTANCE);
-
-        testBatch(new Float[] { 1.0f, 0.0f, 123.1234f, }, PUnsignedFloat.INSTANCE);
-
-        testBatch(
-            new Double[] { 1.0, 0.0, -1.0, 123.1234, -123.1234, random.nextDouble(),
-                    random.nextDouble() }, PDouble.INSTANCE);
-
-        testBatch(new Double[] { 1.0, 0.0, 123.1234, }, PUnsignedDouble.INSTANCE);
-
-        testBatch(
-            new Long[] { 1L, 0L, -1L, Long.MAX_VALUE, Long.MIN_VALUE, 123L, -123L,
-                    random.nextLong(), random.nextLong() }, PLong.INSTANCE);
-
-        testBatch(new Long[] { 1L, 0L, Long.MAX_VALUE, 123L }, PUnsignedLong.INSTANCE);
-
-        testBatch(
-            new Integer[] { 1, 0, -1, Integer.MAX_VALUE, Integer.MIN_VALUE, 123, -123,
-                    random.nextInt(), random.nextInt() }, PInteger.INSTANCE);
-
-        testBatch(new Integer[] { 1, 0, Integer.MAX_VALUE, 123 }, PUnsignedInt.INSTANCE);
-
-        testBatch(new Short[] { (short) 1, (short) 0, (short) -1, Short.MAX_VALUE, Short.MIN_VALUE,
-                (short) 123, (short) -123 }, PSmallint.INSTANCE);
-
-        testBatch(new Short[] { (short) 1, (short) 0, Short.MAX_VALUE, (short) 123 },
-            PSmallint.INSTANCE);
-
-        testBatch(new Byte[] { (byte) 1, (byte) 0, (byte) -1, Byte.MAX_VALUE, Byte.MIN_VALUE,
-                (byte) 123, (byte) -123 }, PTinyint.INSTANCE);
-
-        testBatch(new Byte[] { (byte) 1, (byte) 0, Byte.MAX_VALUE, (byte) 123 }, PTinyint.INSTANCE);
+  private static void testBatch(Number[] value, PNumericType dataType) throws SQLException {
+    double[][] expected = new double[value.length][3];
+    for (int i = 0; i < expected.length; ++i) {
+      expected[i][0] = Math.log(value[i].doubleValue());
+      expected[i][1] = Math.log10(value[i].doubleValue());
+      expected[i][2] = Math.log10(value[i].doubleValue()) / Math.log10(3);
     }
+    assertEquals(value.length, expected.length);
+    for (int i = 0; i < value.length; ++i) {
+      test(value[i], dataType, expected[i][0], expected[i][1], expected[i][2]);
+    }
+  }
+
+  @Test
+  public void testLnLogFunction() throws Exception {
+    Random random = new Random();
+
+    testBatch(
+      new BigDecimal[] { BigDecimal.valueOf(1.0), BigDecimal.valueOf(0.0), BigDecimal.valueOf(-1.0),
+        BigDecimal.valueOf(123.1234), BigDecimal.valueOf(-123.1234),
+        BigDecimal.valueOf(random.nextDouble()), BigDecimal.valueOf(random.nextDouble()) },
+      PDecimal.INSTANCE);
+
+    testBatch(new Float[] { 1.0f, 0.0f, -1.0f, 123.1234f, -123.1234f, random.nextFloat(),
+      random.nextFloat() }, PFloat.INSTANCE);
+
+    testBatch(new Float[] { 1.0f, 0.0f, 123.1234f, }, PUnsignedFloat.INSTANCE);
+
+    testBatch(new Double[] { 1.0, 0.0, -1.0, 123.1234, -123.1234, random.nextDouble(),
+      random.nextDouble() }, PDouble.INSTANCE);
+
+    testBatch(new Double[] { 1.0, 0.0, 123.1234, }, PUnsignedDouble.INSTANCE);
+
+    testBatch(new Long[] { 1L, 0L, -1L, Long.MAX_VALUE, Long.MIN_VALUE, 123L, -123L,
+      random.nextLong(), random.nextLong() }, PLong.INSTANCE);
+
+    testBatch(new Long[] { 1L, 0L, Long.MAX_VALUE, 123L }, PUnsignedLong.INSTANCE);
+
+    testBatch(new Integer[] { 1, 0, -1, Integer.MAX_VALUE, Integer.MIN_VALUE, 123, -123,
+      random.nextInt(), random.nextInt() }, PInteger.INSTANCE);
+
+    testBatch(new Integer[] { 1, 0, Integer.MAX_VALUE, 123 }, PUnsignedInt.INSTANCE);
+
+    testBatch(new Short[] { (short) 1, (short) 0, (short) -1, Short.MAX_VALUE, Short.MIN_VALUE,
+      (short) 123, (short) -123 }, PSmallint.INSTANCE);
+
+    testBatch(new Short[] { (short) 1, (short) 0, Short.MAX_VALUE, (short) 123 },
+      PSmallint.INSTANCE);
+
+    testBatch(new Byte[] { (byte) 1, (byte) 0, (byte) -1, Byte.MAX_VALUE, Byte.MIN_VALUE,
+      (byte) 123, (byte) -123 }, PTinyint.INSTANCE);
+
+    testBatch(new Byte[] { (byte) 1, (byte) 0, Byte.MAX_VALUE, (byte) 123 }, PTinyint.INSTANCE);
+  }
 }

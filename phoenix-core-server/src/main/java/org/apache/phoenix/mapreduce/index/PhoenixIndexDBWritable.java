@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,77 +24,75 @@ import java.util.List;
 
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.util.ColumnInfo;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.util.ColumnInfo;
 
 /**
  * A {@link DBWritable} class that reads and write records.
- *
- * 
  */
-public class PhoenixIndexDBWritable  implements DBWritable { 
-    
-    private List<ColumnInfo> columnMetadata;
-    
-    private List<Object> values;
-    
-    private int columnCount = -1;
+public class PhoenixIndexDBWritable implements DBWritable {
 
-    private long rowTs = -1;
-    
-    @Override
-    public void write(PreparedStatement statement) throws SQLException {
-       Preconditions.checkNotNull(values);
-       Preconditions.checkNotNull(columnMetadata);
-       for(int i = 0 ; i < values.size() ; i++) {
-           Object value = values.get(i);
-           ColumnInfo columnInfo = columnMetadata.get(i);
-           if(value == null) {
-               statement.setNull(i + 1, columnInfo.getSqlType());               
-           } else {
-               statement.setObject(i + 1, value , columnInfo.getSqlType());
-           }
-       }
-       
+  private List<ColumnInfo> columnMetadata;
+
+  private List<Object> values;
+
+  private int columnCount = -1;
+
+  private long rowTs = -1;
+
+  @Override
+  public void write(PreparedStatement statement) throws SQLException {
+    Preconditions.checkNotNull(values);
+    Preconditions.checkNotNull(columnMetadata);
+    for (int i = 0; i < values.size(); i++) {
+      Object value = values.get(i);
+      ColumnInfo columnInfo = columnMetadata.get(i);
+      if (value == null) {
+        statement.setNull(i + 1, columnInfo.getSqlType());
+      } else {
+        statement.setObject(i + 1, value, columnInfo.getSqlType());
+      }
     }
 
-    @Override
-    public void readFields(ResultSet resultSet) throws SQLException {
-        // we do this once per mapper.
-        if(columnCount == -1) {
-            this.columnCount = resultSet.getMetaData().getColumnCount();
-        }
-        if (columnCount > 0) {
-            this.rowTs = resultSet.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp();
-        }
-        values = Lists.newArrayListWithCapacity(columnCount);
-        for(int i = 0 ; i < columnCount ; i++) {
-            Object value = resultSet.getObject(i + 1);
-            values.add(value);
-        }
-        
+  }
+
+  @Override
+  public void readFields(ResultSet resultSet) throws SQLException {
+    // we do this once per mapper.
+    if (columnCount == -1) {
+      this.columnCount = resultSet.getMetaData().getColumnCount();
+    }
+    if (columnCount > 0) {
+      this.rowTs =
+        resultSet.unwrap(PhoenixResultSet.class).getCurrentRow().getValue(0).getTimestamp();
+    }
+    values = Lists.newArrayListWithCapacity(columnCount);
+    for (int i = 0; i < columnCount; i++) {
+      Object value = resultSet.getObject(i + 1);
+      values.add(value);
     }
 
-    public List<ColumnInfo> getColumnMetadata() {
-        return columnMetadata;
-    }
+  }
 
-    public void setColumnMetadata(List<ColumnInfo> columnMetadata) {
-        this.columnMetadata = columnMetadata;
-    }
+  public List<ColumnInfo> getColumnMetadata() {
+    return columnMetadata;
+  }
 
-    public List<Object> getValues() {
-        return values;
-    }
+  public void setColumnMetadata(List<ColumnInfo> columnMetadata) {
+    this.columnMetadata = columnMetadata;
+  }
 
-    public void setValues(List<Object> values) {
-        this.values = values;
-    }
+  public List<Object> getValues() {
+    return values;
+  }
 
-    public long getRowTs() {
-        return rowTs;
-    }
+  public void setValues(List<Object> values) {
+    this.values = values;
+  }
+
+  public long getRowTs() {
+    return rowTs;
+  }
 
 }

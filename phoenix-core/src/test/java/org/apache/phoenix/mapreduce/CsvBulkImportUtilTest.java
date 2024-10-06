@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,69 +33,70 @@ import org.junit.Test;
 
 public class CsvBulkImportUtilTest {
 
-    @Test
-    public void testInitCsvImportJob() throws IOException {
-        Configuration conf = new Configuration();
+  @Test
+  public void testInitCsvImportJob() throws IOException {
+    Configuration conf = new Configuration();
 
-        char delimiter = '\001';
-        char quote = '\002';
-        char escape = '!';
+    char delimiter = '\001';
+    char quote = '\002';
+    char escape = '!';
 
-        CsvBulkImportUtil.initCsvImportJob(conf, delimiter, quote, escape, null, null);
+    CsvBulkImportUtil.initCsvImportJob(conf, delimiter, quote, escape, null, null);
 
-        // Serialize and deserialize the config to ensure that there aren't any issues
-        // with non-printable characters as delimiters
-        File tempFile = File.createTempFile("test-config", ".xml");
-        FileOutputStream fileOutputStream = new FileOutputStream(tempFile);
-        conf.writeXml(fileOutputStream);
-        fileOutputStream.close();
-        Configuration deserialized = new Configuration();
-        deserialized.addResource(new FileInputStream(tempFile));
+    // Serialize and deserialize the config to ensure that there aren't any issues
+    // with non-printable characters as delimiters
+    File tempFile = File.createTempFile("test-config", ".xml");
+    FileOutputStream fileOutputStream = new FileOutputStream(tempFile);
+    conf.writeXml(fileOutputStream);
+    fileOutputStream.close();
+    Configuration deserialized = new Configuration();
+    deserialized.addResource(new FileInputStream(tempFile));
 
-        assertEquals(Character.valueOf('\001'),
-                CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
-        assertEquals(Character.valueOf('\002'),
-                CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY));
-        assertEquals(Character.valueOf('!'),
-                CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY));
-        assertNull(deserialized.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
+    assertEquals(Character.valueOf('\001'),
+      CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.FIELD_DELIMITER_CONFKEY));
+    assertEquals(Character.valueOf('\002'),
+      CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.QUOTE_CHAR_CONFKEY));
+    assertEquals(Character.valueOf('!'),
+      CsvBulkImportUtil.getCharacter(deserialized, CsvToKeyValueMapper.ESCAPE_CHAR_CONFKEY));
+    assertNull(deserialized.get(CsvToKeyValueMapper.ARRAY_DELIMITER_CONFKEY));
 
-        tempFile.delete();
+    tempFile.delete();
+  }
+
+  @Test
+  public void testConfigurePreUpsertProcessor() {
+    Configuration conf = new Configuration();
+    CsvBulkImportUtil.configurePreUpsertProcessor(conf, MockProcessor.class);
+    ImportPreUpsertKeyValueProcessor processor =
+      PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
+    assertEquals(MockProcessor.class, processor.getClass());
+  }
+
+  @Test
+  public void testGetAndSetChar_BasicChar() {
+    Configuration conf = new Configuration();
+    CsvBulkImportUtil.setChar(conf, "conf.key", '|');
+    assertEquals(Character.valueOf('|'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+  }
+
+  @Test
+  public void testGetAndSetChar_NonPrintableChar() {
+    Configuration conf = new Configuration();
+    CsvBulkImportUtil.setChar(conf, "conf.key", '\001');
+    assertEquals(Character.valueOf('\001'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+  }
+
+  @Test
+  public void testGetChar_NotPresent() {
+    Configuration conf = new Configuration();
+    assertNull(CsvBulkImportUtil.getCharacter(conf, "conf.key"));
+  }
+
+  public static class MockProcessor implements ImportPreUpsertKeyValueProcessor {
+
+    @Override
+    public List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues) {
+      throw new UnsupportedOperationException("Not yet implemented");
     }
-
-    @Test
-    public void testConfigurePreUpsertProcessor() {
-        Configuration conf = new Configuration();
-        CsvBulkImportUtil.configurePreUpsertProcessor(conf, MockProcessor.class);
-        ImportPreUpsertKeyValueProcessor processor = PhoenixConfigurationUtil.loadPreUpsertProcessor(conf);
-        assertEquals(MockProcessor.class, processor.getClass());
-    }
-
-    @Test
-    public void testGetAndSetChar_BasicChar() {
-        Configuration conf = new Configuration();
-        CsvBulkImportUtil.setChar(conf, "conf.key", '|');
-        assertEquals(Character.valueOf('|'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
-    }
-
-    @Test
-    public void testGetAndSetChar_NonPrintableChar() {
-        Configuration conf = new Configuration();
-        CsvBulkImportUtil.setChar(conf, "conf.key", '\001');
-        assertEquals(Character.valueOf('\001'), CsvBulkImportUtil.getCharacter(conf, "conf.key"));
-    }
-
-    @Test
-    public void testGetChar_NotPresent() {
-        Configuration conf = new Configuration();
-        assertNull(CsvBulkImportUtil.getCharacter(conf, "conf.key"));
-    }
-
-    public static class MockProcessor implements ImportPreUpsertKeyValueProcessor {
-
-        @Override
-        public List<Cell> preUpsert(byte[] rowKey, List<Cell> keyValues) {
-            throw new UnsupportedOperationException("Not yet implemented");
-        }
-    }
+  }
 }

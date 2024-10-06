@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.expression.util.bson;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.bson.BsonDocument;
 import org.bson.BsonValue;
@@ -24,11 +28,6 @@ import org.bson.RawBsonDocument;
 import org.mvel2.MVEL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * SQL style condition expression evaluation support.
@@ -38,12 +37,12 @@ public class SQLComparisonExpressionUtils {
   private static final Logger LOGGER = LoggerFactory.getLogger(SQLComparisonExpressionUtils.class);
 
   /**
-   * All supported operators. Used to parse the input string and identify how many of the
-   * operators are in use and accordingly performs string conversions using individual
+   * All supported operators. Used to parse the input string and identify how many of the operators
+   * are in use and accordingly performs string conversions using individual
    * pattern-matcher-replace.
    */
   private static final String ALL_SUPPORTED_OPS =
-          "\\b(field_not_exists|field_exists|BETWEEN|IN|AND|OR|NOT)\\b|<=|>=|!=|==|=|<>|<|>";
+    "\\b(field_not_exists|field_exists|BETWEEN|IN|AND|OR|NOT)\\b|<=|>=|!=|==|=|<>|<|>";
   private static final Pattern ALL_SUPPORTED_OPS_PATTERN = Pattern.compile(ALL_SUPPORTED_OPS);
 
   private static final String FIELD_NOT_EXISTS = "field_not_exists\\(([^)]+)\\)";
@@ -57,7 +56,7 @@ public class SQLComparisonExpressionUtils {
   private static final String GREATER_THAN = "\\b([\\w.\\[\\]]+)\\s*>\\s*([#:$]*\\w+)";
   private static final String GREATER_THAN_OR_EQUALS = "\\b([\\w.\\[\\]]+)\\s*>=\\s*([#:$]*\\w+)";
   private static final String BETWEEN =
-          "\\b([\\w.\\[\\]]+)\\s+BETWEEN\\s+([#:$]*\\w+)\\s+AND\\s+([#:$]*\\w+)";
+    "\\b([\\w.\\[\\]]+)\\s+BETWEEN\\s+([#:$]*\\w+)\\s+AND\\s+([#:$]*\\w+)";
   private static final String IN = "\\b([\\w.\\[\\]]+)\\s+IN\\s+\\(([^)]+)\\)";
   private static final String AND = "\\bAND\\b";
   private static final String OR = "\\bOR\\b";
@@ -73,7 +72,7 @@ public class SQLComparisonExpressionUtils {
   private static final Pattern LESS_THAN_OR_EQUALS_PATTERN = Pattern.compile(LESS_THAN_OR_EQUALS);
   private static final Pattern GREATER_THAN_PATTERN = Pattern.compile(GREATER_THAN);
   private static final Pattern GREATER_THAN_OR_EQUALS_PATTERN =
-          Pattern.compile(GREATER_THAN_OR_EQUALS);
+    Pattern.compile(GREATER_THAN_OR_EQUALS);
   private static final Pattern BETWEEN_PATTERN = Pattern.compile(BETWEEN);
   private static final Pattern IN_PATTERN = Pattern.compile(IN);
   private static final Pattern AND_PATTERN = Pattern.compile(AND);
@@ -98,7 +97,7 @@ public class SQLComparisonExpressionUtils {
   private final BsonDocument comparisonValuesDocument;
 
   public SQLComparisonExpressionUtils(RawBsonDocument rawBsonDocument,
-      BsonDocument comparisonValuesDocument) {
+    BsonDocument comparisonValuesDocument) {
     this.rawBsonDocument = rawBsonDocument;
     this.comparisonValuesDocument = comparisonValuesDocument;
   }
@@ -117,7 +116,6 @@ public class SQLComparisonExpressionUtils {
 
   /**
    * Converts the input string expression into Java executable statement.
-   *
    * @param expression Input string expression.
    * @return Executable string conversion statement.
    */
@@ -151,14 +149,14 @@ public class SQLComparisonExpressionUtils {
     }
     if (patternsMatched.contains("<=")) {
       expression =
-              LESS_THAN_OR_EQUALS_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN_OR_EQUALS);
+        LESS_THAN_OR_EQUALS_PATTERN.matcher(expression).replaceAll(FUNC_LESS_THAN_OR_EQUALS);
     }
     if (patternsMatched.contains(">")) {
       expression = GREATER_THAN_PATTERN.matcher(expression).replaceAll(FUNC_GREATER_THAN);
     }
     if (patternsMatched.contains(">=")) {
-      expression = GREATER_THAN_OR_EQUALS_PATTERN.matcher(expression)
-              .replaceAll(FUNC_GREATER_THAN_OR_EQUALS);
+      expression =
+        GREATER_THAN_OR_EQUALS_PATTERN.matcher(expression).replaceAll(FUNC_GREATER_THAN_OR_EQUALS);
     }
     if (patternsMatched.contains("BETWEEN")) {
       expression = BETWEEN_PATTERN.matcher(expression).replaceAll(FUNC_BETWEEN);
@@ -180,32 +178,28 @@ public class SQLComparisonExpressionUtils {
 
   /**
    * Returns true if the value of the field is comparable to the value represented by
-   * {@code expectedFieldValue} as per the comparison operator represented by {@code compareOp}.
-   * The comparison can happen only if the data type of both values match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * {@code expectedFieldValue} as per the comparison operator represented by {@code compareOp}. The
+   * comparison can happen only if the data type of both values match.
+   * @param fieldKey           The field key for which value is compared against expectedFieldValue.
    * @param expectedFieldValue The literal value to compare against the field value.
-   * @param compareOp The comparison operator.
+   * @param compareOp          The comparison operator.
    * @return True if the comparison is successful, False otherwise.
    */
-  private boolean compare(final String fieldKey,
-      final String expectedFieldValue,
-      final CommonComparisonExpressionUtils.CompareOp compareOp) {
+  private boolean compare(final String fieldKey, final String expectedFieldValue,
+    final CommonComparisonExpressionUtils.CompareOp compareOp) {
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ?
-        topLevelValue :
-        CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    BsonValue value = topLevelValue != null
+      ? topLevelValue
+      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (value != null) {
       BsonValue compareValue = comparisonValuesDocument.get(expectedFieldValue);
-      return CommonComparisonExpressionUtils.compareValues(
-          value, compareValue, compareOp);
+      return CommonComparisonExpressionUtils.compareValues(value, compareValue, compareOp);
     }
     return false;
   }
 
   /**
    * Returns true if the given field exists in the document.
-   *
    * @param documentField The document field.
    * @return True if the given field exists in the document.
    */
@@ -221,56 +215,49 @@ public class SQLComparisonExpressionUtils {
   /**
    * Returns true if the value of the field is less than the value represented by {@code
    * expectedFieldValue}. The comparison can happen only if the data type of both values match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param fieldKey           The field key for which value is compared against expectedFieldValue.
    * @param expectedFieldValue The literal value to compare against the field value.
    * @return True if the value of the field is less than expectedFieldValue.
    */
   public boolean lessThan(final String fieldKey, final String expectedFieldValue) {
-    return compare(fieldKey, expectedFieldValue,
-        CommonComparisonExpressionUtils.CompareOp.LESS);
+    return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.LESS);
   }
 
   /**
    * Returns true if the value of the field is less than or equal to the value represented by
    * {@code expectedFieldValue}. The comparison can happen only if the data type of both values
    * match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param fieldKey           The field key for which value is compared against expectedFieldValue.
    * @param expectedFieldValue The literal value to compare against the field value.
    * @return True if the value of the field is less than or equal to expectedFieldValue.
    */
   public boolean lessThanOrEquals(final String fieldKey, final String expectedFieldValue) {
     return compare(fieldKey, expectedFieldValue,
-        CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
+      CommonComparisonExpressionUtils.CompareOp.LESS_OR_EQUAL);
   }
 
   /**
    * Returns true if the value of the field is greater than the value represented by {@code
    * expectedFieldValue}. The comparison can happen only if the data type of both values match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param fieldKey           The field key for which value is compared against expectedFieldValue.
    * @param expectedFieldValue The literal value to compare against the field value.
    * @return True if the value of the field is greater than expectedFieldValue.
    */
   public boolean greaterThan(final String fieldKey, final String expectedFieldValue) {
-    return compare(fieldKey, expectedFieldValue,
-        CommonComparisonExpressionUtils.CompareOp.GREATER);
+    return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.GREATER);
   }
 
   /**
    * Returns true if the value of the field is greater than or equal to the value represented by
    * {@code expectedFieldValue}. The comparison can happen only if the data type of both values
    * match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * @param fieldKey           The field key for which value is compared against expectedFieldValue.
    * @param expectedFieldValue The literal value to compare against the field value.
    * @return True if the value of the field is greater than or equal to expectedFieldValue.
    */
-  public boolean greaterThanOrEquals(final String fieldKey,
-      final String expectedFieldValue) {
+  public boolean greaterThanOrEquals(final String fieldKey, final String expectedFieldValue) {
     return compare(fieldKey, expectedFieldValue,
-        CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
+      CommonComparisonExpressionUtils.CompareOp.GREATER_OR_EQUAL);
   }
 
   /**
@@ -278,36 +265,35 @@ public class SQLComparisonExpressionUtils {
    * {@code expectedFieldValue1} and less than or equal to the value represented by
    * {@code expectedFieldValue2}. The comparison can happen only if the data type of both values
    * match.
-   *
-   * @param fieldKey The field key for which value is compared against two values.
+   * @param fieldKey            The field key for which value is compared against two values.
    * @param expectedFieldValue1 The first literal value to compare against the field value.
    * @param expectedFieldValue2 The second literal value to compare against the field value.
    * @return True if the value of the field is greater than or equal to the value represented by
-   * expectedFieldValue1 and less than or equal to the value represented by expectedFieldValue2.
+   *         expectedFieldValue1 and less than or equal to the value represented by
+   *         expectedFieldValue2.
    */
   public boolean between(final String fieldKey, final String expectedFieldValue1,
-      final String expectedFieldValue2) {
-    return greaterThanOrEquals(fieldKey, expectedFieldValue1) && lessThanOrEquals(
-        fieldKey, expectedFieldValue2);
+    final String expectedFieldValue2) {
+    return greaterThanOrEquals(fieldKey, expectedFieldValue1)
+      && lessThanOrEquals(fieldKey, expectedFieldValue2);
   }
 
   /**
-   * Returns true if the value of the field equals to any of the comma separated values
-   * represented by {@code expectedInValues}. The equality check is successful only if the value
-   * and the data type both match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedInValues.
+   * Returns true if the value of the field equals to any of the comma separated values represented
+   * by {@code expectedInValues}. The equality check is successful only if the value and the data
+   * type both match.
+   * @param fieldKey         The field key for which value is compared against expectedInValues.
    * @param expectedInValues The array of values for comparison, separated by comma.
-   * @return True if the value of the field equals to any of the comma separated values
-   * represented by expectedInValues. The equality check is successful only if the value
-   * and the data type both match.
+   * @return True if the value of the field equals to any of the comma separated values represented
+   *         by expectedInValues. The equality check is successful only if the value and the data
+   *         type both match.
    */
   public boolean in(final String fieldKey, final String expectedInValues) {
     String[] expectedInVals = expectedInValues.split("\\s*,\\s*");
     BsonValue topLevelValue = rawBsonDocument.get(fieldKey);
-    BsonValue value = topLevelValue != null ?
-        topLevelValue :
-        CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
+    BsonValue value = topLevelValue != null
+      ? topLevelValue
+      : CommonComparisonExpressionUtils.getFieldFromDocument(fieldKey, rawBsonDocument);
     if (value != null) {
       for (String expectedInVal : expectedInVals) {
         if (isEquals(fieldKey, expectedInVal)) {
@@ -320,16 +306,14 @@ public class SQLComparisonExpressionUtils {
 
   /**
    * Returns true if the value of the field is equal to the value represented by {@code
-   * expectedFieldValue}. The equality check is successful only if the value
-   * and the data type both match.
-   *
-   * @param fieldKey The field key for which value is compared against expectedFieldValue.
+   * expectedFieldValue}. The equality check is successful only if the value and the data type both
+   * match.
+   * @param fieldKey           The field key for which value is compared against expectedFieldValue.
    * @param expectedFieldValue The literal value to compare against the field value.
    * @return True if the value of the field is equal to expectedFieldValue.
    */
   public boolean isEquals(final String fieldKey, final String expectedFieldValue) {
-    return compare(fieldKey, expectedFieldValue,
-        CommonComparisonExpressionUtils.CompareOp.EQUALS);
+    return compare(fieldKey, expectedFieldValue, CommonComparisonExpressionUtils.CompareOp.EQUALS);
   }
 
 }

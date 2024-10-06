@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,13 +24,12 @@ import org.apache.hadoop.hbase.Stoppable;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.write.IndexFailurePolicy;
 import org.apache.phoenix.hbase.index.write.KillServerOnFailurePolicy;
 import org.apache.phoenix.hbase.index.write.TrackingParallelWriterIndexCommitter;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Tracks any failed writes in The {@link PerRegionIndexWriteCache}, given a
@@ -60,18 +59,18 @@ public class StoreFailuresInCachePolicy implements IndexFailurePolicy {
   }
 
   @Override
-  public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException {
+  public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause)
+    throws IOException {
     // if its not an exception we can handle, let the delegate take care of it
     if (!(cause instanceof MultiIndexWriteFailureException)) {
       delegate.handleFailure(attempted, cause);
     }
     List<HTableInterfaceReference> failedTables =
-        ((MultiIndexWriteFailureException) cause).getFailedTables();
+      ((MultiIndexWriteFailureException) cause).getFailedTables();
     for (HTableInterfaceReference table : failedTables) {
       cache.addEdits(this.region, table, attempted.get(table));
     }
   }
-
 
   @Override
   public void stop(String why) {

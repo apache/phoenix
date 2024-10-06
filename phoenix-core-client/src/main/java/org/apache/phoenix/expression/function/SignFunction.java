@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,46 +37,45 @@ import org.apache.phoenix.schema.types.PNumericType;
 @BuiltInFunction(name = SignFunction.NAME, args = { @Argument(allowedTypes = { PDecimal.class }) })
 public class SignFunction extends ScalarFunction {
 
-    public static final String NAME = "SIGN";
+  public static final String NAME = "SIGN";
 
-    private static final byte[][] RESULT = { PInteger.INSTANCE.toBytes(Integer.valueOf(-1)),
-            PInteger.INSTANCE.toBytes(Integer.valueOf(0)),
-            PInteger.INSTANCE.toBytes(Integer.valueOf(1)), };
+  private static final byte[][] RESULT = { PInteger.INSTANCE.toBytes(Integer.valueOf(-1)),
+    PInteger.INSTANCE.toBytes(Integer.valueOf(0)), PInteger.INSTANCE.toBytes(Integer.valueOf(1)), };
 
-    public SignFunction() {
+  public SignFunction() {
+  }
+
+  public SignFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression childExpr = children.get(0);
+    PDataType dataType = childExpr.getDataType();
+    if (childExpr.evaluate(tuple, ptr)) {
+      if (ptr.getLength() == 0) {
+        return true;
+      }
+      int ret = ((PNumericType) dataType).signum(ptr, childExpr.getSortOrder());
+      ptr.set(RESULT[ret + 1]);
+      return true;
     }
+    return false;
+  }
 
-    public SignFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+  @Override
+  public PDataType getDataType() {
+    return PInteger.INSTANCE;
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression childExpr = children.get(0);
-        PDataType dataType = childExpr.getDataType();
-        if (childExpr.evaluate(tuple, ptr)) {
-            if (ptr.getLength()==0) {
-                return true;
-            }
-            int ret = ((PNumericType) dataType).signum(ptr, childExpr.getSortOrder());
-            ptr.set(RESULT[ret + 1]);
-            return true;
-        }
-        return false;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PInteger.INSTANCE;
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
-    }
-
-    @Override
-    public OrderPreserving preservesOrder() {
-        return OrderPreserving.YES;
-    }
+  @Override
+  public OrderPreserving preservesOrder() {
+    return OrderPreserving.YES;
+  }
 }

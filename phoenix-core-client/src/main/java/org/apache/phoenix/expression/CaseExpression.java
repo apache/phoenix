@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,215 +35,212 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.ExpressionUtil;
 
-
 /**
- * 
  * CASE/WHEN expression implementation
- *
- * 
  * @since 0.1
  */
 public class CaseExpression extends BaseCompoundExpression {
-    private static final int FULLY_EVALUATE = -1;
-    
-    private short evalIndex = FULLY_EVALUATE;
-    private boolean foundIndex;
-    private PDataType returnType;
-   
-    public CaseExpression() {
-    }
-    
-    public static Expression create(List<Expression> children) throws SQLException {
-        CaseExpression caseExpression = new CaseExpression(coerceIfNecessary(children));
-        if (ExpressionUtil.isConstant(caseExpression)) {
-            ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-            int index = caseExpression.evaluateIndexOf(null, ptr);
-            if (index < 0) {
-                return LiteralExpression.newConstant(null, caseExpression.getDeterminism());
-            }
-            return caseExpression.getChildren().get(index);
-        }
-        return caseExpression;
-    }
-    
-    private static List<Expression> coerceIfNecessary(List<Expression> children) throws SQLException {
-        boolean isChildTypeUnknown = false;
-        PDataType returnType = children.get(0).getDataType();
-        for (int i = 2; i < children.size(); i+=2) {
-            Expression child = children.get(i);
-            PDataType childType = child.getDataType();
-            if (childType == null) {
-                isChildTypeUnknown = true;
-            } else if (returnType == null) {
-                returnType = childType;
-                isChildTypeUnknown = true;
-            } else if (returnType == childType || childType.isCoercibleTo(returnType)) {
-                continue;
-            } else if (returnType.isCoercibleTo(childType)) {
-                returnType = childType;
-            } else {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
-                    .setMessage("Case expressions must have common type: " + returnType + " cannot be coerced to " + childType)
-                    .build().buildException();
-            }
-        }
-        // If we found an "unknown" child type and the return type is a number
-        // make the return type be the most general number type of DECIMAL.
-        if (isChildTypeUnknown && returnType != null && returnType.isCoercibleTo(PDecimal.INSTANCE)) {
-            returnType = PDecimal.INSTANCE;
-        }
-        List<Expression> newChildren = children;
-        for (int i = 0; i < children.size(); i+=2) {
-            Expression child = children.get(i);
-            PDataType childType = child.getDataType();
-            if (childType != returnType) {
-                if (newChildren == children) {
-                    newChildren = new ArrayList<Expression>(children);
-                }
-                newChildren.set(i, CoerceExpression.create(child, returnType));
-            }
-        }
-        return newChildren;
-    }
-    /**
-     * Construct CASE/WHEN expression
-     * @param children list of expressions in the form of:
-     * {@code ((<result expression>, <boolean expression>)+, [<optional else result expression>]) }
-     */
-    public CaseExpression(List<Expression> children) {
-        super(children);
-        returnType = children.get(0).getDataType();
-    }
-    
-    private boolean isPartiallyEvaluating() {
-        return evalIndex != FULLY_EVALUATE;
-    }
-    
-    public boolean hasElse() {
-        return children.size() % 2 != 0;
-    }
-    
-    @Override
-    public boolean isNullable() {
-        // If any expression is nullable or there's no else clause
-        // return true since null may be returned.
-        if (super.isNullable() || !hasElse()) {
-            return true;
-        }
-        return children.get(children.size()-1).isNullable();
-    }
+  private static final int FULLY_EVALUATE = -1;
 
-    @Override
-    public PDataType getDataType() {
-        return returnType;
-    }
+  private short evalIndex = FULLY_EVALUATE;
+  private boolean foundIndex;
+  private PDataType returnType;
 
-    @Override
-    public void reset() {
-        foundIndex = false;
-        evalIndex = 0;
+  public CaseExpression() {
+  }
+
+  public static Expression create(List<Expression> children) throws SQLException {
+    CaseExpression caseExpression = new CaseExpression(coerceIfNecessary(children));
+    if (ExpressionUtil.isConstant(caseExpression)) {
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      int index = caseExpression.evaluateIndexOf(null, ptr);
+      if (index < 0) {
+        return LiteralExpression.newConstant(null, caseExpression.getDeterminism());
+      }
+      return caseExpression.getChildren().get(index);
     }
-    
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        this.returnType = PDataType.values()[WritableUtils.readVInt(input)];
+    return caseExpression;
+  }
+
+  private static List<Expression> coerceIfNecessary(List<Expression> children) throws SQLException {
+    boolean isChildTypeUnknown = false;
+    PDataType returnType = children.get(0).getDataType();
+    for (int i = 2; i < children.size(); i += 2) {
+      Expression child = children.get(i);
+      PDataType childType = child.getDataType();
+      if (childType == null) {
+        isChildTypeUnknown = true;
+      } else if (returnType == null) {
+        returnType = childType;
+        isChildTypeUnknown = true;
+      } else if (returnType == childType || childType.isCoercibleTo(returnType)) {
+        continue;
+      } else if (returnType.isCoercibleTo(childType)) {
+        returnType = childType;
+      } else {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
+          .setMessage("Case expressions must have common type: " + returnType
+            + " cannot be coerced to " + childType)
+          .build().buildException();
+      }
     }
-    
-    @Override
-    public void write(DataOutput output) throws IOException {
-        super.write(output);
-        WritableUtils.writeVInt(output, this.returnType.ordinal());
+    // If we found an "unknown" child type and the return type is a number
+    // make the return type be the most general number type of DECIMAL.
+    if (isChildTypeUnknown && returnType != null && returnType.isCoercibleTo(PDecimal.INSTANCE)) {
+      returnType = PDecimal.INSTANCE;
     }
-    
-    public int evaluateIndexOf(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (foundIndex) {
-            return evalIndex;
+    List<Expression> newChildren = children;
+    for (int i = 0; i < children.size(); i += 2) {
+      Expression child = children.get(i);
+      PDataType childType = child.getDataType();
+      if (childType != returnType) {
+        if (newChildren == children) {
+          newChildren = new ArrayList<Expression>(children);
         }
-        int size = children.size();
-        // If we're doing partial evaluation, start where we left off
-        for (int i = isPartiallyEvaluating() ? evalIndex : 0; i < size; i+=2) {
-            // Short circuit if we see our stop value
-            if (i+1 == size) {
-                return i;
-            }
-            // If we get null, we have to re-evaluate from that point (special case this in filter, like is null)
-            // We may only run this when we're done/have all values
-            boolean evaluated = children.get(i+1).evaluate(tuple, ptr);
-            if (evaluated && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr))) {
-                if (isPartiallyEvaluating()) {
-                    foundIndex = true;
-                }
-                return i;
-            }
-            if (isPartiallyEvaluating()) {
-                if (evaluated || tuple.isImmutable()) {
-                    evalIndex+=2;
-                } else {
-                    /*
-                     * Return early here if incrementally evaluating and we don't
-                     * have all the key values yet. We can't continue because we'd
-                     * potentially be bypassing cases which we could later evaluate
-                     * once we have more column values.
-                     */
-                    return -1;
-                }
-            }
-        }
-        // No conditions matched, return size to indicate that we were able
-        // to evaluate all cases, but didn't find any matches.
-        return size;
+        newChildren.set(i, CoerceExpression.create(child, returnType));
+      }
     }
-    
-    /**
-     * Only expression that currently uses the isPartial flag. The IS NULL
-     * expression will use it too. TODO: We could alternatively have a non interface
-     * method, like setIsPartial in which we set to false prior to calling
-     * evaluate.
-     */
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        int index = evaluateIndexOf(tuple, ptr);
-        if (index < 0) {
-            return false;
-        } else if (index == children.size()) {
-            ptr.set(PDataType.NULL_BYTES);
-            return true;
-        }
-        if (children.get(index).evaluate(tuple, ptr)) {
-            return true;
-        }
-        return false;
+    return newChildren;
+  }
+
+  /**
+   * Construct CASE/WHEN expression
+   * @param children list of expressions in the form of:
+   *                 {@code ((<result expression>, <boolean expression>)+, [<optional else result expression>]) }
+   */
+  public CaseExpression(List<Expression> children) {
+    super(children);
+    returnType = children.get(0).getDataType();
+  }
+
+  private boolean isPartiallyEvaluating() {
+    return evalIndex != FULLY_EVALUATE;
+  }
+
+  public boolean hasElse() {
+    return children.size() % 2 != 0;
+  }
+
+  @Override
+  public boolean isNullable() {
+    // If any expression is nullable or there's no else clause
+    // return true since null may be returned.
+    if (super.isNullable() || !hasElse()) {
+      return true;
     }
-    
-    @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
-        List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
-        T t = visitor.visitLeave(this, l);
-        if (t == null) {
-            t = visitor.defaultReturn(this, l);
-        }
-        return t;
+    return children.get(children.size() - 1).isNullable();
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return returnType;
+  }
+
+  @Override
+  public void reset() {
+    foundIndex = false;
+    evalIndex = 0;
+  }
+
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    this.returnType = PDataType.values()[WritableUtils.readVInt(input)];
+  }
+
+  @Override
+  public void write(DataOutput output) throws IOException {
+    super.write(output);
+    WritableUtils.writeVInt(output, this.returnType.ordinal());
+  }
+
+  public int evaluateIndexOf(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (foundIndex) {
+      return evalIndex;
     }
-    
-    @Override
-    public String toString() {
-        StringBuilder buf = new StringBuilder("CASE ");
-        for (int i = 0; i < children.size() - 1; i+=2) {
-            buf.append("WHEN ");
-            buf.append(children.get(i+1));
-            buf.append(" THEN ");
-            buf.append(children.get(i));
+    int size = children.size();
+    // If we're doing partial evaluation, start where we left off
+    for (int i = isPartiallyEvaluating() ? evalIndex : 0; i < size; i += 2) {
+      // Short circuit if we see our stop value
+      if (i + 1 == size) {
+        return i;
+      }
+      // If we get null, we have to re-evaluate from that point (special case this in filter, like
+      // is null)
+      // We may only run this when we're done/have all values
+      boolean evaluated = children.get(i + 1).evaluate(tuple, ptr);
+      if (evaluated && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(ptr))) {
+        if (isPartiallyEvaluating()) {
+          foundIndex = true;
         }
-        if (hasElse()) {
-            buf.append(" ELSE " + children.get(children.size()-1));
+        return i;
+      }
+      if (isPartiallyEvaluating()) {
+        if (evaluated || tuple.isImmutable()) {
+          evalIndex += 2;
+        } else {
+          /*
+           * Return early here if incrementally evaluating and we don't have all the key values yet.
+           * We can't continue because we'd potentially be bypassing cases which we could later
+           * evaluate once we have more column values.
+           */
+          return -1;
         }
-        buf.append(" END");
-        return buf.toString();
+      }
     }
-    
-    @Override
-    public boolean requiresFinalEvaluation() {
-        return super.requiresFinalEvaluation() || this.hasElse();
+    // No conditions matched, return size to indicate that we were able
+    // to evaluate all cases, but didn't find any matches.
+    return size;
+  }
+
+  /**
+   * Only expression that currently uses the isPartial flag. The IS NULL expression will use it too.
+   * TODO: We could alternatively have a non interface method, like setIsPartial in which we set to
+   * false prior to calling evaluate.
+   */
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    int index = evaluateIndexOf(tuple, ptr);
+    if (index < 0) {
+      return false;
+    } else if (index == children.size()) {
+      ptr.set(PDataType.NULL_BYTES);
+      return true;
     }
+    if (children.get(index).evaluate(tuple, ptr)) {
+      return true;
+    }
+    return false;
+  }
+
+  @Override
+  public final <T> T accept(ExpressionVisitor<T> visitor) {
+    List<T> l = acceptChildren(visitor, visitor.visitEnter(this));
+    T t = visitor.visitLeave(this, l);
+    if (t == null) {
+      t = visitor.defaultReturn(this, l);
+    }
+    return t;
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder buf = new StringBuilder("CASE ");
+    for (int i = 0; i < children.size() - 1; i += 2) {
+      buf.append("WHEN ");
+      buf.append(children.get(i + 1));
+      buf.append(" THEN ");
+      buf.append(children.get(i));
+    }
+    if (hasElse()) {
+      buf.append(" ELSE " + children.get(children.size() - 1));
+    }
+    buf.append(" END");
+    return buf.toString();
+  }
+
+  @Override
+  public boolean requiresFinalEvaluation() {
+    return super.requiresFinalEvaluation() || this.hasElse();
+  }
 }

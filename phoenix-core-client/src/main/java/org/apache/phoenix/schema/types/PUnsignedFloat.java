@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.schema.types;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PUnsignedFloat extends PRealNumber<PFloat> {
@@ -67,8 +66,7 @@ public class PUnsignedFloat extends PRealNumber<PFloat> {
     if (object == null) {
       throw newIllegalDataException(this + " may not be null");
     }
-    return this.getCodec().encodeFloat(((Number) object).floatValue(),
-        bytes, offset);
+    return this.getCodec().encodeFloat(((Number) object).floatValue(), bytes, offset);
   }
 
   @Override
@@ -79,8 +77,7 @@ public class PUnsignedFloat extends PRealNumber<PFloat> {
     try {
       Float f = Float.parseFloat(value);
       if (f.floatValue() < 0) {
-        throw newIllegalDataException("Value may not be negative("
-            + f + ")");
+        throw newIllegalDataException("Value may not be negative(" + f + ")");
       }
       return f;
     } catch (NumberFormatException e) {
@@ -97,7 +94,7 @@ public class PUnsignedFloat extends PRealNumber<PFloat> {
 
   @Override
   public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
-      Integer maxLength, Integer scale) {
+    Integer maxLength, Integer scale) {
     Float v = (Float) PFloat.INSTANCE.toObject(b, o, l, actualType, sortOrder);
     throwIfNonNegativeNumber(v);
     return v;
@@ -110,8 +107,8 @@ public class PUnsignedFloat extends PRealNumber<PFloat> {
 
   @Override
   public boolean isCoercibleTo(PDataType targetType) {
-    return this.equals(targetType) || PUnsignedDouble.INSTANCE.isCoercibleTo(targetType) || PFloat.INSTANCE
-        .isCoercibleTo(targetType);
+    return this.equals(targetType) || PUnsignedDouble.INSTANCE.isCoercibleTo(targetType)
+      || PFloat.INSTANCE.isCoercibleTo(targetType);
   }
 
   @Override

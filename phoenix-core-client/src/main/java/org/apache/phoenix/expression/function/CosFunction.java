@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,31 +26,31 @@ import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 
-@BuiltInFunction(name = CosFunction.NAME, args = { @Argument(allowedTypes = { PDouble.class,
-        PDecimal.class }) })
+@BuiltInFunction(name = CosFunction.NAME,
+    args = { @Argument(allowedTypes = { PDouble.class, PDecimal.class }) })
 public class CosFunction extends JavaMathOneArgumentFunction {
 
-    public static final String NAME = "COS";
+  public static final String NAME = "COS";
 
-    public CosFunction() {
-    }
+  public CosFunction() {
+  }
 
-    public CosFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+  public CosFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    @Override
-    protected double compute(double firstArg) {
-        return Math.cos(firstArg);
-    }
+  @Override
+  protected double compute(double firstArg) {
+    return Math.cos(firstArg);
+  }
 
-    @Override
-    public OrderPreserving preservesOrder() {
-        return OrderPreserving.YES;
-    }
+  @Override
+  public OrderPreserving preservesOrder() {
+    return OrderPreserving.YES;
+  }
 }

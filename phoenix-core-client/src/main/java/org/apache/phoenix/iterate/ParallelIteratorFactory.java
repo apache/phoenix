@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,12 +24,14 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.StatementContext;
 
 public interface ParallelIteratorFactory {
-    public static ParallelIteratorFactory NOOP_FACTORY = new ParallelIteratorFactory() {
-        @Override
-        public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String physicalTableName, QueryPlan plan)
-                throws SQLException {
-            return LookAheadResultIterator.wrap(scanner);
-        }
-    };
-    PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan, String physicalTableName, QueryPlan plan) throws SQLException;
+  public static ParallelIteratorFactory NOOP_FACTORY = new ParallelIteratorFactory() {
+    @Override
+    public PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner,
+      Scan scan, String physicalTableName, QueryPlan plan) throws SQLException {
+      return LookAheadResultIterator.wrap(scanner);
+    }
+  };
+
+  PeekingResultIterator newIterator(StatementContext context, ResultIterator scanner, Scan scan,
+    String physicalTableName, QueryPlan plan) throws SQLException;
 }

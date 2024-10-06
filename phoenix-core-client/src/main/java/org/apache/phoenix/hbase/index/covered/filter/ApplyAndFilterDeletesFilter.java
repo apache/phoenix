@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -58,47 +58,45 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   private Hinter currentHint;
   private DeleteColumnHinter columnHint = new DeleteColumnHinter();
   private DeleteFamilyHinter familyHint = new DeleteFamilyHinter();
-  
+
   /**
    * Setup the filter to only include the given families. This allows us to seek intelligently pass
    * families we don't care about.
-   * @param families
    */
   public ApplyAndFilterDeletesFilter(Set<ImmutableBytesPtr> families) {
     this.families = new ArrayList<ImmutableBytesPtr>(families);
     Collections.sort(this.families);
   }
-      
+
   public DeleteTracker getDeleteTracker() {
-      return coveringDelete;
+    return coveringDelete;
   }
-  
+
   private ImmutableBytesPtr getNextFamily(ImmutableBytesPtr family) {
     int index = Collections.binarySearch(families, family);
-    //doesn't match exactly, be we can find the right next match
-    //this is pretty unlikely, but just incase
-    if(index < 0){
-      //the actual location of the next match
-      index = -index -1;
-    }else{
-      //its an exact match for a family, so we get the next entry
-      index = index +1;
+    // doesn't match exactly, be we can find the right next match
+    // this is pretty unlikely, but just incase
+    if (index < 0) {
+      // the actual location of the next match
+      index = -index - 1;
+    } else {
+      // its an exact match for a family, so we get the next entry
+      index = index + 1;
     }
-    //now we have the location of the next entry
-    if(index >= families.size()){
+    // now we have the location of the next entry
+    if (index >= families.size()) {
       return null;
     }
-    return  families.get(index);
+    return families.get(index);
   }
-  
+
   @Override
-  public void reset(){
+  public void reset() {
     this.coveringDelete.reset();
   }
-  
-  
+
   @Override
-  public Cell getNextCellHint(Cell peeked){
+  public Cell getNextCellHint(Cell peeked) {
     return currentHint.getHint(PhoenixKeyValueUtil.maybeCopyCell(peeked));
   }
 
@@ -111,57 +109,62 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
   public ReturnCode filterCell(Cell next) {
     KeyValue nextKV = PhoenixKeyValueUtil.maybeCopyCell(next);
     switch (next.getType()) {
-    /*
-     * DeleteFamily will always sort first because those KVs (we assume) don't have qualifiers (or
-     * rather are null). Therefore, we have to keep a hold of all the delete families until we get
-     * to a Put entry that is covered by that delete (in which case, we are done with the family).
-     */
-    case DeleteFamily:
-      // track the family to delete. If we are updating the delete, that means we have passed all
-      // kvs in the last column, so we can safely ignore the last deleteFamily, and just use this
-      // one. In fact, it means that all the previous deletes can be ignored because the family must
-      // not match anymore.
-      // We could potentially have multiple deleteFamily for the same row and family
-      // (e.g. upsert row+family, delete it, upsert again, delete again),
-      // in which case we keep the first one since its timestamp dominates
-      if (coveringDelete.deleteFamily == null || !CellUtil.matchingFamily(coveringDelete.deleteFamily, nextKV)) {
+      /*
+       * DeleteFamily will always sort first because those KVs (we assume) don't have qualifiers (or
+       * rather are null). Therefore, we have to keep a hold of all the delete families until we get
+       * to a Put entry that is covered by that delete (in which case, we are done with the family).
+       */
+      case DeleteFamily:
+        // track the family to delete. If we are updating the delete, that means we have passed all
+        // kvs in the last column, so we can safely ignore the last deleteFamily, and just use this
+        // one. In fact, it means that all the previous deletes can be ignored because the family
+        // must
+        // not match anymore.
+        // We could potentially have multiple deleteFamily for the same row and family
+        // (e.g. upsert row+family, delete it, upsert again, delete again),
+        // in which case we keep the first one since its timestamp dominates
+        if (
+          coveringDelete.deleteFamily == null
+            || !CellUtil.matchingFamily(coveringDelete.deleteFamily, nextKV)
+        ) {
           this.coveringDelete.reset();
           this.coveringDelete.deleteFamily = nextKV;
-      }
-      return ReturnCode.SKIP;
-    case DeleteColumn:
-      // similar to deleteFamily, all the newer deletes/puts would have been seen at this point, so
-      // we can safely replace the more recent delete column with the more recent one
-      this.coveringDelete.pointDelete = null;
-      this.coveringDelete.deleteColumn = nextKV;
-      return ReturnCode.SKIP;
-    case Delete:
-      // we are just deleting the single column value at this point.
-      // therefore we just skip this entry and go onto the next one. The only caveat is that
-      // we should still cover the next entry if this delete applies to the next entry, so we
-      // have to keep around a reference to the KV to compare against the next valid entry
-      this.coveringDelete.pointDelete = nextKV;
-      return ReturnCode.SKIP;
-    default:
-      // no covering deletes
-      if (coveringDelete.empty()) {
-        return ReturnCode.INCLUDE;
-      }
-
-      if (coveringDelete.matchesFamily(nextKV)) {
-        this.currentHint = familyHint;
-        return ReturnCode.SEEK_NEXT_USING_HINT;
-      }
-
-      if (coveringDelete.matchesColumn(nextKV)) {
-        // hint to the next column
-        this.currentHint = columnHint;
-        return ReturnCode.SEEK_NEXT_USING_HINT;
-      }
-
-      if (coveringDelete.matchesPoint(nextKV)) {
+        }
         return ReturnCode.SKIP;
-      }
+      case DeleteColumn:
+        // similar to deleteFamily, all the newer deletes/puts would have been seen at this point,
+        // so
+        // we can safely replace the more recent delete column with the more recent one
+        this.coveringDelete.pointDelete = null;
+        this.coveringDelete.deleteColumn = nextKV;
+        return ReturnCode.SKIP;
+      case Delete:
+        // we are just deleting the single column value at this point.
+        // therefore we just skip this entry and go onto the next one. The only caveat is that
+        // we should still cover the next entry if this delete applies to the next entry, so we
+        // have to keep around a reference to the KV to compare against the next valid entry
+        this.coveringDelete.pointDelete = nextKV;
+        return ReturnCode.SKIP;
+      default:
+        // no covering deletes
+        if (coveringDelete.empty()) {
+          return ReturnCode.INCLUDE;
+        }
+
+        if (coveringDelete.matchesFamily(nextKV)) {
+          this.currentHint = familyHint;
+          return ReturnCode.SEEK_NEXT_USING_HINT;
+        }
+
+        if (coveringDelete.matchesColumn(nextKV)) {
+          // hint to the next column
+          this.currentHint = columnHint;
+          return ReturnCode.SEEK_NEXT_USING_HINT;
+        }
+
+        if (coveringDelete.matchesPoint(nextKV)) {
+          return ReturnCode.SKIP;
+        }
 
     }
 
@@ -186,16 +189,15 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
     @Override
     public Cell getHint(Cell peeked) {
       // check to see if we have another column to seek
-      ImmutableBytesPtr nextFamily =
-          getNextFamily(new ImmutableBytesPtr(peeked.getFamilyArray(), peeked.getFamilyOffset(),
-              peeked.getFamilyLength()));
+      ImmutableBytesPtr nextFamily = getNextFamily(new ImmutableBytesPtr(peeked.getFamilyArray(),
+        peeked.getFamilyOffset(), peeked.getFamilyLength()));
       if (nextFamily == null) {
         return KeyValue.LOWESTKEY;
       }
-        // there is a valid family, so we should seek to that
+      // there is a valid family, so we should seek to that
       return org.apache.hadoop.hbase.KeyValueUtil.createFirstOnRow(peeked.getRowArray(),
-          peeked.getRowOffset(), peeked.getRowLength(), nextFamily.get(),
-          nextFamily.getOffset(), nextFamily.getLength(), HConstants.EMPTY_BYTE_ARRAY, 0, 0);
+        peeked.getRowOffset(), peeked.getRowLength(), nextFamily.get(), nextFamily.getOffset(),
+        nextFamily.getLength(), HConstants.EMPTY_BYTE_ARRAY, 0, 0);
     }
 
   }
@@ -208,9 +210,10 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
 
     @Override
     public Cell getHint(Cell kv) {
-      return org.apache.hadoop.hbase.KeyValueUtil.createLastOnRow(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength(),
-        kv.getFamilyArray(), kv.getFamilyOffset(), kv.getFamilyLength(), kv.getQualifierArray(),
-        kv.getQualifierOffset(), kv.getQualifierLength());
+      return org.apache.hadoop.hbase.KeyValueUtil.createLastOnRow(kv.getRowArray(),
+        kv.getRowOffset(), kv.getRowLength(), kv.getFamilyArray(), kv.getFamilyOffset(),
+        kv.getFamilyLength(), kv.getQualifierArray(), kv.getQualifierOffset(),
+        kv.getQualifierLength());
     }
   }
 
@@ -233,7 +236,6 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
      * Internally, also resets the currently tracked "Delete Family" marker we are tracking if the
      * keyvalue is into another family (since CFs sort lexicographically, we can discard the current
      * marker since it must not be applicable to any more kvs in a linear scan).
-     * @param next
      * @return <tt>true</tt> if this {@link KeyValue} matches a delete.
      */
     public boolean matchesFamily(KeyValue next) {
@@ -253,16 +255,16 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
       return false;
     }
 
-
     /**
-     * @param next
-     * @return
      */
     public boolean matchesColumn(KeyValue next) {
       if (deleteColumn == null) {
         return false;
       }
-      if (CellUtil.matchingFamily(deleteColumn, next) && CellUtil.matchingQualifier(deleteColumn, next)) {
+      if (
+        CellUtil.matchingFamily(deleteColumn, next)
+          && CellUtil.matchingQualifier(deleteColumn, next)
+      ) {
         // falls within the timestamp range
         if (deleteColumn.getTimestamp() >= next.getTimestamp()) {
           return true;
@@ -274,16 +276,16 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
     }
 
     /**
-     * @param next
-     * @return
      */
     public boolean matchesPoint(KeyValue next) {
       // point deletes only apply to the exact KV that they reference, so we only need to ensure
       // that the timestamp matches exactly. Because we sort by timestamp first, either the next
       // keyvalue has the exact timestamp or is an older (smaller) timestamp, and we can allow that
       // one.
-      if (pointDelete != null && CellUtil.matchingFamily(pointDelete, next)
-          && CellUtil.matchingQualifier(pointDelete, next)) {
+      if (
+        pointDelete != null && CellUtil.matchingFamily(pointDelete, next)
+          && CellUtil.matchingQualifier(pointDelete, next)
+      ) {
         if (pointDelete.getTimestamp() == next.getTimestamp()) {
           return true;
         }
@@ -293,9 +295,7 @@ public class ApplyAndFilterDeletesFilter extends FilterBase {
       return false;
     }
 
-    /**
-     * @return <tt>true</tt> if no delete has been set
-     */
+    /** Returns <tt>true</tt> if no delete has been set */
     public boolean empty() {
       return deleteFamily == null && deleteColumn == null && pointDelete == null;
     }

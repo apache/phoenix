@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,53 +29,54 @@ import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
- * A drop-in statistics collector that does nothing. An instance of this class is used for tables
- * or environments where statistics collection is disabled.
+ * A drop-in statistics collector that does nothing. An instance of this class is used for tables or
+ * environments where statistics collection is disabled.
  */
 public class NoOpStatisticsCollector implements StatisticsCollector {
 
-    @Override
-    public long getMaxTimeStamp() {
-        return NO_TIMESTAMP;
-    }
+  @Override
+  public long getMaxTimeStamp() {
+    return NO_TIMESTAMP;
+  }
 
-    @Override
-    public void close() throws IOException {
-        // No-op
-    }
+  @Override
+  public void close() throws IOException {
+    // No-op
+  }
 
-    @Override
-    public void updateStatistics(Region region, Scan scan) {
-        // No-op
-    }
+  @Override
+  public void updateStatistics(Region region, Scan scan) {
+    // No-op
+  }
 
-    @Override
-    public void collectStatistics(List<Cell> results) {
-        // No-op
-    }
+  @Override
+  public void collectStatistics(List<Cell> results) {
+    // No-op
+  }
 
-    @Override
-    public void init() {
-        // No-op
-    }
+  @Override
+  public void init() {
+    // No-op
+  }
 
-    @Override public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
-        return null;
-    }
+  @Override
+  public GuidePostsInfo getGuidePosts(ImmutableBytesPtr fam) {
+    return null;
+  }
 
-    @Override
-    public long getGuidePostDepth() {
-        return -1;
-    }
+  @Override
+  public long getGuidePostDepth() {
+    return -1;
+  }
 
-    @Override
-    public StatisticsWriter getStatisticsWriter() {
-        return null;
-    }
+  @Override
+  public StatisticsWriter getStatisticsWriter() {
+    return null;
+  }
 
-    @Override
-    public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env,
-                                                   Store store, InternalScanner delegate) {
-        return delegate;
-    }
+  @Override
+  public InternalScanner createCompactionScanner(RegionCoprocessorEnvironment env, Store store,
+    InternalScanner delegate) {
+    return delegate;
+  }
 }

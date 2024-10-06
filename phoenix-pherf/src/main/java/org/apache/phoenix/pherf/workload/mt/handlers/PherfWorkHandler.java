@@ -15,15 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.handlers;
-
-import com.lmax.disruptor.WorkHandler;
-import org.apache.phoenix.pherf.result.ResultValue;
-import org.apache.phoenix.pherf.workload.mt.operations.OperationStats;
 
 import java.util.List;
 
+import org.apache.phoenix.pherf.result.ResultValue;
+import org.apache.phoenix.pherf.workload.mt.operations.OperationStats;
+
+import com.lmax.disruptor.WorkHandler;
+
 public interface PherfWorkHandler<T> extends WorkHandler<T> {
-    List<ResultValue<OperationStats>> getResults();
+  List<ResultValue<OperationStats>> getResults();
 }

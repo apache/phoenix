@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.apache.phoenix.schema.types;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PUnsignedTinyint extends PWholeNumber<Byte> {
@@ -95,7 +94,7 @@ public class PUnsignedTinyint extends PWholeNumber<Byte> {
 
   @Override
   public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
-      Integer maxLength, Integer scale) {
+    Integer maxLength, Integer scale) {
     Byte v = (Byte) PTinyint.INSTANCE.toObject(b, o, l, actualType, sortOrder);
     throwIfNonNegativeNumber(v);
     return v;
@@ -104,13 +103,13 @@ public class PUnsignedTinyint extends PWholeNumber<Byte> {
   @Override
   public boolean isCoercibleTo(PDataType targetType) {
     return targetType.equals(this) || PUnsignedSmallint.INSTANCE.isCoercibleTo(targetType)
-        || PTinyint.INSTANCE.isCoercibleTo(targetType);
+      || PTinyint.INSTANCE.isCoercibleTo(targetType);
   }
 
   @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
-    return super.isCoercibleTo(targetType, value) || PTinyint.INSTANCE
-        .isCoercibleTo(targetType, value);
+    return super.isCoercibleTo(targetType, value)
+      || PTinyint.INSTANCE.isCoercibleTo(targetType, value);
   }
 
   @Override

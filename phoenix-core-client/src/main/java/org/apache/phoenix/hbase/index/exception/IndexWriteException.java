@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,9 +19,9 @@ package org.apache.phoenix.hbase.index.exception;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import org.apache.hadoop.hbase.HBaseIOException;
 import org.apache.phoenix.query.QueryServicesOptions;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
 
 /**
@@ -30,25 +30,23 @@ import org.apache.phoenix.thirdparty.com.google.common.base.MoreObjects;
 @SuppressWarnings("serial")
 public class IndexWriteException extends HBaseIOException {
 
-    /*
-     * We pass this message back to the client so that the config only needs to be set on the
-     * server side.
-     */
-    private static final String DISABLE_INDEX_ON_FAILURE_MSG = "disableIndexOnFailure=";
-    private boolean disableIndexOnFailure = QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
+  /*
+   * We pass this message back to the client so that the config only needs to be set on the server
+   * side.
+   */
+  private static final String DISABLE_INDEX_ON_FAILURE_MSG = "disableIndexOnFailure=";
+  private boolean disableIndexOnFailure = QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
 
   public IndexWriteException() {
     super();
   }
 
-    /**
-     * Used for the case where we cannot reach the index, but not sure of the table or the mutations
-     * that caused the failure
-     * @param message
-     * @param cause
-     */
+  /**
+   * Used for the case where we cannot reach the index, but not sure of the table or the mutations
+   * that caused the failure
+   */
   public IndexWriteException(String message, Throwable cause) {
-      super(message, cause);
+    super(message, cause);
   }
 
   public IndexWriteException(Throwable cause, boolean disableIndexOnFailure) {
@@ -60,29 +58,28 @@ public class IndexWriteException extends HBaseIOException {
     this.disableIndexOnFailure = disableIndexOnFailure;
   }
 
-public IndexWriteException(Throwable cause) {
+  public IndexWriteException(Throwable cause) {
     super(cause);
   }
 
-    public static boolean parseDisableIndexOnFailure(String message) {
-        Pattern p =
-                Pattern.compile(DISABLE_INDEX_ON_FAILURE_MSG + "(true|false)",
-                    Pattern.CASE_INSENSITIVE);
-        Matcher m = p.matcher(message);
-        if (m.find()) {
-            boolean disableIndexOnFailure = Boolean.parseBoolean(m.group(1));
-            return disableIndexOnFailure;
-        }
-        return QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
+  public static boolean parseDisableIndexOnFailure(String message) {
+    Pattern p =
+      Pattern.compile(DISABLE_INDEX_ON_FAILURE_MSG + "(true|false)", Pattern.CASE_INSENSITIVE);
+    Matcher m = p.matcher(message);
+    if (m.find()) {
+      boolean disableIndexOnFailure = Boolean.parseBoolean(m.group(1));
+      return disableIndexOnFailure;
     }
+    return QueryServicesOptions.DEFAULT_INDEX_FAILURE_DISABLE_INDEX;
+  }
 
-    public boolean isDisableIndexOnFailure() {
-        return disableIndexOnFailure;
-    }
+  public boolean isDisableIndexOnFailure() {
+    return disableIndexOnFailure;
+  }
 
-    @Override
-    public String getMessage() {
-        return MoreObjects.firstNonNull(super.getMessage(), "") + " "
-                + DISABLE_INDEX_ON_FAILURE_MSG + disableIndexOnFailure + ",";
-    }
+  @Override
+  public String getMessage() {
+    return MoreObjects.firstNonNull(super.getMessage(), "") + " " + DISABLE_INDEX_ON_FAILURE_MSG
+      + disableIndexOnFailure + ",";
+  }
 }

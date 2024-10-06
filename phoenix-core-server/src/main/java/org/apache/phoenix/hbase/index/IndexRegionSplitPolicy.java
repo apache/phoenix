@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,45 +31,45 @@ import org.apache.phoenix.query.QueryConstants;
  */
 public class IndexRegionSplitPolicy extends SteppingSplitPolicy {
 
-    @Override
-    protected boolean skipStoreFileRangeCheck(String familyName) {
-        if (familyName.startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-            return true;
-        }
-        return false;
+  @Override
+  protected boolean skipStoreFileRangeCheck(String familyName) {
+    if (familyName.startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+      return true;
     }
+    return false;
+  }
 
-    @Override
-    protected byte[] getSplitPoint() {
-        byte[] oldSplitPoint = super.getSplitPoint();
-        if (oldSplitPoint == null) return null;
-        List<HStore> stores = region.getStores();
-        byte[] splitPointFromLargestStore = null;
-        long largestStoreSize = 0;
-        boolean isLocalIndexKey = false;
-        for (HStore s : stores) {
-            if (s.getColumnFamilyName()
-                    .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                Optional<byte[]> splitPoint = s.getSplitPoint();
-                if (oldSplitPoint != null && splitPoint.isPresent()
-                        && Bytes.compareTo(oldSplitPoint, splitPoint.get()) == 0) {
-                    isLocalIndexKey = true;
-                }
-            }
+  @Override
+  protected byte[] getSplitPoint() {
+    byte[] oldSplitPoint = super.getSplitPoint();
+    if (oldSplitPoint == null) return null;
+    List<HStore> stores = region.getStores();
+    byte[] splitPointFromLargestStore = null;
+    long largestStoreSize = 0;
+    boolean isLocalIndexKey = false;
+    for (HStore s : stores) {
+      if (s.getColumnFamilyName().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+        Optional<byte[]> splitPoint = s.getSplitPoint();
+        if (
+          oldSplitPoint != null && splitPoint.isPresent()
+            && Bytes.compareTo(oldSplitPoint, splitPoint.get()) == 0
+        ) {
+          isLocalIndexKey = true;
         }
-        if (!isLocalIndexKey) return oldSplitPoint;
-
-        for (HStore s : stores) {
-            if (!s.getColumnFamilyName()
-                    .startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
-                Optional<byte[]> splitPoint = s.getSplitPoint();
-                long storeSize = s.getSize();
-                if (splitPoint.isPresent() && largestStoreSize < storeSize) {
-                    splitPointFromLargestStore = splitPoint.get();
-                    largestStoreSize = storeSize;
-                }
-            }
-        }
-        return splitPointFromLargestStore;
+      }
     }
+    if (!isLocalIndexKey) return oldSplitPoint;
+
+    for (HStore s : stores) {
+      if (!s.getColumnFamilyName().startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)) {
+        Optional<byte[]> splitPoint = s.getSplitPoint();
+        long storeSize = s.getSize();
+        if (splitPoint.isPresent() && largestStoreSize < storeSize) {
+          splitPointFromLargestStore = splitPoint.get();
+          largestStoreSize = storeSize;
+        }
+      }
+    }
+    return splitPointFromLargestStore;
+  }
 }

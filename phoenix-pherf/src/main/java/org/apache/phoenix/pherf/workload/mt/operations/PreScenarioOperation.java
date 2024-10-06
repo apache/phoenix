@@ -15,17 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.operations;
 
-import org.apache.phoenix.pherf.configuration.Ddl;
-
 import java.util.List;
+
+import org.apache.phoenix.pherf.configuration.Ddl;
 
 /**
  * Defines a pre scenario operation.
  * @see {@link OperationType#PRE_RUN}
  */
 public interface PreScenarioOperation extends Operation {
-    List<Ddl> getPreScenarioDdls();
+  List<Ddl> getPreScenarioDdls();
 }

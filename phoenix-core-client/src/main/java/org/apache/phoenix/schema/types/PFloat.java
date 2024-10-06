@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import java.sql.Types;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 public class PFloat extends PRealNumber<Float> {
@@ -80,8 +79,7 @@ public class PFloat extends PRealNumber<Float> {
     if (object == null) {
       throw newIllegalDataException(this + " may not be null");
     }
-    return this.getCodec().encodeFloat(((Number) object).floatValue(),
-        bytes, offset);
+    return this.getCodec().encodeFloat(((Number) object).floatValue(), bytes, offset);
   }
 
   @Override
@@ -106,14 +104,14 @@ public class PFloat extends PRealNumber<Float> {
       return object;
     } else if (equalsAny(actualType, PDouble.INSTANCE, PUnsignedDouble.INSTANCE)) {
       double d = (Double) object;
-      if (Double.isNaN(d)
-          || d == Double.POSITIVE_INFINITY
-          || d == Double.NEGATIVE_INFINITY
-          || (d >= -Float.MAX_VALUE && d <= Float.MAX_VALUE)) {
+      if (
+        Double.isNaN(d) || d == Double.POSITIVE_INFINITY || d == Double.NEGATIVE_INFINITY
+          || (d >= -Float.MAX_VALUE && d <= Float.MAX_VALUE)
+      ) {
         return (float) d;
       } else {
         throw newIllegalDataException(
-            actualType + " value " + d + " cannot be cast to Float without changing its value");
+          actualType + " value " + d + " cannot be cast to Float without changing its value");
       }
     } else if (equalsAny(actualType, PLong.INSTANCE, PUnsignedLong.INSTANCE)) {
       f = (Long) object;
@@ -136,14 +134,16 @@ public class PFloat extends PRealNumber<Float> {
 
   @Override
   public Float toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
-      Integer maxLength, Integer scale) {
+    Integer maxLength, Integer scale) {
     if (l <= 0) {
       return null;
     }
-    if (equalsAny(actualType, PFloat.INSTANCE, PUnsignedFloat.INSTANCE, PDouble.INSTANCE,
+    if (
+      equalsAny(actualType, PFloat.INSTANCE, PUnsignedFloat.INSTANCE, PDouble.INSTANCE,
         PUnsignedDouble.INSTANCE, PLong.INSTANCE, PUnsignedLong.INSTANCE, PInteger.INSTANCE,
         PUnsignedInt.INSTANCE, PSmallint.INSTANCE, PUnsignedSmallint.INSTANCE, PTinyint.INSTANCE,
-        PUnsignedTinyint.INSTANCE)) {
+        PUnsignedTinyint.INSTANCE)
+    ) {
       return actualType.getCodec().decodeFloat(b, o, sortOrder);
     } else if (actualType == PDecimal.INSTANCE) {
       BigDecimal bd = (BigDecimal) actualType.toObject(b, o, l, actualType, sortOrder);
@@ -198,7 +198,7 @@ public class PFloat extends PRealNumber<Float> {
       float v = decodeFloat(b, o, sortOrder);
       if (v < Long.MIN_VALUE || v > Long.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Long without changing its value");
+          "Value " + v + " cannot be cast to Long without changing its value");
       }
       return (long) v;
     }
@@ -208,7 +208,7 @@ public class PFloat extends PRealNumber<Float> {
       float v = decodeFloat(b, o, sortOrder);
       if (v < Integer.MIN_VALUE || v > Integer.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Integer without changing its value");
+          "Value " + v + " cannot be cast to Integer without changing its value");
       }
       return (int) v;
     }
@@ -218,7 +218,7 @@ public class PFloat extends PRealNumber<Float> {
       float v = decodeFloat(b, o, sortOrder);
       if (v < Byte.MIN_VALUE || v > Byte.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Byte without changing its value");
+          "Value " + v + " cannot be cast to Byte without changing its value");
       }
       return (byte) v;
     }
@@ -228,14 +228,13 @@ public class PFloat extends PRealNumber<Float> {
       float v = decodeFloat(b, o, sortOrder);
       if (v < Short.MIN_VALUE || v > Short.MAX_VALUE) {
         throw newIllegalDataException(
-            "Value " + v + " cannot be cast to Short without changing its value");
+          "Value " + v + " cannot be cast to Short without changing its value");
       }
       return (short) v;
     }
 
     @Override
-    public double decodeDouble(byte[] b, int o,
-        SortOrder sortOrder) {
+    public double decodeDouble(byte[] b, int o, SortOrder sortOrder) {
       return decodeFloat(b, o, sortOrder);
     }
 
@@ -245,13 +244,13 @@ public class PFloat extends PRealNumber<Float> {
       checkForSufficientLength(b, o, Bytes.SIZEOF_INT);
       int value;
       if (sortOrder == SortOrder.DESC) {
-          value = 0;
-          for(int i = o; i < (o + Bytes.SIZEOF_INT); i++) {
-            value <<= 8;
-            value ^= (b[i] ^ 0xff) & 0xFF;
-          }
+        value = 0;
+        for (int i = o; i < (o + Bytes.SIZEOF_INT); i++) {
+          value <<= 8;
+          value ^= (b[i] ^ 0xff) & 0xFF;
+        }
       } else {
-          value = Bytes.toInt(b, o);
+        value = Bytes.toInt(b, o);
       }
       value--;
       value ^= (~value >> Integer.SIZE - 1) | Integer.MIN_VALUE;
@@ -280,13 +279,14 @@ public class PFloat extends PRealNumber<Float> {
 
     @Override
     public int encodeDouble(double v, byte[] b, int o) {
-      if (Double.isNaN(v) || v == Double.POSITIVE_INFINITY
-          || v == Double.NEGATIVE_INFINITY
-          || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)) {
+      if (
+        Double.isNaN(v) || v == Double.POSITIVE_INFINITY || v == Double.NEGATIVE_INFINITY
+          || (v >= -Float.MAX_VALUE && v <= Float.MAX_VALUE)
+      ) {
         return encodeFloat((float) v, b, o);
       } else {
         throw newIllegalDataException(
-            "Value " + v + " cannot be encoded as an Float without changing its value");
+          "Value " + v + " cannot be encoded as an Float without changing its value");
       }
 
     }

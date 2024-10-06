@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -30,10 +30,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class is a copy paste version of org.apache.hadoop.hbase.codec.BaseDecoder class. 
- * This class is meant to be used in {@link IndexedWALEditCodec} when runtime version of
- * HBase is older than 1.1.3. This is needed to handle binary incompatibility introduced by
- * HBASE-14501. See PHOENIX-2629 and PHOENIX-2636 for details.
+ * This class is a copy paste version of org.apache.hadoop.hbase.codec.BaseDecoder class. This class
+ * is meant to be used in {@link IndexedWALEditCodec} when runtime version of HBase is older than
+ * 1.1.3. This is needed to handle binary incompatibility introduced by HBASE-14501. See
+ * PHOENIX-2629 and PHOENIX-2636 for details.
  */
 public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
   protected static final Logger LOGGER = LoggerFactory.getLogger(BinaryCompatibleBaseDecoder.class);
@@ -62,13 +62,14 @@ public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
     if (firstByte == -1) {
       return false;
     } else {
-      ((PBIS)in).unread(firstByte);
+      ((PBIS) in).unread(firstByte);
     }
 
     try {
       this.current = parseCell();
     } catch (IOException ioEx) {
-      ((PBIS)in).resetBuf(1); // reset the buffer in case the underlying stream is read from upper layers
+      ((PBIS) in).resetBuf(1); // reset the buffer in case the underlying stream is read from upper
+                               // layers
       rethrowEofException(ioEx);
     }
     return true;
@@ -97,8 +98,7 @@ public abstract class BinaryCompatibleBaseDecoder implements Codec.Decoder {
   /**
    * Extract a Cell.
    * @return a parsed Cell or throws an Exception. EOFException or a generic IOException maybe
-   * thrown if EOF is reached prematurely. Does not return null.
-   * @throws IOException
+   *         thrown if EOF is reached prematurely. Does not return null.
    */
   @Nonnull
   protected abstract Cell parseCell() throws IOException;

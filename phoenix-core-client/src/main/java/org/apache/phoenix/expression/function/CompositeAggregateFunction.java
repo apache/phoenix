@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,24 +22,19 @@ import java.util.List;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 
-
 /**
- * 
- * Base class for aggregation functions which are composed of other
- * aggregation functions (for example, AVG is modeled as a SUM aggregate
- * function and a COUNT aggregate function).
- *
- * 
+ * Base class for aggregation functions which are composed of other aggregation functions (for
+ * example, AVG is modeled as a SUM aggregate function and a COUNT aggregate function).
  * @since 0.1
  */
 abstract public class CompositeAggregateFunction extends AggregateFunction {
 
-    public CompositeAggregateFunction(List<Expression> children) {
-        super(children);
-    }
-    
-    @Override
-    public final <T> T accept(ExpressionVisitor<T> visitor) {
-        return null;
-    }
+  public CompositeAggregateFunction(List<Expression> children) {
+    super(children);
+  }
+
+  @Override
+  public final <T> T accept(ExpressionVisitor<T> visitor) {
+    return null;
+  }
 }

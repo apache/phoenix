@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,23 +23,18 @@ import java.util.Map;
 
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.regionserver.Region;
-
+import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
-
-import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
-
 
 public class PerRegionIndexWriteCache {
 
   private Map<Region, Multimap<HTableInterfaceReference, Mutation>> cache =
-      new HashMap<Region, Multimap<HTableInterfaceReference, Mutation>>();
-
+    new HashMap<Region, Multimap<HTableInterfaceReference, Mutation>>();
 
   /**
    * Get the edits for the current region. Removes the edits from the cache. To add them back, call
    * #addEdits(HRegion, HTableInterfaceReference, Collection).
-   * @param region
    * @return Get the edits for the given region. Returns <tt>null</tt> if there are no pending edits
    *         for the region
    */
@@ -48,12 +43,9 @@ public class PerRegionIndexWriteCache {
   }
 
   /**
-   * @param region
-   * @param table
-   * @param collection
    */
   public void addEdits(Region region, HTableInterfaceReference table,
-      Collection<Mutation> collection) {
+    Collection<Mutation> collection) {
     Multimap<HTableInterfaceReference, Mutation> edits = cache.get(region);
     if (edits == null) {
       edits = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();

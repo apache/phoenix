@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,9 +22,9 @@ import java.sql.SQLException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.omid.committable.CommitTable;
-import org.apache.omid.committable.InMemoryCommitTable;
 import org.apache.omid.committable.CommitTable.Client;
 import org.apache.omid.committable.CommitTable.Writer;
+import org.apache.omid.committable.InMemoryCommitTable;
 import org.apache.omid.transaction.HBaseOmidClientConfiguration;
 import org.apache.omid.transaction.HBaseTransactionManager;
 import org.apache.omid.tso.TSOMockModule;
@@ -42,83 +42,82 @@ import com.google.inject.Injector;
 
 public class OmidTransactionService implements PhoenixTransactionService {
 
-    private static final String OMID_TSO_PORT = "phoenix.omid.tso.port";
-    private static final String OMID_TSO_CONFLICT_MAP_SIZE = "phoenix.omid.tso.conflict.map.size";
-    private static final String OMID_TSO_TIMESTAMP_TYPE = "phoenix.omid.tso.timestamp.type";
-    private static final int DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE = 1000;
-    private static final String DEFAULT_OMID_TSO_TIMESTAMP_TYPE = "WORLD_TIME";
+  private static final String OMID_TSO_PORT = "phoenix.omid.tso.port";
+  private static final String OMID_TSO_CONFLICT_MAP_SIZE = "phoenix.omid.tso.conflict.map.size";
+  private static final String OMID_TSO_TIMESTAMP_TYPE = "phoenix.omid.tso.timestamp.type";
+  private static final int DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE = 1000;
+  private static final String DEFAULT_OMID_TSO_TIMESTAMP_TYPE = "WORLD_TIME";
 
-    private final HBaseTransactionManager transactionManager;
-    private TSOServer tso;
+  private final HBaseTransactionManager transactionManager;
+  private TSOServer tso;
 
-    public OmidTransactionService(TSOServer tso, HBaseTransactionManager transactionManager) {
-        this.tso = tso;
-        this.transactionManager = transactionManager;
+  public OmidTransactionService(TSOServer tso, HBaseTransactionManager transactionManager) {
+    this.tso = tso;
+    this.transactionManager = transactionManager;
+  }
+
+  public static OmidTransactionService startAndInjectOmidTransactionService(
+    OmidTransactionProvider transactionProvider, Configuration config,
+    ConnectionInfo connectionInfo, int port) throws SQLException {
+    TSOServerConfig tsoConfig = new TSOServerConfig();
+    TSOServer tso;
+
+    tsoConfig.setPort(port);
+    tsoConfig.setConflictMapSize(
+      config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));
+    tsoConfig
+      .setTimestampType(config.get(OMID_TSO_TIMESTAMP_TYPE, DEFAULT_OMID_TSO_TIMESTAMP_TYPE));
+    tsoConfig.setWaitStrategy(WAIT_STRATEGY.LOW_CPU.toString());
+
+    Injector injector = Guice.createInjector(new TSOMockModule(tsoConfig));
+    tso = injector.getInstance(TSOServer.class);
+    tso.startAsync();
+    tso.awaitRunning();
+
+    OmidClientConfiguration clientConfig = new OmidClientConfiguration();
+    clientConfig.setConnectionString("localhost:" + port);
+    clientConfig.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
+
+    InMemoryCommitTable commitTable = (InMemoryCommitTable) injector.getInstance(CommitTable.class);
+
+    HBaseTransactionManager transactionManager;
+    Client commitTableClient;
+    Writer commitTableWriter;
+    try {
+      // Create the associated Handler
+      TSOClient client = TSOClient.newInstance(clientConfig);
+
+      HBaseOmidClientConfiguration clientConf = new HBaseOmidClientConfiguration();
+      clientConf.setConnectionString("localhost:" + port);
+      clientConf.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
+      clientConf.setHBaseConfiguration(config);
+      commitTableClient = commitTable.getClient();
+      commitTableWriter = commitTable.getWriter();
+      transactionManager =
+        HBaseTransactionManager.builder(clientConf).commitTableClient(commitTableClient)
+          .commitTableWriter(commitTableWriter).tsoClient(client).build();
+    } catch (IOException | InterruptedException e) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_FAILED)
+        .setMessage(e.getMessage()).setRootCause(e).build().buildException();
     }
 
-    public static OmidTransactionService startAndInjectOmidTransactionService(
-            OmidTransactionProvider transactionProvider, Configuration config,
-            ConnectionInfo connectionInfo, int port) throws SQLException {
-        TSOServerConfig tsoConfig = new TSOServerConfig();
-        TSOServer tso;
+    transactionProvider.injectTestService(transactionManager, commitTableClient);
 
-        tsoConfig.setPort(port);
-        tsoConfig.setConflictMapSize(
-            config.getInt(OMID_TSO_CONFLICT_MAP_SIZE, DEFAULT_OMID_TSO_CONFLICT_MAP_SIZE));
-        tsoConfig.setTimestampType(
-            config.get(OMID_TSO_TIMESTAMP_TYPE, DEFAULT_OMID_TSO_TIMESTAMP_TYPE));
-        tsoConfig.setWaitStrategy(WAIT_STRATEGY.LOW_CPU.toString());
+    return new OmidTransactionService(tso, transactionManager);
+  }
 
-        Injector injector = Guice.createInjector(new TSOMockModule(tsoConfig));
-        tso = injector.getInstance(TSOServer.class);
-        tso.startAsync();
-        tso.awaitRunning();
+  public void start() {
 
-        OmidClientConfiguration clientConfig = new OmidClientConfiguration();
-        clientConfig.setConnectionString("localhost:" + port);
-        clientConfig.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
+  }
 
-        InMemoryCommitTable commitTable =
-                (InMemoryCommitTable) injector.getInstance(CommitTable.class);
-
-        HBaseTransactionManager transactionManager;
-        Client commitTableClient;
-        Writer commitTableWriter;
-        try {
-            // Create the associated Handler
-            TSOClient client = TSOClient.newInstance(clientConfig);
-
-            HBaseOmidClientConfiguration clientConf = new HBaseOmidClientConfiguration();
-            clientConf.setConnectionString("localhost:" + port);
-            clientConf.setConflictAnalysisLevel(OmidClientConfiguration.ConflictDetectionLevel.ROW);
-            clientConf.setHBaseConfiguration(config);
-            commitTableClient = commitTable.getClient();
-            commitTableWriter = commitTable.getWriter();
-            transactionManager =
-                    HBaseTransactionManager.builder(clientConf).commitTableClient(commitTableClient)
-                            .commitTableWriter(commitTableWriter).tsoClient(client).build();
-        } catch (IOException | InterruptedException e) {
-            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRANSACTION_FAILED)
-                    .setMessage(e.getMessage()).setRootCause(e).build().buildException();
-        }
-
-        transactionProvider.injectTestService(transactionManager, commitTableClient);
-
-        return new OmidTransactionService(tso, transactionManager);
+  @Override
+  public void close() throws IOException {
+    if (transactionManager != null) {
+      transactionManager.close();
     }
-
-    public void start() {
-
+    if (tso != null) {
+      tso.stopAsync();
+      tso.awaitTerminated();
     }
-
-    @Override
-    public void close() throws IOException {
-        if (transactionManager != null) {
-            transactionManager.close();
-        }
-        if (tso != null) {
-            tso.stopAsync();
-            tso.awaitTerminated();
-        }
-    }
+  }
 }

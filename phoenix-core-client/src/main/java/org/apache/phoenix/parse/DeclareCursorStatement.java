@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,44 +17,45 @@
  */
 package org.apache.phoenix.parse;
 
-import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import java.util.*;
 
+import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+
 public class DeclareCursorStatement implements BindableStatement {
-    private final CursorName cursorName;
-    private final SelectStatement select;
+  private final CursorName cursorName;
+  private final SelectStatement select;
 
-    public DeclareCursorStatement(CursorName cursorName, SelectStatement select){
-        this.cursorName = cursorName;
-        this.select = select;
+  public DeclareCursorStatement(CursorName cursorName, SelectStatement select) {
+    this.cursorName = cursorName;
+    this.select = select;
+  }
+
+  public String getCursorName() {
+    return cursorName.getName();
+  }
+
+  public String getQuerySQL() {
+    // Check if there are parameters to bind.
+    if (select.getBindCount() > 0) {
+
     }
+    // TODO: Test if this works
+    return select.toString();
+  }
 
-    public String getCursorName(){
-        return cursorName.getName();
-    }
+  public SelectStatement getSelect() {
+    return select;
+  }
 
-    public String getQuerySQL(){
-        //Check if there are parameters to bind.
-        if(select.getBindCount() > 0){
+  public List<OrderByNode> getSelectOrderBy() {
+    return select.getOrderBy();
+  }
 
-        }
-        //TODO: Test if this works
-        return select.toString();
-    }
+  public int getBindCount() {
+    return select.getBindCount();
+  }
 
-    public SelectStatement getSelect(){
-    	return select;
-    }
-
-    public List<OrderByNode> getSelectOrderBy() {
-        return select.getOrderBy();
-    }
-
-    public int getBindCount(){
-        return select.getBindCount();
-    }
-
-    public Operation getOperation(){
-        return Operation.UPSERT;
-    }
+  public Operation getOperation() {
+    return Operation.UPSERT;
+  }
 }

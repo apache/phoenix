@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,18 +24,16 @@ import org.apache.phoenix.schema.SortOrder;
 
 /**
  * Client side Aggregator for STDDEV_SAMP aggregations for DECIMAL data type.
- * 
- * 
  * @since 1.2.1
  */
 public class DecimalStddevSampAggregator extends BaseDecimalStddevAggregator {
 
-    public DecimalStddevSampAggregator(List<Expression> exps, SortOrder sortOrder) {
-        super(exps, sortOrder);
-    }
+  public DecimalStddevSampAggregator(List<Expression> exps, SortOrder sortOrder) {
+    super(exps, sortOrder);
+  }
 
-    @Override
-    protected long getDataPointsCount() {
-        return totalCount - 1;
-    }
+  @Override
+  protected long getDataPointsCount() {
+    return totalCount - 1;
+  }
 }
