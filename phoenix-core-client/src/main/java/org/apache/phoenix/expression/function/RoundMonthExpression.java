@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,38 +26,38 @@ import org.joda.time.DateTimeFieldType;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * 
  * Rounds off the given {@link DateTime} to month.
  */
 public class RoundMonthExpression extends RoundJodaDateExpression {
-    
-    public RoundMonthExpression(){}
-    
-    public RoundMonthExpression(List<Expression> children) {
-       super(children);
-    }
 
-    @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.monthOfYear().roundHalfEvenCopy().getMillis();
-    }
+  public RoundMonthExpression() {
+  }
 
-    @Override
-    public long rangeLower(long epochMs) {
-        // We're doing unnecessary conversions here, but this is not perf sensitive
-        DateTime rounded =
-                new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
-                        GJChronology.getInstanceUTC());
-        DateTime prev = rounded.minusMonths(1);
-        return DateUtil.rangeJodaHalfEven(rounded, prev, DateTimeFieldType.monthOfYear());
-    }
+  public RoundMonthExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public long rangeUpper(long epochMs) {
-        DateTime rounded =
-                new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
-                        GJChronology.getInstanceUTC());
-        DateTime next = rounded.plusMonths(1);
-        return DateUtil.rangeJodaHalfEven(rounded, next, DateTimeFieldType.monthOfYear());
-    }
+  @Override
+  public long roundDateTime(DateTime dateTime) {
+    return dateTime.monthOfYear().roundHalfEvenCopy().getMillis();
+  }
+
+  @Override
+  public long rangeLower(long epochMs) {
+    // We're doing unnecessary conversions here, but this is not perf sensitive
+    DateTime rounded =
+      new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
+        GJChronology.getInstanceUTC());
+    DateTime prev = rounded.minusMonths(1);
+    return DateUtil.rangeJodaHalfEven(rounded, prev, DateTimeFieldType.monthOfYear());
+  }
+
+  @Override
+  public long rangeUpper(long epochMs) {
+    DateTime rounded =
+      new DateTime(roundDateTime(new DateTime(epochMs, GJChronology.getInstanceUTC())),
+        GJChronology.getInstanceUTC());
+    DateTime next = rounded.plusMonths(1);
+    return DateUtil.rangeJodaHalfEven(rounded, next, DateTimeFieldType.monthOfYear());
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,34 +24,33 @@ import org.joda.time.DateTime;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * 
- * Floor function that rounds up the {@link DateTime} to start of month. 
+ * Floor function that rounds up the {@link DateTime} to start of month.
  */
 public class FloorMonthExpression extends RoundJodaDateExpression {
 
-    public FloorMonthExpression() {
-        super();
-    }
+  public FloorMonthExpression() {
+    super();
+  }
 
-    public FloorMonthExpression(List<Expression> children) {
-        super(children);
-    }
+  public FloorMonthExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public long roundDateTime(DateTime datetime) {
-        return datetime.monthOfYear().roundFloorCopy().getMillis();
-    }
+  @Override
+  public long roundDateTime(DateTime datetime) {
+    return datetime.monthOfYear().roundFloorCopy().getMillis();
+  }
 
-    @Override
-    public long rangeLower(long time) {
-        // floor
-        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
-    }
+  @Override
+  public long rangeLower(long time) {
+    // floor
+    return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+  }
 
-    @Override
-    public long rangeUpper(long time) {
-        // ceil(time + 1) -1
-        return (new DateTime(time + 1, GJChronology.getInstanceUTC())).monthOfYear()
-                .roundCeilingCopy().getMillis() - 1;
-    }
+  @Override
+  public long rangeUpper(long time) {
+    // ceil(time + 1) -1
+    return (new DateTime(time + 1, GJChronology.getInstanceUTC())).monthOfYear().roundCeilingCopy()
+      .getMillis() - 1;
+  }
 }

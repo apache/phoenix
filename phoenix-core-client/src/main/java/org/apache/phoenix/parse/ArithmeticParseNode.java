@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,21 +23,21 @@ import org.apache.phoenix.compile.ColumnResolver;
 
 public abstract class ArithmeticParseNode extends CompoundParseNode {
 
-    public ArithmeticParseNode(List<ParseNode> children) {
-        super(children);
-    }
+  public ArithmeticParseNode(List<ParseNode> children) {
+    super(children);
+  }
 
-    public abstract String getOperator();
-    
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        buf.append('(');
-        List<ParseNode> children = getChildren();
-        children.get(0).toSQL(resolver, buf);
-        for (int i = 1 ; i < children.size(); i++) {
-            buf.append(" " + getOperator() + " ");
-            children.get(i).toSQL(resolver, buf);
-        }
-        buf.append(')');
+  public abstract String getOperator();
+
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    buf.append('(');
+    List<ParseNode> children = getChildren();
+    children.get(0).toSQL(resolver, buf);
+    for (int i = 1; i < children.size(); i++) {
+      buf.append(" " + getOperator() + " ");
+      children.get(i).toSQL(resolver, buf);
     }
+    buf.append(')');
+  }
 }

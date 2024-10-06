@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,75 +28,74 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.NumberUtil;
 
-
 public class DecimalAddExpression extends AddExpression {
-    private Integer maxLength;
-    private Integer scale;
+  private Integer maxLength;
+  private Integer scale;
 
-    public DecimalAddExpression() {
+  public DecimalAddExpression() {
+  }
+
+  public DecimalAddExpression(List<Expression> children) {
+    super(children);
+    Expression firstChild = children.get(0);
+    maxLength = getPrecision(firstChild);
+    scale = getScale(firstChild);
+    for (int i = 1; i < children.size(); i++) {
+      Expression childExpr = children.get(i);
+      maxLength = getPrecision(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
+      scale = getScale(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
     }
+  }
 
-    public DecimalAddExpression(List<Expression> children) {
-        super(children);
-        Expression firstChild = children.get(0);
-        maxLength = getPrecision(firstChild);
-        scale = getScale(firstChild);
-        for (int i=1; i<children.size(); i++) {
-            Expression childExpr = children.get(i);
-            maxLength = getPrecision(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
-            scale = getScale(maxLength, getPrecision(childExpr), scale, getScale(childExpr));
-        }
-    }
-
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        BigDecimal result = null;
-        for (int i=0; i<children.size(); i++) {
-            Expression childExpr = children.get(i);
-            if (!childExpr.evaluate(tuple, ptr)) {
-                return false;
-            }
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            
-            PDataType childType = childExpr.getDataType();
-            SortOrder childSortOrder = childExpr.getSortOrder();
-            BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childType, childSortOrder);
-            
-            if (result == null) {
-                result = bd;
-            } else {
-                result = result.add(bd);
-            }
-        }
-        if (maxLength != null || scale != null) {
-            result = NumberUtil.setDecimalWidthAndScale(result, maxLength, scale);
-        }
-        if (result == null) {
-            throw new DataExceedsCapacityException(PDecimal.INSTANCE, maxLength, scale, null);
-        }
-        ptr.set(PDecimal.INSTANCE.toBytes(result));
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    BigDecimal result = null;
+    for (int i = 0; i < children.size(); i++) {
+      Expression childExpr = children.get(i);
+      if (!childExpr.evaluate(tuple, ptr)) {
+        return false;
+      }
+      if (ptr.getLength() == 0) {
         return true;
-    }
+      }
 
-    @Override
-    public PDataType getDataType() {
-        return PDecimal.INSTANCE;
-    }
+      PDataType childType = childExpr.getDataType();
+      SortOrder childSortOrder = childExpr.getSortOrder();
+      BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childType, childSortOrder);
 
-    @Override
-    public Integer getScale() {
-        return scale;
+      if (result == null) {
+        result = bd;
+      } else {
+        result = result.add(bd);
+      }
     }
+    if (maxLength != null || scale != null) {
+      result = NumberUtil.setDecimalWidthAndScale(result, maxLength, scale);
+    }
+    if (result == null) {
+      throw new DataExceedsCapacityException(PDecimal.INSTANCE, maxLength, scale, null);
+    }
+    ptr.set(PDecimal.INSTANCE.toBytes(result));
+    return true;
+  }
 
-    @Override
-    public Integer getMaxLength() {
-        return maxLength;
-    }
+  @Override
+  public PDataType getDataType() {
+    return PDecimal.INSTANCE;
+  }
 
-    @Override
-    public ArithmeticExpression clone(List<Expression> children) {
-        return new DecimalAddExpression(children);
-    }
+  @Override
+  public Integer getScale() {
+    return scale;
+  }
+
+  @Override
+  public Integer getMaxLength() {
+    return maxLength;
+  }
+
+  @Override
+  public ArithmeticExpression clone(List<Expression> children) {
+    return new DecimalAddExpression(children);
+  }
 }

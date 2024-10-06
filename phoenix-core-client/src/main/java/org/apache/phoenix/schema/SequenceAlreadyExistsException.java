@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,29 +18,28 @@
 package org.apache.phoenix.schema;
 
 import java.sql.SQLException;
+
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
-
 public class SequenceAlreadyExistsException extends SQLException {
-	private static final long serialVersionUID = 1L;
-	private static SQLExceptionCode code = SQLExceptionCode.SEQUENCE_ALREADY_EXIST;
-	private final String schemaName;
-	private final String sequenceName;
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode code = SQLExceptionCode.SEQUENCE_ALREADY_EXIST;
+  private final String schemaName;
+  private final String sequenceName;
 
+  public SequenceAlreadyExistsException(String schemaName, String sequenceName) {
+    super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(sequenceName)
+      .build().toString(), code.getSQLState(), code.getErrorCode());
+    this.schemaName = schemaName;
+    this.sequenceName = sequenceName;
+  }
 
-	public SequenceAlreadyExistsException(String schemaName, String sequenceName) {
-		super(new SQLExceptionInfo.Builder(code).setSchemaName(schemaName).setTableName(sequenceName).build().toString(),
-				code.getSQLState(), code.getErrorCode());        
-		this.schemaName = schemaName;
-		this.sequenceName = sequenceName;
-	}
+  public String getSequenceName() {
+    return sequenceName;
+  }
 
-	public String getSequenceName() {
-		return sequenceName;
-	}
-
-	public String getSchemaName() {
-		return schemaName;
-	}
+  public String getSchemaName() {
+    return schemaName;
+  }
 }

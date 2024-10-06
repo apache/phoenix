@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,113 +26,110 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class ImmutableBytesPtr extends ImmutableBytesWritable {
-    private int hashCode;
-    
-    public ImmutableBytesPtr() {
-    }
+  private int hashCode;
 
-    public ImmutableBytesPtr(byte[] bytes) {
-        super(bytes);
-        hashCode = super.hashCode();
-    }
+  public ImmutableBytesPtr() {
+  }
 
-    public ImmutableBytesPtr(ImmutableBytesWritable ibw) {
-        super(ibw.get(), ibw.getOffset(), ibw.getLength());
-        hashCode = super.hashCode();
-    }
+  public ImmutableBytesPtr(byte[] bytes) {
+    super(bytes);
+    hashCode = super.hashCode();
+  }
 
-    public ImmutableBytesPtr(ImmutableBytesPtr ibp) {
-        super(ibp.get(), ibp.getOffset(), ibp.getLength());
-        hashCode = ibp.hashCode;
-    }
+  public ImmutableBytesPtr(ImmutableBytesWritable ibw) {
+    super(ibw.get(), ibw.getOffset(), ibw.getLength());
+    hashCode = super.hashCode();
+  }
 
-    public ImmutableBytesPtr(byte[] bytes, int offset, int length) {
-        super(bytes, offset, length);
-        hashCode = super.hashCode();
-    }
+  public ImmutableBytesPtr(ImmutableBytesPtr ibp) {
+    super(ibp.get(), ibp.getOffset(), ibp.getLength());
+    hashCode = ibp.hashCode;
+  }
 
-    @Override
-    public int hashCode() {
-        return hashCode;
-    }
+  public ImmutableBytesPtr(byte[] bytes, int offset, int length) {
+    super(bytes, offset, length);
+    hashCode = super.hashCode();
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        ImmutableBytesPtr that = (ImmutableBytesPtr)obj;
-        if (this.hashCode != that.hashCode) return false;
-        if (Bytes.compareTo(this.get(), this.getOffset(), this.getLength(), that.get(), that.getOffset(), that.getLength()) != 0) return false;
-        return true;
-    }
+  @Override
+  public int hashCode() {
+    return hashCode;
+  }
 
-    public void set(ImmutableBytesWritable ptr) {
-        set(ptr.get(),ptr.getOffset(),ptr.getLength());
-      }
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (obj == null) return false;
+    if (getClass() != obj.getClass()) return false;
+    ImmutableBytesPtr that = (ImmutableBytesPtr) obj;
+    if (this.hashCode != that.hashCode) return false;
+    if (
+      Bytes.compareTo(this.get(), this.getOffset(), this.getLength(), that.get(), that.getOffset(),
+        that.getLength()) != 0
+    ) return false;
+    return true;
+  }
 
-    /**
-     * @param b Use passed bytes as backing array for this instance.
-     */
-    @Override
-    public void set(final byte [] b) {
-      super.set(b);
-      hashCode = super.hashCode();
-    }
+  public void set(ImmutableBytesWritable ptr) {
+    set(ptr.get(), ptr.getOffset(), ptr.getLength());
+  }
 
-    /**
-     * @param b Use passed bytes as backing array for this instance.
-     * @param offset
-     * @param length
-     */
-    @Override
-    public void set(final byte [] b, final int offset, final int length) {
-        super.set(b,offset,length);
-        hashCode = super.hashCode();
-    }
+  /**
+   * @param b Use passed bytes as backing array for this instance.
+   */
+  @Override
+  public void set(final byte[] b) {
+    super.set(b);
+    hashCode = super.hashCode();
+  }
 
-    @Override
-    public void readFields(final DataInput in) throws IOException {
-        super.readFields(in);
-        hashCode = super.hashCode();
-    }
-    
-    /**
-     * @return the backing byte array, copying only if necessary
-     */
-    public byte[] copyBytesIfNecessary() {
+  /**
+   * @param b Use passed bytes as backing array for this instance.
+   */
+  @Override
+  public void set(final byte[] b, final int offset, final int length) {
+    super.set(b, offset, length);
+    hashCode = super.hashCode();
+  }
+
+  @Override
+  public void readFields(final DataInput in) throws IOException {
+    super.readFields(in);
+    hashCode = super.hashCode();
+  }
+
+  /** Returns the backing byte array, copying only if necessary */
+  public byte[] copyBytesIfNecessary() {
     return copyBytesIfNecessary(this);
-    }
+  }
 
-    public static byte[] copyBytesIfNecessary(ImmutableBytesWritable ptr) {
-        return copyBytesIfNecessary(ptr.get(), ptr.getOffset(), ptr.getLength());
-    }
+  public static byte[] copyBytesIfNecessary(ImmutableBytesWritable ptr) {
+    return copyBytesIfNecessary(ptr.get(), ptr.getOffset(), ptr.getLength());
+  }
 
-    public static byte[] copyBytesIfNecessary(byte[] bytes, int offset, int length) {
-        if (offset == 0 && length == bytes.length) {
-            return bytes;
-        }
-        return Arrays.copyOfRange(bytes, offset, offset + length);
+  public static byte[] copyBytesIfNecessary(byte[] bytes, int offset, int length) {
+    if (offset == 0 && length == bytes.length) {
+      return bytes;
     }
+    return Arrays.copyOfRange(bytes, offset, offset + length);
+  }
 
-    public static byte[] cloneCellRowIfNecessary(Cell cell) {
-        return copyBytesIfNecessary(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
-    }
+  public static byte[] cloneCellRowIfNecessary(Cell cell) {
+    return copyBytesIfNecessary(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+  }
 
-    public static byte[] cloneCellFamilyIfNecessary(Cell cell) {
-        return copyBytesIfNecessary(cell.getFamilyArray(), cell.getFamilyOffset(),
-                cell.getFamilyLength());
-    }
+  public static byte[] cloneCellFamilyIfNecessary(Cell cell) {
+    return copyBytesIfNecessary(cell.getFamilyArray(), cell.getFamilyOffset(),
+      cell.getFamilyLength());
+  }
 
-    public static byte[] cloneCellQualifierIfNecessary(Cell cell) {
-        return ImmutableBytesPtr.copyBytesIfNecessary(
-                cell.getQualifierArray(), cell.getQualifierOffset(),
-                cell.getQualifierLength());
-    }
+  public static byte[] cloneCellQualifierIfNecessary(Cell cell) {
+    return ImmutableBytesPtr.copyBytesIfNecessary(cell.getQualifierArray(),
+      cell.getQualifierOffset(), cell.getQualifierLength());
+  }
 
-    public static byte[] cloneCellValueIfNecessary(Cell cell) {
-        return ImmutableBytesPtr.copyBytesIfNecessary(
-                cell.getValueArray(), cell.getValueOffset(),
-                cell.getValueLength());
-    }
+  public static byte[] cloneCellValueIfNecessary(Cell cell) {
+    return ImmutableBytesPtr.copyBytesIfNecessary(cell.getValueArray(), cell.getValueOffset(),
+      cell.getValueLength());
+  }
 }

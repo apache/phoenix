@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,63 +25,60 @@ import java.util.Properties;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.junit.Test;
 
 public class PhoenixPreparedStatementTest extends BaseConnectionlessQueryTest {
 
-    @Test
-    public void testSetParameter_InvalidIndex() throws Exception {
-        Properties connectionProperties = new Properties();
-        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+  @Test
+  public void testSetParameter_InvalidIndex() throws Exception {
+    Properties connectionProperties = new Properties();
+    Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
 
-        PreparedStatement stmt = connection.prepareStatement(
-                "UPSERT INTO " + ATABLE + " (organization_id, entity_id, a_integer) " +
-                        "VALUES (?,?,?)");
+    PreparedStatement stmt = connection.prepareStatement(
+      "UPSERT INTO " + ATABLE + " (organization_id, entity_id, a_integer) " + "VALUES (?,?,?)");
 
-        stmt.setString(1, "AAA");
-        stmt.setString(2, "BBB");
-        stmt.setInt(3, 1);
+    stmt.setString(1, "AAA");
+    stmt.setString(2, "BBB");
+    stmt.setInt(3, 1);
 
-        try {
-            stmt.setString(4, "Invalid bind column");
-            fail("Setting a value for a column that doesn't exist should throw SQLException");
-        } catch (SQLException e) {
-            // Expected exception
-        }
-
-        try {
-            stmt.setString(-1, "Invalid bind column");
-            fail("Setting a value for a column that doesn't exist should throw SQLException");
-        } catch (SQLException e) {
-            // Expected exception
-        }
+    try {
+      stmt.setString(4, "Invalid bind column");
+      fail("Setting a value for a column that doesn't exist should throw SQLException");
+    } catch (SQLException e) {
+      // Expected exception
     }
-    
-    @Test
-    public void testMutationUsingExecuteQueryShouldFail() throws Exception {
-        Properties connectionProperties = new Properties();
-        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
-        PreparedStatement stmt = connection.prepareStatement("DELETE FROM " + ATABLE);
-        try {
-            stmt.executeQuery();
-            fail();
-        } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_QUERY_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
-        }
+
+    try {
+      stmt.setString(-1, "Invalid bind column");
+      fail("Setting a value for a column that doesn't exist should throw SQLException");
+    } catch (SQLException e) {
+      // Expected exception
     }
-    
-    @Test
-    public void testQueriesUsingExecuteUpdateShouldFail() throws Exception {
-        Properties connectionProperties = new Properties();
-        Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
-        PreparedStatement stmt = connection.prepareStatement("SELECT * FROM " + ATABLE);
-        try {
-            stmt.executeUpdate();
-            fail();
-        } catch(SQLException e) {
-            assertEquals(SQLExceptionCode.EXECUTE_UPDATE_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
-        }
+  }
+
+  @Test
+  public void testMutationUsingExecuteQueryShouldFail() throws Exception {
+    Properties connectionProperties = new Properties();
+    Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+    PreparedStatement stmt = connection.prepareStatement("DELETE FROM " + ATABLE);
+    try {
+      stmt.executeQuery();
+      fail();
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.EXECUTE_QUERY_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
     }
+  }
+
+  @Test
+  public void testQueriesUsingExecuteUpdateShouldFail() throws Exception {
+    Properties connectionProperties = new Properties();
+    Connection connection = DriverManager.getConnection(getUrl(), connectionProperties);
+    PreparedStatement stmt = connection.prepareStatement("SELECT * FROM " + ATABLE);
+    try {
+      stmt.executeUpdate();
+      fail();
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.EXECUTE_UPDATE_NOT_APPLICABLE.getErrorCode(), e.getErrorCode());
+    }
+  }
 }

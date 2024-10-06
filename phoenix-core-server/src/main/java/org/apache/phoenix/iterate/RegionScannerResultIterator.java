@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 package org.apache.phoenix.iterate;
+
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -35,54 +37,56 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 
-import static org.apache.phoenix.util.ScanUtil.isDummy;
-
-
 public class RegionScannerResultIterator extends BaseResultIterator {
-    private final RegionScanner scanner;
-    private final Pair<Integer, Integer> minMaxQualifiers;
-    private final boolean useQualifierAsIndex;
-    private final QualifierEncodingScheme encodingScheme;
-    
-    public RegionScannerResultIterator(RegionScanner scanner, Pair<Integer, Integer> minMaxQualifiers, QualifierEncodingScheme encodingScheme) {
-        this.scanner = scanner;
-        this.useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
-        this.minMaxQualifiers = minMaxQualifiers;
-        this.encodingScheme = encodingScheme;
-    }
+  private final RegionScanner scanner;
+  private final Pair<Integer, Integer> minMaxQualifiers;
+  private final boolean useQualifierAsIndex;
+  private final QualifierEncodingScheme encodingScheme;
 
-    @Override
-    public Tuple next() throws SQLException {
-        // XXX: No access here to the region instance to enclose this with startRegionOperation /
-        // stopRegionOperation
-        synchronized (scanner) {
-            try {
-                // TODO: size
-                List<Cell> results = useQualifierAsIndex ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(), minMaxQualifiers.getSecond(), encodingScheme) :  new ArrayList<Cell>();
-                // Results are potentially returned even when the return value of s.next is false
-                // since this is an indication of whether or not there are more values after the
-                // ones returned
-                boolean hasMore = scanner.nextRaw(results);
+  public RegionScannerResultIterator(RegionScanner scanner, Pair<Integer, Integer> minMaxQualifiers,
+    QualifierEncodingScheme encodingScheme) {
+    this.scanner = scanner;
+    this.useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
+    this.minMaxQualifiers = minMaxQualifiers;
+    this.encodingScheme = encodingScheme;
+  }
 
-                if (!hasMore && results.isEmpty()) {
-                    return null;
-                }
-                if (isDummy(results)) {
-                    return new ResultTuple(Result.create(results));
-                }
-                // We instantiate a new tuple because in all cases currently we hang on to it
-                // (i.e. to compute and hold onto the TopN).
-                Tuple tuple = useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
-                tuple.setKeyValues(results);
-                return tuple;
-            } catch (IOException e) {
-                throw ClientUtil.parseServerException(e);
-            }
+  @Override
+  public Tuple next() throws SQLException {
+    // XXX: No access here to the region instance to enclose this with startRegionOperation /
+    // stopRegionOperation
+    synchronized (scanner) {
+      try {
+        // TODO: size
+        List<Cell> results = useQualifierAsIndex
+          ? new EncodedColumnQualiferCellsList(minMaxQualifiers.getFirst(),
+            minMaxQualifiers.getSecond(), encodingScheme)
+          : new ArrayList<Cell>();
+        // Results are potentially returned even when the return value of s.next is false
+        // since this is an indication of whether or not there are more values after the
+        // ones returned
+        boolean hasMore = scanner.nextRaw(results);
+
+        if (!hasMore && results.isEmpty()) {
+          return null;
         }
+        if (isDummy(results)) {
+          return new ResultTuple(Result.create(results));
+        }
+        // We instantiate a new tuple because in all cases currently we hang on to it
+        // (i.e. to compute and hold onto the TopN).
+        Tuple tuple =
+          useQualifierAsIndex ? new PositionBasedMultiKeyValueTuple() : new MultiKeyValueTuple();
+        tuple.setKeyValues(results);
+        return tuple;
+      } catch (IOException e) {
+        throw ClientUtil.parseServerException(e);
+      }
     }
+  }
 
-	@Override
-	public String toString() {
-		return "RegionScannerResultIterator [scanner=" + scanner + "]";
-	}
+  @Override
+  public String toString() {
+    return "RegionScannerResultIterator [scanner=" + scanner + "]";
+  }
 }

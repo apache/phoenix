@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,65 +32,64 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.joda.time.DateTimeZone;
 
 /**
- * Build in function CONVERT_TZ(date, 'timezone_from', 'timezone_to). Convert date from one timezone to
- * another
- *
+ * Build in function CONVERT_TZ(date, 'timezone_from', 'timezone_to). Convert date from one timezone
+ * to another
  */
-@FunctionParseNode.BuiltInFunction(name = ConvertTimezoneFunction.NAME, args = {
-    @FunctionParseNode.Argument(allowedTypes = { PTimestamp.class }),
-    @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
-    @FunctionParseNode.Argument(allowedTypes = { PVarchar.class })})
+@FunctionParseNode.BuiltInFunction(name = ConvertTimezoneFunction.NAME,
+    args = { @FunctionParseNode.Argument(allowedTypes = { PTimestamp.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
 public class ConvertTimezoneFunction extends ScalarFunction {
 
-    public static final String NAME = "CONVERT_TZ";
+  public static final String NAME = "CONVERT_TZ";
 
-    public ConvertTimezoneFunction() {
+  public ConvertTimezoneFunction() {
+  }
+
+  public ConvertTimezoneFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (!children.get(0).evaluate(tuple, ptr)) {
+      return false;
     }
-
-    public ConvertTimezoneFunction(List<Expression> children) throws SQLException {
-        super(children);
+    if (ptr.getLength() == 0) {
+      return true;
     }
+    long date = PDate.INSTANCE.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
 
-    @Override
-    public String getName() {
-        return NAME;
+    if (!children.get(1).evaluate(tuple, ptr)) {
+      return false;
     }
-
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!children.get(0).evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        long date = PDate.INSTANCE.getCodec().decodeLong(ptr, children.get(0).getSortOrder());
-
-        if (!children.get(1).evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        DateTimeZone timezoneFrom = JodaTimezoneCache.getInstance(ptr);
-
-        if (!children.get(2).evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        DateTimeZone timezoneTo = JodaTimezoneCache.getInstance(ptr);
-
-        long convertedDate = date - timezoneFrom.getOffset(date) + timezoneTo.getOffset(date);
-        byte[] outBytes = new byte[8];
-        PDate.INSTANCE.getCodec().encodeLong(convertedDate, outBytes, 0);
-        ptr.set(outBytes);
-        return true;
+    if (ptr.getLength() == 0) {
+      return true;
     }
+    DateTimeZone timezoneFrom = JodaTimezoneCache.getInstance(ptr);
 
-    @Override
-    public PDataType getDataType() {
-        return PDate.INSTANCE;
+    if (!children.get(2).evaluate(tuple, ptr)) {
+      return false;
     }
+    if (ptr.getLength() == 0) {
+      return true;
+    }
+    DateTimeZone timezoneTo = JodaTimezoneCache.getInstance(ptr);
+
+    long convertedDate = date - timezoneFrom.getOffset(date) + timezoneTo.getOffset(date);
+    byte[] outBytes = new byte[8];
+    PDate.INSTANCE.getCodec().encodeLong(convertedDate, outBytes, 0);
+    ptr.set(outBytes);
+    return true;
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return PDate.INSTANCE;
+  }
 }

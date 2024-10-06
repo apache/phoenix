@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,49 +20,46 @@ package org.apache.phoenix.monitoring;
 import org.apache.phoenix.util.PhoenixStopWatch;
 
 /**
- * 
- * Stop watch that is cognizant of the fact whether or not metrics is enabled.
- * If metrics isn't enabled it doesn't do anything. Otherwise, it delegates
- * calls to a {@code PhoenixStopWatch}.
- *
+ * Stop watch that is cognizant of the fact whether or not metrics is enabled. If metrics isn't
+ * enabled it doesn't do anything. Otherwise, it delegates calls to a {@code PhoenixStopWatch}.
  */
 final class MetricsStopWatch {
-    
-    private final boolean isMetricsEnabled;
-    private final PhoenixStopWatch stopwatch;
-    
-    MetricsStopWatch(boolean isMetricsEnabled) {
-        this.isMetricsEnabled = isMetricsEnabled;
-        this.stopwatch = new PhoenixStopWatch();
-    }
-    
-    void start()  {
-        if (isMetricsEnabled) {
-            stopwatch.start();
-        }
-    }
-    
-    void stop() {
-        if (isMetricsEnabled) {
-            if (stopwatch.isRunning()) {
-                stopwatch.stop();
-            }
-        }
-    }
 
-    boolean isRunning() {
-        return isMetricsEnabled && stopwatch.isRunning();
-    }
-    
-    long getElapsedTimeInMs() {
-        if (isMetricsEnabled) {
-            return stopwatch.elapsedMillis();
-        }
-        return 0;
-    }
+  private final boolean isMetricsEnabled;
+  private final PhoenixStopWatch stopwatch;
 
-    @org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting
-    final boolean getMetricsEnabled(){
-        return isMetricsEnabled;
+  MetricsStopWatch(boolean isMetricsEnabled) {
+    this.isMetricsEnabled = isMetricsEnabled;
+    this.stopwatch = new PhoenixStopWatch();
+  }
+
+  void start() {
+    if (isMetricsEnabled) {
+      stopwatch.start();
     }
+  }
+
+  void stop() {
+    if (isMetricsEnabled) {
+      if (stopwatch.isRunning()) {
+        stopwatch.stop();
+      }
+    }
+  }
+
+  boolean isRunning() {
+    return isMetricsEnabled && stopwatch.isRunning();
+  }
+
+  long getElapsedTimeInMs() {
+    if (isMetricsEnabled) {
+      return stopwatch.elapsedMillis();
+    }
+    return 0;
+  }
+
+  @org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting
+  final boolean getMetricsEnabled() {
+    return isMetricsEnabled;
+  }
 }

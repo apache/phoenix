@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,34 +24,33 @@ import org.joda.time.DateTime;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * 
- * Ceil function that rounds up the {@link DateTime} to next year. 
+ * Ceil function that rounds up the {@link DateTime} to next year.
  */
 public class CeilYearExpression extends RoundJodaDateExpression {
-    
-    public CeilYearExpression() {
-        super();
-    }
 
-    public CeilYearExpression(List<Expression> children) {
-        super(children);
-    }
+  public CeilYearExpression() {
+    super();
+  }
 
-    @Override
-    public long roundDateTime(DateTime dateTime) {
-       return dateTime.year().roundCeilingCopy().getMillis();
-    }
+  public CeilYearExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public long rangeLower(long time) {
-        // floor(time - 1) + 1
-        return (new DateTime(time - 1, GJChronology.getInstanceUTC())).year().roundFloorCopy()
-                .getMillis() + 1;
-    }
+  @Override
+  public long roundDateTime(DateTime dateTime) {
+    return dateTime.year().roundCeilingCopy().getMillis();
+  }
 
-    @Override
-    public long rangeUpper(long time) {
-        // ceil
-        return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
-    }
+  @Override
+  public long rangeLower(long time) {
+    // floor(time - 1) + 1
+    return (new DateTime(time - 1, GJChronology.getInstanceUTC())).year().roundFloorCopy()
+      .getMillis() + 1;
+  }
+
+  @Override
+  public long rangeUpper(long time) {
+    // ceil
+    return roundDateTime(new DateTime(time, GJChronology.getInstanceUTC()));
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,35 +30,35 @@ import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.InitializationError;
 
 /**
- * 
  * Conditionally run tests based on HBase version. Uses a
- * @minVersion(versionStr) annotation on either the test class
- * or the test method.
- *
+ * @minVersion(versionStr) annotation on either the test class or the test method.
  */
 public class MinVersionTestRunner extends BlockJUnit4ClassRunner {
-    
-    public MinVersionTestRunner(Class klass) throws InitializationError {
-        super(klass);
-    }
-    @Override
-    public void runChild(FrameworkMethod method, RunNotifier notifier) {
-        MinVersion methodCondition = method.getAnnotation(MinVersion.class);
-        MinVersion classCondition = this.getTestClass().getJavaClass().getAnnotation(MinVersion.class);
-        String versionStr = VersionInfo.getVersion();
-        int version = VersionUtil.encodeVersion(versionStr);
-        if (  (methodCondition == null || version >= VersionUtil.encodeVersion(methodCondition.value()))
-           && (classCondition == null || version >= VersionUtil.encodeVersion(classCondition.value()))) {
-            super.runChild(method, notifier);
-        } else {
-            notifier.fireTestIgnored(describeChild(method));
-        }
-    }
-    
-    @Target( {ElementType.TYPE, ElementType.METHOD} )
-    @Retention(RetentionPolicy.RUNTIME)
-    public @interface MinVersion {
-        /** The minimum version supported for this test class or test method */
-        String value();
-    }}
 
+  public MinVersionTestRunner(Class klass) throws InitializationError {
+    super(klass);
+  }
+
+  @Override
+  public void runChild(FrameworkMethod method, RunNotifier notifier) {
+    MinVersion methodCondition = method.getAnnotation(MinVersion.class);
+    MinVersion classCondition = this.getTestClass().getJavaClass().getAnnotation(MinVersion.class);
+    String versionStr = VersionInfo.getVersion();
+    int version = VersionUtil.encodeVersion(versionStr);
+    if (
+      (methodCondition == null || version >= VersionUtil.encodeVersion(methodCondition.value()))
+        && (classCondition == null || version >= VersionUtil.encodeVersion(classCondition.value()))
+    ) {
+      super.runChild(method, notifier);
+    } else {
+      notifier.fireTestIgnored(describeChild(method));
+    }
+  }
+
+  @Target({ ElementType.TYPE, ElementType.METHOD })
+  @Retention(RetentionPolicy.RUNTIME)
+  public @interface MinVersion {
+    /** The minimum version supported for this test class or test method */
+    String value();
+  }
+}

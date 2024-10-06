@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,8 +26,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.RowProjector;
@@ -47,111 +46,113 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.SQLCloseables;
 
 public class LiteralResultIterationPlan extends BaseQueryPlan {
-    protected final Iterable<Tuple> tuples;
+  protected final Iterable<Tuple> tuples;
 
-    public LiteralResultIterationPlan(StatementContext context, 
-            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
-            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), 
-                context, statement, tableRef, projection, limit, offset, orderBy, parallelIteratorFactory);
-    }
+  public LiteralResultIterationPlan(StatementContext context, FilterableStatement statement,
+    TableRef tableRef, RowProjector projection, Integer limit, Integer offset, OrderBy orderBy,
+    ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
+    this(Collections.<Tuple> singletonList(new SingleKeyValueTuple(KeyValue.LOWESTKEY)), context,
+      statement, tableRef, projection, limit, offset, orderBy, parallelIteratorFactory);
+  }
 
-    public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context, 
-            FilterableStatement statement, TableRef tableRef, RowProjector projection, 
-            Integer limit, Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory) throws SQLException {
-        super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(), limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
-        this.tuples = tuples;
-    }
+  public LiteralResultIterationPlan(Iterable<Tuple> tuples, StatementContext context,
+    FilterableStatement statement, TableRef tableRef, RowProjector projection, Integer limit,
+    Integer offset, OrderBy orderBy, ParallelIteratorFactory parallelIteratorFactory)
+    throws SQLException {
+    super(context, statement, tableRef, projection, context.getBindManager().getParameterMetaData(),
+      limit, offset, orderBy, GroupBy.EMPTY_GROUP_BY, parallelIteratorFactory, null);
+    this.tuples = tuples;
+  }
 
-    @Override
-    public Cost getCost() {
-        return Cost.ZERO;
-    }
+  @Override
+  public Cost getCost() {
+    return Cost.ZERO;
+  }
 
-    @Override
-    public List<KeyRange> getSplits() {
-        return Collections.emptyList();
-    }
+  @Override
+  public List<KeyRange> getSplits() {
+    return Collections.emptyList();
+  }
 
-    @Override
-    public List<List<Scan>> getScans() {
-        return Collections.emptyList();
-    }
+  @Override
+  public List<List<Scan>> getScans() {
+    return Collections.emptyList();
+  }
 
-    @Override
-    public boolean useRoundRobinIterator() throws SQLException {
-        return false;
-    }
+  @Override
+  public boolean useRoundRobinIterator() throws SQLException {
+    return false;
+  }
 
-    @Override
-    public <T> T accept(QueryPlanVisitor<T> visitor) {
-        return visitor.visit(this);
-    }
+  @Override
+  public <T> T accept(QueryPlanVisitor<T> visitor) {
+    return visitor.visit(this);
+  }
 
-    @Override
-    protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan, final Map<ImmutableBytesPtr,ServerCache> caches)
-            throws SQLException {
-        ResultIterator scanner = new ResultIterator() {
-            private final Iterator<Tuple> tupleIterator = tuples.iterator();
-            private boolean closed = false;
-            private int count = 0;
-            private int offsetCount = 0;
+  @Override
+  protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan,
+    final Map<ImmutableBytesPtr, ServerCache> caches) throws SQLException {
+    ResultIterator scanner = new ResultIterator() {
+      private final Iterator<Tuple> tupleIterator = tuples.iterator();
+      private boolean closed = false;
+      private int count = 0;
+      private int offsetCount = 0;
 
-            @Override
-            public void close() throws SQLException {
-                SQLCloseables.closeAll(caches.values());
-                this.closed = true;
-            }
+      @Override
+      public void close() throws SQLException {
+        SQLCloseables.closeAll(caches.values());
+        this.closed = true;
+      }
 
-            @Override
-            public Tuple next() throws SQLException {
-                while (!this.closed && (offset != null && offsetCount < offset) && tupleIterator.hasNext()) {
-                    offsetCount++;
-                    tupleIterator.next();
-                }
-                if (!this.closed 
-                        && (limit == null || count++ < limit)
-                        && tupleIterator.hasNext()) {
-                    return tupleIterator.next();
-                }
-                return null;
-            }
-
-            @Override
-            public void explain(List<String> planSteps) {
-            }
-
-            @Override
-            public void explain(List<String> planSteps,
-                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-            }
-
-        };
-        
-        if (context.getSequenceManager().getSequenceCount() > 0) {
-            scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
+      @Override
+      public Tuple next() throws SQLException {
+        while (
+          !this.closed && (offset != null && offsetCount < offset) && tupleIterator.hasNext()
+        ) {
+          offsetCount++;
+          tupleIterator.next();
         }
-        
-        return scanner;
+        if (!this.closed && (limit == null || count++ < limit) && tupleIterator.hasNext()) {
+          return tupleIterator.next();
+        }
+        return null;
+      }
+
+      @Override
+      public void explain(List<String> planSteps) {
+      }
+
+      @Override
+      public void explain(List<String> planSteps,
+        ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+      }
+
+    };
+
+    if (context.getSequenceManager().getSequenceCount() > 0) {
+      scanner = new SequenceResultIterator(scanner, context.getSequenceManager());
     }
 
-	@Override
-	public Long getEstimatedRowsToScan() {
-		return 0l;
-	}
+    return scanner;
+  }
 
-	@Override
-	public Long getEstimatedBytesToScan() {
-		return 0l;
-	}
+  @Override
+  public Long getEstimatedRowsToScan() {
+    return 0l;
+  }
 
-    @Override
-    public Long getEstimateInfoTimestamp() throws SQLException {
-        return 0l;
-    }
+  @Override
+  public Long getEstimatedBytesToScan() {
+    return 0l;
+  }
 
-    @Override
-    public List<OrderBy> getOutputOrderBys() {
-        return Collections.<OrderBy> emptyList();
-    }
+  @Override
+  public Long getEstimateInfoTimestamp() throws SQLException {
+    return 0l;
+  }
+
+  @Override
+  public List<OrderBy> getOutputOrderBys() {
+    return Collections.<OrderBy> emptyList();
+  }
 }

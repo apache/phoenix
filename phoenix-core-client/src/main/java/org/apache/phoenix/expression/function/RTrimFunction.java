@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.expression.function;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -41,173 +40,169 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
-
 /**
- * 
- * Implementation of the {@code RTrim(<string>) } build-in function. It removes from the right end of
- * {@code <string> } space character and other function bytes in single byte utf8 characters set 
- * 
- * 
+ * Implementation of the {@code RTrim(<string>) } build-in function. It removes from the right end
+ * of {@code <string> } space character and other function bytes in single byte utf8 characters set
  * @since 0.1
  */
-@BuiltInFunction(name=RTrimFunction.NAME, args={
-    @Argument(allowedTypes={PVarchar.class})})
+@BuiltInFunction(name = RTrimFunction.NAME, args = { @Argument(allowedTypes = { PVarchar.class }) })
 public class RTrimFunction extends ScalarFunction {
-    public static final String NAME = "RTRIM";
+  public static final String NAME = "RTRIM";
 
-    public RTrimFunction() { }
+  public RTrimFunction() {
+  }
 
-    public RTrimFunction(List<Expression> children) throws SQLException {
-        super(children);
+  public RTrimFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  private Expression getStringExpression() {
+    return children.get(0);
+  }
+
+  @Override
+  public SortOrder getSortOrder() {
+    return children.get(0).getSortOrder();
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    // Starting from the end of the byte, look for all single bytes at the end of the string
+    // that is below SPACE_UTF8 (space and control characters) or above (control chars).
+    if (!getStringExpression().evaluate(tuple, ptr)) {
+      return false;
     }
-
-    private Expression getStringExpression() {
-        return children.get(0);
+    if (ptr.getLength() == 0) {
+      ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+      return true;
     }
+    byte[] string = ptr.get();
+    int offset = ptr.getOffset();
+    int length = ptr.getLength();
 
-    @Override
-    public SortOrder getSortOrder() {
-        return children.get(0).getSortOrder();
-    }    
+    SortOrder sortOrder = getStringExpression().getSortOrder();
+    int i = StringUtil.getFirstNonBlankCharIdxFromEnd(string, offset, length, sortOrder);
+    if (i == offset - 1) {
+      ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
+      return true;
+    }
+    ptr.set(string, offset, i - offset + 1);
+    return true;
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        // Starting from the end of the byte, look for all single bytes at the end of the string
-        // that is below SPACE_UTF8 (space and control characters) or above (control chars).
-        if (!getStringExpression().evaluate(tuple, ptr)) {
-            return false;
+  @Override
+  public OrderPreserving preservesOrder() {
+    return OrderPreserving.YES_IF_LAST;
+  }
+
+  @Override
+  public int getKeyFormationTraversalIndex() {
+    return 0;
+  }
+
+  @Override
+  public KeyPart newKeyPart(final KeyPart childPart) {
+    return new KeyPart() {
+      @Override
+      public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
+        byte[] lowerRange = KeyRange.UNBOUND;
+        byte[] upperRange = KeyRange.UNBOUND;
+        boolean lowerInclusive = true;
+        boolean upperInclusive = false;
+
+        PDataType type = getColumn().getDataType();
+        SortOrder sortOrder = getColumn().getSortOrder();
+        switch (op) {
+          case LESS_OR_EQUAL:
+            lowerInclusive = false;
+          case EQUAL:
+            upperRange = evaluateExpression(rhs);
+            if (op == CompareOperator.EQUAL) {
+              lowerRange = upperRange;
+            }
+            if (sortOrder == SortOrder.ASC || !getTable().rowKeyOrderOptimizable()) {
+              upperRange = Arrays.copyOf(upperRange, upperRange.length + 1);
+              upperRange[upperRange.length - 1] = StringUtil.SPACE_UTF8;
+              ByteUtil.nextKey(upperRange, upperRange.length);
+            } else {
+              upperInclusive = true;
+              if (op == CompareOperator.LESS_OR_EQUAL) {
+                // Nothing more to do here, as the biggest value for DESC
+                // will be the RHS value.
+                break;
+              }
+              /*
+               * Somewhat tricky to get the range correct for the DESC equality case. The lower
+               * range is the RHS value followed by any number of inverted spaces. We need to add a
+               * zero byte as the lower range will have an \xFF byte appended to it and otherwise
+               * we'd skip past any rows where there is more than one space following the RHS. The
+               * upper range should span up to and including the RHS value. We need to add our own
+               * \xFF as otherwise this will look like a degenerate query since the lower would be
+               * bigger than the upper range.
+               */
+              lowerRange = Arrays.copyOf(lowerRange, lowerRange.length + 2);
+              lowerRange[lowerRange.length - 2] = StringUtil.INVERTED_SPACE_UTF8;
+              lowerRange[lowerRange.length - 1] = QueryConstants.SEPARATOR_BYTE;
+              upperRange = Arrays.copyOf(upperRange, upperRange.length + 1);
+              upperRange[upperRange.length - 1] = QueryConstants.DESC_SEPARATOR_BYTE;
+            }
+            break;
+          default:
+            // TOOD: Is this ok for DESC?
+            return childPart.getKeyRange(op, rhs);
         }
-        if (ptr.getLength() == 0) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return true;
+        Integer length = getColumn().getMaxLength();
+        if (type.isFixedWidth() && length != null) {
+          // Don't pad based on current sort order, but instead use our
+          // minimum byte as otherwise we'll end up skipping rows in
+          // the case of descending, since rows with more padding appear
+          // *after* rows with no padding.
+          if (lowerRange != KeyRange.UNBOUND) {
+            lowerRange = type.pad(lowerRange, length, SortOrder.ASC);
+          }
+          if (upperRange != KeyRange.UNBOUND) {
+            upperRange = type.pad(upperRange, length, SortOrder.ASC);
+          }
         }
-        byte[] string = ptr.get();
-        int offset = ptr.getOffset();
-        int length = ptr.getLength();
-        
-        SortOrder sortOrder = getStringExpression().getSortOrder();
-        int i = StringUtil.getFirstNonBlankCharIdxFromEnd(string, offset, length, sortOrder);
-        if (i == offset - 1) {
-            ptr.set(ByteUtil.EMPTY_BYTE_ARRAY);
-            return true;
-            }
-        ptr.set(string, offset, i - offset + 1);
-        return true;
-    }
+        KeyRange range =
+          KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
+        if (getColumn().getSortOrder() == SortOrder.DESC) {
+          range = range.invert();
+        }
+        return range;
+      }
 
-    @Override
-    public OrderPreserving preservesOrder() {
-        return OrderPreserving.YES_IF_LAST;
-    }
+      @Override
+      public Set<Expression> getExtractNodes() {
+        // We cannot extract the node, as we may have false positives with trailing
+        // non blank characters such as 'foo bar' where the RHS constant is 'foo'.
+        return Collections.emptySet();
+      }
 
-    @Override
-    public int getKeyFormationTraversalIndex() {
-        return 0;
-    }
+      @Override
+      public PColumn getColumn() {
+        return childPart.getColumn();
+      }
 
-    @Override
-    public KeyPart newKeyPart(final KeyPart childPart) {
-        return new KeyPart() {
-            @Override
-            public KeyRange getKeyRange(CompareOperator op, Expression rhs) {
-                byte[] lowerRange = KeyRange.UNBOUND;
-                byte[] upperRange = KeyRange.UNBOUND;
-                boolean lowerInclusive = true;
-                boolean upperInclusive = false;
-                
-                PDataType type = getColumn().getDataType();
-                SortOrder sortOrder = getColumn().getSortOrder();
-                switch (op) {
-                case LESS_OR_EQUAL:
-                    lowerInclusive = false;
-                case EQUAL:
-                    upperRange = evaluateExpression(rhs);
-                    if (op == CompareOperator.EQUAL) {
-                        lowerRange = upperRange;
-                    }
-                    if (sortOrder == SortOrder.ASC || !getTable().rowKeyOrderOptimizable()) {
-                        upperRange = Arrays.copyOf(upperRange, upperRange.length + 1);
-                        upperRange[upperRange.length-1] = StringUtil.SPACE_UTF8;
-                        ByteUtil.nextKey(upperRange, upperRange.length);
-                    } else {
-                        upperInclusive = true;
-                        if (op == CompareOperator.LESS_OR_EQUAL) {
-                            // Nothing more to do here, as the biggest value for DESC
-                            // will be the RHS value.
-                            break;
-                        }
-                        /*
-                         * Somewhat tricky to get the range correct for the DESC equality case.
-                         * The lower range is the RHS value followed by any number of inverted spaces.
-                         * We need to add a zero byte as the lower range will have an \xFF byte
-                         * appended to it and otherwise we'd skip past any rows where there is more
-                         * than one space following the RHS.
-                         * The upper range should span up to and including the RHS value. We need
-                         * to add our own \xFF as otherwise this will look like a degenerate query
-                         * since the lower would be bigger than the upper range.
-                         */
-                        lowerRange = Arrays.copyOf(lowerRange, lowerRange.length + 2);
-                        lowerRange[lowerRange.length-2] = StringUtil.INVERTED_SPACE_UTF8;
-                        lowerRange[lowerRange.length-1] = QueryConstants.SEPARATOR_BYTE;
-                        upperRange = Arrays.copyOf(upperRange, upperRange.length + 1);
-                        upperRange[upperRange.length-1] = QueryConstants.DESC_SEPARATOR_BYTE;
-                    }
-                    break;
-                default:
-                    // TOOD: Is this ok for DESC?
-                    return childPart.getKeyRange(op, rhs);
-                }
-                Integer length = getColumn().getMaxLength();
-                if (type.isFixedWidth() && length != null) {
-                    // Don't pad based on current sort order, but instead use our
-                    // minimum byte as otherwise we'll end up skipping rows in
-                    // the case of descending, since rows with more padding appear
-                    // *after* rows with no padding.
-                    if (lowerRange != KeyRange.UNBOUND) {
-                        lowerRange = type.pad(lowerRange, length, SortOrder.ASC);
-                    }
-                    if (upperRange != KeyRange.UNBOUND) {
-                        upperRange = type.pad(upperRange, length, SortOrder.ASC);
-                    }
-                }
-                KeyRange range = KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
-                if (getColumn().getSortOrder() == SortOrder.DESC) {
-                    range = range.invert();
-                }
-                return range;
-            }
+      @Override
+      public PTable getTable() {
+        return childPart.getTable();
+      }
+    };
+  }
 
-            @Override
-            public Set<Expression> getExtractNodes() {
-                // We cannot extract the node, as we may have false positives with trailing
-                // non blank characters such as 'foo  bar' where the RHS constant is 'foo'.
-                return Collections.emptySet();
-            }
+  @Override
+  public Integer getMaxLength() {
+    return getStringExpression().getMaxLength();
+  }
 
-            @Override
-            public PColumn getColumn() {
-                return childPart.getColumn();
-            }
+  @Override
+  public PDataType getDataType() {
+    return PVarchar.INSTANCE;
+  }
 
-            @Override
-            public PTable getTable() {
-                return childPart.getTable();
-            }
-        };
-    }
-
-    @Override
-    public Integer getMaxLength() {
-        return getStringExpression().getMaxLength();
-    }
-
-    @Override
-    public PDataType getDataType() {
-        return PVarchar.INSTANCE;
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 }

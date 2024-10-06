@@ -1,5 +1,4 @@
-/**
- *
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,9 +17,9 @@
  */
 package org.apache.phoenix.hbase.index.scanner;
 
-import org.apache.hadoop.hbase.Cell;
-
 import java.io.IOException;
+
+import org.apache.hadoop.hbase.Cell;
 
 public interface ReseekableScanner extends Scanner {
 

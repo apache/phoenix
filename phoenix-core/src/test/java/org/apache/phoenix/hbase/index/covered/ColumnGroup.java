@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.hbase.index.covered;
 
 import java.util.ArrayList;
@@ -23,7 +22,6 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.hadoop.hbase.util.Bytes;
-
 
 /**
  * A collection of {@link CoveredColumn}s that should be included in a covered index.
@@ -62,9 +60,9 @@ public class ColumnGroup implements Iterable<CoveredColumn> {
 
   /**
    * Check to see if any column matches the family/qualifier pair
-   * @param family family to match against
+   * @param family    family to match against
    * @param qualifier qualifier to match, can be <tt>null</tt>, in which case we match all
-   *          qualifiers
+   *                  qualifiers
    * @return <tt>true</tt> if any column matches, <tt>false</tt> otherwise
    */
   public boolean matches(byte[] family, byte[] qualifier) {
@@ -73,17 +71,15 @@ public class ColumnGroup implements Iterable<CoveredColumn> {
     for (CoveredColumn column : columns) {
       if (column.matchesFamily(fam)) {
         // check the qualifier
-          if (column.matchesQualifier(qualifier)) {
-            return true;
+        if (column.matchesQualifier(qualifier)) {
+          return true;
         }
       }
     }
     return false;
   }
 
-  /**
-   * @return the number of columns in the group
-   */
+  /** Returns the number of columns in the group */
   public int size() {
     return this.columns.size();
   }

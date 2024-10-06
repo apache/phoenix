@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,12 +37,13 @@ public class TestThreadPoolManager {
   public IndexTableName name = new IndexTableName();
 
   @Test
-  public void testShutdownGetsNewThreadPool() throws Exception{
+  public void testShutdownGetsNewThreadPool() throws Exception {
     Map<String, Object> cache = new HashMap<String, Object>();
-    ThreadPoolBuilder builder = new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
+    ThreadPoolBuilder builder =
+      new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
     ThreadPoolExecutor exec = ThreadPoolManager.getExecutor(builder, cache);
     assertNotNull("Got a null exector from the pool!", exec);
-    //shutdown the pool and ensure that it actually shutdown
+    // shutdown the pool and ensure that it actually shutdown
     exec.shutdown();
     ThreadPoolExecutor exec2 = ThreadPoolManager.getExecutor(builder, cache);
     assertFalse("Got the same exectuor, even though the original shutdown", exec2 == exec);
@@ -52,7 +53,7 @@ public class TestThreadPoolManager {
   public void testShutdownWithReferencesDoesNotStopExecutor() throws Exception {
     Map<String, Object> cache = new HashMap<String, Object>();
     ThreadPoolBuilder builder =
-        new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
+      new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
     ThreadPoolExecutor exec = ThreadPoolManager.getExecutor(builder, cache);
     assertNotNull("Got a null exector from the pool!", exec);
     ThreadPoolExecutor exec2 = ThreadPoolManager.getExecutor(builder, cache);
@@ -70,20 +71,18 @@ public class TestThreadPoolManager {
   public void testGetExpectedExecutorForName() throws Exception {
     Map<String, Object> cache = new HashMap<String, Object>();
     ThreadPoolBuilder builder =
-        new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
+      new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
     ThreadPoolExecutor exec = ThreadPoolManager.getExecutor(builder, cache);
     assertNotNull("Got a null exector from the pool!", exec);
     ThreadPoolExecutor exec2 = ThreadPoolManager.getExecutor(builder, cache);
     assertTrue("Got a different exectuor, even though they have the same name", exec2 == exec);
     builder = new ThreadPoolBuilder(name.getTableNameString(), new Configuration(false));
     exec2 = ThreadPoolManager.getExecutor(builder, cache);
-    assertTrue(
-      "Got a different exectuor, even though they have the same name, but different confs",
+    assertTrue("Got a different exectuor, even though they have the same name, but different confs",
       exec2 == exec);
 
-    builder =
-        new ThreadPoolBuilder(name.getTableNameString() + "-some-other-pool", new Configuration(
-            false));
+    builder = new ThreadPoolBuilder(name.getTableNameString() + "-some-other-pool",
+      new Configuration(false));
     exec2 = ThreadPoolManager.getExecutor(builder, cache);
     assertFalse(
       "Got a different exectuor, even though they have the same name, but different confs",

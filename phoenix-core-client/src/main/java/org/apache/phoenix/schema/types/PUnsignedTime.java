@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -45,7 +45,7 @@ public class PUnsignedTime extends PDataType<Time> {
 
   @Override
   public Time toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
-      Integer maxLength, Integer scale) {
+    Integer maxLength, Integer scale) {
     java.sql.Time t = (java.sql.Time) PTime.INSTANCE.toObject(b, o, l, actualType, sortOrder);
     throwIfNonNegativeDate(t);
     return t;
@@ -53,11 +53,10 @@ public class PUnsignedTime extends PDataType<Time> {
 
   @Override
   public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
-          SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
-          throws SQLException {
-      java.sql.Time sqlTime =
-              toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
-      return PTime.INSTANCE.timeToClass(sqlTime, actualType, jdbcType);
+    SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType) throws SQLException {
+    java.sql.Time sqlTime =
+      toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
+    return PTime.INSTANCE.timeToClass(sqlTime, actualType, jdbcType);
   }
 
   @Override
@@ -79,7 +78,8 @@ public class PUnsignedTime extends PDataType<Time> {
 
   @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
-    return super.isCoercibleTo(targetType, value) || PTime.INSTANCE.isCoercibleTo(targetType, value);
+    return super.isCoercibleTo(targetType, value)
+      || PTime.INSTANCE.isCoercibleTo(targetType, value);
   }
 
   @Override
@@ -104,7 +104,8 @@ public class PUnsignedTime extends PDataType<Time> {
 
   @Override
   public boolean isBytesComparableWith(PDataType otherType) {
-    return super.isBytesComparableWith(otherType) || otherType == PUnsignedDate.INSTANCE || otherType == PUnsignedTimestamp.INSTANCE;
+    return super.isBytesComparableWith(otherType) || otherType == PUnsignedDate.INSTANCE
+      || otherType == PUnsignedTimestamp.INSTANCE;
   }
 
   @Override
@@ -124,7 +125,6 @@ public class PUnsignedTime extends PDataType<Time> {
 
   @Override
   public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-    return new java.sql.Time(
-        (Long) PUnsignedLong.INSTANCE.getSampleValue(maxLength, arrayLength));
+    return new java.sql.Time((Long) PUnsignedLong.INSTANCE.getSampleValue(maxLength, arrayLength));
   }
 }

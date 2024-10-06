@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -46,6 +46,8 @@ import org.apache.hadoop.hbase.wal.WALFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -54,11 +56,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
-
 public class TestPerRegionIndexWriteCache {
-  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility(); 
+  private static final HBaseTestingUtility TEST_UTIL = new HBaseTestingUtility();
   private static TableName tableName = TableName.valueOf("t1");;
   private static final byte[] row = Bytes.toBytes("row");
   private static final byte[] family = Bytes.toBytes("family");
@@ -83,78 +82,78 @@ public class TestPerRegionIndexWriteCache {
 
   @BeforeClass
   public static synchronized void startDfs() throws Exception {
-      miniDfs = TEST_UTIL.startMiniDFSCluster(1);
+    miniDfs = TEST_UTIL.startMiniDFSCluster(1);
   }
 
   @AfterClass
   public static synchronized void stopDfs() throws Exception {
-      if (miniDfs != null) {
-          miniDfs.shutdown();
-          miniDfs = null;
-      }
+    if (miniDfs != null) {
+      miniDfs.shutdown();
+      miniDfs = null;
+    }
   }
 
   @SuppressWarnings("deprecation")
   @Before
   public void setUp() throws Exception {
-      Path hbaseRootDir = new Path(getClass().getSimpleName() + "_" + testName.getMethodName());
-      TEST_UTIL.getConfiguration().set("hbase.rootdir", hbaseRootDir.toString());
+    Path hbaseRootDir = new Path(getClass().getSimpleName() + "_" + testName.getMethodName());
+    TEST_UTIL.getConfiguration().set("hbase.rootdir", hbaseRootDir.toString());
 
-      FileSystem newFS = miniDfs.getFileSystem();
-      RegionInfo hri = RegionInfoBuilder.newBuilder(tableName).setStartKey(null).setEndKey(null).setSplit(false).build();
-      Path basedir = CommonFSUtils.getTableDir(hbaseRootDir, tableName);
-      Random rn = new Random();
-      tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
-      WALFactory walFactory = new WALFactory(TEST_UTIL.getConfiguration(), getClass().getSimpleName());
-      wal = walFactory.getWAL(RegionInfoBuilder.newBuilder(TableName.valueOf("logs")).build());
-        TableDescriptor htd =
-                TableDescriptorBuilder
-                        .newBuilder(tableName)
-                        .addColumnFamily(
-                            ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("a")).build())
-                        .build();
-      
-      r1 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
-          @Override
-          public int hashCode() {
-            return 1;
-          }
+    FileSystem newFS = miniDfs.getFileSystem();
+    RegionInfo hri = RegionInfoBuilder.newBuilder(tableName).setStartKey(null).setEndKey(null)
+      .setSplit(false).build();
+    Path basedir = CommonFSUtils.getTableDir(hbaseRootDir, tableName);
+    Random rn = new Random();
+    tableName = TableName.valueOf("TestPerRegion" + rn.nextInt());
+    WALFactory walFactory =
+      new WALFactory(TEST_UTIL.getConfiguration(), getClass().getSimpleName());
+    wal = walFactory.getWAL(RegionInfoBuilder.newBuilder(TableName.valueOf("logs")).build());
+    TableDescriptor htd = TableDescriptorBuilder.newBuilder(tableName)
+      .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("a")).build())
+      .build();
 
-          @Override
-          public String toString() {
-            return "testRegion1";
-          }
-        };
-        
-      r2 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
-          @Override
-          public int hashCode() {
-            return 2;
-          }
+    r1 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
+      @Override
+      public int hashCode() {
+        return 1;
+      }
 
-          @Override
-          public String toString() {
-            return "testRegion1";
-          }
-        };
+      @Override
+      public String toString() {
+        return "testRegion1";
+      }
+    };
+
+    r2 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {
+      @Override
+      public int hashCode() {
+        return 2;
+      }
+
+      @Override
+      public String toString() {
+        return "testRegion1";
+      }
+    };
   }
-  
+
   @After
   public void cleanUp() throws Exception {
-      try{
-          r1.close();
-          r2.close();
-          wal.close();
-      } catch (Exception ignored) {}
-      FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
-      newFS.delete(TEST_UTIL.getDataTestDir(), true);
+    try {
+      r1.close();
+      r2.close();
+      wal.close();
+    } catch (Exception ignored) {
+    }
+    FileSystem newFS = FileSystem.get(TEST_UTIL.getConfiguration());
+    newFS.delete(TEST_UTIL.getDataTestDir(), true);
   }
 
-  
   @Test
   public void testAddRemoveSingleRegion() {
     PerRegionIndexWriteCache cache = new PerRegionIndexWriteCache();
-    HTableInterfaceReference t1 = new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes("t1")));
+    HTableInterfaceReference t1 =
+      new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes("t1")));
     List<Mutation> mutations = new ArrayList<Mutation>();
     mutations.add(p);
     cache.addEdits(r1, t1, mutations);
@@ -162,7 +161,8 @@ public class TestPerRegionIndexWriteCache {
     Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = edits.asMap().entrySet();
     assertEquals("Got more than one table in the the edit map!", 1, entries.size());
     for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
-     //ensure that we are still storing a list here - otherwise it breaks the parallel writer implementation
+      // ensure that we are still storing a list here - otherwise it breaks the parallel writer
+      // implementation
       final List<Mutation> stored = (List<Mutation>) entry.getValue();
       assertEquals("Got an unexpected amount of mutations in the entry", 1, stored.size());
       assertEquals("Got an unexpected mutation in the entry", p, stored.get(0));
@@ -177,7 +177,7 @@ public class TestPerRegionIndexWriteCache {
   public void testMultipleAddsForSingleRegion() {
     PerRegionIndexWriteCache cache = new PerRegionIndexWriteCache();
     HTableInterfaceReference t1 =
-        new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes("t1")));
+      new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes("t1")));
     List<Mutation> mutations = Lists.<Mutation> newArrayList(p);
     cache.addEdits(r1, t1, mutations);
 
@@ -202,7 +202,7 @@ public class TestPerRegionIndexWriteCache {
   public void testMultipleRegions() {
     PerRegionIndexWriteCache cache = new PerRegionIndexWriteCache();
     HTableInterfaceReference t1 =
-        new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes("t1")));
+      new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes("t1")));
     List<Mutation> mutations = Lists.<Mutation> newArrayList(p);
     List<Mutation> m2 = Lists.<Mutation> newArrayList(p2);
     // add each region
@@ -234,7 +234,6 @@ public class TestPerRegionIndexWriteCache {
         stored.size());
       assertEquals("Got an unexpected mutation in the entry for region2", p2, stored.get(0));
     }
-
 
     // ensure that a second get doesn't have any more edits. This ensures that we don't keep
     // references around to these edits and have a memory leak

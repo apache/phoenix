@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,94 +29,98 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 
-public class BaseMetaDataEndpointObserver implements MetaDataEndpointObserver, PhoenixCoprocessor{
+public class BaseMetaDataEndpointObserver implements MetaDataEndpointObserver, PhoenixCoprocessor {
 
-    @Override
-    public void start(CoprocessorEnvironment env) throws IOException {
+  @Override
+  public void start(CoprocessorEnvironment env) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void stop(CoprocessorEnvironment env) throws IOException {
+  @Override
+  public void stop(CoprocessorEnvironment env) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preGetTable(
-            org.apache.hadoop.hbase.coprocessor.ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
-            String tenantId, String tableName, TableName physicalTableName) throws IOException {
+  @Override
+  public void preGetTable(
+    org.apache.hadoop.hbase.coprocessor.ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String tableName, TableName physicalTableName) throws IOException {
 
-    }
+  }
 
-    
-    @Override
-    public void preCreateTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
-            String tableName, TableName physicalTableName, TableName parentPhysicalTableName, PTableType tableType,
-            Set<byte[]> familySet, Set<TableName> indexes) throws IOException {
+  @Override
+  public void preCreateTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String tableName, TableName physicalTableName,
+    TableName parentPhysicalTableName, PTableType tableType, Set<byte[]> familySet,
+    Set<TableName> indexes) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preDropTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
-            String tableName, TableName physicalTableName, TableName parentPhysicalTableName, PTableType tableType,
-            List<PTable> indexes) throws IOException {
+  @Override
+  public void preDropTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String tableName, TableName physicalTableName,
+    TableName parentPhysicalTableName, PTableType tableType, List<PTable> indexes)
+    throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preAlterTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
-            String tableName, TableName physicalTableName, TableName parentPhysicalTableName, PTableType type) throws IOException {
+  @Override
+  public void preAlterTable(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String tableName, TableName physicalTableName,
+    TableName parentPhysicalTableName, PTableType type) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preGetSchema(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String schemaName)
-            throws IOException {
+  @Override
+  public void preGetSchema(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String schemaName) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preCreateSchema(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String schemaName)
-            throws IOException {
+  @Override
+  public void preCreateSchema(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String schemaName) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preDropSchema(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String schemaName) throws IOException {
+  @Override
+  public void preDropSchema(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String schemaName) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preCreateFunction(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
-            String functionName) throws IOException {
+  @Override
+  public void preCreateFunction(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String functionName) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preDropFunction(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId, String functionName)
-            throws IOException {}
+  @Override
+  public void preDropFunction(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String functionName) throws IOException {
+  }
 
-    @Override
-    public void preGetFunctions(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId, String functionName)
-            throws IOException {
+  @Override
+  public void preGetFunctions(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String functionName) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preIndexUpdate(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, String tenantId,
-            String indexName, TableName physicalTableName, TableName parentPhysicalTableName, PIndexState newState)
-            throws IOException {
+  @Override
+  public void preIndexUpdate(ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    String tenantId, String indexName, TableName physicalTableName,
+    TableName parentPhysicalTableName, PIndexState newState) throws IOException {
 
-    }
+  }
 
-    @Override
-    public void preCreateViewAddChildLink(
-            final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
-            final String tableName) throws IOException {}
+  @Override
+  public void preCreateViewAddChildLink(
+    final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx, final String tableName)
+    throws IOException {
+  }
 
-    @Override
-    public void preUpsertTaskDetails(
-            final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
-            final String tableName) throws IOException {
-    }
+  @Override
+  public void preUpsertTaskDetails(final ObserverContext<PhoenixMetaDataControllerEnvironment> ctx,
+    final String tableName) throws IOException {
+  }
 }

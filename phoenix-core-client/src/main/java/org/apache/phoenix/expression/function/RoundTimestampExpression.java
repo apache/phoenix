@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,87 +38,83 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 /**
- * 
- * Class encapsulating the process for rounding off a column/literal of 
- * type {@link org.apache.phoenix.schema.types.PTimestamp}
- * This class only supports rounding off the milliseconds that is for
- * {@link TimeUnit#MILLISECOND}. If you want more options of rounding like 
+ * Class encapsulating the process for rounding off a column/literal of type
+ * {@link org.apache.phoenix.schema.types.PTimestamp} This class only supports rounding off the
+ * milliseconds that is for {@link TimeUnit#MILLISECOND}. If you want more options of rounding like
  * using {@link TimeUnit#HOUR} use {@link RoundDateExpression}
- *
- * 
  * @since 3.0.0
  */
 @BuiltInFunction(name = RoundFunction.NAME,
-        args = {
-                @Argument(allowedTypes={PTimestamp.class}),
-                @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
-                @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
-        },
-        classType = FunctionClassType.DERIVED
-)
+    args = { @Argument(allowedTypes = { PTimestamp.class }),
+      @Argument(allowedTypes = { PVarchar.class, PInteger.class }, defaultValue = "null",
+          isConstant = true),
+      @Argument(allowedTypes = { PInteger.class }, defaultValue = "1", isConstant = true) },
+    classType = FunctionClassType.DERIVED)
 public class RoundTimestampExpression extends RoundDateExpression {
-    
-    private static final long HALF_OF_NANOS_IN_MILLI = java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(1)/2;
 
-    public RoundTimestampExpression() {}
-    
-    public RoundTimestampExpression(List<Expression> children) {
-        super(children);
+  private static final long HALF_OF_NANOS_IN_MILLI =
+    java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(1) / 2;
+
+  public RoundTimestampExpression() {
+  }
+
+  public RoundTimestampExpression(List<Expression> children) {
+    super(children);
+  }
+
+  public static Expression create(List<Expression> children) throws SQLException {
+    Expression firstChild = children.get(0);
+    PDataType firstChildDataType = firstChild.getDataType();
+    String timeUnit = (String) ((LiteralExpression) children.get(1)).getValue();
+    LiteralExpression multiplierExpr = (LiteralExpression) children.get(2);
+
+    /*
+     * When rounding off timestamp to milliseconds, nanos play a part only when the multiplier value
+     * is equal to 1. This is because for cases when multiplier value is greater than 1, number of
+     * nanos/multiplier will always be less than half the nanos in a millisecond.
+     */
+    if (
+      (timeUnit == null || TimeUnit.MILLISECOND.toString().equalsIgnoreCase(timeUnit))
+        && ((Number) multiplierExpr.getValue()).intValue() == 1
+    ) {
+      return new RoundTimestampExpression(children);
     }
-    
-    public static Expression create (List<Expression> children) throws SQLException {
-        Expression firstChild = children.get(0);
-        PDataType firstChildDataType = firstChild.getDataType();
-        String timeUnit = (String)((LiteralExpression)children.get(1)).getValue();
-        LiteralExpression multiplierExpr = (LiteralExpression)children.get(2);
-        
-        /*
-         * When rounding off timestamp to milliseconds, nanos play a part only when the multiplier value
-         * is equal to 1. This is because for cases when multiplier value is greater than 1, number of nanos/multiplier
-         * will always be less than half the nanos in a millisecond. 
-         */
-        if((timeUnit == null || TimeUnit.MILLISECOND.toString().equalsIgnoreCase(timeUnit)) && ((Number)multiplierExpr.getValue()).intValue() == 1) {
-            return new RoundTimestampExpression(children);
-        }
-        // Coerce TIMESTAMP to DATE, as the nanos has no affect
-        List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size());
-        newChildren.add(CoerceExpression.create(firstChild, firstChildDataType == PTimestamp.INSTANCE ?
-            PDate.INSTANCE : PUnsignedDate.INSTANCE));
-        newChildren.addAll(children.subList(1, children.size()));
-        return RoundDateExpression.create(newChildren);
+    // Coerce TIMESTAMP to DATE, as the nanos has no affect
+    List<Expression> newChildren = Lists.newArrayListWithExpectedSize(children.size());
+    newChildren.add(CoerceExpression.create(firstChild,
+      firstChildDataType == PTimestamp.INSTANCE ? PDate.INSTANCE : PUnsignedDate.INSTANCE));
+    newChildren.addAll(children.subList(1, children.size()));
+    return RoundDateExpression.create(newChildren);
+  }
+
+  @Override
+  protected PDataCodec getKeyRangeCodec(PDataType columnDataType) {
+    return columnDataType == PTimestamp.INSTANCE ? PDate.INSTANCE.getCodec()
+      : columnDataType == PUnsignedTimestamp.INSTANCE ? PUnsignedDate.INSTANCE.getCodec()
+      : super.getKeyRangeCodec(columnDataType);
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (children.get(0).evaluate(tuple, ptr)) {
+      if (ptr.getLength() == 0) {
+        return true;
+      }
+      SortOrder sortOrder = children.get(0).getSortOrder();
+      PDataType dataType = getDataType();
+      int nanos = dataType.getNanos(ptr, sortOrder);
+      if (nanos >= HALF_OF_NANOS_IN_MILLI) {
+        long timeMillis = dataType.getMillis(ptr, sortOrder);
+        Timestamp roundedTs = new Timestamp(timeMillis + 1);
+        byte[] byteValue = dataType.toBytes(roundedTs);
+        ptr.set(byteValue);
+      }
+      return true; // for timestamp we only support rounding up the milliseconds.
     }
-    
-    @Override
-    protected PDataCodec getKeyRangeCodec(PDataType columnDataType) {
-        return columnDataType == PTimestamp.INSTANCE
-                ? PDate.INSTANCE.getCodec()
-                : columnDataType == PUnsignedTimestamp.INSTANCE
-                    ? PUnsignedDate.INSTANCE.getCodec()
-                    : super.getKeyRangeCodec(columnDataType);
-    }
-    
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (children.get(0).evaluate(tuple, ptr)) {
-            if (ptr.getLength()==0) {
-                return true;
-            }
-            SortOrder sortOrder = children.get(0).getSortOrder();
-            PDataType dataType = getDataType();
-            int nanos = dataType.getNanos(ptr, sortOrder);
-            if(nanos >= HALF_OF_NANOS_IN_MILLI) {
-                long timeMillis = dataType.getMillis(ptr, sortOrder);
-                Timestamp roundedTs = new Timestamp(timeMillis + 1);
-                byte[] byteValue = dataType.toBytes(roundedTs);
-                ptr.set(byteValue);
-            }
-            return true; // for timestamp we only support rounding up the milliseconds. 
-        }
-        return false;
-    }
+    return false;
+  }
 
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,67 +20,59 @@ package org.apache.phoenix.compile;
 import java.sql.SQLException;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-
 import org.apache.phoenix.expression.Expression;
-import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.tuple.Tuple;
-
-
+import org.apache.phoenix.schema.types.PDataType;
 
 /**
- * 
  * Interface used to access the value of a projected column.
- * 
- * 
  * @since 0.1
  */
 public interface ColumnProjector {
-    /**
-     * Get the column name
-     * @return the database column name
-     */
-    String getName();
+  /**
+   * Get the column name
+   * @return the database column name
+   */
+  String getName();
 
-    /**
-     * Get the expression string
-     * @return the label as it was referenced in the query
-     */
-    String getLabel();
+  /**
+   * Get the expression string
+   * @return the label as it was referenced in the query
+   */
+  String getLabel();
 
-    /**
-     * Get the expression
-     * @return the expression for the column projector
-     */
-    public Expression getExpression();
-    
-    // TODO: An expression may contain references to multiple tables.
-    /**
-     * Get the name of the hbase table containing the column
-     * @return the hbase table name
-     */
-    String getTableName();
-    
-    /**
-     * Get the value of the column, coercing it if necessary to the specified type
-     * @param tuple the row containing the column
-     * @param type the type to which to coerce the binary value
-     * @param ptr used to retrieve the value
-     * @return the object representation of the column value.
-     * @throws SQLException
-     */
-    Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr) throws SQLException;
+  /**
+   * Get the expression
+   * @return the expression for the column projector
+   */
+  public Expression getExpression();
 
-    /**
-     * Get the value of the column, coercing it if necessary to the specified type
-     * @param tuple the row containing the column
-     * @param type the type to which to coerce the binary value
-     * @param ptr used to retrieve the value
-     * @param jdbcType The java type to convert to, for rs.getObject()
-     * @return the object representation of the column value.
-     * @throws SQLException
-     */
-    Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr, Class jdbcType)
-            throws SQLException;
+  // TODO: An expression may contain references to multiple tables.
+  /**
+   * Get the name of the hbase table containing the column
+   * @return the hbase table name
+   */
+  String getTableName();
 
-    boolean isCaseSensitive();
+  /**
+   * Get the value of the column, coercing it if necessary to the specified type
+   * @param tuple the row containing the column
+   * @param type  the type to which to coerce the binary value
+   * @param ptr   used to retrieve the value
+   * @return the object representation of the column value.
+   */
+  Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr) throws SQLException;
+
+  /**
+   * Get the value of the column, coercing it if necessary to the specified type
+   * @param tuple    the row containing the column
+   * @param type     the type to which to coerce the binary value
+   * @param ptr      used to retrieve the value
+   * @param jdbcType The java type to convert to, for rs.getObject()
+   * @return the object representation of the column value.
+   */
+  Object getValue(Tuple tuple, PDataType type, ImmutableBytesWritable ptr, Class jdbcType)
+    throws SQLException;
+
+  boolean isCaseSensitive();
 }

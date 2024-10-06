@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,23 +24,25 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class StaleRegionBoundaryCacheException extends SQLException {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode ERROR_CODE = SQLExceptionCode.STALE_REGION_BOUNDARY_CACHE;
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode ERROR_CODE = SQLExceptionCode.STALE_REGION_BOUNDARY_CACHE;
 
-    public StaleRegionBoundaryCacheException() {
-        this(null, null);
-    }
+  public StaleRegionBoundaryCacheException() {
+    this(null, null);
+  }
 
-    public StaleRegionBoundaryCacheException(byte[] fullTableName) {
-        this(SchemaUtil.getSchemaNameFromFullName(fullTableName),SchemaUtil.getTableNameFromFullName(fullTableName));
-    }
+  public StaleRegionBoundaryCacheException(byte[] fullTableName) {
+    this(SchemaUtil.getSchemaNameFromFullName(fullTableName),
+      SchemaUtil.getTableNameFromFullName(fullTableName));
+  }
 
-    public StaleRegionBoundaryCacheException(String fullTableName) {
-        this(SchemaUtil.getSchemaNameFromFullName(fullTableName),SchemaUtil.getTableNameFromFullName(fullTableName));
-    }
+  public StaleRegionBoundaryCacheException(String fullTableName) {
+    this(SchemaUtil.getSchemaNameFromFullName(fullTableName),
+      SchemaUtil.getTableNameFromFullName(fullTableName));
+  }
 
-    public StaleRegionBoundaryCacheException(String schemaName, String tableName) {
-        super(new SQLExceptionInfo.Builder(ERROR_CODE).setSchemaName(schemaName).setTableName(tableName).build().toString(),
-            ERROR_CODE.getSQLState(), ERROR_CODE.getErrorCode(), null);
-    }
+  public StaleRegionBoundaryCacheException(String schemaName, String tableName) {
+    super(new SQLExceptionInfo.Builder(ERROR_CODE).setSchemaName(schemaName).setTableName(tableName)
+      .build().toString(), ERROR_CODE.getSQLState(), ERROR_CODE.getErrorCode(), null);
+  }
 }

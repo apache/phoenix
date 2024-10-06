@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,48 +30,48 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
 /**
-*
-* Implementation of the {@code TO_TIMESTAMP(<string>,[<format-string>,[<timezone-string>]])} built-in function.
-* The second argument is optional and defaults to the phoenix.query.timestampFormat value
-* from the HBase config. If present it must be a constant string. The third argument is either a
-* valid (constant) timezone id, or the string "local". The third argument is also optional, and
-* it defaults to GMT.
-*
-*/
-@BuiltInFunction(name=ToTimestampFunction.NAME, nodeClass=ToTimestampParseNode.class,
-       args={@Argument(allowedTypes={PVarchar.class}),
-               @Argument(allowedTypes={PVarchar.class},isConstant=true,defaultValue="null"),
-               @Argument(allowedTypes={PVarchar.class}, isConstant=true, defaultValue = "null") } )
+ * Implementation of the {@code TO_TIMESTAMP(<string>,[<format-string>,[<timezone-string>]])}
+ * built-in function. The second argument is optional and defaults to the
+ * phoenix.query.timestampFormat value from the HBase config. If present it must be a constant
+ * string. The third argument is either a valid (constant) timezone id, or the string "local". The
+ * third argument is also optional, and it defaults to GMT.
+ */
+@BuiltInFunction(name = ToTimestampFunction.NAME, nodeClass = ToTimestampParseNode.class,
+    args = { @Argument(allowedTypes = { PVarchar.class }),
+      @Argument(allowedTypes = { PVarchar.class }, isConstant = true, defaultValue = "null"),
+      @Argument(allowedTypes = { PVarchar.class }, isConstant = true, defaultValue = "null") })
 public class ToTimestampFunction extends ToDateFunction {
-    public static final String NAME = "TO_TIMESTAMP";
+  public static final String NAME = "TO_TIMESTAMP";
 
-    public ToTimestampFunction() {
-    }
+  public ToTimestampFunction() {
+  }
 
-    public ToTimestampFunction(List<Expression> children, StatementContext context) throws SQLException {
-        super(children, context);
-    }
+  public ToTimestampFunction(List<Expression> children, StatementContext context)
+    throws SQLException {
+    super(children, context);
+  }
 
-    public ToTimestampFunction(List<Expression> children, String dateFormat, String timeZoneId) throws SQLException {
-        super(children, dateFormat, timeZoneId);
-    }
-    
-    @Override
-    public ToTimestampFunction clone(List<Expression> children) {
-    	try {
-            return new ToTimestampFunction(children, dateFormat, timeZoneId);
-        } catch (Exception e) {
-            throw new RuntimeException(e); // Impossible, since it was originally constructed this way
-        }
-    }
+  public ToTimestampFunction(List<Expression> children, String dateFormat, String timeZoneId)
+    throws SQLException {
+    super(children, dateFormat, timeZoneId);
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PTimestamp.INSTANCE;
+  @Override
+  public ToTimestampFunction clone(List<Expression> children) {
+    try {
+      return new ToTimestampFunction(children, dateFormat, timeZoneId);
+    } catch (Exception e) {
+      throw new RuntimeException(e); // Impossible, since it was originally constructed this way
     }
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public PDataType getDataType() {
+    return PTimestamp.INSTANCE;
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
 }

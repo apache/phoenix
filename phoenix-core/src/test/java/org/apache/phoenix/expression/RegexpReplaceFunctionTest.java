@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,54 +28,53 @@ import org.apache.phoenix.expression.function.ByteBasedRegexpReplaceFunction;
 import org.apache.phoenix.expression.function.StringBasedRegexpReplaceFunction;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.junit.Test;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 public class RegexpReplaceFunctionTest {
-    private final static PVarchar TYPE = PVarchar.INSTANCE;
+  private final static PVarchar TYPE = PVarchar.INSTANCE;
 
-    private String evalExp(Expression exp) {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        boolean eval = exp.evaluate(null, ptr);
-        assertTrue(eval);
-        String res = (String) exp.getDataType().toObject(ptr);
-        return res;
-    }
+  private String evalExp(Expression exp) {
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    boolean eval = exp.evaluate(null, ptr);
+    assertTrue(eval);
+    String res = (String) exp.getDataType().toObject(ptr);
+    return res;
+  }
 
-    private String testExpression(String srcStr, String patternStr, String replaceStr,
-            SortOrder sortOrder) throws SQLException {
-        Expression srcExp, patternExp, replaceExp;
-        srcExp = LiteralExpression.newConstant(srcStr, TYPE, sortOrder);
-        patternExp = LiteralExpression.newConstant(patternStr, TYPE, sortOrder);
-        replaceExp = LiteralExpression.newConstant(replaceStr, TYPE, sortOrder);
-        List<Expression> expressions = Lists.newArrayList(srcExp, patternExp, replaceExp);
-        String res1, res2;
-        res1 = evalExp(new ByteBasedRegexpReplaceFunction(expressions));
-        res2 = evalExp(new StringBasedRegexpReplaceFunction(expressions));
-        assertEquals(res1, res2);
-        return res1;
-    }
+  private String testExpression(String srcStr, String patternStr, String replaceStr,
+    SortOrder sortOrder) throws SQLException {
+    Expression srcExp, patternExp, replaceExp;
+    srcExp = LiteralExpression.newConstant(srcStr, TYPE, sortOrder);
+    patternExp = LiteralExpression.newConstant(patternStr, TYPE, sortOrder);
+    replaceExp = LiteralExpression.newConstant(replaceStr, TYPE, sortOrder);
+    List<Expression> expressions = Lists.newArrayList(srcExp, patternExp, replaceExp);
+    String res1, res2;
+    res1 = evalExp(new ByteBasedRegexpReplaceFunction(expressions));
+    res2 = evalExp(new StringBasedRegexpReplaceFunction(expressions));
+    assertEquals(res1, res2);
+    return res1;
+  }
 
-    private String testExpression(String srcStr, String patternStr, String replaceStr)
-            throws SQLException {
-        String result1 = testExpression(srcStr, patternStr, replaceStr, SortOrder.ASC);
-        String result2 = testExpression(srcStr, patternStr, replaceStr, SortOrder.DESC);
-        assertEquals(result1, result2);
-        return result1;
-    }
+  private String testExpression(String srcStr, String patternStr, String replaceStr)
+    throws SQLException {
+    String result1 = testExpression(srcStr, patternStr, replaceStr, SortOrder.ASC);
+    String result2 = testExpression(srcStr, patternStr, replaceStr, SortOrder.DESC);
+    assertEquals(result1, result2);
+    return result1;
+  }
 
-    private void testExpression(String srcStr, String patternStr, String replaceStr,
-            String expectedStr) throws SQLException {
-        String result = testExpression(srcStr, patternStr, replaceStr);
-        assertEquals(expectedStr, result);
-    }
+  private void testExpression(String srcStr, String patternStr, String replaceStr,
+    String expectedStr) throws SQLException {
+    String result = testExpression(srcStr, patternStr, replaceStr);
+    assertEquals(expectedStr, result);
+  }
 
-    @Test
-    public void test() throws Exception {
-        testExpression("aa11bb22cc33dd44ee", "[0-9]+", "*", "aa*bb*cc*dd*ee");
-        testExpression("aa11bb22cc33dd44ee", "[0-9]+", "", "aabbccddee");
-        testExpression("aa11bb22cc33dd44ee", "[a-z][0-9]", "", "a1b2c3d4ee");
-        testExpression("aa11bb22cc33dd44ee", "[a-z0-9]+", "", (String) null);
-    }
+  @Test
+  public void test() throws Exception {
+    testExpression("aa11bb22cc33dd44ee", "[0-9]+", "*", "aa*bb*cc*dd*ee");
+    testExpression("aa11bb22cc33dd44ee", "[0-9]+", "", "aabbccddee");
+    testExpression("aa11bb22cc33dd44ee", "[a-z][0-9]", "", "a1b2c3d4ee");
+    testExpression("aa11bb22cc33dd44ee", "[a-z0-9]+", "", (String) null);
+  }
 }

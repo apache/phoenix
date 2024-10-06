@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,88 +20,80 @@ package org.apache.phoenix.log;
 import java.util.Map;
 
 import org.apache.phoenix.monitoring.MetricType;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
+
 import com.lmax.disruptor.EventFactory;
 
- class RingBufferEvent {
-    private String queryId;
-    private LogLevel connectionLogLevel;
-    private ImmutableMap<QueryLogInfo, Object> queryInfo;
-    private Map<String, Map<MetricType, Long>> readMetrics;
-    private Map<MetricType, Long> overAllMetrics;
-    
-    public static final Factory FACTORY = new Factory();
-    
-    /**
-     * Creates the events that will be put in the RingBuffer.
-     */
-    private static class Factory implements EventFactory<RingBufferEvent> {
-        @Override
-        public RingBufferEvent newInstance() {
-            final RingBufferEvent result = new RingBufferEvent();
-            return result;
-        }
+class RingBufferEvent {
+  private String queryId;
+  private LogLevel connectionLogLevel;
+  private ImmutableMap<QueryLogInfo, Object> queryInfo;
+  private Map<String, Map<MetricType, Long>> readMetrics;
+  private Map<MetricType, Long> overAllMetrics;
+
+  public static final Factory FACTORY = new Factory();
+
+  /**
+   * Creates the events that will be put in the RingBuffer.
+   */
+  private static class Factory implements EventFactory<RingBufferEvent> {
+    @Override
+    public RingBufferEvent newInstance() {
+      final RingBufferEvent result = new RingBufferEvent();
+      return result;
     }
+  }
 
-    public void clear() {
-        this.queryInfo=null;
-        this.queryId=null;
-    }
+  public void clear() {
+    this.queryInfo = null;
+    this.queryId = null;
+  }
 
-   
-    public String getQueryId() {
-        return queryId;
-    }
+  public String getQueryId() {
+    return queryId;
+  }
 
-    public static Factory getFactory() {
-        return FACTORY;
-    }
+  public static Factory getFactory() {
+    return FACTORY;
+  }
 
-    public void setQueryInfo(ImmutableMap<QueryLogInfo, Object> queryInfo) {
-        this.queryInfo=queryInfo;
-        
-    }
+  public void setQueryInfo(ImmutableMap<QueryLogInfo, Object> queryInfo) {
+    this.queryInfo = queryInfo;
 
-    public void setQueryId(String queryId) {
-        this.queryId=queryId;
-        
-    }
+  }
 
-    public ImmutableMap<QueryLogInfo, Object> getQueryInfo() {
-        return queryInfo;
-        
-    }
+  public void setQueryId(String queryId) {
+    this.queryId = queryId;
 
-    public LogLevel getConnectionLogLevel() {
-        return connectionLogLevel;
-    }
+  }
 
+  public ImmutableMap<QueryLogInfo, Object> getQueryInfo() {
+    return queryInfo;
 
-    public void setConnectionLogLevel(LogLevel connectionLogLevel) {
-        this.connectionLogLevel = connectionLogLevel;
-    }
+  }
 
+  public LogLevel getConnectionLogLevel() {
+    return connectionLogLevel;
+  }
 
-    public Map<String, Map<MetricType, Long>> getReadMetrics() {
-        return readMetrics;
-    }
+  public void setConnectionLogLevel(LogLevel connectionLogLevel) {
+    this.connectionLogLevel = connectionLogLevel;
+  }
 
+  public Map<String, Map<MetricType, Long>> getReadMetrics() {
+    return readMetrics;
+  }
 
-    public void setReadMetrics(Map<String, Map<MetricType, Long>> readMetrics) {
-        this.readMetrics = readMetrics;
-    }
+  public void setReadMetrics(Map<String, Map<MetricType, Long>> readMetrics) {
+    this.readMetrics = readMetrics;
+  }
 
+  public Map<MetricType, Long> getOverAllMetrics() {
+    return overAllMetrics;
+  }
 
-    public Map<MetricType, Long> getOverAllMetrics() {
-        return overAllMetrics;
-    }
-
-
-    public void setOverAllMetrics(Map<MetricType, Long> overAllMetrics) {
-        this.overAllMetrics = overAllMetrics;
-    }
-
-    
+  public void setOverAllMetrics(Map<MetricType, Long> overAllMetrics) {
+    this.overAllMetrics = overAllMetrics;
+  }
 
 }

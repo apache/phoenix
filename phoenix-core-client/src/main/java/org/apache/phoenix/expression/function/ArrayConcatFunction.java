@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,70 +31,79 @@ import org.apache.phoenix.schema.types.PBinaryArray;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayConcatFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
-        @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class})})
+@FunctionParseNode.BuiltInFunction(name = ArrayConcatFunction.NAME,
+    nodeClass = ArrayModifierParseNode.class,
+    args = {
+      @FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }) })
 public class ArrayConcatFunction extends ArrayModifierFunction {
 
-    public static final String NAME = "ARRAY_CAT";
+  public static final String NAME = "ARRAY_CAT";
 
-    public ArrayConcatFunction() {
+  public ArrayConcatFunction() {
+  }
+
+  public ArrayConcatFunction(List<Expression> children) throws TypeMismatchException {
+    super(children);
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+
+    if (!getLHSExpr().evaluate(tuple, ptr)) {
+      return false;
+    }
+    boolean isLHSRowKeyOrderOptimized = PArrayDataType
+      .isRowKeyOrderOptimized(getLHSExpr().getDataType(), getLHSExpr().getSortOrder(), ptr);
+
+    SortOrder sortOrder = getRHSExpr().getSortOrder();
+    int actualLengthOfArray1 =
+      Math.abs(PArrayDataType.getArrayLength(ptr, getLHSBaseType(), getLHSExpr().getMaxLength()));
+    int lengthArray1 = ptr.getLength();
+    int offsetArray1 = ptr.getOffset();
+    byte[] array1Bytes = ptr.get();
+    if (!getRHSExpr().evaluate(tuple, ptr)) {
+      return false;
+    }
+    // If second array is null, return first array
+    if (ptr.getLength() == 0) {
+      ptr.set(array1Bytes, offsetArray1, lengthArray1);
+      return true;
     }
 
-    public ArrayConcatFunction(List<Expression> children) throws TypeMismatchException {
-        super(children);
+    checkSizeCompatibility(ptr, sortOrder, getLHSExpr(), getLHSExpr().getDataType(), getRHSExpr(),
+      getRHSExpr().getDataType());
+
+    // FIXME: calling version of coerceBytes that takes into account the separator used by LHS
+    // If the RHS does not have the same separator, it'll be coerced to use it. It's unclear
+    // if we should do the same for all classes derived from the base class.
+    // Coerce RHS to LHS type
+    getLHSExpr().getDataType().coerceBytes(ptr, null, getRHSExpr().getDataType(),
+      getRHSExpr().getMaxLength(), getRHSExpr().getScale(), getRHSExpr().getSortOrder(),
+      getLHSExpr().getMaxLength(), getLHSExpr().getScale(), getLHSExpr().getSortOrder(),
+      isLHSRowKeyOrderOptimized);
+    if (lengthArray1 == 0) {
+      return true;
     }
+    return modifierFunction(ptr, lengthArray1, offsetArray1, array1Bytes, getLHSBaseType(),
+      actualLengthOfArray1, getMaxLength(), getLHSExpr());
+  }
 
+  @Override
+  protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset,
+    byte[] array1Bytes, PDataType baseDataType, int actualLengthOfArray1, Integer maxLength,
+    Expression array1Exp) {
+    int actualLengthOfArray2 =
+      Math.abs(PArrayDataType.getArrayLength(ptr, baseDataType, array1Exp.getMaxLength()));
+    // FIXME: concatArrays will be fine if it's copying the separator bytes, including the
+    // terminating bytes.
+    return PArrayDataType.concatArrays(ptr, len, offset, array1Bytes, baseDataType,
+      actualLengthOfArray1, actualLengthOfArray2);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-
-        if (!getLHSExpr().evaluate(tuple, ptr)){
-            return false;
-        }
-        boolean isLHSRowKeyOrderOptimized = PArrayDataType.isRowKeyOrderOptimized(getLHSExpr().getDataType(), getLHSExpr().getSortOrder(), ptr);
-
-        SortOrder sortOrder = getRHSExpr().getSortOrder();
-        int actualLengthOfArray1 = Math.abs(PArrayDataType.getArrayLength(ptr, getLHSBaseType(), getLHSExpr().getMaxLength()));
-        int lengthArray1 = ptr.getLength();
-        int offsetArray1 = ptr.getOffset();
-        byte[] array1Bytes = ptr.get();
-        if (!getRHSExpr().evaluate(tuple, ptr)) {
-            return false;
-        }
-        // If second array is null, return first array
-        if (ptr.getLength() == 0){
-            ptr.set(array1Bytes, offsetArray1, lengthArray1);
-            return true;
-        }
-
-        checkSizeCompatibility(ptr, sortOrder, getLHSExpr(), getLHSExpr().getDataType(), getRHSExpr(),getRHSExpr().getDataType());
-
-        // FIXME: calling version of coerceBytes that takes into account the separator used by LHS
-        // If the RHS does not have the same separator, it'll be coerced to use it. It's unclear
-        // if we should do the same for all classes derived from the base class.
-        // Coerce RHS to LHS type
-        getLHSExpr().getDataType().coerceBytes(ptr, null, getRHSExpr().getDataType(), getRHSExpr().getMaxLength(),
-                getRHSExpr().getScale(), getRHSExpr().getSortOrder(), getLHSExpr().getMaxLength(),
-                getLHSExpr().getScale(), getLHSExpr().getSortOrder(), isLHSRowKeyOrderOptimized);
-        if (lengthArray1 == 0) {
-            return true;
-        }
-        return modifierFunction(ptr, lengthArray1, offsetArray1, array1Bytes, getLHSBaseType(), actualLengthOfArray1, getMaxLength(), getLHSExpr());
-    }
-
-    @Override
-    protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset,
-                                       byte[] array1Bytes, PDataType baseDataType, int actualLengthOfArray1, Integer maxLength,
-                                       Expression array1Exp) {
-        int actualLengthOfArray2 = Math.abs(PArrayDataType.getArrayLength(ptr, baseDataType, array1Exp.getMaxLength()));
-        // FIXME: concatArrays will be fine if it's copying the separator bytes, including the terminating bytes.
-        return PArrayDataType.concatArrays(ptr, len, offset, array1Bytes, baseDataType, actualLengthOfArray1, actualLengthOfArray2);
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
 }

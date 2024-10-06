@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,10 +24,9 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
 
 /**
  * Naive failure policy - kills the server on which it resides
@@ -57,15 +56,15 @@ public class KillServerOnFailurePolicy implements IndexFailurePolicy {
   }
 
   @Override
-  public void
-      handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause) throws IOException{
+  public void handleFailure(Multimap<HTableInterfaceReference, Mutation> attempted, Exception cause)
+    throws IOException {
     // cleanup resources
     this.stop("Killing ourselves because of an error:" + cause);
     // notify the regionserver of the failure
     String msg =
-        "Could not update the index table, killing server region because couldn't write to an index table";
+      "Could not update the index table, killing server region because couldn't write to an index table";
     LOGGER.error(msg, cause);
-    throw new FatalIndexBuildingFailureException(msg,cause);
+    throw new FatalIndexBuildingFailureException(msg, cause);
   }
 
 }

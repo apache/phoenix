@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,34 +20,31 @@ package org.apache.phoenix.expression.function;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.CurrentDateParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.FunctionClassType;
 
-
 /**
- * 
- * Function used to represent NOW()
- * The function returns a {@link org.apache.phoenix.schema.types.PTimestamp}
- *
+ * Function used to represent NOW() The function returns a
+ * {@link org.apache.phoenix.schema.types.PTimestamp}
  */
-@BuiltInFunction(name = NowFunction.NAME,
-        nodeClass=CurrentDateParseNode.class, args= {}, classType = FunctionClassType.ALIAS, derivedFunctions = {CurrentDateFunction.class})
+@BuiltInFunction(name = NowFunction.NAME, nodeClass = CurrentDateParseNode.class, args = {},
+    classType = FunctionClassType.ALIAS, derivedFunctions = { CurrentDateFunction.class })
 public abstract class NowFunction extends ScalarFunction {
-    
-    public static final String NAME = "NOW";
 
-    public NowFunction() {}
-    
-    public NowFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+  public static final String NAME = "NOW";
 
-    @Override
-    public String getName() {
-        return NAME;
-    }   
-    
+  public NowFunction() {
+  }
+
+  public NowFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
 }

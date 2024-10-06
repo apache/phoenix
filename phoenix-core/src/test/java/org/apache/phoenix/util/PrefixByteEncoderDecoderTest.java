@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -33,64 +33,74 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.query.QueryConstants;
 import org.junit.Test;
 
-
 public class PrefixByteEncoderDecoderTest {
 
-    static final List<byte[]> guideposts = Arrays.asList(
-            ByteUtil.concat(Bytes.toBytes("aaaaaaaaaa"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
-            ByteUtil.concat(Bytes.toBytes("aaaaaaaaaa"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbccccc")),
-            ByteUtil.concat(Bytes.toBytes("aaaaaaaaaa"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(2000L), Bytes.toBytes("bbbbbbbbbb")),
-            ByteUtil.concat(Bytes.toBytes("bbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
-            ByteUtil.concat(Bytes.toBytes("bbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(2000L), Bytes.toBytes("bbbbbbbbbb")),
-            ByteUtil.concat(Bytes.toBytes("bbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(2000L), Bytes.toBytes("c")),
-            ByteUtil.concat(Bytes.toBytes("bbbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
-            ByteUtil.concat(Bytes.toBytes("d"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
-            ByteUtil.concat(Bytes.toBytes("d"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbbc")),
-            ByteUtil.concat(Bytes.toBytes("e"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb"))
-            );
-    
-    @Test
-    public void testEncode() throws IOException {
-        List<byte[]> listOfBytes = Arrays.asList(Bytes.toBytes("aaaaa"), Bytes.toBytes("aaaabb"));
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        int maxLength = PrefixByteCodec.encodeBytes(listOfBytes, ptr);
-        assertEquals(6, maxLength);
-        TrustedByteArrayOutputStream stream = new TrustedByteArrayOutputStream(PrefixByteCodec.calculateSize(listOfBytes));
-        DataOutput output = new DataOutputStream(stream);
-        WritableUtils.writeVInt(output, 0);
-        WritableUtils.writeVInt(output, 5);
-        output.write(Bytes.toBytes("aaaaa")); // No space savings on first key
-        WritableUtils.writeVInt(output, 4);
-        WritableUtils.writeVInt(output, 2);
-        output.write(Bytes.toBytes("bb")); // Only writes part of second key that's different
-        assertArrayEquals(stream.toByteArray(), ptr.copyBytes());
+  static final List<byte[]> guideposts = Arrays.asList(
+    ByteUtil.concat(Bytes.toBytes("aaaaaaaaaa"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
+    ByteUtil.concat(Bytes.toBytes("aaaaaaaaaa"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(1000L), Bytes.toBytes("bbbbbccccc")),
+    ByteUtil.concat(Bytes.toBytes("aaaaaaaaaa"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(2000L), Bytes.toBytes("bbbbbbbbbb")),
+    ByteUtil.concat(Bytes.toBytes("bbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
+    ByteUtil.concat(Bytes.toBytes("bbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(2000L), Bytes.toBytes("bbbbbbbbbb")),
+    ByteUtil.concat(Bytes.toBytes("bbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(2000L), Bytes.toBytes("c")),
+    ByteUtil.concat(Bytes.toBytes("bbbbbbbbbbb"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes(1000L), Bytes.toBytes("bbbbbbbbbb")),
+    ByteUtil.concat(Bytes.toBytes("d"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L),
+      Bytes.toBytes("bbbbbbbbbb")),
+    ByteUtil.concat(Bytes.toBytes("d"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L),
+      Bytes.toBytes("bbbbbbbbbbc")),
+    ByteUtil.concat(Bytes.toBytes("e"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes(1000L),
+      Bytes.toBytes("bbbbbbbbbb")));
+
+  @Test
+  public void testEncode() throws IOException {
+    List<byte[]> listOfBytes = Arrays.asList(Bytes.toBytes("aaaaa"), Bytes.toBytes("aaaabb"));
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    int maxLength = PrefixByteCodec.encodeBytes(listOfBytes, ptr);
+    assertEquals(6, maxLength);
+    TrustedByteArrayOutputStream stream =
+      new TrustedByteArrayOutputStream(PrefixByteCodec.calculateSize(listOfBytes));
+    DataOutput output = new DataOutputStream(stream);
+    WritableUtils.writeVInt(output, 0);
+    WritableUtils.writeVInt(output, 5);
+    output.write(Bytes.toBytes("aaaaa")); // No space savings on first key
+    WritableUtils.writeVInt(output, 4);
+    WritableUtils.writeVInt(output, 2);
+    output.write(Bytes.toBytes("bb")); // Only writes part of second key that's different
+    assertArrayEquals(stream.toByteArray(), ptr.copyBytes());
+  }
+
+  @Test
+  public void testEncodeDecodeWithSingleBuffer() throws IOException {
+    testEncodeDecode(true);
+  }
+
+  @Test
+  public void testEncodeDecodeWithNewBuffer() throws IOException {
+    testEncodeDecode(false);
+  }
+
+  private void testEncodeDecode(boolean useSingleBuffer) throws IOException {
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    int maxLength = PrefixByteCodec.encodeBytes(guideposts, ptr);
+    int encodedSize = ptr.getLength();
+    int unencodedSize = PrefixByteCodec.calculateSize(guideposts);
+    assertTrue(encodedSize < unencodedSize);
+    List<byte[]> listOfBytes = PrefixByteCodec.decodeBytes(ptr, useSingleBuffer ? maxLength : -1);
+    assertListByteArraysEquals(guideposts, listOfBytes);
+  }
+
+  private static void assertListByteArraysEquals(List<byte[]> listOfBytes1,
+    List<byte[]> listOfBytes2) {
+    assertEquals(listOfBytes1.size(), listOfBytes2.size());
+    for (int i = 0; i < listOfBytes1.size(); i++) {
+      assertArrayEquals(listOfBytes1.get(i), listOfBytes2.get(i));
     }
-    
-    @Test
-    public void testEncodeDecodeWithSingleBuffer() throws IOException {
-        testEncodeDecode(true);
-    }
-    
-    @Test
-    public void testEncodeDecodeWithNewBuffer() throws IOException {
-        testEncodeDecode(false);
-    }
-    
-    private void testEncodeDecode(boolean useSingleBuffer) throws IOException {
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        int maxLength = PrefixByteCodec.encodeBytes(guideposts, ptr);
-        int encodedSize = ptr.getLength();
-        int unencodedSize = PrefixByteCodec.calculateSize(guideposts);
-        assertTrue(encodedSize < unencodedSize);
-        List<byte[]> listOfBytes = PrefixByteCodec.decodeBytes(ptr, useSingleBuffer ? maxLength : -1);
-        assertListByteArraysEquals(guideposts, listOfBytes);
-    }
-    
-    private static void assertListByteArraysEquals(List<byte[]> listOfBytes1, List<byte[]> listOfBytes2) {
-        assertEquals(listOfBytes1.size(), listOfBytes2.size());
-        for (int i = 0; i < listOfBytes1.size(); i++) {
-            assertArrayEquals(listOfBytes1.get(i), listOfBytes2.get(i));
-        }
-    }
+  }
 
 }

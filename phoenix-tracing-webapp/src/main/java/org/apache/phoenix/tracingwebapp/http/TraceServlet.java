@@ -1,12 +1,13 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to you under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,6 +19,10 @@ package org.apache.phoenix.tracingwebapp.http;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -30,15 +35,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.JacksonUtil;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Map;
-
 /**
- *
  * Server to show trace information
- *
  */
 public class TraceServlet extends HttpServlet {
 
@@ -54,15 +52,14 @@ public class TraceServlet extends HttpServlet {
   @Override
   public void init() {
     Configuration conf = HBaseConfiguration.create();
-    TRACING_TABLE =
-            conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
-                    QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
+    TRACING_TABLE = conf.get(QueryServices.TRACING_STATS_TABLE_NAME_ATTRIB,
+      QueryServicesOptions.DEFAULT_TRACING_STATS_TABLE_NAME);
   }
 
   protected void doGet(HttpServletRequest request, HttpServletResponse response)
-          throws ServletException, IOException {
+    throws ServletException, IOException {
 
-    //reading url params
+    // reading url params
     String action = request.getParameter("action");
     String limit = request.getParameter("limit");
     String traceid = request.getParameter("traceid");
@@ -79,7 +76,7 @@ public class TraceServlet extends HttpServlet {
     } else {
       jsonObject = "{ \"Server\": \"Phoenix Tracing Web App\", \"API version\": 0.1 }";
     }
-    //response send as json
+    // response send as json
     response.setContentType("application/json");
     String output = jsonObject;
     PrintWriter out = response.getWriter();
@@ -87,34 +84,35 @@ public class TraceServlet extends HttpServlet {
     out.flush();
   }
 
-  //get all trace results with limit count
+  // get all trace results with limit count
   protected String getAll(String limit) {
     String json = null;
-    if(limit == null) {
+    if (limit == null) {
       limit = DEFAULT_LIMIT;
     }
-    try{
-        Long.parseLong(limit);
+    try {
+      Long.parseLong(limit);
     } catch (NumberFormatException e) {
-    	throw new RuntimeException("The LIMIT passed to the query is not a number.", e);
+      throw new RuntimeException("The LIMIT passed to the query is not a number.", e);
     }
-    String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT "+limit;
+    String sqlQuery = "SELECT * FROM " + TRACING_TABLE + " LIMIT " + limit;
     json = getResults(sqlQuery);
     return getJson(json);
   }
 
-  //get count on traces can pick on param to count
+  // get count on traces can pick on param to count
   protected String getCount(String countby) {
     String json = null;
-    if(countby == null) {
+    if (countby == null) {
       countby = DEFAULT_COUNTBY;
     }
-    String sqlQuery = "SELECT "+countby+", COUNT(*) AS count FROM " + TRACING_TABLE + " GROUP BY "+countby+" HAVING COUNT(*) > 1 ";
+    String sqlQuery = "SELECT " + countby + ", COUNT(*) AS count FROM " + TRACING_TABLE
+      + " GROUP BY " + countby + " HAVING COUNT(*) > 1 ";
     json = getResults(sqlQuery);
     return json;
   }
 
-  //search the trace over parent id or trace id
+  // search the trace over parent id or trace id
   protected String searchTrace(String parentId, String traceId, String logic) {
 
     String json = null;
@@ -131,10 +129,12 @@ public class TraceServlet extends HttpServlet {
       throw new RuntimeException("The passed parentId/traceId is not a number.", e);
     }
     if (logic != null && !logic.equals(LOGIC_AND) && !logic.equals(LOGIC_OR)) {
-      throw new RuntimeException("Wrong logical operator passed to the query. Only " + LOGIC_AND + "," + LOGIC_OR + " are allowed.");
+      throw new RuntimeException("Wrong logical operator passed to the query. Only " + LOGIC_AND
+        + "," + LOGIC_OR + " are allowed.");
     }
     if (parentId != null && traceId != null) {
-      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId + " " + logic + " trace_id=" + traceId;
+      query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId + " " + logic
+        + " trace_id=" + traceId;
     } else if (parentId != null && traceId == null) {
       query = "SELECT * FROM " + TRACING_TABLE + " WHERE parent_id=" + parentId;
     } else if (parentId == null && traceId != null) {
@@ -144,16 +144,15 @@ public class TraceServlet extends HttpServlet {
     return getJson(json);
   }
 
-  //return json string
+  // return json string
   protected String getJson(String json) {
-    String output = json.toString().replace("_id\":", "_id\":\"")
-            .replace(",\"hostname", "\",\"hostname")
-            .replace(",\"parent", "\",\"parent")
-            .replace(",\"end", "\",\"end");
+    String output =
+      json.toString().replace("_id\":", "_id\":\"").replace(",\"hostname", "\",\"hostname")
+        .replace(",\"parent", "\",\"parent").replace(",\"end", "\",\"end");
     return output;
   }
 
-  //get results with passing sql query
+  // get results with passing sql query
   protected String getResults(String sqlQuery) {
     String json = null;
     if (sqlQuery == null) {
@@ -162,8 +161,7 @@ public class TraceServlet extends HttpServlet {
       try {
         con = ConnectionFactory.getConnection();
         EntityFactory nutrientEntityFactory = new EntityFactory(con, sqlQuery);
-        List<Map<String, Object>> nutrients = nutrientEntityFactory
-                .findMultiple();
+        List<Map<String, Object>> nutrients = nutrientEntityFactory.findMultiple();
         json = JacksonUtil.getObjectWriter().writeValueAsString(nutrients);
       } catch (Exception e) {
         json = "{error:true,msg:'Server Error:" + e.getMessage() + "'}";

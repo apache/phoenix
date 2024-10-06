@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,30 +17,30 @@
  */
 package org.apache.phoenix.schema;
 
+import java.sql.SQLException;
+
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
-import java.sql.SQLException;
-
 /**
- *
- * Exception thrown when MutationState row Column Cell size is bigger than
- * maximum allowed number
- *
+ * Exception thrown when MutationState row Column Cell size is bigger than maximum allowed number
  */
 
-public class MaxPhoenixColumnSizeExceededException extends SQLException  {
-    private static final long serialVersionUID = 1L;
-    private static SQLExceptionCode code = SQLExceptionCode.MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED;
+public class MaxPhoenixColumnSizeExceededException extends SQLException {
+  private static final long serialVersionUID = 1L;
+  private static SQLExceptionCode code =
+    SQLExceptionCode.MAX_HBASE_CLIENT_KEYVALUE_MAXSIZE_EXCEEDED;
 
-    public MaxPhoenixColumnSizeExceededException() {
-        super(new SQLExceptionInfo.Builder(code).build().toString(), code.getSQLState(), code.getErrorCode(), null);
-    }
+  public MaxPhoenixColumnSizeExceededException() {
+    super(new SQLExceptionInfo.Builder(code).build().toString(), code.getSQLState(),
+      code.getErrorCode(), null);
+  }
 
-    public MaxPhoenixColumnSizeExceededException(String columnInfo, int maxMutationCellSizeBytes,
-                                                 int mutationCellSizeBytes) {
-        super(new SQLExceptionInfo.Builder(code).setMaxPhoenixColumnSizeBytes(maxMutationCellSizeBytes)
-                        .setPhoenixColumnSizeBytes(mutationCellSizeBytes).build().toString() + ". " + columnInfo,
-                code.getSQLState(), code.getErrorCode(), null);
-    }
+  public MaxPhoenixColumnSizeExceededException(String columnInfo, int maxMutationCellSizeBytes,
+    int mutationCellSizeBytes) {
+    super(
+      new SQLExceptionInfo.Builder(code).setMaxPhoenixColumnSizeBytes(maxMutationCellSizeBytes)
+        .setPhoenixColumnSizeBytes(mutationCellSizeBytes).build().toString() + ". " + columnInfo,
+      code.getSQLState(), code.getErrorCode(), null);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,41 +27,44 @@ import org.junit.Assert;
 import org.junit.Test;
 
 /**
- * Tests for {@linkplain TableRowkeyPair} 
+ * Tests for {@linkplain TableRowkeyPair}
  */
 public class TestTableRowkeyPair {
 
-    @Test
-    public void testRowkeyPair() throws IOException {
-        testsRowsKeys("first", "aa", "first", "aa", 0);
-        testsRowsKeys("first", "aa", "first", "ab", -1);
-        testsRowsKeys("second", "aa", "first", "aa", 1);
-        testsRowsKeys("first", "aa", "first", "aaa", -1);
-        testsRowsKeys("first","bb", "first", "aaaa", 1);
+  @Test
+  public void testRowkeyPair() throws IOException {
+    testsRowsKeys("first", "aa", "first", "aa", 0);
+    testsRowsKeys("first", "aa", "first", "ab", -1);
+    testsRowsKeys("second", "aa", "first", "aa", 1);
+    testsRowsKeys("first", "aa", "first", "aaa", -1);
+    testsRowsKeys("first", "bb", "first", "aaaa", 1);
+  }
+
+  private void testsRowsKeys(String aTable, String akey, String bTable, String bkey,
+    int expectedSignum) throws IOException {
+
+    final ImmutableBytesWritable arowkey = new ImmutableBytesWritable(Bytes.toBytes(akey));
+    TableRowkeyPair pair1 = new TableRowkeyPair(aTable, arowkey);
+
+    ImmutableBytesWritable browkey = new ImmutableBytesWritable(Bytes.toBytes(bkey));
+    TableRowkeyPair pair2 = new TableRowkeyPair(bTable, browkey);
+
+    TableRowkeyPair.Comparator comparator = new TableRowkeyPair.Comparator();
+    try (ByteArrayOutputStream baosA = new ByteArrayOutputStream();
+      ByteArrayOutputStream baosB = new ByteArrayOutputStream()) {
+
+      pair1.write(new DataOutputStream(baosA));
+      pair2.write(new DataOutputStream(baosB));
+      Assert.assertEquals(expectedSignum, signum(pair1.compareTo(pair2)));
+      Assert.assertEquals(expectedSignum, signum(comparator.compare(baosA.toByteArray(), 0,
+        baosA.size(), baosB.toByteArray(), 0, baosB.size())));
+      Assert.assertEquals(expectedSignum, -signum(comparator.compare(baosB.toByteArray(), 0,
+        baosB.size(), baosA.toByteArray(), 0, baosA.size())));
     }
 
-    private void testsRowsKeys(String aTable, String akey, String bTable, String bkey, int expectedSignum) throws IOException {
-        
-        final ImmutableBytesWritable arowkey = new ImmutableBytesWritable(Bytes.toBytes(akey));
-        TableRowkeyPair pair1 = new TableRowkeyPair(aTable, arowkey);
-        
-        ImmutableBytesWritable browkey = new ImmutableBytesWritable(Bytes.toBytes(bkey));
-        TableRowkeyPair pair2 = new TableRowkeyPair(bTable, browkey);
-        
-        TableRowkeyPair.Comparator comparator = new TableRowkeyPair.Comparator();
-        try( ByteArrayOutputStream baosA = new ByteArrayOutputStream();
-             ByteArrayOutputStream baosB = new ByteArrayOutputStream()) {
-            
-            pair1.write(new DataOutputStream(baosA));
-            pair2.write(new DataOutputStream(baosB));
-            Assert.assertEquals(expectedSignum , signum(pair1.compareTo(pair2)));
-            Assert.assertEquals(expectedSignum , signum(comparator.compare(baosA.toByteArray(), 0, baosA.size(), baosB.toByteArray(), 0, baosB.size())));
-            Assert.assertEquals(expectedSignum, -signum(comparator.compare(baosB.toByteArray(), 0, baosB.size(), baosA.toByteArray(), 0, baosA.size())));
-        }
+  }
 
-    }
-    
-    private int signum(int i) {
-        return i > 0 ? 1: (i == 0 ? 0: -1);
-    }
+  private int signum(int i) {
+    return i > 0 ? 1 : (i == 0 ? 0 : -1);
+  }
 }

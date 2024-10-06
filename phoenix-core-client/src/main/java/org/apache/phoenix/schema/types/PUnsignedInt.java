@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,16 +20,14 @@ package org.apache.phoenix.schema.types;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Order;
 import org.apache.phoenix.schema.SortOrder;
-
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * Unsigned integer type that restricts values to be from 0 to {@link Integer#MAX_VALUE}
- * inclusive. May be used to map to existing HTable values created through
- * {@link org.apache.hadoop.hbase.util.Bytes#toBytes(int)}
- * as long as all values are non negative (the leading sign bit of negative numbers would cause
- * them to sort ahead of positive numbers when they're used as part of the row key when using the
- * HBase utility methods).
+ * Unsigned integer type that restricts values to be from 0 to {@link Integer#MAX_VALUE} inclusive.
+ * May be used to map to existing HTable values created through
+ * {@link org.apache.hadoop.hbase.util.Bytes#toBytes(int)} as long as all values are non negative
+ * (the leading sign bit of negative numbers would cause them to sort ahead of positive numbers when
+ * they're used as part of the row key when using the HBase utility methods).
  */
 public class PUnsignedInt extends PWholeNumber<Integer> {
 
@@ -37,7 +35,7 @@ public class PUnsignedInt extends PWholeNumber<Integer> {
 
   private PUnsignedInt() {
     super("UNSIGNED_INT", 9 /* no constant available in Types */, Integer.class,
-        new UnsignedIntCodec(), 16);
+      new UnsignedIntCodec(), 16);
   }
 
   @Override
@@ -84,9 +82,8 @@ public class PUnsignedInt extends PWholeNumber<Integer> {
 
   @Override
   public Object toObject(byte[] b, int o, int l, PDataType actualType, SortOrder sortOrder,
-      Integer maxLength, Integer scale) {
-    Integer v =
-        (Integer) PInteger.INSTANCE.toObject(b, o, l, actualType, sortOrder);
+    Integer maxLength, Integer scale) {
+    Integer v = (Integer) PInteger.INSTANCE.toObject(b, o, l, actualType, sortOrder);
     throwIfNonNegativeNumber(v);
     return v;
   }
@@ -94,14 +91,14 @@ public class PUnsignedInt extends PWholeNumber<Integer> {
   @Override
   public boolean isCoercibleTo(PDataType targetType) {
     return targetType.equals(this) || targetType.equals(PUnsignedFloat.INSTANCE)
-        || PUnsignedLong.INSTANCE.isCoercibleTo(targetType)
-        || PInteger.INSTANCE.isCoercibleTo(targetType);
+      || PUnsignedLong.INSTANCE.isCoercibleTo(targetType)
+      || PInteger.INSTANCE.isCoercibleTo(targetType);
   }
 
   @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
-    return super.isCoercibleTo(targetType, value) || PInteger.INSTANCE
-        .isCoercibleTo(targetType, value);
+    return super.isCoercibleTo(targetType, value)
+      || PInteger.INSTANCE.isCoercibleTo(targetType, value);
   }
 
   @Override
