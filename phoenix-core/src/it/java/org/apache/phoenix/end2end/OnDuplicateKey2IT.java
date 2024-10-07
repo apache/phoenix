@@ -207,43 +207,61 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             ps.setString(1, "pk000");
             ps.setDouble(2, -123.98);
             ps.setString(3, "pk003");
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true,
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, true,
                     bsonDocument2, 234);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false,
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
                     bsonDocument2, 234);
 
-            upsertSql =
-                    "UPSERT INTO " + tableName
-                            + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk001', 122.34, "
-                            + "'pk004', 23, 'col2_001')";
-            conn.createStatement().execute(upsertSql);
-            upsertSql =
-                    "UPSERT INTO " + tableName
-                            + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk001', 122.34, "
-                            + "'pk005', 23, 'col2_001')";
-            conn.createStatement().execute(upsertSql);
-            upsertSql =
-                    "UPSERT INTO " + tableName
-                            + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk003', 122.34, "
-                            + "'pk005', 23, 'col2_001')";
-            conn.createStatement().execute(upsertSql);
+            addRows(tableName, conn);
 
             ps = conn.prepareStatement(
                     "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?")
                     .unwrap(PhoenixPreparedStatement.class);
             ps.setString(1, "pk001");
             ps.setDouble(2, 122.34);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false,
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
                     bsonDocument2, 234);
 
             ps = conn.prepareStatement(
                             "DELETE FROM " + tableName).unwrap(PhoenixPreparedStatement.class);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false,
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
                     bsonDocument2, 234);
 
             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
             assertFalse(rs.next());
+
+            addRows(tableName, conn);
+
+            ps = conn.prepareStatement(
+                            "DELETE FROM " + tableName + " WHERE PK1 IN (?) AND PK2 IN (?) AND " +
+                                    "PK3 IN (?, ?)")
+                    .unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk001");
+            ps.setDouble(2, 122.34);
+            ps.setString(3, "pk004");
+            ps.setString(4, "pk005");
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
+                    bsonDocument2, 234);
         }
+    }
+
+    private static void addRows(String tableName, Connection conn) throws SQLException {
+        String upsertSql;
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk001', 122.34, "
+                        + "'pk004', 23, 'col2_001')";
+        conn.createStatement().execute(upsertSql);
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk001', 122.34, "
+                        + "'pk005', 23, 'col2_001')";
+        conn.createStatement().execute(upsertSql);
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk003', 122.34, "
+                        + "'pk005', 23, 'col2_001')";
+        conn.createStatement().execute(upsertSql);
     }
 
     private static void validateReturnedRowAfterDelete(Connection conn,
@@ -251,7 +269,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                                                        String tableName,
                                                        Double col1,
                                                        String col2,
-                                                       boolean success,
+                                                       boolean isSinglePointLookup,
+                                                       boolean atomicDeleteSuccessful,
                                                        BsonDocument expectedDoc,
                                                        Integer col4)
             throws SQLException {
@@ -260,14 +279,15 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
         PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
 
-        if (!success && result.getResult() == null) {
+        if (!isSinglePointLookup) {
+            assertNull(result.getResult());
             return;
         }
         Cell cell =
                 result.getResult()
                         .getColumnLatestCell(table.getColumns().get(3).getFamilyName().getBytes(),
                                 table.getColumns().get(3).getColumnQualifierBytes());
-        if (!success) {
+        if (!atomicDeleteSuccessful) {
             assertNull(cell);
             return;
         }
