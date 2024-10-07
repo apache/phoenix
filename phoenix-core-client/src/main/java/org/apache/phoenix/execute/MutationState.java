@@ -685,7 +685,7 @@ public class MutationState implements SQLCloseable {
                 };
                 ImmutableBytesPtr key = new ImmutableBytesPtr(maintainer.buildRowKey(
                         getter, ptr, null, null, mutationTimestamp));
-                PRow row = table.newRow(
+                PRow row = index.newRow(
                         connection.getKeyValueBuilder(), mutationTimestamp, key, false);
                 row.delete();
                 indexMutations.addAll(row.toRowMutations());

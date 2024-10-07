@@ -35,10 +35,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.PTableRef;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,7 +103,10 @@ public class ValidateLastDDLTimestampUtil {
     public static void validateLastDDLTimestamp(PhoenixConnection conn,
                                                 List<TableRef> allTableRefs,
                                                 boolean doRetry) throws SQLException {
-        List<TableRef> tableRefs = filterTableRefs(allTableRefs);
+        List<TableRef> tableRefs = filterTableRefs(conn, allTableRefs);
+        if (tableRefs.isEmpty()) {
+            return;
+        }
         String infoString = getInfoString(conn.getTenantId(), tableRefs);
         try (Admin admin = conn.getQueryServices().getAdmin()) {
             // get all live region servers
@@ -215,14 +221,38 @@ public class ValidateLastDDLTimestampUtil {
     }
 
     /**
-     * Filter out any TableRefs which are not tables, views or indexes.
+     * Filter out TableRefs for sending to server to validate last_ddl_timestamp.
+     * 1. table type is in ALLOWED_PTABLE_TYPES
+     * 2. table schema has a non-zero UPDATE_CACHE_FREQUENCY and cache entry is old.
      * @param tableRefs
      * @return
      */
-    private static List<TableRef> filterTableRefs(List<TableRef> tableRefs) {
+    private static List<TableRef> filterTableRefs(PhoenixConnection conn,
+                                                  List<TableRef> tableRefs) {
         List<TableRef> filteredTableRefs = tableRefs.stream()
-                .filter(tableRef -> ALLOWED_PTABLE_TYPES.contains(tableRef.getTable().getType()))
+                .filter(tableRef -> ALLOWED_PTABLE_TYPES.contains(tableRef.getTable().getType())
+                            && !avoidRpc(conn, tableRef.getTable()))
                 .collect(Collectors.toList());
         return filteredTableRefs;
+    }
+
+    /**
+     * Decide whether we should avoid the validate timestamp RPC for this table. If the schema of
+     * the table had specified a positive UCF to begin with, clients for this table should not see
+     * a regression when metadata caching re-design is enabled i.e. any server RPC should be
+     * skipped for them within the UCF window.
+     */
+    private static boolean avoidRpc(PhoenixConnection conn, PTable table) {
+        try {
+            PTableRef ptr = conn.getTableRef(table.getKey());
+            long tableUCF = table.getUpdateCacheFrequency();
+            return tableUCF > (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("ALWAYS")
+                    && tableUCF < (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue("NEVER")
+                    && MetaDataUtil.avoidMetadataRPC(conn, table, ptr, tableUCF);
+        } catch (TableNotFoundException e) {
+            //should not happen since this is called after query compilation and optimizer
+            //so the table would be in the cache
+            return false;
+        }
     }
 }

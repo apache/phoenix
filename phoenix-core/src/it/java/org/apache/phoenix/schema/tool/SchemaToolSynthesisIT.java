@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.schema.tool;
 
+import org.apache.phoenix.end2end.ParallelStatsEnabledTest;
 import org.junit.Assert;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import java.io.File;
 import java.net.URL;
@@ -27,6 +29,7 @@ import static org.apache.phoenix.schema.tool.SchemaSynthesisProcessor.ENTITY_NAM
 import static org.apache.phoenix.schema.tool.SchemaSynthesisProcessor.UNSUPPORTED_DDL_EXCEPTION;
 import static org.apache.phoenix.schema.tool.SchemaToolExtractionIT.runSchemaTool;
 
+@Category(ParallelStatsEnabledTest.class)
 public class SchemaToolSynthesisIT {
 
     private static final String SYNTHESIS_DIR = "synthesis/";
@@ -223,5 +226,16 @@ public class SchemaToolSynthesisIT {
         } catch (Exception e) {
             e.getMessage().equalsIgnoreCase(UNSUPPORTED_DDL_EXCEPTION);
         }
+    }
+
+    @Test
+    public void testEscapedPropertyName() throws Exception {
+        String expected = "CREATE TABLE IF NOT EXISTS ABC\n" +
+                "(ORGANIZATION_ID CHAR(15) NOT NULL,\n" +
+                "NETWORK_ID CHAR(15) NOT NULL\n" +
+                "CONSTRAINT PK PRIMARY KEY (ORGANIZATION_ID))\n" +
+                "UPDATE_CACHE_FREQUENCY=172800000,DISABLE_BACKUP=true,MULTI_TENANT=true,REPLICATION_SCOPE=1,\"phoenix.max.lookback.age.seconds\"=0,VERSIONS=1";
+        String baseDDL = filePath+"/escape_property.sql";
+        runAndVerify(expected, baseDDL);
     }
 }

@@ -1048,7 +1048,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         context.indexUpdates.put(hTableInterfaceReference,
                                 new Pair<Mutation, byte[]>(getDeleteIndexMutation(cdcDataRowState,
                                         indexMaintainer, ts, rowKeyPtr), rowKeyPtr.get()));
-
                     }
                 }
             }
