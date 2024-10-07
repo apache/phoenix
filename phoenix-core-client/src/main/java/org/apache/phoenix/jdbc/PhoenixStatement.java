@@ -647,7 +647,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         lastState.getUpdateCount());
                                 Result result = null;
                                 if (connection.getAutoCommit()) {
-                                    if (isSingleRowUpdate(isUpsert, isDelete, plan)) {
+                                    if (isPointLookupPlan(isUpsert, isDelete, plan)) {
                                         state.setReturnResult(returnResult);
                                     }
                                     connection.commit();
@@ -758,7 +758,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
     }
 
-    private static boolean isSingleRowUpdate(boolean isUpsert, boolean isDelete,
+    private static boolean isPointLookupPlan(boolean isUpsert, boolean isDelete,
                                              MutationPlan plan) {
         boolean isSingleRowUpdate = false;
         if (isUpsert) {

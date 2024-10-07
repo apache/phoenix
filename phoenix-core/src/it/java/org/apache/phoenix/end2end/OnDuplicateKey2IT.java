@@ -382,6 +382,56 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     }
 
     @Test
+    public void testReturnRowResultForMultiPointLookup() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK VARCHAR PRIMARY KEY, COL1 DOUBLE, COL2 VARCHAR, COUNTER1 "
+                    + "DOUBLE, COUNTER2 VARCHAR)";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            addRows2(tableName, conn);
+
+            PhoenixPreparedStatement ps = conn.prepareStatement(
+                            "DELETE FROM " + tableName + " WHERE PK IN (?, ?, ?)")
+                    .unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk001");
+            ps.setString(2, "pk002");
+            ps.setString(3, "pk003");
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
+                    null, 234);
+
+            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+            assertFalse(rs.next());
+        }
+    }
+
+    private static void addRows2(String tableName, Connection conn) throws SQLException {
+        String upsertSql;
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK, COL1, COL2, COUNTER1, COUNTER2) VALUES('pk001', 122.34, "
+                        + "'pk004', 23, 'col2_001')";
+        conn.createStatement().execute(upsertSql);
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK, COL1, COL2, COUNTER1, COUNTER2) VALUES('pk002', 122.34, "
+                        + "'pk005', 23, 'col2_001')";
+        conn.createStatement().execute(upsertSql);
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK, COL1, COL2, COUNTER1, COUNTER2) VALUES('pk003', 122.34, "
+                        + "'pk005', 23, 'col2_001')";
+        conn.createStatement().execute(upsertSql);
+    }
+
+    @Test
     public void testReturnRowResultWithoutAutoCommit() throws Exception {
         Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
                 "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
