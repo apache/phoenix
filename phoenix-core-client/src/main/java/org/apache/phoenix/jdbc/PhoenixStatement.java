@@ -647,7 +647,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         lastState.getUpdateCount());
                                 Result result = null;
                                 if (connection.getAutoCommit()) {
-                                    if (isPointLookupPlan(isUpsert, isDelete, plan)) {
+                                    if (isSingleRowUpdatePlan(isUpsert, isDelete, plan)) {
                                         state.setReturnResult(returnResult);
                                     }
                                     connection.commit();
@@ -758,14 +758,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         }
     }
 
-    private static boolean isPointLookupPlan(boolean isUpsert, boolean isDelete,
-                                             MutationPlan plan) {
+    private static boolean isSingleRowUpdatePlan(boolean isUpsert, boolean isDelete,
+                                                 MutationPlan plan) {
         boolean isSingleRowUpdate = false;
         if (isUpsert) {
             isSingleRowUpdate = true;
         } else if (isDelete) {
-            isSingleRowUpdate =
-                    plan.getContext().getScanRanges().isPointLookup();
+            isSingleRowUpdate = plan.getContext().getScanRanges().getPointLookupCount() == 1;
         }
         return isSingleRowUpdate;
     }
