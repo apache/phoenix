@@ -647,13 +647,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         lastState.getUpdateCount());
                                 Result result = null;
                                 if (connection.getAutoCommit()) {
-                                    state.setReturnResult(returnResult);
+                                    if (isSingleRowUpdatePlan(isUpsert, isDelete, plan)) {
+                                        state.setReturnResult(returnResult);
+                                    }
                                     connection.commit();
                                     if (isAtomicUpsert) {
                                         lastUpdateCount = connection.getMutationState()
                                                 .getNumUpdatedRowsForAutoCommit();
                                     }
                                     result = connection.getMutationState().getResult();
+                                    connection.getMutationState().clearResult();
                                 }
                                 setLastQueryPlan(null);
                                 setLastUpdateCount(lastUpdateCount);
@@ -753,6 +756,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
+    }
+
+    private static boolean isSingleRowUpdatePlan(boolean isUpsert, boolean isDelete,
+                                                 MutationPlan plan) {
+        boolean isSingleRowUpdate = false;
+        if (isUpsert) {
+            isSingleRowUpdate = true;
+        } else if (isDelete) {
+            isSingleRowUpdate = plan.getContext().getScanRanges().getPointLookupCount() == 1;
+        }
+        return isSingleRowUpdate;
     }
 
     protected static interface CompilableStatement extends BindableStatement {
