@@ -20,6 +20,8 @@ package org.apache.phoenix;
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Test rule that prevents System.exit / JVM exit to error out the test runner, which manages
@@ -28,6 +30,7 @@ import org.junit.runners.model.Statement;
  */
 public class SystemExitRule implements TestRule {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(SystemExitRule.class);
     private static final SecurityManager SECURITY_MANAGER = new TestSecurityManager();
 
     @Override
@@ -38,8 +41,15 @@ public class SystemExitRule implements TestRule {
                 try {
                     System.setSecurityManager(SECURITY_MANAGER);
                     s.evaluate();
+                } catch (UnsupportedOperationException e) {
+                    LOGGER.warn("Was unable to set SecurityManager, JVM exits in tests will not be"
+                            + "handled correctly ", e);
                 } finally {
-                    System.setSecurityManager(null);
+                    try {
+                        System.setSecurityManager(null);
+                    } catch (UnsupportedOperationException e) {
+                        //We have logged a warning above already
+                    }
                 }
             }
 
