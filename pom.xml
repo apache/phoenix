@@ -209,6 +209,10 @@
     </phoenix-surefire.jdk11.tuning.flags>
     <phoenix-surefire.jdk17.flags>--add-opens java.base/jdk.internal.util.random=ALL-UNNAMED</phoenix-surefire.jdk17.flags>
     <phoenix-surefire.jdk17.tuning.flags></phoenix-surefire.jdk17.tuning.flags>
+    <!-- This is needed for SystemExitRule to work correctly. This may mask related issues in
+    dependencies -->
+    <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow</phoenix-surefire.jdk21.flags>
+
     <!-- Surefire argLine defaults for Linux + JDK8 -->
     <argLine>${phoenix-surefire.argLine} ${phoenix-surefire.jdk8.tuning.flags} @{jacocoArgLine}</argLine>
 
@@ -2003,11 +2007,25 @@
     <profile>
       <id>build-with-jdk17</id>
       <activation>
-        <jdk>[17,)</jdk>
+        <jdk>[17,21)</jdk>
       </activation>
       <properties>
         <argLine>${phoenix-surefire.jdk11.flags}
           ${phoenix-surefire.jdk17.flags}
+          ${phoenix-surefire.jdk17.tuning.flags}
+          ${phoenix-surefire.argLine}
+          @{jacocoArgLine}</argLine>
+      </properties>
+    </profile>
+    <profile>
+      <id>build-with-jdk21</id>
+      <activation>
+        <jdk>[21,)</jdk>
+      </activation>
+      <properties>
+        <argLine>${phoenix-surefire.jdk11.flags}
+          ${phoenix-surefire.jdk17.flags}
+          ${phoenix-surefire.jdk21.flags}
           ${phoenix-surefire.jdk17.tuning.flags}
           ${phoenix-surefire.argLine}
           @{jacocoArgLine}</argLine>

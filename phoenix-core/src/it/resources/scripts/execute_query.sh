@@ -35,6 +35,7 @@ mvn -B dependency:copy -Dartifact=org.apache.phoenix:phoenix-client:$client_vers
 -DoutputDirectory=$tmp_dir
 
 phoenix_client_jar=$tmp_dir/phoenix-client-$client_version.jar
-java -cp ".:$phoenix_client_jar" sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
--u jdbc:phoenix:$zk_url -n none -p none --color=false --fastConnect=true --outputformat=csv \
+java -cp ".:$phoenix_client_jar" "-Djava.security.manager=allow" sqlline.SqlLine \
+-d org.apache.phoenix.jdbc.PhoenixDriver -u jdbc:phoenix:$zk_url -n none -p none \
+--color=false --fastConnect=true --outputformat=csv \
 --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED --run=$sqlfile &> $resultfile
