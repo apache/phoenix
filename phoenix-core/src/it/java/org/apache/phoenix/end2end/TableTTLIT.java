@@ -280,10 +280,8 @@ public class TableTTLIT extends BaseTest {
                     assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row),
                             rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
                 }
-                TestUtil.dumpTable(conn, TableName.valueOf(tableName));
                 // Run one minor compaction (in case no minor compaction has happened yet)
                 TestUtil.minorCompact(utility, TableName.valueOf(tableName));
-                TestUtil.dumpTable(conn, TableName.valueOf(tableName));
                 assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
                                 Bytes.toBytes("a")), (MAX_COLUMN_INDEX + 1) * versions);
             } catch (AssertionError e) {
