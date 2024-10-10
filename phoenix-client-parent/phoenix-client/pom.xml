@@ -28,6 +28,11 @@
   <artifactId>phoenix-client-${hbase.suffix}</artifactId>
   <name>Phoenix Client</name>
   <description>Phoenix Client</description>
+
+  <properties>
+    <top.dir>${project.basedir}/../..</top.dir>
+  </properties>
+
   <packaging>jar</packaging>
 
   <build>

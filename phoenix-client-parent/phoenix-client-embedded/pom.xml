@@ -28,6 +28,11 @@
   <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
   <name>Phoenix Client Embedded</name>
   <description>Phoenix Client without logging implementation</description>
+
+  <properties>
+    <top.dir>${project.basedir}/../..</top.dir>
+  </properties>
+
   <packaging>jar</packaging>
 
   <build>
