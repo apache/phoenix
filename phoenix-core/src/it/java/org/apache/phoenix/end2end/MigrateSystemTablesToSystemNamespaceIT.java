@@ -17,6 +17,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -318,6 +319,8 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         Properties clientProps = new Properties();
         clientProps.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         clientProps.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.TRUE.toString());
+        clientProps.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
+
         return clientProps;
     }
 
@@ -325,6 +328,8 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
         Properties clientProps = new Properties();
         clientProps.setProperty(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
         clientProps.setProperty(QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE, Boolean.FALSE.toString());
+        clientProps.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
+
         return clientProps;
     }
 
@@ -337,6 +342,7 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     }
 
     private void createConnection(Properties clientProps) throws SQLException, IOException {
+        clientProps.setProperty(SYSTEM_CATALOG_INDEXES_ENABLED, "false");
         try (Connection conn = DriverManager.getConnection(getJdbcUrl(), clientProps);
              Statement stmt = conn.createStatement();) {
             verifySyscatData(clientProps, conn.toString(), stmt);
