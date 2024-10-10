@@ -54,7 +54,7 @@
         <include>com.fasterxml.woodstox:woodstox-core</include>
         <include>org.codehaus.woodstox:stax2-api</include>
         <include>com.google.guava:guava</include>
-        <include>commons-collections:commons-collections</include>
+        <include>org.apache.commons:commons-collections4</include>
         <include>commons-cli:commons-cli</include>
       </includes>
     </dependencySet>

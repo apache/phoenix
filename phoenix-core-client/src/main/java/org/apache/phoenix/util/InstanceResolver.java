@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.commons.collections.IteratorUtils;
+import org.apache.commons.collections4.IteratorUtils;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
