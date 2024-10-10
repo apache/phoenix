@@ -105,9 +105,10 @@ public class TaskMetaDataEndpoint extends TaskMetaDataService
 
             phoenixAccessCoprocessorHost.preUpsertTaskDetails(fullTableName);
 
-            mutateRowsWithLocks(this.accessCheckEnabled, this.env.getRegion(),
-                taskMutations, Collections.emptySet(), HConstants.NO_NONCE,
-                HConstants.NO_NONCE);
+            // We do not enable indexes on SYSTEM.TASK yet, so no need to check for it.
+            mutateRowsWithLocks(this.accessCheckEnabled, env, this.env.getRegion(), taskMutations,
+                    Collections.emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
+                    false, PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
         } catch (Throwable t) {
             LOGGER.error("Unable to write mutations to {}",
                 PhoenixDatabaseMetaData.SYSTEM_TASK_NAME, t);
