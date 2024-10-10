@@ -37,6 +37,7 @@ import java.util.Properties;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PDate;
@@ -427,6 +428,34 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
         }
     }
 
+    @Test
+    public void testNumberOfRPCsWithPaging() throws SQLException {
+        // insert 200 rows
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        stmt.execute("CREATE TABLE " + tableName
+                + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
+        for (int i = 1; i <= 200; i++) {
+            String sql = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
+            stmt.execute(sql);
+        }
+        conn.commit();
+
+        // delete every alternate row
+        for (int i=1; i<=200; i=i+2) {
+            stmt.execute("DELETE FROM " + tableName + " WHERE A = " + i);
+            conn.commit();
+        }
+
+        ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName);
+        while (rs.next()) {
+        }
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+        long numRpc = getMetricValue(metrics, MetricType.COUNT_RPC_CALLS);
+        Assert.assertEquals(101, numRpc);
+    }
+
     private void populateTable(String tableName) throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         conn.createStatement().execute("create table " + tableName +
@@ -437,5 +466,16 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute("upsert into " + tableName + " values ('b', 'bc', 'bcd', 'bcde')");
         conn.commit();
         conn.close();
+    }
+
+    private long getMetricValue(Map<String, Map<MetricType, Long>> metrics, MetricType type) {
+        long result = 0;
+        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
+            Long val = entry.getValue().get(type);
+            if (val != null) {
+                result += val.longValue();
+            }
+        }
+        return result;
     }
 }

@@ -22,7 +22,6 @@ import java.util.List;
 
 import static org.apache.phoenix.util.ScanUtil.getDummyTuple;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
-
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.EnvironmentEdgeManager;

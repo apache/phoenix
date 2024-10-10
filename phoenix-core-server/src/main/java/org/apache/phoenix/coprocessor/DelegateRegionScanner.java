@@ -25,6 +25,9 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
+
+import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 public class DelegateRegionScanner implements RegionScanner {
 
@@ -61,22 +64,22 @@ public class DelegateRegionScanner implements RegionScanner {
 
     @Override
     public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("Next with scannerContext should not be called in Phoenix environment");
+        return next(result, false, scannerContext);
     }
 
     @Override
     public boolean next(List<Cell> result) throws IOException {
-        return delegate.next(result);
+        return next(result, false, null);
     }
 
     @Override
     public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
+        return next(result, true, scannerContext);
     }
 
     @Override
-    public boolean nextRaw(List<Cell> arg0) throws IOException {
-        return delegate.nextRaw(arg0);
+    public boolean nextRaw(List<Cell> result) throws IOException {
+        return next(result, true, null);
     }
 
     @Override
@@ -96,5 +99,24 @@ public class DelegateRegionScanner implements RegionScanner {
         } catch (ClassCastException e) {
             throw new DoNotRetryIOException(e);
         }
+    }
+
+    private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
+            throws IOException {
+        if (scannerContext != null) {
+            ScannerContext noLimitContext = ScannerContextUtil
+                    .copyNoLimitScanner(scannerContext);
+            boolean hasMore = raw
+                    ? delegate.nextRaw(result, noLimitContext)
+                    : delegate.next(result, noLimitContext);
+            if (isDummy(result)) {
+                // when a dummy row is returned by a lower layer, set returnImmediately
+                // on the ScannerContext to force HBase to return a response to the client
+                ScannerContextUtil.setReturnImmediately(scannerContext);
+            }
+            ScannerContextUtil.updateMetrics(noLimitContext, scannerContext);
+            return hasMore;
+        }
+        return raw ? delegate.nextRaw(result) : delegate.next(result);
     }
 }

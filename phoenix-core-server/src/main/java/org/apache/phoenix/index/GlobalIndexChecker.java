@@ -252,7 +252,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
             return true;
         }
 
-        public boolean next(List<Cell> result, boolean raw) throws IOException {
+        public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
+                throws IOException {
             try {
                 if (!initialized) {
                     init();
@@ -261,9 +262,13 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 do {
                     if (raw) {
-                        hasMore = scanner.nextRaw(result);
+                        hasMore = (scannerContext == null)
+                                    ? scanner.nextRaw(result)
+                                    : scanner.nextRaw(result, scannerContext);
                     } else {
-                        hasMore = scanner.next(result);
+                        hasMore = (scannerContext == null)
+                                ? scanner.next(result)
+                                : scanner.next(result, scannerContext);
                     }
                     if (result.isEmpty()) {
                         return hasMore;
@@ -298,22 +303,22 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
 
         @Override
         public boolean next(List<Cell> result) throws IOException {
-           return next(result, false);
+            return next(result, false, null);
         }
 
         @Override
         public boolean nextRaw(List<Cell> result) throws IOException {
-            return next(result, true);
+            return next(result, true, null);
         }
 
         @Override
         public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-            throw new IOException("next with scannerContext should not be called in Phoenix environment");
+            return next(result, false, scannerContext);
         }
 
         @Override
         public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
-            throw new IOException("NextRaw with scannerContext should not be called in Phoenix environment");
+            return next(result, true, scannerContext);
         }
 
         @Override
