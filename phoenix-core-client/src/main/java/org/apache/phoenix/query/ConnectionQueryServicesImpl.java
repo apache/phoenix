@@ -1326,10 +1326,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
 
             // TODO: better encapsulation for this
             // Since indexes can't have indexes, don't install our indexing coprocessor for indexes.
-            // Also don't install on the SYSTEM.CATALOG and SYSTEM.STATS table because we use
+            // Also don't install on the SYSTEM.STATS table because we use
             // all-or-none mutate class which break when this coprocessor is installed (PHOENIX-1318).
+            // With PHOENIX-7107 which introduced indexes on SYSTEM.CATALOG we need to install the
+            // indexing coprocessor on SYSTEM.CATALOG
             if ((tableType != PTableType.INDEX && tableType != PTableType.VIEW && !isViewIndex)
-                    && !SchemaUtil.isMetaTable(tableName)
                     && !SchemaUtil.isStatsTable(tableName)) {
                 if (isTransactional) {
                     if (!newDesc.hasCoprocessor(QueryConstants.PHOENIX_TRANSACTIONAL_INDEXER_CLASSNAME)) {
@@ -1759,8 +1760,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             TableDescriptorBuilder newDesc = generateTableDescriptor(physicalTableName, parentPhysicalTableName, existingDesc, tableType, props, families,
                     splits, isNamespaceMapped);
 
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info(String.format("ensureTableCreated " +
+                                "physicalTableName = %s, " +
+                                "parentPhysicalTableName = %s, " +
+                                "isUpgradeRequired = %s, " +
+                                "isAutoUpgradeEnabled = %s, " +
+                                "isDoNotUpgradePropSet = %s",
+                        Bytes.toString(parentPhysicalTableName),
+                        Bytes.toString(parentPhysicalTableName),
+                        isUpgradeRequired(),
+                        isAutoUpgradeEnabled,
+                        isDoNotUpgradePropSet));
+            }
+
+
             if (!tableExist) {
-                if (SchemaUtil.isSystemTable(physicalTableName) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
+                if (SchemaUtil.isSystemTable(physicalTableName) && (tableType == PTableType.TABLE || tableType == PTableType.SYSTEM) && !isUpgradeRequired() && (!isAutoUpgradeEnabled || isDoNotUpgradePropSet)) {
                     // Disallow creating the SYSTEM.CATALOG or SYSTEM:CATALOG HBase table
                     throw new UpgradeRequiredException();
                 }
