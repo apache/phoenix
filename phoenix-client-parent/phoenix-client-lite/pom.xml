@@ -28,6 +28,11 @@
   <artifactId>phoenix-client-lite-${hbase.suffix}</artifactId>
   <name>Phoenix Client Lite</name>
   <description>Phoenix Client without server-side code and dependencies</description>
+
+  <properties>
+    <top.dir>${project.basedir}/../..</top.dir>
+  </properties>
+
   <packaging>jar</packaging>
 
   <build>
