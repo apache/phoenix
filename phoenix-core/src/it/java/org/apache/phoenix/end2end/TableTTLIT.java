@@ -261,25 +261,33 @@ public class TableTTLIT extends BaseTest {
             final int flushCount = 10;
             byte[] row = Bytes.toBytes("a");
             int rowUpdateCounter = 0;
-            for (int i = 0; i < flushCount; i++) {
-                // Generate more row versions than the maximum cell versions for the table
-                int updateCount = RAND.nextInt(10) + versions;
-                rowUpdateCounter += updateCount;
-                for (int j = 0; j < updateCount; j++) {
-                    updateRow(conn, tableName, "a");
+            try {
+                for (int i = 0; i < flushCount; i++) {
+                    // Generate more row versions than the maximum cell versions for the table
+                    int updateCount = RAND.nextInt(10) + versions;
+                    rowUpdateCounter += updateCount;
+                    LOG.info(String.format("Iteration:%d uc:%d cntr:%d",
+                            i, updateCount, rowUpdateCounter));
+                    for (int j = 0; j < updateCount; j++) {
+                        updateRow(conn, tableName, "a");
+                        // Sometimes multiple updates to the same row are done in the same millisecond
+                        // This results in overwriting the previous version which breaks the test
+                        Thread.sleep(1);
+                    }
+                    flush(TableName.valueOf(tableName));
+                    // Flushes dump and retain all the cells to HFile.
+                    // Doing MAX_COLUMN_INDEX + 1 to account for empty cells
+                    assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row),
+                            rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
                 }
-                flush(TableName.valueOf(tableName));
-                // Flushes dump and retain all the cells to HFile.
-                // Doing MAX_COLUMN_INDEX + 1 to account for empty cells
-                assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), row),
-                        rowUpdateCounter * (MAX_COLUMN_INDEX + 1));
+                // Run one minor compaction (in case no minor compaction has happened yet)
+                TestUtil.minorCompact(utility, TableName.valueOf(tableName));
+                assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName),
+                                Bytes.toBytes("a")), (MAX_COLUMN_INDEX + 1) * versions);
+            } catch (AssertionError e) {
+                TestUtil.dumpTable(conn, TableName.valueOf(tableName));
+                throw e;
             }
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-            // Run one minor compaction (in case no minor compaction has happened yet)
-            TestUtil.minorCompact(utility, TableName.valueOf(tableName));
-            TestUtil.dumpTable(conn, TableName.valueOf(tableName));
-            assertEquals(TestUtil.getRawCellCount(conn, TableName.valueOf(tableName), Bytes.toBytes("a")),
-                    (MAX_COLUMN_INDEX + 1) * versions);
         }
     }
 
