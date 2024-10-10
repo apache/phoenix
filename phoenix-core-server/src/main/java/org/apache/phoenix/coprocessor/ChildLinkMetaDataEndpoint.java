@@ -95,8 +95,11 @@ public class ChildLinkMetaDataEndpoint extends ChildLinkMetaDataService implemen
             getCoprocessorHost().preCreateViewAddChildLink(fullparentTableName);
 
             // From 4.15 the parent->child links are stored in a separate table SYSTEM.CHILD_LINK
-            mutateRowsWithLocks(this.accessCheckEnabled, this.env.getRegion(), childLinkMutations,
-                Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE);
+            // Also check if SYSTEM indexes exists on SYSTEM.CHILD_LINK, if so set metadata attribs
+            // on child link mutations
+            mutateRowsWithLocks(this.accessCheckEnabled, env, this.env.getRegion(), childLinkMutations,
+                    Collections.<byte[]>emptySet(), HConstants.NO_NONCE, HConstants.NO_NONCE,
+                    true, PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME);
 
         } catch (Throwable t) {
             LOGGER.error("Unable to write mutations to " +

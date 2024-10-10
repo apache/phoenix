@@ -19,6 +19,7 @@ package org.apache.phoenix.compile;
 
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
@@ -31,7 +32,9 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.parse.ComparisonParseNode;
 import org.apache.phoenix.parse.CreateIndexStatement;
+import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
 import org.apache.phoenix.parse.SubqueryParseNode;
@@ -87,12 +90,35 @@ public class CreateIndexCompiler {
      */
     private static class IndexWhereParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
         private boolean  hasSubquery = false;
+        private boolean hasExcludedSystemSchema = false;
 
         @Override
         public Void visit(SubqueryParseNode node) throws SQLException {
             hasSubquery = true;
             return null;
         }
+
+        @Override
+        public boolean visitEnter(ComparisonParseNode node) throws SQLException {
+            if (node.getFilterOp() == CompareOperator.NOT_EQUAL) {
+                boolean hasTableSchemColumn = node.getLHS().toString().equals(PhoenixDatabaseMetaData.TABLE_SCHEM) ||
+                        node.getRHS().toString().equals(PhoenixDatabaseMetaData.TABLE_SCHEM);
+                boolean hasSystemLiteralNode = false;
+                if (node.getLHS().getClass().isAssignableFrom(LiteralParseNode.class)) {
+                    hasSystemLiteralNode =
+                            SchemaUtil.normalizeLiteral((LiteralParseNode) node.getLHS())
+                                    .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME);
+                }
+                if (node.getRHS().getClass().isAssignableFrom(LiteralParseNode.class)) {
+                    hasSystemLiteralNode =
+                            SchemaUtil.normalizeLiteral((LiteralParseNode) node.getRHS())
+                                    .equalsIgnoreCase(PhoenixDatabaseMetaData.SYSTEM_SCHEMA_NAME);
+                }
+                hasExcludedSystemSchema = hasTableSchemColumn && hasSystemLiteralNode;
+            }
+            return true;
+        }
+
     }
 
     private String getValue(PDataType type) {
@@ -138,6 +164,14 @@ public class CreateIndexCompiler {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_WHERE_WITH_SUBQUERY).
                     build().buildException();
         }
+        // Verify that index WHERE clause on SYSTEM.CATALOG table excludes the SYSTEM schema
+        // TABLE_SCHEM <> 'SYSTEM'
+        if (SchemaUtil.isMetaTable(dataTableName.getSchemaName(), dataTableName.getTableName())
+                && !indexWhereParseNodeVisitor.hasExcludedSystemSchema) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_INDEX_WHERE_WITH_SYSTEM_CATALOG_ROWS_NOT_EXCLUDED).
+                    build().buildException();
+        }
+
 
         // Verify that index WHERE clause can be evaluated on a single data table row
 
