@@ -162,6 +162,8 @@ public class TaskRegionObserver implements RegionObserver, RegionCoprocessor {
         public void run() {
             PhoenixConnection connForTask = null;
             try {
+                // TODO: Not sufficient info available when namespaces are enabled and index rebuild task are run
+                //  getConnectionOnServer can fail when namespaces are enabled but SYSTEM namespace not available
                 connForTask = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
                 String[] excludeStates = new String[] { PTable.TaskStatus.FAILED.toString(),
                         PTable.TaskStatus.COMPLETED.toString() };
