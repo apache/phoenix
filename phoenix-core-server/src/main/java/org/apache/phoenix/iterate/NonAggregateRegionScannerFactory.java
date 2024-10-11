@@ -209,7 +209,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 env.getConfiguration()
                         .getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
-        IteratorAndContext ic
+        OrderedResultIteratorWithScannerContext ic
                 = deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
         final OrderedResultIterator iterator = ic.getIterator();
         if (iterator == null) {
@@ -265,11 +265,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
 
     @VisibleForTesting
-    static IteratorAndContext deserializeFromScan(Scan scan, RegionScanner s,
-                                                     boolean spoolingEnabled, long thresholdBytes) {
+    static OrderedResultIteratorWithScannerContext deserializeFromScan(Scan scan, RegionScanner s,
+                                                   boolean spoolingEnabled, long thresholdBytes) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserverConstants.TOPN);
         if (topN == null) {
-            return new IteratorAndContext(null, null);
+            return new OrderedResultIteratorWithScannerContext(null, null);
         }
         int clientVersion = ScanUtil.getClientVersion(scan);
         // Client including and after 4.15 and 5.1 are not going to serialize thresholdBytes
@@ -306,7 +306,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                     = new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
                     thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
                     getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
-            return new IteratorAndContext(inner.getRegionScannerContext(), iterator);
+            return new OrderedResultIteratorWithScannerContext(inner.getRegionScannerContext(),
+                    iterator);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -318,11 +319,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
     }
 
-    private static class IteratorAndContext {
+    private static class OrderedResultIteratorWithScannerContext {
         private ScannerContext scannerContext;
         private OrderedResultIterator iterator;
 
-        IteratorAndContext(ScannerContext sc, OrderedResultIterator ori) {
+        OrderedResultIteratorWithScannerContext(ScannerContext sc, OrderedResultIterator ori) {
             this.scannerContext = sc;
             this.iterator = ori;
         }
