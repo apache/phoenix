@@ -19,7 +19,6 @@ package org.apache.phoenix.util;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.parse.HintNode;
 
@@ -56,7 +55,7 @@ public class QueryBuilder {
      */
     public List<String> getRequiredColumns() {
         List<String> allColumns = Lists.newArrayList(selectColumns);
-        if (!CollectionUtils.isEmpty(selectExpressionColumns)) {
+        if (selectExpressionColumns != null && !selectExpressionColumns.isEmpty()) {
             allColumns.addAll(selectExpressionColumns);
         }
         return allColumns;
@@ -148,7 +147,7 @@ public class QueryBuilder {
 
     public String build() {
         Preconditions.checkNotNull(fullTableName, "Table name cannot be null");
-        if (CollectionUtils.isEmpty(selectColumns) && StringUtils.isBlank(selectExpression)) {
+        if ((selectColumns == null || selectColumns.isEmpty()) && StringUtils.isBlank(selectExpression)) {
             throw new IllegalArgumentException("At least one column or select expression must be provided");
         }
         StringBuilder query = new StringBuilder();

@@ -39,7 +39,6 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
 
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -440,7 +439,7 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
          Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin()) {
       List<SnapshotDescription> snapshotDescriptions = admin.listSnapshots();
       boolean isSnapshotPresent = false;
-      if (CollectionUtils.isNotEmpty(snapshotDescriptions)) {
+      if (snapshotDescriptions != null && !snapshotDescriptions.isEmpty()) {
         for (SnapshotDescription snapshotDescription : snapshotDescriptions) {
           if (snapshotName.equals(snapshotDescription.getName())) {
             isSnapshotPresent = true;
