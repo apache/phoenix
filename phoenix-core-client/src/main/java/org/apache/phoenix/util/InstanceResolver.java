@@ -18,8 +18,8 @@
 package org.apache.phoenix.util;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
-import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceLoader;
@@ -70,21 +70,14 @@ public class InstanceResolver {
     public static <T> List get(Class<T> clazz, List<T> defaultInstances) {
         Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
         if (defaultInstances != null) {
-            defaultInstances.addAll(iteratorToList(iterator));
+            defaultInstances.addAll(Lists.newArrayList(iterator));
         } else {
-            defaultInstances = iteratorToList(iterator);
+            defaultInstances = Lists.newArrayList(iterator);
         }
 
         return defaultInstances;
     }
 
-    private static <T> List<T> iteratorToList(Iterator<T> iterator) {
-        List<T> list = new ArrayList<>();
-        while (iterator.hasNext()) {
-            list.add(iterator.next());
-        }
-        return list;
-    }
 
     private synchronized static <T> T resolveSingleton(Class<T> clazz, T defaultInstance) {
         ServiceLoader<T> loader = ServiceLoader.load(clazz);
