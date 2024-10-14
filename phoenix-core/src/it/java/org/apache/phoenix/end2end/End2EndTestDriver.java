@@ -62,7 +62,7 @@ public class End2EndTestDriver extends Configured implements Tool {
     private static Option SHORT_REGEX_OPTION = new Option("r", true, "Java regex to use selecting tests to run: e.g. .*TestBig.*" +
             " will select all tests that include TestBig in their name.  Default: " +
             ".*end2end.*");
-    private static Option SKIP_TESTS_OPTION = new Option("n", true, "Print list of End2End test suits without running them.");
+    private static Option SKIP_TESTS_OPTION = new Option("n", false, "Print list of End2End test suits without running them.");
 
     private End2EndTestFilter end2endTestFilter = new End2EndTestFilter();
     private boolean skipTests = false;
