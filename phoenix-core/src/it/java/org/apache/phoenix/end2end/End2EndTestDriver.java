@@ -117,7 +117,7 @@ public class End2EndTestDriver extends AbstractHBaseTool {
 
     @Override
     protected void processOptions(CommandLine cmd) {
-      String testFilterString = cmd.getOptionValue(SHORT_REGEX_ARG, (String)null);
+      String testFilterString = cmd.getOptionValue(SHORT_REGEX_ARG);
       if (testFilterString != null) {
         end2endTestFilter.setPattern(testFilterString);
       }
