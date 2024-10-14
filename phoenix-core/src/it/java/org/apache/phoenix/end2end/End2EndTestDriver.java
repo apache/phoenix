@@ -58,7 +58,7 @@ import org.slf4j.LoggerFactory;
 public class End2EndTestDriver extends Configured implements Tool {
     
     private static final Logger LOGGER = LoggerFactory.getLogger(End2EndTestDriver.class);
- 
+
     private static Option SHORT_REGEX_OPTION = new Option("r", true, "Java regex to use selecting tests to run: e.g. .*TestBig.*" +
             " will select all tests that include TestBig in their name.  Default: " +
             ".*end2end.*");
