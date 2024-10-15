@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.execute.TupleProjector;
@@ -365,6 +366,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         } else {
             return false;
         }
+    }
+
+    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+        return next(result);
     }
 
     /**

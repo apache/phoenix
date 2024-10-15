@@ -42,6 +42,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
+import org.apache.hadoop.hbase.regionserver.ScannerContextUtil;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.cache.GlobalCache;
@@ -183,19 +185,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         if (scanOffset != null) {
             final boolean isIncompatibleClient =
                     ScanUtil.isIncompatibleClientForServerReturnValidRowKey(scan);
+            RegionScannerResultIterator iterator = new RegionScannerResultIterator(scan,
+                    innerScanner,
+                    getMinMaxQualifiersFromScan(scan),
+                    encodingScheme);
+            ScannerContext sc = iterator.getRegionScannerContext();
             innerScanner = getOffsetScanner(
                     innerScanner,
                     new OffsetResultIterator(
-                            new RegionScannerResultIterator(
-                                    innerScanner,
-                                    getMinMaxQualifiersFromScan(scan),
-                                    encodingScheme),
+                            iterator,
                             scanOffset,
                             getPageSizeMsForRegionScanner(scan),
                             isIncompatibleClient),
                     scan.getAttribute(QueryConstants.LAST_SCAN) != null,
                     isIncompatibleClient,
-                    scan);
+                    scan, sc);
         }
         boolean spoolingEnabled =
                 env.getConfiguration().getBoolean(
@@ -205,13 +209,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 env.getConfiguration()
                         .getLongBytes(QueryServices.SERVER_SPOOL_THRESHOLD_BYTES_ATTRIB,
                         QueryServicesOptions.DEFAULT_SERVER_SPOOL_THRESHOLD_BYTES);
-        final OrderedResultIterator iterator =
-                deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
+        OrderedResultIteratorWithScannerContext ic
+                = deserializeFromScan(scan, innerScanner, spoolingEnabled, thresholdBytes);
+        final OrderedResultIterator iterator = ic.getIterator();
         if (iterator == null) {
             return innerScanner;
         }
         // TODO:the above wrapped scanner should be used here also
-        return getTopNScanner(env, innerScanner, iterator, tenantId);
+        return getTopNScanner(env, innerScanner, iterator, tenantId, ic.getScannerContext());
     }
 
     private List<Expression> getServerParsedExpressions(Scan scan,
@@ -260,11 +265,11 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     }
 
     @VisibleForTesting
-    static OrderedResultIterator deserializeFromScan(Scan scan, RegionScanner s,
-                                                     boolean spoolingEnabled, long thresholdBytes) {
+    static OrderedResultIteratorWithScannerContext deserializeFromScan(Scan scan, RegionScanner s,
+                                                   boolean spoolingEnabled, long thresholdBytes) {
         byte[] topN = scan.getAttribute(BaseScannerRegionObserverConstants.TOPN);
         if (topN == null) {
-            return null;
+            return new OrderedResultIteratorWithScannerContext(null, null);
         }
         int clientVersion = ScanUtil.getClientVersion(scan);
         // Client including and after 4.15 and 5.1 are not going to serialize thresholdBytes
@@ -295,11 +300,14 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             }
             PTable.QualifierEncodingScheme encodingScheme =
                     EncodedColumnsUtil.getQualifierEncodingScheme(scan);
-            ResultIterator inner = new RegionScannerResultIterator(s,
+            RegionScannerResultIterator inner = new RegionScannerResultIterator(scan, s,
                     EncodedColumnsUtil.getMinMaxQualifiersFromScan(scan), encodingScheme);
-            return new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
+            OrderedResultIterator iterator
+                    = new OrderedResultIterator(inner, orderByExpressions, spoolingEnabled,
                     thresholdBytes, limit >= 0 ? limit : null, null, estimatedRowSize,
                     getPageSizeMsForRegionScanner(scan), scan, s.getRegionInfo());
+            return new OrderedResultIteratorWithScannerContext(inner.getRegionScannerContext(),
+                    iterator);
         } catch (IOException e) {
             throw new RuntimeException(e);
         } finally {
@@ -308,6 +316,24 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+        }
+    }
+
+    private static class OrderedResultIteratorWithScannerContext {
+        private ScannerContext scannerContext;
+        private OrderedResultIterator iterator;
+
+        OrderedResultIteratorWithScannerContext(ScannerContext sc, OrderedResultIterator ori) {
+            this.scannerContext = sc;
+            this.iterator = ori;
+        }
+
+        public ScannerContext getScannerContext() {
+            return scannerContext;
+        }
+
+        public OrderedResultIterator getIterator() {
+            return iterator;
         }
     }
 
@@ -362,7 +388,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                                            final OffsetResultIterator iterator,
                                            final boolean isLastScan,
                                            final boolean incompatibleClient,
-                                           final Scan scan)
+                                           final Scan scan, final ScannerContext sc)
             throws IOException {
         final Tuple firstTuple;
         final Region region = getRegion();
@@ -439,6 +465,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         return new BaseRegionScanner(s) {
             private Tuple tuple = firstTuple;
             private byte[] previousResultRowKey;
+            private ScannerContext regionScannerContext = sc;
 
             @Override
             public boolean isFilterDone() {
@@ -447,6 +474,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
             @Override
             public boolean next(List<Cell> results) throws IOException {
+                return next(results, null);
+            }
+
+            @Override
+            public boolean next(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
                 try {
                     if (isFilterDone()) {
                         return false;
@@ -480,12 +513,22 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         }
                     }
                     tuple = nextTuple;
+                    if (regionScannerContext != null) {
+                        ScannerContextUtil.updateMetrics(regionScannerContext, scannerContext);
+                        regionScannerContext = null;
+                    }
                     return !isFilterDone();
                 } catch (Throwable t) {
                     LOGGER.error("Error while iterating Offset scanner.", t);
                     ClientUtil.throwIOException(getRegion().getRegionInfo().getRegionNameAsString(), t);
                     return false;
                 }
+            }
+
+            @Override
+            public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
+                return next(results, scannerContext);
             }
 
             @Override
@@ -542,7 +585,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
      *  since after this everything is held in memory
      */
     private RegionScanner getTopNScanner(RegionCoprocessorEnvironment env, final RegionScanner s,
-                                         final OrderedResultIterator iterator, ImmutableBytesPtr tenantId) throws Throwable {
+                                         final OrderedResultIterator iterator,
+                                         ImmutableBytesPtr tenantId, ScannerContext sc)
+            throws Throwable {
 
         final Tuple firstTuple;
         TenantCache tenantCache = GlobalCache.getTenantCache(env, tenantId);
@@ -565,6 +610,7 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
         }
         return new BaseRegionScanner(s) {
             private Tuple tuple = firstTuple;
+            private ScannerContext regionScannerContext = sc;
 
             @Override
             public boolean isFilterDone() {
@@ -573,6 +619,12 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
 
             @Override
             public boolean next(List<Cell> results) throws IOException {
+                return next(results, null);
+            }
+
+            @Override
+            public boolean next(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
                 try {
                     if (isFilterDone()) {
                         return false;
@@ -585,11 +637,21 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                         }
                     }
                     tuple = iterator.next();
+                    if (regionScannerContext != null) {
+                        ScannerContextUtil.updateMetrics(regionScannerContext, scannerContext);
+                        regionScannerContext = null;
+                    }
                     return !isFilterDone();
                 } catch (Throwable t) {
                     ClientUtil.throwIOException(region.getRegionInfo().getRegionNameAsString(), t);
                     return false;
                 }
+            }
+
+            @Override
+            public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                    throws IOException {
+                return next(results, scannerContext);
             }
 
             @Override

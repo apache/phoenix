@@ -217,7 +217,8 @@ public class OrderedResultIterator implements PeekingResultIterator {
 
     public OrderedResultIterator(ResultIterator delegate,
             List<OrderByExpression> orderByExpressions, boolean spoolingEnabled,
-            long thresholdBytes, Integer limit, Integer offset, int estimatedRowSize, long pageSizeMs) {
+            long thresholdBytes, Integer limit, Integer offset,
+             int estimatedRowSize, long pageSizeMs) {
         checkArgument(!orderByExpressions.isEmpty());
         this.delegate = delegate;
         this.orderByExpressions = orderByExpressions;
