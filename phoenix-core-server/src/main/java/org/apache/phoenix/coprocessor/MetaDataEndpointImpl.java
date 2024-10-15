@@ -1582,6 +1582,9 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                         } catch (SQLException e) {
                             if (e.getErrorCode()
                                 != SQLExceptionCode.GET_TABLE_ERROR.getErrorCode()) {
+                                LOGGER.error(
+                                    "Error while retrieving getTable for PHYSICAL_TABLE link to {}",
+                                    famName, e);
                                 throw e;
                             }
                         }
