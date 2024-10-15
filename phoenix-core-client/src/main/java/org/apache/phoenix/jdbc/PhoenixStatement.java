@@ -623,9 +623,19 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     throw new UpgradeRequiredException();
                                 }
                                 state = connection.getMutationState();
-                                plan = stmt.compilePlan(PhoenixStatement.this, Sequence.ValueOp.VALIDATE_SEQUENCE);
                                 isUpsert = stmt instanceof ExecutableUpsertStatement;
                                 isDelete = stmt instanceof ExecutableDeleteStatement;
+                                if (isDelete && connection.getAutoCommit() &&
+                                        returnResult == ReturnResult.ROW) {
+                                    // used only if single row deletion needs to atomically
+                                    // return row that is deleted.
+                                    plan = ((ExecutableDeleteStatement) stmt).compilePlan(
+                                            PhoenixStatement.this,
+                                            Sequence.ValueOp.VALIDATE_SEQUENCE, returnResult);
+                                } else {
+                                    plan = stmt.compilePlan(PhoenixStatement.this,
+                                            Sequence.ValueOp.VALIDATE_SEQUENCE);
+                                }
                                 isAtomicUpsert = isUpsert && ((ExecutableUpsertStatement)stmt).getOnDupKeyPairs() != null;
                                 if (plan.getTargetRef() != null && plan.getTargetRef().getTable() != null) {
                                     if (!Strings.isNullOrEmpty(plan.getTargetRef().getTable().getPhysicalName().toString())) {
@@ -647,7 +657,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                         lastState.getUpdateCount());
                                 Result result = null;
                                 if (connection.getAutoCommit()) {
-                                    if (isSingleRowUpdatePlan(isUpsert, isDelete, plan)) {
+                                    boolean singleRowUpdate = isSingleRowUpdatePlan(isUpsert,
+                                            isDelete, plan);
+                                    if (singleRowUpdate) {
                                         state.setReturnResult(returnResult);
                                     }
                                     connection.commit();
@@ -657,6 +669,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                                     }
                                     result = connection.getMutationState().getResult();
                                     connection.getMutationState().clearResult();
+                                    result = getResult(singleRowUpdate, isDelete, plan,
+                                            lastState, result);
                                 }
                                 setLastQueryPlan(null);
                                 setLastUpdateCount(lastUpdateCount);
@@ -756,6 +770,25 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             Throwables.propagate(e);
             throw new IllegalStateException(); // Can't happen as Throwables.propagate() always throws
         }
+    }
+
+    /**
+     * Get different Result if the row is atomically deleted.
+     *
+     * @param singleRowUpdate True if this is single row Upsert/Delete.
+     * @param isDelete True if this is Delete and not Upsert.
+     * @param plan Mutation Plan.
+     * @param mutationState Mutation State.
+     * @param result Result obtained so far.
+     * @return Result for the atomically updated row.
+     */
+    private Result getResult(boolean singleRowUpdate, boolean isDelete, MutationPlan plan,
+                             MutationState mutationState, Result result) {
+        if (singleRowUpdate && isDelete &&
+                plan instanceof DeleteCompiler.ServerSelectDeleteMutationPlan) {
+                result = mutationState.getResult();
+        }
+        return result;
     }
 
     private static boolean isSingleRowUpdatePlan(boolean isUpsert, boolean isDelete,
@@ -1158,6 +1191,29 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             }
 		    DeleteCompiler compiler = new DeleteCompiler(stmt, this.getOperation());
             MutationPlan plan = compiler.compile(this);
+            plan.getContext().getSequenceManager().validateSequences(seqAction);
+            return plan;
+        }
+
+        /**
+         * Compile Plan for single row delete with additional condition on non-pk columns. New
+         * plan compilation is used for returning the deleted row atomically only if it is deleted
+         * by the given DELETE statement.
+         *
+         * @param stmt JDBC Phoenix Statement object.
+         * @param seqAction Sequence statement validation.
+         * @param returnResult ReturnResult object.
+         * @return The compiled MutationPlan.
+         * @throws SQLException If something fails during plan compilation.
+         */
+        public MutationPlan compilePlan(PhoenixStatement stmt,
+                                        Sequence.ValueOp seqAction,
+                                        ReturnResult returnResult) throws SQLException {
+            if (!getUdfParseNodes().isEmpty()) {
+                stmt.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
+            }
+            DeleteCompiler compiler = new DeleteCompiler(stmt, this.getOperation());
+            MutationPlan plan = compiler.compile(this, returnResult);
             plan.getContext().getSequenceManager().validateSequences(seqAction);
             return plan;
         }

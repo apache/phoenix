@@ -141,7 +141,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     }
 
     @Test
-    public void testReturnRowResult() throws Exception {
+    public void testReturnRowResult1() throws Exception {
         Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
                 "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
 
@@ -160,45 +160,7 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             conn.createStatement().execute(ddl);
             createIndex(conn, tableName);
 
-            String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
-                    + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
-                    "IGNORE";
-            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
-                    bsonDocument1, bsonDocument1, 123);
-
-            upsertSql =
-                    "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
-                            + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE"
-                            + " KEY IGNORE";
-            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
-                    null, bsonDocument1, 123);
-
-            upsertSql =
-                    "UPSERT INTO " + tableName
-                            + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
-                            + "'pk003', 234, 'col2_000')";
-            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
-                    null, bsonDocument1, 123);
-
-            upsertSql = "UPSERT INTO " + tableName
-                    + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
-                    + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
-                    + " END, "
-                    + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
-                    + "END, "
-                    + "COL3 = ?, "
-                    + "COL4 = 234";
-            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
-                    bsonDocument2, bsonDocument2, 234);
-
-            upsertSql = "UPSERT INTO " + tableName
-                    + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
-                    + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
-                    + " END,"
-                    + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
-                    + "END";
-            validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
-                    , null, bsonDocument2, 234);
+            validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
             PhoenixPreparedStatement ps =
                     conn.prepareStatement(
@@ -212,37 +174,136 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
                     bsonDocument2, 234);
 
-            addRows(tableName, conn);
-
-            ps = conn.prepareStatement(
-                    "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?")
-                    .unwrap(PhoenixPreparedStatement.class);
-            ps.setString(1, "pk001");
-            ps.setDouble(2, 122.34);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                    bsonDocument2, 234);
-
-            ps = conn.prepareStatement(
-                            "DELETE FROM " + tableName).unwrap(PhoenixPreparedStatement.class);
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                    bsonDocument2, 234);
-
-            ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
-            assertFalse(rs.next());
-
-            addRows(tableName, conn);
-
-            ps = conn.prepareStatement(
-                            "DELETE FROM " + tableName + " WHERE PK1 IN (?) AND PK2 IN (?) AND " +
-                                    "PK3 IN (?, ?)")
-                    .unwrap(PhoenixPreparedStatement.class);
-            ps.setString(1, "pk001");
-            ps.setDouble(2, 122.34);
-            ps.setString(3, "pk004");
-            ps.setString(4, "pk005");
-            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
-                    bsonDocument2, 234);
+            validateMultiRowDelete(tableName, conn, bsonDocument2);
         }
+    }
+
+    @Test
+    public void testReturnRowResult2() throws Exception {
+        Assume.assumeTrue("Set correct result to RegionActionResult on hbase versions " +
+                "2.4.18+, 2.5.9+, and 2.6.0+", isSetCorrectResultEnabledOnHBase());
+
+        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+        String sample1 = getJsonString("json/sample_01.json");
+        String sample2 = getJsonString("json/sample_02.json");
+        BsonDocument bsonDocument1 = RawBsonDocument.parse(sample1);
+        BsonDocument bsonDocument2 = RawBsonDocument.parse(sample2);
+        try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+            conn.setAutoCommit(true);
+            String tableName = generateUniqueName();
+            String ddl = "CREATE TABLE " + tableName
+                    + "(PK1 VARCHAR, PK2 DOUBLE NOT NULL, PK3 VARCHAR, COUNTER1 DOUBLE,"
+                    + " COUNTER2 VARCHAR,"
+                    + " COL3 BSON, COL4 INTEGER, CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3))";
+            conn.createStatement().execute(ddl);
+            createIndex(conn, tableName);
+
+            validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
+
+            PhoenixPreparedStatement ps =
+                    conn.prepareStatement(
+                                    "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
+                                            "= ? AND PK3 = ? AND COL4 = ?")
+                            .unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            ps.setInt(4, 235);
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
+                    bsonDocument2, 234);
+
+            ps = conn.prepareStatement("DELETE FROM " + tableName
+                            + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND COL4 = ?")
+                    .unwrap(PhoenixPreparedStatement.class);
+            ps.setString(1, "pk000");
+            ps.setDouble(2, -123.98);
+            ps.setString(3, "pk003");
+            ps.setInt(4, 234);
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, true,
+                    bsonDocument2, 234);
+            validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
+                    bsonDocument2, 234);
+
+            validateMultiRowDelete(tableName, conn, bsonDocument2);
+        }
+    }
+
+    private static void validateMultiRowDelete(String tableName, Connection conn,
+                                               BsonDocument bsonDocument2)
+            throws SQLException {
+        addRows(tableName, conn);
+
+        PhoenixPreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 = ?")
+                .unwrap(PhoenixPreparedStatement.class);
+        ps.setString(1, "pk001");
+        ps.setDouble(2, 122.34);
+        validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
+                bsonDocument2, 234);
+
+        ps = conn.prepareStatement(
+                "DELETE FROM " + tableName).unwrap(PhoenixPreparedStatement.class);
+        validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
+                bsonDocument2, 234);
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName);
+        assertFalse(rs.next());
+
+        addRows(tableName, conn);
+
+        ps = conn.prepareStatement(
+                        "DELETE FROM " + tableName + " WHERE PK1 IN (?) AND PK2 IN (?) AND " +
+                                "PK3 IN (?, ?)")
+                .unwrap(PhoenixPreparedStatement.class);
+        ps.setString(1, "pk001");
+        ps.setDouble(2, 122.34);
+        ps.setString(3, "pk004");
+        ps.setString(4, "pk005");
+        validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", false, false,
+                bsonDocument2, 234);
+    }
+
+    private static void validateAtomicUpsertReturnRow(String tableName, Connection conn, BsonDocument bsonDocument1,
+                                  BsonDocument bsonDocument2) throws SQLException {
+        String upsertSql = "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1, COL3, COL4)"
+                + " VALUES('pk000', -123.98, 'pk003', 1011.202, ?, 123) ON DUPLICATE KEY " +
+                "IGNORE";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, true,
+                bsonDocument1, bsonDocument1, 123);
+
+        upsertSql =
+                "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COUNTER1) "
+                        + "VALUES('pk000', -123.98, 'pk003', 0) ON DUPLICATE"
+                        + " KEY IGNORE";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 1011.202, null, false,
+                null, bsonDocument1, 123);
+
+        upsertSql =
+                "UPSERT INTO " + tableName
+                        + " (PK1, PK2, PK3, COUNTER1, COUNTER2) VALUES('pk000', -123.98, "
+                        + "'pk003', 234, 'col2_000')";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 234d, "col2_000", true,
+                null, bsonDocument1, 123);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END, "
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END, "
+                + "COL3 = ?, "
+                + "COL4 = 234";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", true,
+                bsonDocument2, bsonDocument2, 234);
+
+        upsertSql = "UPSERT INTO " + tableName
+                + " (PK1, PK2, PK3) VALUES('pk000', -123.98, 'pk003') ON DUPLICATE KEY UPDATE "
+                + "COUNTER1 = CASE WHEN COUNTER1 < 2000 THEN COUNTER1 + 1999.99 ELSE COUNTER1"
+                + " END,"
+                + "COUNTER2 = CASE WHEN COUNTER2 = 'col2_000' THEN 'col2_001' ELSE COUNTER2 "
+                + "END";
+        validateReturnedRowAfterUpsert(conn, upsertSql, tableName, 2233.99, "col2_001", false
+                , null, bsonDocument2, 234);
     }
 
     private static void addRows(String tableName, Connection conn) throws SQLException {
@@ -292,31 +353,13 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             return;
         }
 
-        validateReturnedRowResult(col1, col2, expectedDoc, col4, table, cell, result);
+        validateReturnedRowResult(col2, expectedDoc, col4, table, result);
     }
 
-    private static void validateReturnedRowResult(Double col1, String col2,
+    private static void validateReturnedRowResult(String col2,
                                                   BsonDocument expectedDoc, Integer col4,
-                                                  PTable table, Cell cell, ResultTuple result) {
-        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 1);
-        assertEquals("pk000",
-                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
-
-        ptr = new ImmutableBytesPtr();
-        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 2);
-        assertEquals(-123.98,
-                PDouble.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
-
-        ptr = new ImmutableBytesPtr();
-        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 3);
-        assertEquals("pk003",
-                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
-
-        assertEquals(col1,
-                PDouble.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
-                        cell.getValueLength()));
-        cell = result.getResult()
+                                                  PTable table, ResultTuple result) {
+        Cell cell = result.getResult()
                 .getColumnLatestCell(table.getColumns().get(4).getFamilyName().getBytes(),
                         table.getColumns().get(4).getColumnQualifierBytes());
         if (col2 != null) {
@@ -378,7 +421,24 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
                 result.getResult()
                         .getColumnLatestCell(table.getColumns().get(3).getFamilyName().getBytes(),
                                 table.getColumns().get(3).getColumnQualifierBytes());
-        validateReturnedRowResult(col1, col2, expectedDoc, col4, table, cell, result);
+        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 1);
+        assertEquals("pk000",
+                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 2);
+        assertEquals(-123.98,
+                PDouble.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+
+        ptr = new ImmutableBytesPtr();
+        table.getRowKeySchema().iterator(cell.getRowArray(), ptr, 3);
+        assertEquals("pk003",
+                PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength()));
+        assertEquals(col1,
+                PDouble.INSTANCE.toObject(cell.getValueArray(), cell.getValueOffset(),
+                        cell.getValueLength()));
+        validateReturnedRowResult(col2, expectedDoc, col4, table, result);
     }
 
     @Test
