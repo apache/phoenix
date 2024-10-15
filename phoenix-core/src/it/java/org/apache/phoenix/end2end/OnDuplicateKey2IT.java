@@ -49,6 +49,8 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -200,6 +202,8 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
 
             validateAtomicUpsertReturnRow(tableName, conn, bsonDocument1, bsonDocument2);
 
+            verifyIndexRow(conn, tableName, false);
+
             PhoenixPreparedStatement ps =
                     conn.prepareStatement(
                                     "DELETE FROM " + tableName + " WHERE PK1 = ? AND PK2 " +
@@ -221,11 +225,35 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
             ps.setInt(4, 234);
             validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, true,
                     bsonDocument2, 234);
+
+            verifyIndexRow(conn, tableName, true);
             validateReturnedRowAfterDelete(conn, ps, tableName, 2233.99, "col2_001", true, false,
                     bsonDocument2, 234);
 
             validateMultiRowDelete(tableName, conn, bsonDocument2);
         }
+    }
+
+    private void verifyIndexRow(Connection conn, String tableName, boolean deleted) throws SQLException {
+        PreparedStatement preparedStatement =
+                conn.prepareStatement("SELECT COUNTER2 FROM " + tableName + " WHERE COUNTER1 " +
+                        "= ?");
+        preparedStatement.setDouble(1, 2233.99);
+
+        ResultSet resultSet = preparedStatement.executeQuery();
+        if (!deleted) {
+            assertTrue(resultSet.next());
+            assertEquals("col2_001", resultSet.getString(1));
+        }
+        assertFalse(resultSet.next());
+
+        ExplainPlan plan =
+                preparedStatement.unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+                        .getExplainPlan();
+        ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+        assertEquals(indexDDL.contains("index") ? (indexDDL.contains("local index") ?
+                        tableName + "_IDX(" + tableName + ")" : tableName + "_IDX") :
+                        tableName, explainPlanAttributes.getTableName());
     }
 
     private static void validateMultiRowDelete(String tableName, Connection conn,
