@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
@@ -130,12 +131,20 @@ public class PagingRegionScanner extends BaseRegionScanner {
         private boolean hasMore() {
             return lookupPosition < pointLookupRanges.size();
         }
-        private boolean next(List<Cell> results, boolean raw, RegionScanner scanner)
-                throws IOException {
+        private boolean next(List<Cell> results, boolean raw, RegionScanner scanner,
+                             ScannerContext scannerContext) throws IOException {
             try {
                 long startTime = EnvironmentEdgeManager.currentTimeMillis();
                 while (true) {
-                    if (raw ? scanner.nextRaw(results) : scanner.next(results)) {
+                    boolean hasMore;
+                    if (scannerContext != null) {
+                        hasMore = raw
+                                ? scanner.nextRaw(results, scannerContext)
+                                : scanner.next(results, scannerContext);
+                    } else {
+                        hasMore = raw ? scanner.nextRaw(results) : scanner.next(results);
+                    }
+                    if (hasMore) {
                         // Since each scan is supposed to return only one row (even when the
                         // start and stop row key are not the same, which happens after region
                         // moves or when there are delete markers in the table), this should not
@@ -197,7 +206,8 @@ public class PagingRegionScanner extends BaseRegionScanner {
         initialized = true;
     }
 
-    private boolean next(List<Cell> results, boolean raw) throws IOException {
+    private boolean next(List<Cell> results, boolean raw, ScannerContext scannerContext)
+            throws IOException {
         init();
         if (pagingFilter != null) {
             pagingFilter.init();
@@ -230,19 +240,26 @@ public class PagingRegionScanner extends BaseRegionScanner {
 
         } else {
             if (multiKeyPointLookup != null) {
-               RegionScanner regionScanner = multiKeyPointLookup.getNewScanner();
-               if (regionScanner == null) {
-                   return false;
-               }
-               delegate.close();
-               delegate = regionScanner;
+                RegionScanner regionScanner = multiKeyPointLookup.getNewScanner();
+                if (regionScanner == null) {
+                    return false;
+                }
+                delegate.close();
+                delegate = regionScanner;
             }
         }
 
         if (multiKeyPointLookup != null) {
-            return multiKeyPointLookup.next(results, raw, delegate);
+            return multiKeyPointLookup.next(results, raw, delegate, scannerContext);
         }
-        boolean hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
+        boolean hasMore;
+        if (scannerContext != null) {
+            hasMore = raw
+                    ? delegate.nextRaw(results, scannerContext)
+                    : delegate.next(results, scannerContext);
+        } else {
+            hasMore = raw ? delegate.nextRaw(results) : delegate.next(results);
+        }
         if (pagingFilter == null) {
             return hasMore;
         }
@@ -268,12 +285,22 @@ public class PagingRegionScanner extends BaseRegionScanner {
 
     @Override
     public boolean next(List<Cell> results) throws IOException {
-        return next(results, false);
+        return next(results, false, null);
     }
 
     @Override
     public boolean nextRaw(List<Cell> results) throws IOException {
-        return next(results, true);
+        return next(results, true, null);
+    }
+
+    @Override
+    public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+        return next(results, false, scannerContext);
+    }
+
+    @Override
+    public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+        return next(results, true, scannerContext);
     }
 
     @Override

@@ -53,6 +53,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
@@ -352,6 +353,11 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             return new BaseRegionScanner(s) {
                 private int index = 0;
 
+                public boolean next(List<Cell> result, ScannerContext scannerContext)
+                        throws IOException {
+                    return next(result);
+                }
+
                 @Override
                 public void close() throws IOException {
                     try {
@@ -483,7 +489,19 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         @Override
+        public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                throws IOException {
+            return next(results, scannerContext);
+        }
+
+        @Override
         public boolean next(List<Cell> resultsToReturn) throws IOException {
+            return next(resultsToReturn, null);
+        }
+
+        @Override
+        public boolean next(List<Cell> resultsToReturn, ScannerContext scannerContext)
+                throws IOException {
             if (firstScan && actualScanStartRowKey != null) {
                 if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
                     if (hasRegionMoved()) {
@@ -522,7 +540,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
             if (firstScan) {
                 firstScan = false;
             }
-            boolean moreRows = nextInternal(resultsToReturn);
+            boolean moreRows = nextInternal(resultsToReturn, scannerContext);
             if (ScanUtil.isDummy(resultsToReturn)) {
                 return true;
             }
@@ -560,7 +578,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // If includeStartRowKey is false and the current rowkey is matching
                         // with scanStartRowKey, return the next row result.
                         resultsToReturn.clear();
-                        moreRows = nextInternal(resultsToReturn);
+                        moreRows = nextInternal(resultsToReturn, scannerContext);
                         if (ScanUtil.isDummy(resultsToReturn)) {
                             return true;
                         }
@@ -578,7 +596,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                             // If includeStartRowKey is true and the (current rowkey + "\0xx") is
                             // matching with scanStartRowKey, return the next row result.
                             resultsToReturn.clear();
-                            moreRows = nextInternal(resultsToReturn);
+                            moreRows = nextInternal(resultsToReturn, scannerContext);
                             if (ScanUtil.isDummy(resultsToReturn)) {
                                 return true;
                             }
@@ -590,7 +608,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                     }
                     // In the loop, keep iterating through rows.
                     resultsToReturn.clear();
-                    moreRows = nextInternal(resultsToReturn);
+                    moreRows = nextInternal(resultsToReturn, scannerContext);
                     if (ScanUtil.isDummy(resultsToReturn)) {
                         return true;
                     }
@@ -609,7 +627,8 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
          * @return true if more rows exist after this one, false if scanner is done.
          * @throws IOException if something goes wrong.
          */
-        private boolean nextInternal(List<Cell> resultsToReturn) throws IOException {
+        private boolean nextInternal(List<Cell> resultsToReturn, ScannerContext scannerContext)
+                throws IOException {
             boolean hasMore;
             long startTime = EnvironmentEdgeManager.currentTimeMillis();
             long now;
@@ -620,7 +639,7 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                 acquiredLock = true;
                 synchronized (delegate) {
                     if (regionScanner != null) {
-                        return regionScanner.next(resultsToReturn);
+                        return regionScanner.next(resultsToReturn, scannerContext);
                     }
                     do {
                         List<Cell> results = useQualifierAsIndex ?
@@ -632,7 +651,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // since this is an indication of whether or not there are
                         // more values after the
                         // ones returned
-                        hasMore = delegate.nextRaw(results);
+                        hasMore = (scannerContext == null)
+                                    ? delegate.nextRaw(results)
+                                    : delegate.nextRaw(results, scannerContext);
                         if (!results.isEmpty()) {
                             if (isDummy(results)) {
                                 return getDummyResult(resultsToReturn);
@@ -780,7 +801,17 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
         }
 
         @Override
+        public boolean nextRaw(List<Cell> results, ScannerContext scannerContext)
+                throws IOException {
+            return next(results, scannerContext);
+        }
+
+        @Override
         public boolean next(List<Cell> results) throws IOException {
+            return next(results, null);
+        }
+        @Override
+        public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
             boolean hasMore;
             boolean atLimit;
             boolean aggBoundary = false;
@@ -807,7 +838,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver im
                         // since this is an indication of whether or not there
                         // are more values after the
                         // ones returned
-                        hasMore = delegate.nextRaw(kvs);
+                        hasMore = (scannerContext == null)
+                                    ? delegate.nextRaw(kvs)
+                                    : delegate.nextRaw(kvs, scannerContext);
                         if (!kvs.isEmpty()) {
                             if (isDummy(kvs)) {
                                 updateDummyWithPrevRowKey(results, initStartRowKey,

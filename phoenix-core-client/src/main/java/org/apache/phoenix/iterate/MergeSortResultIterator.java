@@ -56,7 +56,10 @@ public abstract class MergeSortResultIterator implements PeekingResultIterator {
     @Override
     public Tuple next() throws SQLException {
         MaterializedComparableResultIterator iterator = minIterator();
-        if (iterator == null) { return null; }
+        if (iterator == null) {
+            close();
+            return null;
+        }
         Tuple next = iterator.next();
         minHeap.poll();
         if (iterator.peek() != null) {
