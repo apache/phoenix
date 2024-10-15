@@ -43,7 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class drives the End2End tests suite execution against an
+ * This class drives the End2End tests suite execution against   an
  * already deployed distributed cluster.
  */
 public class End2EndTestDriver extends AbstractHBaseTool {
