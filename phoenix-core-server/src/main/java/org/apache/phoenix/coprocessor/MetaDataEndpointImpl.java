@@ -1041,17 +1041,6 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
         arguments.add(arg);
     }
 
-    private PTable getTable(byte[] tenantId, byte[] schemaName, byte[] tableName, long clientTimeStamp, int clientVersion)
-            throws IOException, SQLException {
-        byte[] tableKey = SchemaUtil.getTableKey(tenantId, schemaName, tableName);
-        ImmutableBytesPtr cacheKey = new ImmutableBytesPtr(tableKey);
-        // Get as of latest timestamp so we can detect if we have a newer table that already
-        // exists without making an additional query
-        PTable table = loadTable(env, tableKey, cacheKey, clientTimeStamp, HConstants.LATEST_TIMESTAMP,
-                clientVersion);
-        return table;
-    }
-
     private PName getPhysicalTableName(Region region, byte[] tenantId, byte[] schema, byte[] table, long timestamp) throws IOException {
         byte[] key = SchemaUtil.getTableKey(tenantId, schema, table);
         Scan scan = MetaDataUtil.newTableRowsScan(key, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
@@ -1525,8 +1514,22 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // in Phoenix, hence there is no point of calling getTable().
                     if (!famName.getString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)
                         && indexType != IndexType.LOCAL) {
-                        parentTable = getTable(null, SchemaUtil.getSchemaNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8),
-                                SchemaUtil.getTableNameFromFullName(famName.getBytes()).getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
+                        try {
+                            parentTable = doGetTable(null,
+                                SchemaUtil.getSchemaNameFromFullName(famName.getBytes())
+                                    .getBytes(StandardCharsets.UTF_8),
+                                SchemaUtil.getTableNameFromFullName(famName.getBytes())
+                                    .getBytes(StandardCharsets.UTF_8), clientTimeStamp,
+                                clientVersion);
+                        } catch (SQLException e) {
+                            if (e.getErrorCode()
+                                != SQLExceptionCode.GET_TABLE_ERROR.getErrorCode()) {
+                                LOGGER.error(
+                                    "Error while retrieving getTable for PHYSICAL_TABLE link to {}",
+                                    famName, e);
+                                throw e;
+                            }
+                        }
                         if (isSystemCatalogSplittable
                             && (parentTable == null || isTableDeleted(parentTable))) {
                             // parentTable is neither in the cache nor in the local region. Since
