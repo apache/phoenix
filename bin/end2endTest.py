@@ -46,7 +46,7 @@ hbase_classpath = ''
 if os.getenv('HBASE_HOME'):
     hbase_bin_dir = os.path.join(os.getenv('HBASE_HOME'), "bin")
     hbase_classpath = subprocess.check_output(
-        [os.path.join(hbase_bin_dir, "hbase"),"--internal-classpath", "classpath"]).decode().strip()
+        [os.path.join(hbase_bin_dir, "hbase"), "--internal-classpath", "classpath"]).decode().strip()
 else:
     print("HBASE_HOME is not set, using HBase jars from cached_classpath.txt")
     # Set whatever config dir phoenix_utlils has decided instead
