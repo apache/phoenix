@@ -1572,11 +1572,19 @@ TABLE_FAMILY_BYTES, TABLE_SEQ_NUM_BYTES);
                     // in Phoenix, hence there is no point of calling getTable().
                     if (!famName.getString().startsWith(MetaDataUtil.VIEW_INDEX_TABLE_PREFIX)
                         && indexType != IndexType.LOCAL) {
-                        parentTable = doGetTable(null,
-                            SchemaUtil.getSchemaNameFromFullName(famName.getBytes())
-                                .getBytes(StandardCharsets.UTF_8),
-                            SchemaUtil.getTableNameFromFullName(famName.getBytes())
-                                .getBytes(StandardCharsets.UTF_8), clientTimeStamp, clientVersion);
+                        try {
+                            parentTable = doGetTable(null,
+                                SchemaUtil.getSchemaNameFromFullName(famName.getBytes())
+                                    .getBytes(StandardCharsets.UTF_8),
+                                SchemaUtil.getTableNameFromFullName(famName.getBytes())
+                                    .getBytes(StandardCharsets.UTF_8), clientTimeStamp,
+                                clientVersion);
+                        } catch (SQLException e) {
+                            if (e.getErrorCode()
+                                != SQLExceptionCode.GET_TABLE_ERROR.getErrorCode()) {
+                                throw e;
+                            }
+                        }
                         if (isSystemCatalogSplittable
                             && (parentTable == null || isTableDeleted(parentTable))) {
                             // parentTable is neither in the cache nor in the local region. Since
