@@ -31,17 +31,37 @@ import phoenix_utils
 
 phoenix_utils.setPath()
 
-phoenix_jar_path = os.getenv(phoenix_utils.phoenix_class_path, phoenix_utils.phoenix_test_jar_path)
+# Get the cached classpath
+base_dir = os.path.join(phoenix_utils.current_dir, '..')
+phoenix_target_dir = os.path.join(base_dir, 'phoenix-core', 'target')
 
-# HBase configuration folder path (where hbase-site.xml reside) for
-# HBase/Phoenix client side property override
-hbase_library_path = os.getenv('HBASE_LIBRARY_DIR', '')
+cp_file_path = os.path.join(phoenix_target_dir, 'cached_classpath.txt')
+cp_components = []
+with open(cp_file_path, 'r') as cp_file:
+    cp_components.append(cp_file.read())
+cached_classpath = ":".join(cp_components)
 
-print("Current ClassPath=%s:%s:%s" % (phoenix_utils.hbase_conf_dir, phoenix_jar_path,
-                                      hbase_library_path))
+# Get the hbase classpath from HBASE_HOME
+hbase_classpath = ''
+if os.getenv('HBASE_HOME'):
+    hbase_bin_dir = os.path.join(os.getenv('HBASE_HOME'), "bin")
+    hbase_classpath = subprocess.check_output(
+        [os.path.join(hbase_bin_dir, "hbase"), "--internal-classpath", "classpath"]).decode().strip()
+else:
+    print("HBASE_HOME is not set, using HBase jars from cached_classpath.txt")
+    # Set whatever config dir phoenix_utlils has decided instead
+    hbase_classpath = phoenix_utils.hbase_conf_dir
 
-java_cmd = "java -cp " + phoenix_utils.hbase_conf_dir + os.pathsep + phoenix_jar_path + os.pathsep + \
-    hbase_library_path + " org.apache.phoenix.end2end.End2EndTestDriver " + \
+# The internal classpath returned by `hbase classpath`, and the cached classpath have a lot of the
+# same files. If HBASE_HOME is set, then the jars from it come before the cached jars, so those
+# take precedence. Otherwise we use the HBase jars from the cached classpath.
+# If HBASE_HOME is specified, then the cached classpath would only be used for Junit.
+
+print("Current ClassPath=%s:%s:%s" %
+      (hbase_classpath, phoenix_utils.phoenix_test_jar_path, cached_classpath))
+
+java_cmd = "java -cp " + hbase_classpath + os.pathsep + phoenix_utils.phoenix_test_jar_path \
+     + os.pathsep + cached_classpath + " org.apache.phoenix.end2end.End2EndTestDriver " + \
     ' '.join(sys.argv[1:])
 
 os.execl("/bin/sh", "/bin/sh", "-c", java_cmd)
