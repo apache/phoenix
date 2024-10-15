@@ -544,6 +544,7 @@
                     <reason>Use shaded version in phoenix-thirdparty</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.cli.**</bannedImport>
+                      <bannedImport>org.apache.hbase.thirdparty.org.apache.commons.cli.**</bannedImport>
                     </bannedImports>
                   </RestrictImports>
                   <RestrictImports>
