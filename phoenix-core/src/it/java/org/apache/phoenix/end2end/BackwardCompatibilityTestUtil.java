@@ -41,6 +41,8 @@ import java.io.FileWriter;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -202,8 +204,14 @@ public final class BackwardCompatibilityTestUtil {
         };
         errorStreamThread.start();
         p.waitFor();
-        assertEquals(String.format("Executing the query failed%s. Check the result file: %s",
-                sb.length() > 0 ? sb.append(" with : ").toString() : "", resultFilePath),
+        String resultDump = "PLACEHOLDER. Could not read result file";
+        try {
+            resultDump = new String(Files.readAllBytes(Paths.get(resultFilePath)));
+        } catch (Exception e) {
+            //We return the placeholder
+        }
+        assertEquals(String.format("Executing the query failed%s. Check the result file: %s\nResult file dump follows:\n%s",
+                sb.length() > 0 ? sb.append(" with : ").toString() : "", resultFilePath, resultDump),
                 0, p.exitValue());
     }
 
