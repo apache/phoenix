@@ -91,6 +91,8 @@ import org.slf4j.LoggerFactory;
 @Category(NeedsOwnMiniClusterTest.class)
 public class BackwardCompatibilityIT {
 
+    //Random comment to trigger Yetus
+    
     private static final Logger LOGGER = LoggerFactory.getLogger(
             BackwardCompatibilityIT.class);
 
