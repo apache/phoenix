@@ -186,6 +186,9 @@ public enum MetricType {
     TIME_SPENT_IN_SYSTEM_TABLE_RPC_CALLS("tsistrc", "Time spent in RPC calls for systemTable lookup",
                                          LogLevel.DEBUG,PLong.INSTANCE),
 
+    COUNT_BLOCK_BYTES_SCANNED("bbs", "Count of Block Bytes Scanned",
+            LogLevel.DEBUG,PLong.INSTANCE),
+
     //HA Related Metrics
     HA_PARALLEL_COUNT_OPERATIONS_ACTIVE_CLUSTER("hpoac","Number of Operations to the active cluster",LogLevel.DEBUG,PLong.INSTANCE),
     HA_PARALLEL_COUNT_OPERATIONS_STANDBY_CLUSTER("hposc","Number of Operations to the standby cluster",LogLevel.DEBUG,PLong.INSTANCE),

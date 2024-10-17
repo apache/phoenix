@@ -26,9 +26,11 @@ import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REMOTE_RPC_CALL
 import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.REMOTE_RPC_RETRIES_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_CALLS_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_RETRIES_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.BLOCK_BYTES_SCANNED_KEY_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BLOCK_BYTES_SCANNED;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS;
@@ -190,8 +192,9 @@ public class ScanningResultIterator implements ResultIterator {
                     scanMetricsMap.get(COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME));
             changeMetric(GLOBAL_HBASE_COUNT_ROWS_FILTERED,
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
-
             changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
+            changeMetric(GLOBAL_HBASE_COUNT_BLOCK_BYTES_SCANNED,
+                    scanMetricsMap.get(BLOCK_BYTES_SCANNED_KEY_METRIC_NAME));
 
             scanMetricsUpdated = true;
         }

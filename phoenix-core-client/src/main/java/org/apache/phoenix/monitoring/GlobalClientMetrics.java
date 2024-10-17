@@ -21,6 +21,7 @@ import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_ADD
 import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_EVICTION_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.CLIENT_METADATA_CACHE_REMOVAL_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.COUNT_BLOCK_BYTES_SCANNED;
 import static org.apache.phoenix.monitoring.MetricType.HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_WAIT_TIME;
@@ -145,7 +146,7 @@ public enum GlobalClientMetrics {
     GLOBAL_HBASE_COUNT_ROWS_SCANNED(COUNT_ROWS_SCANNED),
     GLOBAL_HBASE_COUNT_ROWS_FILTERED(COUNT_ROWS_FILTERED),
     GLOBAL_HBASE_COUNTER_METADATA_INCONSISTENCY(COUNTER_METADATA_INCONSISTENCY),
-
+    GLOBAL_HBASE_COUNT_BLOCK_BYTES_SCANNED(COUNT_BLOCK_BYTES_SCANNED),
     GLOBAL_HA_PARALLEL_POOL1_TASK_QUEUE_WAIT_TIME(HA_PARALLEL_POOL1_TASK_QUEUE_WAIT_TIME),
     GLOBAL_HA_PARALLEL_POOL1_TASK_END_TO_END_TIME(HA_PARALLEL_POOL1_TASK_END_TO_END_TIME),
     GLOBAL_HA_PARALLEL_POOL1_TASK_EXECUTION_TIME(HA_PARALLEL_POOL1_TASK_EXECUTION_TIME),
