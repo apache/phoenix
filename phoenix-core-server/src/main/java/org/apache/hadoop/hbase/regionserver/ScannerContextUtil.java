@@ -42,6 +42,7 @@ public class ScannerContextUtil {
             for (Map.Entry<String, Long> entry : src.getMetrics().getMetricsMap().entrySet()) {
                 dst.metrics.addToCounter(entry.getKey(), entry.getValue());
             }
+            dst.incrementBlockProgress((int) src.getBlockSizeProgress());
         }
     }
 

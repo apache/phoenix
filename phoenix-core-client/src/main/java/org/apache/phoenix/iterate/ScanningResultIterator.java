@@ -167,6 +167,8 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(scanMetricsHolder.getCountOfBytesScanned(),
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
             changeMetric(scanMetricsHolder.getCountOfRowsPaged(), dummyRowCounter);
+            changeMetric(scanMetricsHolder.getCountOfBlockBytesScanned(),
+                    scanMetricsMap.get(BLOCK_BYTES_SCANNED_KEY_METRIC_NAME));
 
             changeMetric(GLOBAL_SCAN_BYTES,
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
@@ -193,8 +195,6 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(GLOBAL_HBASE_COUNT_ROWS_FILTERED,
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
             changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
-            changeMetric(GLOBAL_HBASE_COUNT_BLOCK_BYTES_SCANNED,
-                    scanMetricsMap.get(BLOCK_BYTES_SCANNED_KEY_METRIC_NAME));
 
             scanMetricsUpdated = true;
         }
