@@ -43,6 +43,7 @@ public class ScannerContextUtil {
                 dst.metrics.addToCounter(entry.getKey(), entry.getValue());
             }
             dst.incrementBlockProgress((int) src.getBlockSizeProgress());
+            dst.getMetrics().fsReadTime.addAndGet(src.getMetrics().fsReadTime.get());
         }
     }
 

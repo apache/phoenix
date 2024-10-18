@@ -18,24 +18,21 @@
 
 package org.apache.hadoop.hbase.regionserver;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -71,8 +68,8 @@ public class BlockBytesScannedMetricIT extends BaseTest {
         Assert.assertTrue(count0 == 0);
 
         // flush and clear block cache
-        flush(tableName);
-        clearBlockCache(tableName);
+        TestUtil.flush(utility, TableName.valueOf(tableName));
+        TestUtil.clearBlockCache(utility, TableName.valueOf(tableName));
 
         long count1 = countBlockBytesScannedFromSql(stmt, POINT_LOOKUP_QUERY);
         Assert.assertTrue(count1 > 0);
@@ -91,8 +88,8 @@ public class BlockBytesScannedMetricIT extends BaseTest {
             stmt.execute(sql);
         }
         conn.commit();
-        flush(tableName);
-        clearBlockCache(tableName);
+        TestUtil.flush(utility, TableName.valueOf(tableName));
+        TestUtil.clearBlockCache(utility, TableName.valueOf(tableName));
 
         String RANGE_SCAN_QUERY = "SELECT * FROM " + tableName + " WHERE A > 14 AND A < 18";
         String SERVER_FILTER_QUERY = "SELECT * FROM " + tableName + " WHERE Z > 14 AND Z < 18";
@@ -112,48 +109,7 @@ public class BlockBytesScannedMetricIT extends BaseTest {
         Assert.assertEquals(count3, count2);
     }
 
-    private void clearBlockCache(String tableName) {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
-        for (HRegion region : regionServer.getRegions(TableName.valueOf(tableName))) {
-            regionServer.clearRegionBlockCache(region);
-        }
-    }
-
-    private void flush(String tableName) throws IOException {
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
-        for (HRegion region : regionServer.getRegions(TableName.valueOf(tableName))) {
-            region.flush(true);
-        }
-    }
-
-
     private long countBlockBytesScannedFromSql(Statement stmt, String sql) throws SQLException {
-        ResultSet rs = stmt.executeQuery(sql);
-        while (rs.next()) {
-            // loop to the end
-        }
-        return getBlockBytesScanned(rs);
-    }
-
-    private long getBlockBytesScanned(ResultSet rs) throws SQLException {
-        if (!(rs instanceof PhoenixResultSet)) {
-            return -1;
-        }
-        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
-
-        long sum = 0;
-        boolean valid = false;
-        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
-            Long val = entry.getValue().get(MetricType.COUNT_BLOCK_BYTES_SCANNED);
-            if (val != null) {
-                sum += val.longValue();
-                valid = true;
-            }
-        }
-        if (valid) {
-            return sum;
-        } else {
-            return -1;
-        }
+        return TestUtil.getMetricFromSql(stmt, sql, MetricType.COUNT_BLOCK_BYTES_SCANNED);
     }
 }

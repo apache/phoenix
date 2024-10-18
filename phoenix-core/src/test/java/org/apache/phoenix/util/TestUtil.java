@@ -129,6 +129,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
@@ -816,6 +817,11 @@ public class TestUtil {
         admin.flush(table);
     }
 
+    public static void clearBlockCache(HBaseTestingUtility utility, TableName table) throws IOException {
+        Admin admin = utility.getAdmin();
+        admin.clearBlockCache(table);
+    }
+
     public static void minorCompact(HBaseTestingUtility utility, TableName table)
             throws IOException, InterruptedException {
         try {
@@ -1450,4 +1456,25 @@ public class TestUtil {
         return Files.createTempDirectory(Paths.get(System.getProperty("java.io.tmpdir")), null);
     }
 
+    public static long getMetricFromSql(Statement stmt, String sql, MetricType metric)
+            throws SQLException {
+        ResultSet rs = stmt.executeQuery(sql);
+        while (rs.next()) {}
+        Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+
+        long sum = 0;
+        boolean valid = false;
+        for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
+            Long val = entry.getValue().get(metric);
+            if (val != null) {
+                sum += val.longValue();
+                valid = true;
+            }
+        }
+        if (valid) {
+            return sum;
+        } else {
+            return -1;
+        }
+    }
 }

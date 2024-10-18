@@ -29,6 +29,7 @@ import static org.apache.hadoop.hbase.client.metrics.ScanMetrics.RPC_RETRIES_MET
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.BLOCK_BYTES_SCANNED_KEY_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME;
 import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME;
+import static org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics.FS_READ_TIME_METRIC_NAME;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BLOCK_BYTES_SCANNED;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS;
@@ -42,8 +43,10 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COU
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_COUNT_SCANNED_REGIONS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HBASE_FS_READ_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SCAN_BYTES;
+import static org.apache.phoenix.monitoring.MetricType.FS_READ_TIME;
 import static org.apache.phoenix.util.ScanUtil.isDummy;
 
 import java.io.IOException;
@@ -169,6 +172,8 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(scanMetricsHolder.getCountOfRowsPaged(), dummyRowCounter);
             changeMetric(scanMetricsHolder.getCountOfBlockBytesScanned(),
                     scanMetricsMap.get(BLOCK_BYTES_SCANNED_KEY_METRIC_NAME));
+            changeMetric(scanMetricsHolder.getFsReadTime(),
+                    scanMetricsMap.get(FS_READ_TIME_METRIC_NAME));
 
             changeMetric(GLOBAL_SCAN_BYTES,
                     scanMetricsMap.get(BYTES_IN_RESULTS_METRIC_NAME));
@@ -195,6 +200,9 @@ public class ScanningResultIterator implements ResultIterator {
             changeMetric(GLOBAL_HBASE_COUNT_ROWS_FILTERED,
                     scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
             changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
+            changeMetric(GLOBAL_HBASE_COUNT_BLOCK_BYTES_SCANNED,
+                    scanMetricsMap.get(BLOCK_BYTES_SCANNED_KEY_METRIC_NAME));
+            changeMetric(GLOBAL_HBASE_FS_READ_TIME, scanMetricsMap.get(FS_READ_TIME));
 
             scanMetricsUpdated = true;
         }
