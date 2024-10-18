@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.hbase.regionserver;
 
-import static org.junit.Assert.assertEquals;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -54,31 +52,64 @@ public class BlockBytesScannedMetricIT extends BaseTest {
     }
 
     @Test
-    public void testBlockBytesScannedMetric() throws Exception {
+    public void testPointLookupBlockBytesScannedMetric() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
         String tableName = generateUniqueName();
         PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
         stmt.execute("CREATE TABLE " + tableName
                 + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG)");
-        for (int i = 1; i <= 200; i++) {
+        for (int i = 1; i <= 10; i++) {
             String sql = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
             stmt.execute(sql);
-            if (i%50==0) {
-                conn.commit();
-                flush(tableName);
-            }
         }
+        conn.commit();
+
+        String POINT_LOOKUP_QUERY = "SELECT * FROM " + tableName + " WHERE A = 9";
+
+        // read from memory, block bytes read should be 0
+        long count0 = countBlockBytesScannedFromSql(stmt, POINT_LOOKUP_QUERY);
+        Assert.assertTrue(count0 == 0);
+
+        // flush and clear block cache
+        flush(tableName);
         clearBlockCache(tableName);
 
-        long count1 = countBlockBytesScannedFromSql(stmt, "SELECT * FROM " + tableName + " WHERE A = 67");
+        long count1 = countBlockBytesScannedFromSql(stmt, POINT_LOOKUP_QUERY);
+        Assert.assertTrue(count1 > 0);
+    }
+
+    @Test
+    public void testRangeScanBlockBytesScannedMetric() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        String tableName = generateUniqueName();
+        PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+        // create table with small block size and upsert enough rows to have at least 2 blocks
+        stmt.execute("CREATE TABLE " + tableName
+                + " (A UNSIGNED_LONG NOT NULL PRIMARY KEY, Z UNSIGNED_LONG) BLOCKSIZE=200");
+        for (int i = 1; i <= 20; i++) {
+            String sql = String.format("UPSERT INTO %s VALUES (%d, %d)", tableName, i, i);
+            stmt.execute(sql);
+        }
+        conn.commit();
+        flush(tableName);
+        clearBlockCache(tableName);
+
+        String RANGE_SCAN_QUERY = "SELECT * FROM " + tableName + " WHERE A > 14 AND A < 18";
+        String SERVER_FILTER_QUERY = "SELECT * FROM " + tableName + " WHERE Z > 14 AND Z < 18";
+        String SELECT_ALL_QUERY = "SELECT * FROM " + tableName;
+
+        long count1 = countBlockBytesScannedFromSql(stmt, RANGE_SCAN_QUERY);
         Assert.assertTrue(count1 > 0);
 
-        long count2 = countBlockBytesScannedFromSql(stmt, "SELECT * FROM " + tableName);
+        long count2 = countBlockBytesScannedFromSql(stmt, SERVER_FILTER_QUERY);
         Assert.assertTrue(count2 > 0);
+        // where clause has non PK column, will have to scan all rows
+        Assert.assertTrue(count2 > count1);
 
-        long count3 = countBlockBytesScannedFromSql(stmt, "SELECT * FROM " + tableName
-                + " WHERE A > 21  AND A < 67");
+        long count3 = countBlockBytesScannedFromSql(stmt, SELECT_ALL_QUERY);
         Assert.assertTrue(count3 > 0);
+        // should be same as previous query which also scans all rows
+        Assert.assertEquals(count3, count2);
     }
 
     private void clearBlockCache(String tableName) {
