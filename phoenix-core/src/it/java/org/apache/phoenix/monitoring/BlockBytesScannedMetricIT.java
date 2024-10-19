@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.hbase.regionserver;
+package org.apache.phoenix.monitoring;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -27,7 +27,6 @@ import java.util.Map;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
