@@ -4597,10 +4597,12 @@ public class MetaDataClient {
                     .buildException();
         }
         indexColumn = new HashMap(indexesPTable.size());
-        PDataType indexColDataType = IndexUtil.getIndexColumnDataType(colDef.isNull(), colDef.getDataType());
         ColumnName
                 indexColName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(familyName, colDef.getColumnDefName().getColumnName()));
-        ColumnDef indexColDef = FACTORY.columnDef(indexColName, indexColDataType.getSqlTypeName(), colDef.isNull(), colDef.getMaxLength(), colDef.getScale(), false, colDef.getSortOrder(), colDef.getExpression(), colDef.isRowTimestamp());
+        ColumnDef indexColDef = FACTORY.columnDef(indexColName,
+                colDef.getDataType().getSqlTypeName(), colDef.isNull(),
+                colDef.getMaxLength(), colDef.getScale(), false,
+                colDef.getSortOrder(), colDef.getExpression(), colDef.isRowTimestamp());
         // TODO: add support to specify tenant owned indexes in the DDL statement with CASCADE executed with Global connection
         for (PTable index : indexesPTable) {
             int iPos = indexToColumnSizeMap.get(index);
