@@ -286,14 +286,14 @@ public class TableSnapshotReadsMapReduceIT extends BaseTest {
       ResultSet rs = DriverManager.getConnection(getUrl(), props).createStatement().executeQuery(inputQuery);
 
       if(shouldSplit) {
-          //Records may not be processed in the same order as the query runs,
-          //make sure everything is ordered by Field1 ASC
-          Collections.sort(result, new Comparator<List<Object>>(){
-              @Override
-            public int compare(List<Object> o1, List<Object> o2) {
-                  return ((String)o1.get(0)).compareTo((String)o2.get(0));
-               }
-           });
+        //Records may not be processed in the same order as the query runs,
+        //make sure everything is ordered by Field1 ASC
+        Collections.sort(result, new Comparator<List<Object>>(){
+          @Override
+          public int compare(List<Object> o1, List<Object> o2) {
+              return ((String)o1.get(0)).compareTo((String)o2.get(0));
+          }
+        });
       }
 
       for (List<Object> r : result) {
