@@ -87,7 +87,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
         }
 
         cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-        createCDC(conn, cdc_sql, null, null);
+        createCDC(conn, cdc_sql, null);
         assertCDCState(conn, cdcName, null, 3);
         assertNoResults(conn, cdcName);
 
@@ -111,51 +111,6 @@ public class CDCDefinitionIT extends CDCBaseIT {
         assertNoResults(conn, cdcName);
 
         conn.close();
-    }
-
-    @Test
-    public void testCreateWithSalt() throws Exception {
-        // Indexes on views don't support salt buckets and is currently silently ignored.
-        if (forView) {
-            return;
-        }
-
-        // {data table bucket count, CDC bucket count}
-        Integer[][] saltingConfigs = new Integer[][] {
-                new Integer[]{null, 2},
-                new Integer[]{0, 2},
-                new Integer[]{4, null},
-                new Integer[]{4, 1},
-                new Integer[]{4, 0},
-                new Integer[]{4, 2}
-        };
-
-        for (Integer[] saltingConfig: saltingConfigs) {
-            try (Connection conn = newConnection()) {
-                String tableName = generateUniqueName();
-                createTable(conn, "CREATE TABLE  " + tableName +
-                                " ( k INTEGER PRIMARY KEY, v1 INTEGER, v2 DATE)",
-                                null, false, saltingConfig[0], false, null);
-                assertSaltBuckets(conn, tableName, saltingConfig[0]);
-
-                String cdcName = generateUniqueName();
-                String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-                createCDC(conn, cdc_sql, null,
-                        saltingConfig[1]);
-                try {
-                    assertCDCState(conn, cdcName, null, 3);
-                    assertSaltBuckets(conn, cdcName, null);
-                    // Index inherits table salt buckets.
-                    assertSaltBuckets(conn, CDCUtil.getCDCIndexName(cdcName),
-                            saltingConfig[1] != null ? saltingConfig[1] : saltingConfig[0]);
-                    assertNoResults(conn, cdcName);
-                } catch (Exception error) {
-                    throw new AssertionError("{tableSaltBuckets=" + saltingConfig[0] + ", " +
-                            "cdcSaltBuckets=" + saltingConfig[1] + "} " + error.getMessage(),
-                            error);
-                }
-            }
-        }
     }
 
     @Test
@@ -206,8 +161,9 @@ public class CDCDefinitionIT extends CDCBaseIT {
         assertEquals(true, indexTable.isMultiTenant());
         List<PColumn> idxPkColumns = indexTable.getPKColumns();
         assertEquals(":TENANTID", idxPkColumns.get(0).getName().getString());
-        assertEquals(": PHOENIX_ROW_TIMESTAMP()", idxPkColumns.get(1).getName().getString());
-        assertEquals(":K", idxPkColumns.get(2).getName().getString());
+        assertEquals(": PARTITION_ID()", idxPkColumns.get(1).getName().getString());
+        assertEquals(": PHOENIX_ROW_TIMESTAMP()", idxPkColumns.get(2).getName().getString());
+        assertEquals(":K", idxPkColumns.get(3).getName().getString());
 
         PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
         assertEquals(true, cdcTable.isMultiTenant());

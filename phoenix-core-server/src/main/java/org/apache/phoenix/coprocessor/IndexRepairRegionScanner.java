@@ -121,7 +121,7 @@ public class IndexRepairRegionScanner extends GlobalIndexRegionScanner {
                 del.add(cell);
             }
         }
-        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
+        List<Mutation> indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del, null);
         Collections.reverse(indexMutations);
         for (Mutation mutation : indexMutations) {
             byte[] indexRowKey = mutation.getRow();

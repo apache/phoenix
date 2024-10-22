@@ -440,7 +440,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         valueGetter, ptr, results.get(0).getTimestamp(),
                         env.getRegion().getRegionInfo().getStartKey(),
                         env.getRegion().getRegionInfo().getEndKey(),
-                        false);
+                        false, null);
 
                 if (txnProvider != null) {
                     put = txnProvider.markPutAsCommitted(put, ts, ts);

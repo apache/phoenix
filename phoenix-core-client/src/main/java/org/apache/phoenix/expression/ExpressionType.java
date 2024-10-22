@@ -199,7 +199,8 @@ public enum ExpressionType {
     JsonModifyFunction(JsonModifyFunction.class),
     BsonConditionExpressionFunction(BsonConditionExpressionFunction.class),
     BsonUpdateExpressionFunction(BsonUpdateExpressionFunction.class),
-    BsonValueFunction(BsonValueFunction.class);
+    BsonValueFunction(BsonValueFunction.class),
+    PartitionIdFunction(PartitionIdFunction.class);
 
     ExpressionType(Class<? extends Expression> clazz) {
         this.clazz = clazz;
