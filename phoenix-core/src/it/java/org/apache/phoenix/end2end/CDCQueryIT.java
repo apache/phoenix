@@ -132,6 +132,23 @@ public class CDCQueryIT extends CDCBaseIT {
         assertFalse(explainPlan.contains(cdcName));
     }
 
+    private void checkIndexPartitionIdCount(Connection conn, String cdcName) throws Exception {
+        ResultSet rs = conn.createStatement().executeQuery("SELECT PARTITION_ID() FROM "
+                + cdcName);
+        int i = 1;
+        assertTrue(rs.next());
+        String partition_id = rs.getString(1);
+        LOGGER.info("PARTITION_ID["+ i + "] = " + partition_id);
+        while (rs.next()) {
+            if (!partition_id.equals(rs.getString(1))) {
+                partition_id = rs.getString(1);
+                i++;
+                LOGGER.info("PARTITION_ID["+ i + "] = " + partition_id);
+            }
+        }
+        assertEquals(tableSaltBuckets == null ? 1 : tableSaltBuckets, i);
+    }
+
     @Test
     public void testSelectCDC() throws Exception {
         String cdcName, cdc_sql;
@@ -325,6 +342,10 @@ public class CDCQueryIT extends CDCBaseIT {
                             "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName),
                     datatableName, dataColumns, changes, ALL_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
+            checkIndexPartitionIdCount(conn, cdcFullName);
+        }
+        try (Connection conn = newConnection()) {
+
         }
     }
 
