@@ -299,21 +299,28 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         for (Cell cell : dataRow.rawCells()) {
             put.add(cell);
         }
-        if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
-            if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
-                Mutation[] mutations;
-                Put indexPut = new Put(indexRowKey);
-                indexPut.addColumn(emptyCF, emptyCQ, indexTimestamp, QueryConstants.VERIFIED_BYTES);
-                if ((EnvironmentEdgeManager.currentTimeMillis() - indexTimestamp) > ageThreshold) {
-                    Delete indexDelete = indexMaintainer.buildRowDeleteMutation(indexRowKey,
-                            IndexMaintainer.DeleteType.SINGLE_VERSION, indexTimestamp);
-                    mutations = new Mutation[]{indexPut, indexDelete};
-                } else {
-                    mutations = new Mutation[]{indexPut};
-                }
-                region.batchMutate(mutations);
+        if (indexMaintainer.isCDCIndex()) {
+            if (indexMaintainer.checkIndexRow(indexRowKey, dataRow.getRow(), put, viewConstants)
+                    && IndexUtil.getMaxTimestamp(put) == indexTimestamp) {
+                return true;
             }
-            return true;
+        } else {
+            if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
+                if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
+                    Mutation[] mutations;
+                    Put indexPut = new Put(indexRowKey);
+                    indexPut.addColumn(emptyCF, emptyCQ, indexTimestamp, QueryConstants.VERIFIED_BYTES);
+                    if ((EnvironmentEdgeManager.currentTimeMillis() - indexTimestamp) > ageThreshold) {
+                        Delete indexDelete = indexMaintainer.buildRowDeleteMutation(indexRowKey,
+                                IndexMaintainer.DeleteType.SINGLE_VERSION, indexTimestamp);
+                        mutations = new Mutation[]{indexPut, indexDelete};
+                    } else {
+                        mutations = new Mutation[]{indexPut};
+                    }
+                    region.batchMutate(mutations);
+                }
+                return true;
+            }
         }
         if (indexMaintainer.isAgedEnough(IndexUtil.getMaxTimestamp(put), ageThreshold)) {
             region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put), false));

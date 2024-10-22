@@ -1199,13 +1199,13 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
     }
 
     private static Put prepareIndexPutForRebuild(IndexMaintainer indexMaintainer,
-            ImmutableBytesPtr rowKeyPtr, ValueGetter mergedRowVG, long ts) throws IOException {
+            ImmutableBytesPtr rowKeyPtr, ValueGetter mergedRowVG, long ts, byte[] encodedRegionName) throws IOException {
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                mergedRowVG, rowKeyPtr, ts, null, null, false);
+                mergedRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
         if (indexPut == null) {
             // No covered column. Just prepare an index row with the empty column
             byte[] indexRowKey = indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr,
-                    null, null, ts);
+                    null, null, ts, encodedRegionName);
             indexPut = new Put(indexRowKey);
         } else {
             IndexUtil.removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
@@ -1280,7 +1280,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
      * and mutation type where delete comes after put.
      */
     public static List<Mutation> prepareIndexMutationsForRebuild(IndexMaintainer indexMaintainer,
-                                                                 Put dataPut, Delete dataDel) throws IOException {
+            Put dataPut, Delete dataDel, byte[] encodedRegionName) throws IOException {
         List<Mutation> dataMutations = getMutationsWithSameTS(dataPut, dataDel);
         List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
         // The row key ptr of the data table row for which we will build index rows here
@@ -1341,7 +1341,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     }
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRow);
                     Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
-                            nextDataRowVG, ts);
+                            nextDataRowVG, ts, encodedRegionName);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
                     if (indexRowKeyForCurrentDataRow != null) {
@@ -1380,8 +1380,9 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                             // CDC Index needs two delete markers one for deleting the index row,
                             // and the other for referencing the data table delete mutation with
                             // the right index row key, that is, the index row key starting with ts
-                            indexMutations.add(IndexRegionObserver.getDeleteIndexMutation(
-                                    currentDataRowState, indexMaintainer, ts, rowKeyPtr));
+                            indexMutations.add(IndexRegionObserver
+                                    .getDeleteIndexMutation(currentDataRowState, indexMaintainer,
+                                            ts, rowKeyPtr, encodedRegionName));
                         }
                     }
                     currentDataRowState = null;
@@ -1398,7 +1399,7 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                     }
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr,
-                            nextDataRowVG, ts);
+                            nextDataRowVG, ts, encodedRegionName);
                     indexMutations.add(indexPut);
                     // Delete the current index row if the new index key is different than the current one
                     if (indexRowKeyForCurrentDataRow != null) {
@@ -1424,7 +1425,8 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
                                      Set<byte[]> mostRecentIndexRowKeys) throws IOException {
         List<Mutation> indexMutations;
 
-        indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del);
+        indexMutations = prepareIndexMutationsForRebuild(indexMaintainer, put, del,
+                region.getRegionInfo().getEncodedNameAsBytes());
         Collections.reverse(indexMutations);
 
         boolean mostRecentDone = false;

@@ -119,11 +119,13 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
             if (row.isEmpty()) {
                 singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_DATA_ROW.getValue();
             } else {
-                Put put = new Put(CellUtil.cloneRow(row.get(0)));
+                byte[] dataRowKey = CellUtil.cloneRow(row.get(0));
+                Put put = new Put(dataRowKey);
                 for (Cell cell : row) {
                     put.add(cell);
                 }
-                if (indexMaintainer.checkIndexRow(indexRowKeyforReadRepair, put)) {
+                if (indexMaintainer.checkIndexRow(indexRowKeyforReadRepair, dataRowKey, put,
+                        viewConstants)) {
                     singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.INDEX_ROW_EXISTS.getValue();
                 } else {
                     singleRowRebuildReturnCode = GlobalIndexChecker.RebuildReturnCode.NO_INDEX_ROW.getValue();

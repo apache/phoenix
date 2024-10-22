@@ -97,7 +97,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
             IndexUpdate indexUpdate = statePair.getSecond();
             indexUpdate.setTable(maintainer.isLocalIndex() ? tableName : maintainer.getIndexTableName());
             Put put = maintainer.buildUpdateMutation(KV_BUILDER, valueGetter, ptr, state.getCurrentTimestamp(),
-                    regionStartKey, regionEndKey, verified);
+                    regionStartKey, regionEndKey, verified, null);
             indexUpdate.setUpdate(put);
             indexUpdates.add(indexUpdate);
         }
@@ -124,7 +124,7 @@ public class PhoenixIndexCodec extends BaseIndexCodec {
                 IndexUpdate indexUpdate = statePair.getSecond();
                 indexUpdate.setTable(maintainer.isLocalIndex() ? tableName : maintainer.getIndexTableName());
                 Delete delete = maintainer.buildDeleteMutation(KV_BUILDER, valueGetter, ptr, state.getPendingUpdate(),
-                        state.getCurrentTimestamp(), regionStartKey, regionEndKey);
+                        state.getCurrentTimestamp(), regionStartKey, regionEndKey, null);
                 indexUpdate.setUpdate(delete);
                 indexUpdates.add(indexUpdate);
             }

@@ -19,6 +19,7 @@ package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
@@ -169,6 +170,7 @@ import java.util.Objects;
 
 import org.apache.commons.lang3.mutable.MutableBoolean;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.phoenix.expression.function.PartitionIdFunction;
 import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.DropCDCStatement;
@@ -1978,13 +1980,15 @@ public class MetaDataClient {
                 "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
                         + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName())
                         + " ON " + dataTableFullName + " ("
-                        + PhoenixRowTimestampFunction.NAME + "()) ASYNC";
+                        + PartitionIdFunction.NAME + "(), " + PhoenixRowTimestampFunction.NAME
+                        + "()) ASYNC";
         List<String> indexProps = new ArrayList<>();
         indexProps.add("REPLICATION_SCOPE=0");
-        Object saltBucketNum = TableProperty.SALT_BUCKETS.getValue(tableProps);
-        if (saltBucketNum != null) {
-            indexProps.add("SALT_BUCKETS=" + saltBucketNum);
+        if (TableProperty.SALT_BUCKETS.getValue(tableProps) != null) {
+            throw new SQLExceptionInfo.Builder(SALTING_NOT_ALLOWED_FOR_CDC).setTableName(
+                    statement.getCdcObjName().getName()).build().buildException();
         }
+        indexProps.add("SALT_BUCKETS=0");
         Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
         if (columnEncodedBytes != null) {
             indexProps.add("COLUMN_ENCODED_BYTES=" + columnEncodedBytes);

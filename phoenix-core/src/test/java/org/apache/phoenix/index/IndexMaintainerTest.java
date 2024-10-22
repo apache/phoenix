@@ -18,6 +18,7 @@
 
 package org.apache.phoenix.index;
 
+import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -143,7 +144,8 @@ public class IndexMaintainerTest  extends BaseConnectionlessQueryTest {
             Mutation indexMutation = indexMutations.get(0);
             ImmutableBytesWritable indexKeyPtr = new ImmutableBytesWritable(indexMutation.getRow());
             ptr.set(rowKeyPtr.get(), rowKeyPtr.getOffset(), rowKeyPtr.getLength());
-            byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr, null, null, HConstants.LATEST_TIMESTAMP);
+            byte[] mutablelndexRowKey = im1.buildRowKey(valueGetter, ptr, null, null,
+                    HConstants.LATEST_TIMESTAMP, EMPTY_BYTE_ARRAY);
             byte[] immutableIndexRowKey = indexKeyPtr.copyBytes();
             assertArrayEquals(immutableIndexRowKey, mutablelndexRowKey);
             for (ColumnReference ref : im1.getCoveredColumns()) {

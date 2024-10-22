@@ -785,14 +785,6 @@ public class QueryCompiler {
                 selectNodes = tmpSelectNodes;
             }
             List<OrderByNode> orderByNodes = select.getOrderBy();
-            // For CDC queries, if no ORDER BY is specified, add default ordering.
-            if (orderByNodes.size() == 0) {
-                orderByNodes = Lists.newArrayListWithExpectedSize(1);
-                orderByNodes.add(NODE_FACTORY.orderBy(
-                        NODE_FACTORY.function(PhoenixRowTimestampFunction.NAME,
-                                Collections.emptyList()),
-                        false, SortOrder.getDefault() == SortOrder.ASC));
-            }
             select = NODE_FACTORY.select(select.getFrom(),
                     select.getHint(), select.isDistinct(), selectNodes, select.getWhere(),
                     select.getGroupBy(), select.getHaving(), orderByNodes, select.getLimit(),

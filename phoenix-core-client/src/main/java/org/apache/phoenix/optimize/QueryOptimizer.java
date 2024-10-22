@@ -283,13 +283,17 @@ public class QueryOptimizer {
             plans.add(dataPlan);
             hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes,
                     targetColumns, parallelIteratorFactory, plans);
-            if (hintedPlan != null) {
+            if (hintedPlan != null ) {
                 PTable index = hintedPlan.getTableRef().getTable();
-                if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
-                        || isPartialIndexUsable(select, dataPlan, index))) {
-                    return Collections.singletonList(hintedPlan);
+                // Ignore any index hint with a CDC index
+                if (!CDCUtil.isCDCIndex(index)) {
+                    if (stopAtBestPlan && hintedPlan.isApplicable() && (
+                            index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan,
+                                    index))) {
+                        return Collections.singletonList(hintedPlan);
+                    }
+                    plans.add(0, hintedPlan);
                 }
-                plans.add(0, hintedPlan);
             }
         }
         

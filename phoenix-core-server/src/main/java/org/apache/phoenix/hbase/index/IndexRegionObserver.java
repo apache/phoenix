@@ -378,6 +378,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
+  private byte[] encodedRegionName;
 
   @Override
   public Optional<RegionObserver> getRegionObserver() {
@@ -388,6 +389,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public void start(CoprocessorEnvironment e) throws IOException {
       try {
         final RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) e;
+        encodedRegionName = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
         String serverName = env.getServerName().getServerName();
         if (env.getConfiguration().getBoolean(CHECK_VERSION_CONF_KEY, true)) {
           // make sure the right version <-> combinations are allowed.
@@ -967,9 +969,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
     }
     public static Mutation getDeleteIndexMutation(Put dataRowState, IndexMaintainer indexMaintainer,
-            long ts, ImmutableBytesPtr rowKeyPtr) {
+            long ts, ImmutableBytesPtr rowKeyPtr, byte[] encodedRegionName) {
         ValueGetter dataRowVG = new IndexUtil.SimpleValueGetter(dataRowState);
-        byte[] indexRowKey = indexMaintainer.buildRowKey(dataRowVG, rowKeyPtr, null, null, ts);
+        byte[] indexRowKey = indexMaintainer.buildRowKey(dataRowVG, rowKeyPtr, null, null,
+                ts, encodedRegionName);
         return indexMaintainer.buildRowDeleteMutation(indexRowKey,
                 IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
     }
@@ -1004,11 +1007,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)) {
                     ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
                     Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-                            nextDataRowVG, rowKeyPtr, ts, null, null, false);
+                            nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
                     if (indexPut == null) {
                         // No covered column. Just prepare an index row with the empty column
                         byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr,
-                                null, null, ts);
+                                null, null, ts, encodedRegionName);
                         indexPut = new Put(indexRowKey);
                     } else {
                         IndexUtil.removeEmptyColumn(indexPut, indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
@@ -1023,8 +1026,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     // Delete the current index row if the new index key is different than the current one
                     if (currentDataRowState != null) {
                         ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
-                        byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG, rowKeyPtr,
-                                null, null, ts);
+                        byte[] indexRowKeyForCurrentDataRow = indexMaintainer
+                                .buildRowKey(currentDataRowVG, rowKeyPtr, null, null,
+                                        ts, encodedRegionName);
                         if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
                             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                                     IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
@@ -1036,7 +1040,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                         && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
                     context.indexUpdates.put(hTableInterfaceReference,
                             new Pair<Mutation, byte[]>(getDeleteIndexMutation(currentDataRowState,
-                                    indexMaintainer, ts, rowKeyPtr), rowKeyPtr.get()));
+                                    indexMaintainer, ts, rowKeyPtr, encodedRegionName),
+                                    rowKeyPtr.get()));
                     if (indexMaintainer.isCDCIndex()) {
                         // CDC Index needs two delete markers one for deleting the index row, and
                         // the other for referencing the data table delete mutation with the
@@ -1047,7 +1052,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                                 ByteUtil.EMPTY_BYTE_ARRAY);
                         context.indexUpdates.put(hTableInterfaceReference,
                                 new Pair<Mutation, byte[]>(getDeleteIndexMutation(cdcDataRowState,
-                                        indexMaintainer, ts, rowKeyPtr), rowKeyPtr.get()));
+                                        indexMaintainer, ts, rowKeyPtr, encodedRegionName),
+                                        rowKeyPtr.get()));
                     }
                 }
             }
