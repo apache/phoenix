@@ -29,7 +29,10 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -87,6 +90,7 @@ import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
@@ -467,6 +471,11 @@ public class DeleteCompiler {
     }
 
     public MutationPlan compile(DeleteStatement delete) throws SQLException {
+        return compile(delete, null);
+    }
+
+    public MutationPlan compile(DeleteStatement delete, MutationState.ReturnResult returnResult)
+            throws SQLException {
         final PhoenixConnection connection = statement.getConnection();
         final boolean isAutoCommit = connection.getAutoCommit();
         final boolean hasPostProcessing = delete.getLimit() != null;
@@ -611,6 +620,11 @@ public class DeleteCompiler {
             final StatementContext context = dataPlan.getContext();
             Scan scan = context.getScan();
             scan.setAttribute(BaseScannerRegionObserverConstants.DELETE_AGG, QueryConstants.TRUE);
+            if (context.getScanRanges().getPointLookupCount() == 1 &&
+                    returnResult == MutationState.ReturnResult.ROW) {
+                scan.setAttribute(BaseScannerRegionObserverConstants.SINGLE_ROW_DELETE,
+                        QueryConstants.TRUE);
+            }
 
             // Build an ungrouped aggregate query: select COUNT(*) from <table> where <where>
             // The coprocessor will delete each row returned from the scan
@@ -832,14 +846,24 @@ public class DeleteCompiler {
                 }
                 ResultIterator iterator = aggPlan.iterator();
                 try {
-                    Tuple row = iterator.next();
-                    final long mutationCount = (Long) projector.getColumnProjector(0).getValue(row, PLong.INSTANCE, ptr);
-                    return new MutationState(maxSize, maxSizeBytes, connection) {
-                        @Override
-                        public long getUpdateCount() {
-                            return mutationCount;
-                        }
-                    };
+                    byte[] singleRowDelete =
+                            context.getScan().getAttribute(
+                                    BaseScannerRegionObserverConstants.SINGLE_ROW_DELETE);
+                    boolean isSingleRowDelete = singleRowDelete != null &&
+                            Bytes.compareTo(PDataType.TRUE_BYTES, singleRowDelete) == 0;
+                    if (isSingleRowDelete) {
+                        return deleteRowAndGetMutationState(table);
+                    } else {
+                        Tuple row = iterator.next();
+                        final long mutationCount = (Long) projector.getColumnProjector(0)
+                                .getValue(row, PLong.INSTANCE, ptr);
+                        return new MutationState(maxSize, maxSizeBytes, connection) {
+                            @Override
+                            public long getUpdateCount() {
+                                return mutationCount;
+                            }
+                        };
+                    }
                 } finally {
                     iterator.close();
                 }
@@ -847,6 +871,33 @@ public class DeleteCompiler {
                 if (cache != null) {
                     cache.close();
                 }
+            }
+        }
+
+        /**
+         * Initiate server side single row delete operation atomically and return the Result only
+         * if the row is deleted.
+         *
+         * @param table PTable object.
+         * @return Mutation state.
+         * @throws SQLException If something goes wrong with server side operation.
+         */
+        private MutationState deleteRowAndGetMutationState(PTable table) throws SQLException {
+            Table hTable =
+                    connection.getQueryServices()
+                            .getTable(table.getTableName().getBytes());
+            try (ResultScanner scanner = hTable.getScanner(
+                    new Scan(context.getScan()))) {
+                Result res = scanner.next();
+                Result result = res != null ? res : Result.EMPTY_RESULT;
+                return new MutationState(maxSize, maxSizeBytes, connection) {
+                    @Override
+                    public Result getResult() {
+                        return result;
+                    }
+                };
+            } catch (IOException e) {
+                throw new SQLException(e);
             }
         }
 

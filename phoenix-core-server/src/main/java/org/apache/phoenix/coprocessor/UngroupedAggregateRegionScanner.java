@@ -56,6 +56,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
@@ -80,6 +81,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.memory.InsufficientMemoryException;
 import org.apache.phoenix.memory.MemoryManager;
@@ -165,6 +167,12 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     private byte[] indexMaintainersPtr;
     private boolean useIndexProto;
 
+    /**
+     * Single row atomic delete that requires returning result (row) back to client
+     * only if the row is successfully deleted by the given thread.
+     */
+    private boolean isSingleRowDelete = false;
+
     public UngroupedAggregateRegionScanner(final ObserverContext<RegionCoprocessorEnvironment> c,
                                            final RegionScanner innerScanner, final Region region, final Scan scan,
                                            final RegionCoprocessorEnvironment env,
@@ -240,6 +248,17 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         } else {
             byte[] isDeleteAgg = scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_AGG);
             isDelete = isDeleteAgg != null && Bytes.compareTo(PDataType.TRUE_BYTES, isDeleteAgg) == 0;
+            byte[] singleRowDelete =
+                    scan.getAttribute(BaseScannerRegionObserverConstants.SINGLE_ROW_DELETE);
+            isSingleRowDelete = singleRowDelete != null &&
+                    Bytes.compareTo(PDataType.TRUE_BYTES, singleRowDelete) == 0;
+            if (isSingleRowDelete) {
+                //The Connection is a singleton. It MUST NOT be closed.
+                targetHTable = ServerUtil.ConnectionFactory.getConnection(
+                                ServerUtil.ConnectionType.DEFAULT_SERVER_CONNECTION,
+                                env)
+                        .getTable(region.getRegionInfo().getTable());
+            }
             if (!isDelete) {
                 deleteCF = scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_CF);
                 deleteCQ = scan.getAttribute(BaseScannerRegionObserverConstants.DELETE_CQ);
@@ -450,6 +469,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         }
         result.setKeyValues(results);
     }
+
     void deleteRow(List<Cell> results, UngroupedAggregateRegionObserver.MutationList mutations) {
         Cell firstKV = results.get(0);
         Delete delete = new Delete(firstKV.getRowArray(),
@@ -462,7 +482,10 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         if (sourceOperationBytes != null) {
             delete.setAttribute(SOURCE_OPERATION_ATTRIB, sourceOperationBytes);
         }
-
+        if (isSingleRowDelete) {
+            delete.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
+                    PhoenixIndexBuilderHelper.RETURN_RESULT_ROW);
+        }
         mutations.add(delete);
     }
 
@@ -593,6 +616,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                     || (deleteCQ != null && deleteCF != null) || emptyCF != null || buildLocalIndex) {
                 mutations = new UngroupedAggregateRegionObserver.MutationList(Ints.saturatedCast(maxBatchSize + maxBatchSize / 10));
             }
+            Result atomicSingleRowDeleteResult = null;
             region.startRegionOperation();
             try {
                 synchronized (innerScanner) {
@@ -640,7 +664,12 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                                 insertEmptyKeyValue(results, mutations);
                             }
                             if (ServerUtil.readyToCommit(mutations.size(), mutations.byteSize(), maxBatchSize, maxBatchSizeBytes)) {
-                                annotateAndCommit(mutations);
+                                if (!isSingleRowDelete) {
+                                    annotateAndCommit(mutations);
+                                } else {
+                                    atomicSingleRowDeleteResult =
+                                            annotateCommitAndReturnResult(mutations);
+                                }
                             }
                             // Commit in batches based on UPSERT_BATCH_SIZE_BYTES_ATTRIB in config
 
@@ -654,7 +683,11 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
                         }
                     } while (hasMore && (EnvironmentEdgeManager.currentTimeMillis() - startTime) < pageSizeMs);
                     if (!mutations.isEmpty()) {
-                        annotateAndCommit(mutations);
+                        if (!isSingleRowDelete) {
+                            annotateAndCommit(mutations);
+                        } else {
+                            atomicSingleRowDeleteResult = annotateCommitAndReturnResult(mutations);
+                        }
                     }
                     if (!indexMutations.isEmpty()) {
                         ungroupedAggregateRegionObserver.commitBatch(region, indexMutations, blockingMemStoreSize);
@@ -674,7 +707,13 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
             }
             Cell keyValue;
             if (hasAny) {
-                byte[] value = aggregators.toBytes(rowAggregators);
+                final byte[] value;
+                if (isSingleRowDelete && atomicSingleRowDeleteResult != null) {
+                    resultsToReturn.addAll(atomicSingleRowDeleteResult.listCells());
+                    return hasMore;
+                } else {
+                    value = aggregators.toBytes(rowAggregators);
+                }
                 if (pageSizeMs == Long.MAX_VALUE) {
                     byte[] rowKey;
                     final boolean isIncompatibleClient =
@@ -706,6 +745,28 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
         ungroupedAggregateRegionObserver.commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
             targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
         mutations.clear();
+    }
+
+    /**
+     * Similar to {@link #annotateAndCommit(UngroupedAggregateRegionObserver.MutationList)} but
+     * only meant for single row atomic delete mutation that requires returning the result if
+     * the row is deleted atomically.
+     *
+     * @param mutations Mutation list.
+     * @return Result to be returned.
+     * @throws IOException If something goes wrong with the operation.
+     */
+    private Result annotateCommitAndReturnResult(
+            UngroupedAggregateRegionObserver.MutationList mutations) throws IOException {
+        annotateDataMutations(mutations, scan);
+        if (isDelete || isUpsert) {
+            annotateDataMutationsWithExternalSchemaId(mutations, scan);
+        }
+        Result result = ungroupedAggregateRegionObserver.commitWithResultReturned(mutations,
+                indexUUID, indexMaintainersPtr, txState, targetHTable,
+                useIndexProto, clientVersionBytes);
+        mutations.clear();
+        return result;
     }
 
     @Override

@@ -32,11 +32,9 @@ import java.security.PrivilegedExceptionAction;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.concurrent.GuardedBy;
 
@@ -50,6 +48,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -61,7 +60,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.InterRegionServerIndexRpcControllerFactory;
-import org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -94,7 +92,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.mapreduce.index.IndexTool;
-import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
@@ -124,7 +121,6 @@ import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
-import org.apache.phoenix.util.MetaDataUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -299,15 +295,16 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
     }
 
-    private void commitBatchWithTable(Table table, List<Mutation> mutations) throws IOException {
+    private Object[] commitBatchWithTable(Table table, List<Mutation> mutations)
+            throws IOException {
         if (mutations.isEmpty()) {
-            return;
+            return null;
         }
-
         LOGGER.debug("Committing batch of " + mutations.size() + " mutations for " + table);
         try {
             Object[] results = new Object[mutations.size()];
             table.batch(mutations, results);
+            return results;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
@@ -522,6 +519,35 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver 
         }
         localRegionMutations.clear();
         remoteRegionMutations.clear();
+    }
+
+    /**
+     * Commit single row delete Mutation atomically and return result only if the row is
+     * deleted.
+     *
+     * @param mutations List of Mutations.
+     * @param indexUUID IndexUUID.
+     * @param indexMaintainersPtr Serialized Index Maintainer.
+     * @param txState Transaction State.
+     * @param targetHTable HTable on which the Mutation is executed.
+     * @param useIndexProto True if IdxProtoMD is to be used.
+     * @param clientVersionBytes Client version.
+     * @return Result for the atomic single row deletion.
+     * @throws IOException If something goes wrong with the execution.
+     */
+    Result commitWithResultReturned(List<Mutation> mutations,
+                                    byte[] indexUUID,
+                                    byte[] indexMaintainersPtr, byte[] txState,
+                                    final Table targetHTable, boolean useIndexProto,
+                                    byte[] clientVersionBytes)
+            throws IOException {
+        setIndexAndTransactionProperties(mutations, indexUUID, indexMaintainersPtr, txState,
+                clientVersionBytes, useIndexProto);
+        Object[] results = commitBatchWithTable(targetHTable, mutations);
+        if (results != null && results.length == 1) {
+            return (Result) results[0];
+        }
+        return Result.EMPTY_RESULT;
     }
 
     private void handleIndexWriteException(final List<Mutation> localRegionMutations, IOException origIOE,
