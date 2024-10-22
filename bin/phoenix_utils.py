@@ -79,7 +79,6 @@ def findClasspath(command_name):
 
 def setPath():
     PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN = "phoenix-client-embedded-hbase-*[!s].jar"
-    PHOENIX_CLIENT_LITE_JAR_PATTERN = "phoenix-client-lite-hbase-*[!s].jar"
     PHOENIX_TRACESERVER_JAR_PATTERN = "phoenix-tracing-webapp-*-runnable.jar"
     PHOENIX_TESTS_JAR_PATTERN = "phoenix-core-*-tests*.jar"
     PHOENIX_PHERF_JAR_PATTERN = "phoenix-pherf-*[!s].jar"
@@ -132,16 +131,6 @@ def setPath():
         phoenix_client_embedded_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN, os.path.join(current_dir, ".."))
     if phoenix_client_embedded_jar == "":
         phoenix_client_embedded_jar = find(PHOENIX_CLIENT_EMBEDDED_JAR_PATTERN, phoenix_class_path)
-
-    global phoenix_lite_jar_path
-    phoenix_lite_jar_path = os.path.join(current_dir, "..", "phoenix-client-parent" , "phoenix-client-lite", "target","*")
-
-    global phoenix_client_lite_jar
-    phoenix_client_lite_jar = find(PHOENIX_CLIENT_LITE_JAR_PATTERN, phoenix_lite_jar_path)
-    if phoenix_client_lite_jar == "":
-        phoenix_client_lite_jar = findFileInPathWithoutRecursion(PHOENIX_CLIENT_LITE_JAR_PATTERN, os.path.join(current_dir, ".."))
-    if phoenix_client_lite_jar == "":
-        phoenix_client_lite_jar = find(PHOENIX_CLIENT_LITE_JAR_PATTERN, phoenix_class_path)
 
     global phoenix_test_jar_path
     phoenix_test_jar_path = os.path.join(current_dir, "..", "phoenix-core", "target","*")
