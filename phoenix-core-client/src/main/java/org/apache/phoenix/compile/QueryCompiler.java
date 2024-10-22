@@ -23,6 +23,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUE
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +33,10 @@ import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.TerminalParseNode;
+import org.apache.phoenix.schema.ConditionTTLExpression;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
@@ -786,6 +789,21 @@ public class QueryCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+
+        TTLExpression ttlExpr = table.getTTL();
+        // Query has already been re-written for the base table so no need to re-write again
+        // for index
+        if (ttlExpr instanceof ConditionTTLExpression && table.getType() != PTableType.INDEX) {
+            ParseNode ttlCondition = SQLParser.parseCondition(ttlExpr.getTTLExpression());
+            ParseNode negateTTL = NODE_FACTORY.not(ttlCondition);
+            ParseNode where = select.getWhere();
+            if (where == null) {
+                where = negateTTL;
+            } else {
+                where = NODE_FACTORY.and(Arrays.asList(where, negateTTL));
+            }
+            select = NODE_FACTORY.select(select, where);
+        }
 
         if (table.getType() == PTableType.CDC) {
             List<AliasedNode> selectNodes = select.getSelect();
