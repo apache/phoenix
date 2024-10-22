@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.2.1 - Unreleased (as of 2024-10-05)
+## Release 5.2.1 - Unreleased (as of 2024-10-22)
 
 
 
@@ -26,7 +26,10 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7428](https://issues.apache.org/jira/browse/PHOENIX-7428) | Add usable error message in BackwardCompatibilityIT |  Minor | core, test |
+| [PHOENIX-7432](https://issues.apache.org/jira/browse/PHOENIX-7432) | getTable for PHYSICAL\_TABLE link should use common utility |  Critical | . |
 | [PHOENIX-7416](https://issues.apache.org/jira/browse/PHOENIX-7416) | Bump Avro dependency version to 1.11.4 |  Major | . |
+| [PHOENIX-6982](https://issues.apache.org/jira/browse/PHOENIX-6982) | Exclude Maven descriptors from shaded JARs |  Major | . |
 | [PHOENIX-7395](https://issues.apache.org/jira/browse/PHOENIX-7395) | Metadata Cache metrics at server and client side |  Major | . |
 | [PHOENIX-7397](https://issues.apache.org/jira/browse/PHOENIX-7397) | Optimize ClientAggregatePlan/ClientScanPlan when inner query is UnionPlan |  Major | core |
 | [PHOENIX-7404](https://issues.apache.org/jira/browse/PHOENIX-7404) | Build the HBase 2.5+ profiles with Hadoop 3.3.6 |  Major | . |
@@ -58,6 +61,14 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7440](https://issues.apache.org/jira/browse/PHOENIX-7440) | TableSnapshotReadsMapReduceIT fails with HBase 2.6.1 |  Major | core |
+| [PHOENIX-7282](https://issues.apache.org/jira/browse/PHOENIX-7282) | Incorrect data in index column for corresponding BIGINT type column in data table |  Major | . |
+| [PHOENIX-7427](https://issues.apache.org/jira/browse/PHOENIX-7427) | PHOENIX-7418 breaks backwards compatibility tests |  Critical | core |
+| [PHOENIX-7418](https://issues.apache.org/jira/browse/PHOENIX-7418) | SystemExitRule errors out because of SecurityManager deprecation / removal |  Critical | core, test |
+| [PHOENIX-7429](https://issues.apache.org/jira/browse/PHOENIX-7429) | End2EndTestDriver should not extend AbstractHBaseTool |  Critical | core, test |
+| [PHOENIX-7421](https://issues.apache.org/jira/browse/PHOENIX-7421) | Checkstyle plugin fails in phoenix-client-embedded module |  Minor | test |
+| [PHOENIX-7420](https://issues.apache.org/jira/browse/PHOENIX-7420) | Bump commons-io:commons-io from 2.11.0 to 2.14.0 |  Major | core, queryserver |
+| [PHOENIX-7081](https://issues.apache.org/jira/browse/PHOENIX-7081) | Replace /tmp with {java.io.tmpdir} in tests |  Minor | core |
 | [PHOENIX-7402](https://issues.apache.org/jira/browse/PHOENIX-7402) | Even if a row is updated within TTL its getting expired partially |  Critical | . |
 | [PHOENIX-7406](https://issues.apache.org/jira/browse/PHOENIX-7406) | Index creation fails when creating a partial index on a table which was created with column names in double quotes |  Major | . |
 | [PHOENIX-7405](https://issues.apache.org/jira/browse/PHOENIX-7405) | Update Jetty to 9.4.56.v20240826 |  Major | . |
@@ -98,6 +109,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7439](https://issues.apache.org/jira/browse/PHOENIX-7439) | Bump default HBase 2.6 version to 2.6.1 |  Major | . |
 | [PHOENIX-7362](https://issues.apache.org/jira/browse/PHOENIX-7362) | Update owasp plugin to 10.0.2 |  Major | connectors, core, queryserver |
 | [PHOENIX-7371](https://issues.apache.org/jira/browse/PHOENIX-7371) | Update Hbase 2.5 version to 2.5.10 |  Major | . |
 | [PHOENIX-7365](https://issues.apache.org/jira/browse/PHOENIX-7365) | ExplainPlanV2 should get trimmed list for regionserver location |  Major | . |
