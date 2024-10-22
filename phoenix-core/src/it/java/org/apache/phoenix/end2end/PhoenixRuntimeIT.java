@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -28,6 +29,8 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.client.Result;
@@ -46,6 +49,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -83,7 +87,28 @@ public class PhoenixRuntimeIT extends ParallelStatsDisabledIT {
     public void testGetTenantIdExpressionForUnsaltedTable() throws Exception {
         testGetTenantIdExpression(false);
     }
-    
+
+    @Test
+    public void testGenererateColumnInfoTenantTable() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        conn.setAutoCommit(true);
+        conn.createStatement().execute("CREATE TABLE MULTITENANT_TABLE (TENANT_ID VARCHAR NOT NULL, GLOBAL_COL1 VARCHAR, GLOBAL_COL2 VARCHAR CONSTRAINT pk PRIMARY KEY (TENANT_ID, GLOBAL_COL1)) MULTI_TENANT=true");
+        Properties props = new Properties();
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "MyTenantId");
+        Connection tconn = DriverManager.getConnection(getUrl(), props);
+        tconn.setAutoCommit(true);
+        tconn.createStatement().execute("CREATE VIEW IF NOT EXISTS TENANT_VIEW(TENANT_ONLY_COL VARCHAR) AS SELECT * FROM MULTITENANT_TABLE");
+
+        List<String> expected = Arrays.asList("GLOBAL_COL1","GLOBAL_COL2","TENANT_ONLY_COL");
+
+        List<String> result = PhoenixRuntime
+                .generateColumnInfo(tconn,"TENANT_VIEW",null)
+                .stream()
+                .map(ColumnInfo::getDisplayName).collect(Collectors.toList());
+
+        assertEquals(expected,result);
+    }
+
     private static Filter getUserTableAndViewsFilter() {
         SingleColumnValueFilter tableFilter = new SingleColumnValueFilter(TABLE_FAMILY_BYTES, PhoenixDatabaseMetaData.TABLE_TYPE_BYTES, CompareOperator.EQUAL, Bytes.toBytes(PTableType.TABLE.getSerializedValue()));
         tableFilter.setFilterIfMissing(true);

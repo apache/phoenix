@@ -86,7 +86,7 @@
     <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.10-hadoop3</hbase-2.5.runtime.version>
-    <hbase-2.6.runtime.version>2.6.0-hadoop3</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.1-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -113,7 +113,7 @@
     <protobuf.group>com.google.protobuf</protobuf.group>
     <protobuf-java.version>2.5.0</protobuf-java.version>
     <protoc.version>2.5.0</protoc.version>
-    <commons-io.version>2.11.0</commons-io.version>
+    <commons-io.version>2.14.0</commons-io.version>
     <commons-lang3.version>3.8</commons-lang3.version>
     <commons-csv.version>1.0</commons-csv.version>
     <commons-compress.version>1.26.0</commons-compress.version>
@@ -166,6 +166,7 @@
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
     <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
+    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
     <mvel2.version>2.5.2.Final</mvel2.version>
 
     <!-- Plugin options -->
@@ -212,6 +213,10 @@
     </phoenix-surefire.jdk11.tuning.flags>
     <phoenix-surefire.jdk17.flags>--add-opens java.base/jdk.internal.util.random=ALL-UNNAMED</phoenix-surefire.jdk17.flags>
     <phoenix-surefire.jdk17.tuning.flags></phoenix-surefire.jdk17.tuning.flags>
+    <!-- This is needed for SystemExitRule to work correctly. This may mask related issues in
+    dependencies -->
+    <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow</phoenix-surefire.jdk21.flags>
+
     <!-- Surefire argLine defaults for Linux + JDK8 -->
     <argLine>${phoenix-surefire.argLine} ${phoenix-surefire.jdk8.tuning.flags} @{jacocoArgLine}</argLine>
 
@@ -487,6 +492,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
+          <version>${maven-shade-plugin.version}</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
@@ -543,6 +549,7 @@
                     <reason>Use shaded version in phoenix-thirdparty</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.cli.**</bannedImport>
+                      <bannedImport>org.apache.hbase.thirdparty.org.apache.commons.cli.**</bannedImport>
                     </bannedImports>
                   </RestrictImports>
                   <RestrictImports>
@@ -2159,11 +2166,25 @@
     <profile>
       <id>build-with-jdk17</id>
       <activation>
-        <jdk>[17,)</jdk>
+        <jdk>[17,21)</jdk>
       </activation>
       <properties>
         <argLine>${phoenix-surefire.jdk11.flags}
           ${phoenix-surefire.jdk17.flags}
+          ${phoenix-surefire.jdk17.tuning.flags}
+          ${phoenix-surefire.argLine}
+          @{jacocoArgLine}</argLine>
+      </properties>
+    </profile>
+    <profile>
+      <id>build-with-jdk21</id>
+      <activation>
+        <jdk>[21,)</jdk>
+      </activation>
+      <properties>
+        <argLine>${phoenix-surefire.jdk11.flags}
+          ${phoenix-surefire.jdk17.flags}
+          ${phoenix-surefire.jdk21.flags}
           ${phoenix-surefire.jdk17.tuning.flags}
           ${phoenix-surefire.argLine}
           @{jacocoArgLine}</argLine>
