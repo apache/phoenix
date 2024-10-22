@@ -47,6 +47,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdge;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.TestClock;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -480,7 +481,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
         String tenant2 = "tenant2";
         String tenant3 = "tenant3";
         String tenant4 = "tenant4";
-        MyClock clock = new MyClock(1000);
+        TestClock clock = new TestClock(1000, 1, true);
         
         createMultitenantTableAndViews(tenant1View, tenant2View, tenant3View, tenant4View, tenant1, tenant2,
             tenant3, tenant4, multiTenantBaseTable, clock);
@@ -532,7 +533,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             // Update tenant1 view
             try (Connection conn = getTenantConnection(tenant2)) {
                 // upsert a few rows for tenantView
-                clock.setAdvance(false);
+                clock.shouldAdvance(false);
                 conn.createStatement()
                         .executeUpdate("UPSERT INTO " + tenant2View + " VALUES (11, 11, 11)");
                 conn.createStatement()
@@ -880,7 +881,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
 
     private static void createMultitenantTableAndViews(String tenant1View, String tenant2View,
             String tenant3View, String tenant4View, String tenant1, String tenant2, String tenant3, String tenant4,
-            String multiTenantTable, MyClock clock) throws Exception {
+            String multiTenantTable, TestClock clock) throws Exception {
         byte[][] splits =
                 new byte[][] {
                     ByteUtil.concat(Bytes.toBytes(tenant1),PInteger.INSTANCE.toBytes(1)),
@@ -927,7 +928,7 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
                     "upsert into " + multiTenantTable + " values ('" + tenant3 + "',6,10,10)");
                 conn.commit();
             }
-            clock.setAdvance(false);
+            clock.shouldAdvance(false);
             try (Connection conn = getTenantConnection(tenant1)) {
                 conn.createStatement().execute(
                     "CREATE VIEW " + tenant1View + " AS SELECT * FROM " + multiTenantTable);
@@ -949,30 +950,6 @@ public class ExplainPlanWithStatsEnabledIT extends ParallelStatsEnabledIT {
             }
         } finally {
             EnvironmentEdgeManager.reset();
-        }
-    }
-
-    private static class MyClock extends EnvironmentEdge {
-        public volatile long time;
-        private boolean shouldAdvance = true;
-
-        public MyClock(long time) {
-            this.time = time;
-        }
-
-        @Override
-        public long currentTime() {
-            if(shouldAdvance) {
-                return time++;
-            } else {
-                return time;
-            }
-        }
-        public void setAdvance(boolean val) {
-            shouldAdvance = val;
-        }
-        public void advanceTime(long t) {
-            this.time += t;
         }
     }
 
