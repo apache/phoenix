@@ -893,7 +893,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int dataPosOffset = 0;
         int viewConstantsIndex = 0;
         try {
-            int indexPosOffset = !isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0;
+            int indexPosOffset = !isLocalIndex && !isCDCIndex && nIndexSaltBuckets > 0 ? 1 : 0;
             int maxRowKeyOffset = indexRowKeyPtr.getOffset() + indexRowKeyPtr.getLength();
             indexRowKeySchema.iterator(indexRowKeyPtr, ptr, indexPosOffset);
             if (isDataTableSalted) {

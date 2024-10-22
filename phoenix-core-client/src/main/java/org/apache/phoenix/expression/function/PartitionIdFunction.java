@@ -23,6 +23,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.PartitionIdParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 
@@ -39,6 +40,7 @@ import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
         args = {})
 public class PartitionIdFunction extends ScalarFunction {
     public static final String NAME = "PARTITION_ID";
+    public static final int PARTITION_ID_LENGTH = 32;
 
     public PartitionIdFunction() {
     }
@@ -76,20 +78,16 @@ public class PartitionIdFunction extends ScalarFunction {
             return false;
         }
         tuple.getKey(ptr);
-        int length = 0;
-        byte[] rowKey = ptr.get();
-        for (; length < ptr.getLength(); length++) {
-            if (rowKey[length] == SEPARATOR_BYTE) {
-                break;
-            }
+        if (ptr.getLength() < PARTITION_ID_LENGTH) {
+            return false;
         }
-        ptr.set(ptr.get(), 0, length);
+        ptr.set(ptr.get(), 0, PARTITION_ID_LENGTH);
         return true;
     }
 
     @Override
     public PDataType getDataType() {
-        return PVarchar.INSTANCE;
+        return PChar.INSTANCE;
     }
 
     @Override
