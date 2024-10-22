@@ -17,9 +17,8 @@
  */
 package org.apache.phoenix.util;
 
-import org.apache.commons.collections.IteratorUtils;
-
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 import java.util.Iterator;
 import java.util.List;
@@ -71,13 +70,14 @@ public class InstanceResolver {
     public static <T> List get(Class<T> clazz, List<T> defaultInstances) {
         Iterator<T> iterator = ServiceLoader.load(clazz).iterator();
         if (defaultInstances != null) {
-            defaultInstances.addAll(IteratorUtils.toList(iterator));
+            defaultInstances.addAll(Lists.newArrayList(iterator));
         } else {
-            defaultInstances = IteratorUtils.toList(iterator);
+            defaultInstances = Lists.newArrayList(iterator);
         }
 
         return defaultInstances;
     }
+
 
     private synchronized static <T> T resolveSingleton(Class<T> clazz, T defaultInstance) {
         ServiceLoader<T> loader = ServiceLoader.load(clazz);
