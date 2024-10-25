@@ -28,7 +28,11 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -39,13 +43,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.hadoop.hbase.*;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.TableNotEnabledException;
+import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
@@ -351,8 +359,8 @@ public class ConnectionQueryServicesImplTest {
         doThrow(new TableNotEnabledException()).when(mockAdmin).disableTable(any());
         doNothing().when(mockAdmin).deleteTable(any());
         mockCqs.dropTables(Collections.singletonList("TEST_TABLE".getBytes(StandardCharsets.UTF_8)));
-        verify(mockAdmin, times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
-        verify(mockAdmin, times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
         verify(mockConn).getAdmin();
     }
 
@@ -364,7 +372,7 @@ public class ConnectionQueryServicesImplTest {
         doNothing().when(mockTableStatsCache).invalidateAll();
         mockCqs.dropTables(Collections.singletonList("TEST_TABLE".getBytes(StandardCharsets.UTF_8)));
         verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
-        verify(mockAdmin, times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
         verify(mockConn).getAdmin();
     }
 }
