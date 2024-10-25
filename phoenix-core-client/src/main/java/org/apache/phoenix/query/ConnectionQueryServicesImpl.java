@@ -2249,7 +2249,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
-                        admin.disableTable(physicalIndexTableName);
+                        if(admin.isTableEnabled(physicalIndexTableName)) {
+                            admin.disableTable(physicalIndexTableName);
+                        }
                         admin.deleteTable(physicalIndexTableName);
                         clearTableRegionCache(physicalIndexTableName);
                         wasDeleted = true;
@@ -2582,7 +2584,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         dropTables(Collections.<byte[]>singletonList(tableNameToDelete));
     }
 
-    private void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
+    @VisibleForTesting
+    void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
         SQLException sqlE = null;
         try (Admin admin = getAdmin()) {
             if (tableNamesToDelete != null) {
@@ -2590,7 +2593,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         TableName tn = TableName.valueOf(tableName);
                         TableDescriptor htableDesc = this.getTableDescriptor(tableName);
-                        admin.disableTable(tn);
+                        if(admin.isTableEnabled(tn)) {
+                            admin.disableTable(tn);
+                        }
                         admin.deleteTable(tn);
                         tableStatsCache.invalidateAll(htableDesc);
                         clearTableRegionCache(TableName.valueOf(tableName));
