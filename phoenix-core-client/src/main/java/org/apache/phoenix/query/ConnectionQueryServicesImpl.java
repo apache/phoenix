@@ -2249,7 +2249,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
-                        if(admin.isTableEnabled(physicalIndexTableName)) {
+                        if (admin.isTableEnabled(physicalIndexTableName)) {
                             admin.disableTable(physicalIndexTableName);
                         }
                         admin.deleteTable(physicalIndexTableName);
@@ -2593,7 +2593,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         TableName tn = TableName.valueOf(tableName);
                         TableDescriptor htableDesc = this.getTableDescriptor(tableName);
-                        if(admin.isTableEnabled(tn)) {
+                        if (admin.isTableEnabled(tn)) {
                             admin.disableTable(tn);
                         }
                         admin.deleteTable(tn);
