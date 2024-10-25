@@ -141,14 +141,7 @@ import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.KeepDeletedCells;
-import org.apache.hadoop.hbase.NamespaceDescriptor;
-import org.apache.hadoop.hbase.NamespaceNotFoundException;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.TableExistsException;
-import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.CheckAndMutate;
@@ -2249,8 +2242,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
-                        if (admin.isTableEnabled(physicalIndexTableName)) {
+                        try {
                             admin.disableTable(physicalIndexTableName);
+                        } catch (TableNotEnabledException e) {
+                            LOGGER.info("Table already disabled, continuing with next steps", e);
                         }
                         admin.deleteTable(physicalIndexTableName);
                         clearTableRegionCache(physicalIndexTableName);
@@ -2593,8 +2588,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         TableName tn = TableName.valueOf(tableName);
                         TableDescriptor htableDesc = this.getTableDescriptor(tableName);
-                        if (admin.isTableEnabled(tn)) {
+                        try {
                             admin.disableTable(tn);
+                        } catch (TableNotEnabledException e) {
+                            LOGGER.info("Table already disabled, continuing with next steps", e);
                         }
                         admin.deleteTable(tn);
                         tableStatsCache.invalidateAll(htableDesc);
