@@ -41,6 +41,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DEFAULT_COLUMN_FAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_ROW_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IS_VIEW_REFERENCED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.MAPPED_SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PK_NAME;
@@ -4086,6 +4087,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                 systemTableToSnapshotMap.put(SYSTEM_CATALOG_NAME, snapshotName);
                 LOGGER.info("Created snapshot {} for {}", snapshotName, SYSTEM_CATALOG_NAME);
 
+                // Snapshot qualifiers may only contain 'alphanumeric characters' and
+                // digits, hence : cannot be part of snapshot name
+                String mappedSnapshotName = getSysTableSnapshotName(currentServerSideTableTimeStamp,
+                        "MAPPED." + SYSTEM_CATALOG_NAME);
+                createSnapshot(mappedSnapshotName, MAPPED_SYSTEM_CATALOG_NAME);
+                systemTableToSnapshotMap.put(MAPPED_SYSTEM_CATALOG_NAME, mappedSnapshotName);
+                LOGGER.info("Created snapshot {} for {}",
+                        mappedSnapshotName, MAPPED_SYSTEM_CATALOG_NAME);
+
                 if (caughtUpgradeRequiredException != null) {
                     if (SchemaUtil.isNamespaceMappingEnabled(
                             PTableType.SYSTEM, ConnectionQueryServicesImpl.this.getProps())) {
@@ -4330,9 +4340,9 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         // Snapshot qualifiers may only contain 'alphanumeric characters' and
         // digits, hence : cannot be part of snapshot name
         if (snapshotName.contains(QueryConstants.NAMESPACE_SEPARATOR)) {
-            snapshotName = snapshotName.replace(
-                QueryConstants.NAMESPACE_SEPARATOR,
-                QueryConstants.NAME_SEPARATOR);
+            snapshotName = getSysTableSnapshotName(
+                    currentServerSideTableTimeStamp, "MAPPED." + tableName).
+                    replace(QueryConstants.NAMESPACE_SEPARATOR, QueryConstants.NAME_SEPARATOR);
         }
         createSnapshot(snapshotName, tableName);
         systemTableToSnapshotMap.put(tableName, snapshotName);
