@@ -54,6 +54,28 @@ on caching the unlocked secret via ~/.gnupg/gpg-agent.conf
   default-cache-ttl 86400
   max-cache-ttl 86400
 
+In the current version, passphrase entry doesn't work at all, at least for Linux Docker builds.
+Increasing the TTL only works if you unlock the key before starting the release script by running
+gpg separately before the script.
+A better way to handle passphrases without changing the TTLs is to preset the passphrase,
+which avoids using pinentry mechanism completely, and will be reset on logout.
+
+# Find the "gpg-preset-passphrase" program. It is not on the PATH by default.
+$ find / -name gpg-preset-passphrase
+# Make sure you have the "allow-preset-passphrase" line  in your $HOME/.gnupg/gpg-agent.conf
+# Restart gpg
+$ gpgconf --kill all && gpg-connect-agent /bye
+# List your keys with key grip
+$ gpg --with-keygrip --list-secret-keys
+# Preset the passphrase for your signing key
+# </full/path/to/>/gpg-preset-passphrase -P <the passphrase> -c <the keygrip>
+# Check that the passphrase is succesfully preset. There should be a '1' at the fourth position
+# after the keygrip for your key in the ouput for the signing key
+$ gpg-connect-agent 'keyinfo --list' /bye
+# Run the release script (see above)
+# Restart the gpg agent again to make sure it forgets the preset passphrase
+$ gpgconf --kill all && gpg-connect-agent /bye
+
 Running a build on GCE is easy enough. Here are some notes if of use.
 Create an instance. 4CPU/15G/10G disk seems to work well enough.
 Once up, run the below to make your machine fit for RC building:
