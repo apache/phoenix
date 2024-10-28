@@ -1718,7 +1718,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                                 SQLExceptionCode.INCONSISTENT_NAMESPACE_MAPPING_PROPERTIES.getErrorCode()) {
                             try {
                                 // In case we wrongly created SYSTEM.CATALOG or SYSTEM:CATALOG, we should drop it
-                                admin.disableTable(TableName.valueOf(physicalTableName));
+                                disableTable(admin, TableName.valueOf(physicalTableName));
                                 admin.deleteTable(TableName.valueOf(physicalTableName));
                             } catch (org.apache.hadoop.hbase.TableNotFoundException ignored) {
                                 // Ignore this since it just means that another client with a similar set of
@@ -1874,7 +1874,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         TableName tn = TableName.valueOf(tableName);
         try (Admin admin = getAdmin()) {
             if (!allowOnlineTableSchemaUpdate()) {
-                admin.disableTable(tn);
+                disableTable(admin, tn);
                 admin.modifyTable(newDesc); // TODO: Update to TableDescriptor
                 admin.enableTable(tn);
             } else {
@@ -2167,6 +2167,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         }
     }
 
+    private void disableTable(Admin admin, TableName tableName) throws IOException {
+        try {
+            admin.disableTable(tableName);
+        } catch (TableNotEnabledException e) {
+            LOGGER.info("Table already disabled, continuing with next steps", e);
+        }
+    }
+
     private boolean ensureViewIndexTableDropped(byte[] physicalTableName, long timestamp) throws SQLException {
         byte[] physicalIndexName = MetaDataUtil.getViewIndexPhysicalName(physicalTableName);
         boolean wasDeleted = false;
@@ -2178,7 +2186,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     final ReadOnlyProps props = this.getProps();
                     final boolean dropMetadata = props.getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
                     if (dropMetadata) {
-                        admin.disableTable(physicalIndexTableName);
+                        disableTable(admin, physicalIndexTableName);
                         admin.deleteTable(physicalIndexTableName);
                         clearTableRegionCache(physicalIndexTableName);
                         wasDeleted = true;
@@ -2517,7 +2525,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                     try {
                         TableName tn = TableName.valueOf(tableName);
                         TableDescriptor htableDesc = this.getTableDescriptor(tableName);
-                        admin.disableTable(tn);
+                        disableTable(admin, tn);
                         admin.deleteTable(tn);
                         tableStatsCache.invalidateAll(htableDesc);
                         clearTableRegionCache(TableName.valueOf(tableName));
@@ -3946,7 +3954,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // co-location of data and index regions. If we just modify the
                         // table descriptor when online schema change enabled may reopen
                         // the region in same region server instead of following data region.
-                        admin.disableTable(table.getTableName());
+                        disableTable(admin,table.getTableName());
                         admin.modifyTable(table);
                         admin.enableTable(table.getTableName());
                     }
