@@ -36,6 +36,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +46,7 @@ import java.util.Map;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
@@ -61,7 +63,6 @@ import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -96,6 +97,9 @@ public class ConnectionQueryServicesImplTest {
     @Mock
     private Table mockTable;
 
+    @Mock
+    private GuidePostsCacheWrapper mockTableStatsCache;
+
     public static final TableDescriptorBuilder SYS_TASK_TDB = TableDescriptorBuilder
             .newBuilder(TableName.valueOf(PhoenixDatabaseMetaData.SYSTEM_TASK_NAME));
     public static final TableDescriptorBuilder SYS_TASK_TDB_SP = TableDescriptorBuilder
@@ -114,6 +118,9 @@ public class ConnectionQueryServicesImplTest {
         props = ConnectionQueryServicesImpl.class.getDeclaredField("connection");
         props.setAccessible(true);
         props.set(mockCqs, mockConn);
+        props = ConnectionQueryServicesImpl.class.getDeclaredField("tableStatsCache");
+        props.setAccessible(true);
+        props.set(mockCqs, mockTableStatsCache);
         when(mockCqs.checkIfSysMutexExistsAndModifyTTLIfRequired(mockAdmin))
                 .thenCallRealMethod();
         when(mockCqs.updateAndConfirmSplitPolicyForTask(SYS_TASK_TDB))
@@ -124,6 +131,7 @@ public class ConnectionQueryServicesImplTest {
         when(mockCqs.getAdmin()).thenCallRealMethod();
         when(mockCqs.getTable(Mockito.any())).thenCallRealMethod();
         when(mockCqs.getTableIfExists(Mockito.any())).thenCallRealMethod();
+        doCallRealMethod().when(mockCqs).dropTables(Mockito.any());
     }
 
     @SuppressWarnings("unchecked")
@@ -342,5 +350,28 @@ public class ConnectionQueryServicesImplTest {
         verify(mockConn, Mockito.times(1)).getAdmin();
         verify(mockConn, Mockito.times(1))
                 .getTable(TableName.valueOf("SYSTEM:MUTEX"));
+    }
+
+    @Test
+    public void testDropTablesAlreadyDisabled() throws Exception {
+        when(mockConn.getAdmin()).thenReturn(mockAdmin);
+        doThrow(new TableNotEnabledException()).when(mockAdmin).disableTable(any());
+        doNothing().when(mockAdmin).deleteTable(any());
+        mockCqs.dropTables(Collections.singletonList("TEST_TABLE".getBytes(StandardCharsets.UTF_8)));
+        verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockConn).getAdmin();
+    }
+
+    @Test
+    public void testDropTablesTableEnabled() throws Exception {
+        when(mockConn.getAdmin()).thenReturn(mockAdmin);
+        doNothing().when(mockAdmin).disableTable(any());
+        doNothing().when(mockAdmin).deleteTable(any());
+        doNothing().when(mockTableStatsCache).invalidateAll();
+        mockCqs.dropTables(Collections.singletonList("TEST_TABLE".getBytes(StandardCharsets.UTF_8)));
+        verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
+        verify(mockConn).getAdmin();
     }
 }
