@@ -4075,7 +4075,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
                         // co-location of data and index regions. If we just modify the
                         // table descriptor when online schema change enabled may reopen
                         // the region in same region server instead of following data region.
-                        disableTable(admin,table.getTableName());
+                        disableTable(admin, table.getTableName());
                         admin.modifyTable(table);
                         admin.enableTable(table.getTableName());
                     }
