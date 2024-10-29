@@ -69,8 +69,8 @@ $ gpgconf --kill all && gpg-connect-agent /bye
 $ gpg --with-keygrip --list-secret-keys
 # Preset the passphrase for your signing key
 # </full/path/to/>/gpg-preset-passphrase -P <the passphrase> -c <the keygrip>
-# Check that the passphrase is succesfully preset. There should be a '1' at the fourth position
-# after the keygrip for your key in the ouput for the signing key
+# Check that the passphrase is successfully preset. There should be a '1' at the fourth position
+# after the keygrip for your key in the output for the signing key
 $ gpg-connect-agent 'keyinfo --list' /bye
 # Run the release script (see above)
 # Restart the gpg agent again to make sure it forgets the preset passphrase
