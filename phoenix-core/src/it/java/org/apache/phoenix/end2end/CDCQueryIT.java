@@ -19,7 +19,10 @@ package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.RowKeyOrderedAggregateResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -41,7 +44,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -133,20 +138,71 @@ public class CDCQueryIT extends CDCBaseIT {
     }
 
     private void checkIndexPartitionIdCount(Connection conn, String cdcName) throws Exception {
+        // Verify that we can use retrieve partition ids
         ResultSet rs = conn.createStatement().executeQuery("SELECT PARTITION_ID() FROM "
                 + cdcName);
-        int i = 1;
+        int saltBuckets = tableSaltBuckets == null ? 1 : tableSaltBuckets;
+        String[] partitionId = new String[saltBuckets];
+        int[] countPerPartition = new int[saltBuckets];
+        int partitionIndex = 0;
         assertTrue(rs.next());
-        String partition_id = rs.getString(1);
-        LOGGER.info("PARTITION_ID["+ i + "] = " + partition_id);
+        partitionId[partitionIndex] = rs.getString(1);
+        countPerPartition[partitionIndex]++;
+        LOGGER.info("PARTITION_ID["+ partitionIndex + "] = " + partitionId[partitionIndex]);
         while (rs.next()) {
-            if (!partition_id.equals(rs.getString(1))) {
-                partition_id = rs.getString(1);
-                i++;
-                LOGGER.info("PARTITION_ID["+ i + "] = " + partition_id);
+            if (!partitionId[partitionIndex].equals(rs.getString(1))) {
+                partitionIndex++;
+                partitionId[partitionIndex] = rs.getString(1);
+                LOGGER.info("PARTITION_ID["+ partitionIndex + "] = " + partitionId[partitionIndex]);
             }
+            countPerPartition[partitionIndex]++;
         }
-        assertEquals(tableSaltBuckets == null ? 1 : tableSaltBuckets, i);
+        // Verify that the number of partitions equals to the number of table regions. In this case,
+        // it equals to the number of salt buckets
+        assertEquals(saltBuckets, partitionIndex + 1);
+
+        // Verify that we can access data table mutations by partition id
+        PreparedStatement statement = conn.prepareStatement(
+                getCDCQuery(cdcName, saltBuckets, partitionId));
+        statement.setTimestamp(1, new Timestamp(1000));
+        statement.setTimestamp(2,  new Timestamp(System.currentTimeMillis()));
+        rs = statement.executeQuery();
+        int rowCount = 0;
+        while(rs.next()) {
+            rowCount++;
+            String id = rs.getString(1);
+            int count = rs.getInt(2);
+            boolean found = false;
+            for (int i = 0; i < saltBuckets; i++) {
+                if (partitionId[i].equals(id) && count == countPerPartition[i]) {
+                    found = true;
+                    break;
+                }
+            }
+            assertTrue(found);
+        }
+        // Verify that partition id based queries are row key prefix queries
+        ResultIterator resultIterator = ((PhoenixResultSet) rs).getUnderlyingIterator();
+        assertTrue(resultIterator instanceof RowKeyOrderedAggregateResultIterator);
+        assertEquals(saltBuckets, rowCount);
+    }
+
+    private static String getCDCQuery(String cdcName, int saltBuckets,
+            String[] partitionId) {
+        StringBuilder query = new StringBuilder("SELECT PARTITION_ID(), Count(*) from ");
+        query.append(cdcName);
+        query.append(" WHERE PARTITION_ID() IN (");
+        for (int i = 0; i < saltBuckets - 1; i++) {
+            query.append("'");
+            query.append(partitionId[i]);
+            query.append("',");
+        }
+        query.append("'");
+        query.append(partitionId[saltBuckets - 1]);
+        query.append("')");
+        query.append(" AND PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() < ?");
+        query.append(" Group By PARTITION_ID()");
+        return query.toString();
     }
 
     @Test
@@ -343,9 +399,6 @@ public class CDCQueryIT extends CDCBaseIT {
                     datatableName, dataColumns, changes, ALL_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
             checkIndexPartitionIdCount(conn, cdcFullName);
-        }
-        try (Connection conn = newConnection()) {
-
         }
     }
 

@@ -25,11 +25,8 @@ import org.apache.phoenix.parse.PartitionIdParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PVarchar;
 
 import java.util.List;
-
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
 
 /**
  * Function to return the partition id which is the encoded data table region name. This function
@@ -92,7 +89,7 @@ public class PartitionIdFunction extends ScalarFunction {
 
     @Override
     public Integer getMaxLength() {
-        return 32;
+        return PARTITION_ID_LENGTH;
     }
 
     @Override
