@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,25 +20,26 @@ package org.apache.phoenix.monitoring;
 import org.apache.phoenix.log.LogLevel;
 
 /**
- * Class that encapsulates the various metrics associated with the spooling done by phoenix as part of servicing a
- * request.
+ * Class that encapsulates the various metrics associated with the spooling done by phoenix as part
+ * of servicing a request.
  */
 public class SpoolingMetricsHolder {
 
-    private final CombinableMetric spoolFileSizeMetric;
-    private final CombinableMetric numSpoolFileMetric;
-    public static final SpoolingMetricsHolder NO_OP_INSTANCE = new SpoolingMetricsHolder(new ReadMetricQueue(false,LogLevel.OFF), "");
+  private final CombinableMetric spoolFileSizeMetric;
+  private final CombinableMetric numSpoolFileMetric;
+  public static final SpoolingMetricsHolder NO_OP_INSTANCE =
+    new SpoolingMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "");
 
-    public SpoolingMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
-        this.spoolFileSizeMetric = readMetrics.allotMetric(MetricType.SPOOL_FILE_SIZE, tableName);
-        this.numSpoolFileMetric = readMetrics.allotMetric(MetricType.SPOOL_FILE_COUNTER, tableName);
-    }
+  public SpoolingMetricsHolder(ReadMetricQueue readMetrics, String tableName) {
+    this.spoolFileSizeMetric = readMetrics.allotMetric(MetricType.SPOOL_FILE_SIZE, tableName);
+    this.numSpoolFileMetric = readMetrics.allotMetric(MetricType.SPOOL_FILE_COUNTER, tableName);
+  }
 
-    public CombinableMetric getSpoolFileSizeMetric() {
-        return spoolFileSizeMetric;
-    }
+  public CombinableMetric getSpoolFileSizeMetric() {
+    return spoolFileSizeMetric;
+  }
 
-    public CombinableMetric getNumSpoolFileMetric() {
-        return numSpoolFileMetric;
-    }
+  public CombinableMetric getNumSpoolFileMetric() {
+    return numSpoolFileMetric;
+  }
 }

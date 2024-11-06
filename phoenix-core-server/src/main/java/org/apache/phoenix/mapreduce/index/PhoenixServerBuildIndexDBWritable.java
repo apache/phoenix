@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,28 +32,27 @@ import org.apache.phoenix.schema.types.PLong;
 
 /**
  * A {@link DBWritable} class that reads the number of rows that have been built.
- *
- * 
  */
-public class PhoenixServerBuildIndexDBWritable  implements DBWritable {
-    private long rowCount;
+public class PhoenixServerBuildIndexDBWritable implements DBWritable {
+  private long rowCount;
 
-    @Override
-    public void write(PreparedStatement statement) throws SQLException {
-        throw new SQLFeatureNotSupportedException();
-    }
+  @Override
+  public void write(PreparedStatement statement) throws SQLException {
+    throw new SQLFeatureNotSupportedException();
+  }
 
-    @Override
-    public void readFields(ResultSet resultSet) throws SQLException {
-        Tuple row = resultSet.unwrap(PhoenixResultSet.class).getCurrentRow();
-        Cell kv = row.getValue(0);
-        ImmutableBytesWritable tmpPtr = new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
-        // A single Cell will be returned with the count(*) - we decode that here
-        rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
-    }
+  @Override
+  public void readFields(ResultSet resultSet) throws SQLException {
+    Tuple row = resultSet.unwrap(PhoenixResultSet.class).getCurrentRow();
+    Cell kv = row.getValue(0);
+    ImmutableBytesWritable tmpPtr =
+      new ImmutableBytesWritable(kv.getValueArray(), kv.getValueOffset(), kv.getValueLength());
+    // A single Cell will be returned with the count(*) - we decode that here
+    rowCount = PLong.INSTANCE.getCodec().decodeLong(tmpPtr, SortOrder.getDefault());
+  }
 
-    public long getRowCount() {
-        return rowCount;
-    }
+  public long getRowCount() {
+    return rowCount;
+  }
 
 }

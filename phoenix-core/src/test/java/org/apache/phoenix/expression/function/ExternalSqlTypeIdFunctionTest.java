@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,51 +29,49 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PIntegerArray;
-import org.junit.Test;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.junit.Test;
 
 public class ExternalSqlTypeIdFunctionTest {
 
-    @Test
-    public void testEvaluate() throws SQLException {
-        Expression inputArg = LiteralExpression.newConstant(
-                PInteger.INSTANCE.getSqlType(), PInteger.INSTANCE);
+  @Test
+  public void testEvaluate() throws SQLException {
+    Expression inputArg =
+      LiteralExpression.newConstant(PInteger.INSTANCE.getSqlType(), PInteger.INSTANCE);
 
-        Object returnValue = executeFunction(inputArg);
+    Object returnValue = executeFunction(inputArg);
 
-        assertEquals(Types.INTEGER, returnValue);
-    }
+    assertEquals(Types.INTEGER, returnValue);
+  }
 
-    @Test
-    public void testEvaluateArrayType() throws SQLException {
-        Expression inputArg = LiteralExpression.newConstant(
-                PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
+  @Test
+  public void testEvaluateArrayType() throws SQLException {
+    Expression inputArg =
+      LiteralExpression.newConstant(PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
 
-        Object returnValue = executeFunction(inputArg);
+    Object returnValue = executeFunction(inputArg);
 
-        assertEquals(Types.ARRAY, returnValue);
-    }
+    assertEquals(Types.ARRAY, returnValue);
+  }
 
-    @Test
-    public void testClone() throws SQLException {
-        Expression inputArg = LiteralExpression.newConstant(
-                PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
-        List<Expression> args = Lists.newArrayList(inputArg);
-        ExternalSqlTypeIdFunction externalIdFunction =
-                new ExternalSqlTypeIdFunction(args);
-        ScalarFunction clone = externalIdFunction.clone(args);
-        assertEquals(externalIdFunction, clone);
-    }
+  @Test
+  public void testClone() throws SQLException {
+    Expression inputArg =
+      LiteralExpression.newConstant(PIntegerArray.INSTANCE.getSqlType(), PInteger.INSTANCE);
+    List<Expression> args = Lists.newArrayList(inputArg);
+    ExternalSqlTypeIdFunction externalIdFunction = new ExternalSqlTypeIdFunction(args);
+    ScalarFunction clone = externalIdFunction.clone(args);
+    assertEquals(externalIdFunction, clone);
+  }
 
-    private Object executeFunction(Expression inputArg) throws SQLException {
-        ExternalSqlTypeIdFunction externalIdFunction =
-                new ExternalSqlTypeIdFunction(Lists.newArrayList(inputArg));
+  private Object executeFunction(Expression inputArg) throws SQLException {
+    ExternalSqlTypeIdFunction externalIdFunction =
+      new ExternalSqlTypeIdFunction(Lists.newArrayList(inputArg));
 
-        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-        assertTrue(externalIdFunction.evaluate(null, ptr));
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    assertTrue(externalIdFunction.evaluate(null, ptr));
 
-        return PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(),
-            PInteger.INSTANCE, inputArg.getSortOrder());
-    }
+    return PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength(),
+      PInteger.INSTANCE, inputArg.getSortOrder());
+  }
 }

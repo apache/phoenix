@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.hbase.index.wal;
 
 import java.io.DataInput;
@@ -30,6 +29,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+
 /**
  * Codec to encode/decode KeyValue s and IndexedKeyValue s within a WALEdit
  */
@@ -51,7 +51,7 @@ public class KeyValueCodec {
   public static List<KeyValue> readKeyValues(DataInput in) throws IOException {
     int size = in.readInt();
     if (size == 0) {
-      return Collections.<KeyValue>emptyList();
+      return Collections.<KeyValue> emptyList();
     }
     List<KeyValue> kvs = new ArrayList<KeyValue>(size);
     for (int i = 0; i < size; i++) {
@@ -76,7 +76,7 @@ public class KeyValueCodec {
       ClientProtos.MutationProto mProto = ClientProtos.MutationProto.parseFrom(mutationData);
       Mutation mutation = org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(mProto);
       IndexedKeyValue kv = null;
-      if (mutation != null){
+      if (mutation != null) {
         kv = IndexedKeyValue.newIndexedKeyValue(indexTableName.copyBytesIfNecessary(), mutation);
       } else {
         kv = new IndexedKeyValue();
@@ -91,7 +91,7 @@ public class KeyValueCodec {
    * Write a {@link KeyValue} or an {@link IndexedKeyValue} to the output stream. These can be read
    * back via {@link #readKeyValue(DataInput)} or {@link #readKeyValues(DataInput)}.
    * @param out to write to
-   * @param kv {@link KeyValue} to which to write
+   * @param kv  {@link KeyValue} to which to write
    * @throws IOException if there is an error writing
    */
   public static void write(DataOutput out, KeyValue kv) throws IOException {
@@ -99,7 +99,7 @@ public class KeyValueCodec {
       out.writeInt(INDEX_TYPE_LENGTH_MARKER);
       ((IndexedKeyValue) kv).writeData(out);
     } else {
-        KeyValue.write(kv, out);
+      KeyValue.write(kv, out);
     }
   }
 }

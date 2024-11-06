@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,38 +17,37 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import java.io.IOException;
+import java.util.Optional;
+
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.omid.transaction.OmidCompactor;
 
-import java.io.IOException;
-import java.util.Optional;
-
-
 public class OmidGCProcessor extends DelegateRegionObserver implements RegionCoprocessor {
 
-    @Override
-    public Optional<RegionObserver> getRegionObserver() {
-        return Optional.of(this);
-    }
+  @Override
+  public Optional<RegionObserver> getRegionObserver() {
+    return Optional.of(this);
+  }
 
-    public OmidGCProcessor() {
-        super(new OmidCompactor(true));
-    }
+  public OmidGCProcessor() {
+    super(new OmidCompactor(true));
+  }
 
-    @Override
-    public void start(CoprocessorEnvironment env) throws IOException {
-        if (delegate instanceof RegionCoprocessor) {
-            ((RegionCoprocessor)delegate).start(env);
-        }
+  @Override
+  public void start(CoprocessorEnvironment env) throws IOException {
+    if (delegate instanceof RegionCoprocessor) {
+      ((RegionCoprocessor) delegate).start(env);
     }
+  }
 
-    @Override
-    public void stop(CoprocessorEnvironment env) throws IOException {
-        if (delegate instanceof RegionCoprocessor) {
-            ((RegionCoprocessor)delegate).stop(env);
-        }
+  @Override
+  public void stop(CoprocessorEnvironment env) throws IOException {
+    if (delegate instanceof RegionCoprocessor) {
+      ((RegionCoprocessor) delegate).stop(env);
     }
+  }
 
 }

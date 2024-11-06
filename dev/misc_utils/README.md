@@ -72,11 +72,11 @@ The script also requires below inputs:
 
 Example of script execution:
 ```
-$ python3 dev/misc_utils/git_jira_fix_version_check.py 
+$ python3 dev/misc_utils/git_jira_fix_version_check.py
 JIRA Project Name (e.g PHOENIX / OMID / TEPHRA etc): PHOENIX
 First commit hash to start excluding commits from history: a2adf5e572c5a4bcccee7f8ac43bad6b84293ec6
 Fix Version: 4.16.0
-Jira server url (default: https://issues.apache.org/jira): 
+Jira server url (default: https://issues.apache.org/jira):
 Path of project's working dir with release branch checked-in: /Users/{USER}/Documents/phoenix
 
 Check git status output and verify expected branch
@@ -114,5 +114,3 @@ Completed diff: ##############################################
 
 
 ```
-
-

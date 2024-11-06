@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,33 +27,31 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.schema.MetaDataClient;
 
-
 public class DropSequenceCompiler {
-    private final PhoenixStatement statement;
-    private final Operation operation;
+  private final PhoenixStatement statement;
+  private final Operation operation;
 
-    public DropSequenceCompiler(PhoenixStatement statement, Operation operation) {
-        this.statement = statement;
-        this.operation = operation;
-    }
-    
+  public DropSequenceCompiler(PhoenixStatement statement, Operation operation) {
+    this.statement = statement;
+    this.operation = operation;
+  }
 
-    public MutationPlan compile(final DropSequenceStatement sequence) throws SQLException {
-        final PhoenixConnection connection = statement.getConnection();
-        final MetaDataClient client = new MetaDataClient(connection);        
-        final StatementContext context = new StatementContext(statement);
-        return new BaseMutationPlan(context, operation) {           
+  public MutationPlan compile(final DropSequenceStatement sequence) throws SQLException {
+    final PhoenixConnection connection = statement.getConnection();
+    final MetaDataClient client = new MetaDataClient(connection);
+    final StatementContext context = new StatementContext(statement);
+    return new BaseMutationPlan(context, operation) {
 
-            @Override
-            public MutationState execute() throws SQLException {
-                return client.dropSequence(sequence);
-            }
+      @Override
+      public MutationState execute() throws SQLException {
+        return client.dropSequence(sequence);
+      }
 
-            @Override
-            public ExplainPlan getExplainPlan() throws SQLException {
-                return new ExplainPlan(Collections.singletonList("DROP SEQUENCE"));
-            }
+      @Override
+      public ExplainPlan getExplainPlan() throws SQLException {
+        return new ExplainPlan(Collections.singletonList("DROP SEQUENCE"));
+      }
 
-        };
-    }
+    };
+  }
 }

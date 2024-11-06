@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,30 +20,22 @@ package org.apache.phoenix.schema;
 import org.apache.phoenix.schema.types.PDataType;
 
 public interface PDatum {
-    /**
-     * @return is this column nullable?
-     */
-    boolean isNullable();
+  /** Returns is this column nullable? */
+  boolean isNullable();
 
-    /**
-     * @return data type of the column
-     */
-    PDataType getDataType();
+  /** Returns data type of the column */
+  PDataType getDataType();
 
-    /**
-     * @return the actual length of the column. For decimal, it would be its precision. For char or
-     * varchar, it would be the maximum length as specified during schema definition.
-     */
-    Integer getMaxLength();
+  /**
+   * @return the actual length of the column. For decimal, it would be its precision. For char or
+   *         varchar, it would be the maximum length as specified during schema definition.
+   */
+  Integer getMaxLength();
 
-    /**
-     * @return scale of a decimal number.
-     */
-    Integer getScale();
-    
-    /**
-     * @return The SortOrder for this column, never null
-     */
-    SortOrder getSortOrder();
-    
+  /** Returns scale of a decimal number. */
+  Integer getScale();
+
+  /** Returns The SortOrder for this column, never null */
+  SortOrder getSortOrder();
+
 }

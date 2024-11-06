@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,11 +20,10 @@ package org.apache.phoenix.hbase.index.parallel;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.Futures;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ListenableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * {@link TaskRunner} that attempts to run all tasks passed, but quits early if any {@link Task}
@@ -36,7 +35,7 @@ public class QuickFailingTaskRunner extends BaseTaskRunner {
 
   /**
    * @param service thread pool to which {@link Task}s are submitted. This service is then 'owned'
-   *          by <tt>this</tt> and will be shutdown on calls to {@link #stop(String)}.
+   *                by <tt>this</tt> and will be shutdown on calls to {@link #stop(String)}.
    */
   public QuickFailingTaskRunner(ExecutorService service) {
     super(service);

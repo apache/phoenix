@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,49 +20,43 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 /**
- * 
- * Interface for iterating through results returned from a scan, adding the
- * ability to peek at the next result.
- *
- * 
+ * Interface for iterating through results returned from a scan, adding the ability to peek at the
+ * next result.
  * @since 0.1
  */
 public interface PeekingResultIterator extends ResultIterator {
-    public static final PeekingResultIterator EMPTY_ITERATOR = new PeekingResultIterator() {
+  public static final PeekingResultIterator EMPTY_ITERATOR = new PeekingResultIterator() {
 
-        @Override
-        public Tuple next() throws SQLException {
-            return null;
-        }
+    @Override
+    public Tuple next() throws SQLException {
+      return null;
+    }
 
-        @Override
-        public Tuple peek() {
-            return null;
-        }
+    @Override
+    public Tuple peek() {
+      return null;
+    }
 
-        @Override
-        public void close() throws SQLException {
-        }
+    @Override
+    public void close() throws SQLException {
+    }
 
-        @Override
-        public void explain(List<String> planSteps) {
-        }
+    @Override
+    public void explain(List<String> planSteps) {
+    }
 
-        @Override
-        public void explain(List<String> planSteps,
-            ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-        }
-    };
+    @Override
+    public void explain(List<String> planSteps,
+      ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+    }
+  };
 
-    /**
-     * Returns the next result without advancing the iterator
-     * @throws SQLException
-     */
-    public Tuple peek() throws SQLException;
+  /**
+   * Returns the next result without advancing the iterator
+   */
+  public Tuple peek() throws SQLException;
 }

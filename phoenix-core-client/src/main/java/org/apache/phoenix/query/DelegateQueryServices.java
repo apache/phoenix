@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,49 +24,43 @@ import org.apache.phoenix.memory.MemoryManager;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.util.ReadOnlyProps;
 
-
-
 /**
- * 
- * Class that delegates QueryService calls through to
- * a parent QueryService.
- *
- * 
+ * Class that delegates QueryService calls through to a parent QueryService.
  * @since 0.1
  */
 public class DelegateQueryServices implements QueryServices {
-    private final QueryServices parent;
-    
-    public DelegateQueryServices(QueryServices queryServices) {
-        parent = queryServices;
-    }
+  private final QueryServices parent;
 
-    public QueryServices getDelegate() {
-        return parent;
-    }
-    
-    @Override
-    public ThreadPoolExecutor getExecutor() {
-        return parent.getExecutor();
-    }
+  public DelegateQueryServices(QueryServices queryServices) {
+    parent = queryServices;
+  }
 
-    @Override
-    public MemoryManager getMemoryManager() {
-        return parent.getMemoryManager();
-    }
+  public QueryServices getDelegate() {
+    return parent;
+  }
 
-    @Override
-    public void close() throws SQLException {
-        parent.close();
-    }
+  @Override
+  public ThreadPoolExecutor getExecutor() {
+    return parent.getExecutor();
+  }
 
-    @Override
-    public ReadOnlyProps getProps() {
-        return parent.getProps();
-    }
+  @Override
+  public MemoryManager getMemoryManager() {
+    return parent.getMemoryManager();
+  }
 
-    @Override
-    public QueryOptimizer getOptimizer() {
-        return parent.getOptimizer();
-    }
+  @Override
+  public void close() throws SQLException {
+    parent.close();
+  }
+
+  @Override
+  public ReadOnlyProps getProps() {
+    return parent.getProps();
+  }
+
+  @Override
+  public QueryOptimizer getOptimizer() {
+    return parent.getOptimizer();
+  }
 }

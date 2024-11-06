@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,6 @@ package org.apache.phoenix.hbase.index.covered;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
-
 import org.apache.phoenix.hbase.index.covered.update.ColumnTracker;
 
 /**
@@ -58,19 +57,18 @@ public class IndexUpdate {
   @Override
   public String toString() {
     return "IndexUpdate: \n\ttable - " + Bytes.toString(tableName) + "\n\tupdate: " + update
-        + "\n\tcolumns: " + columns;
+      + "\n\tcolumns: " + columns;
   }
 
-  public static IndexUpdate createIndexUpdateForTesting(ColumnTracker tracker, byte[] table, Put p) {
+  public static IndexUpdate createIndexUpdateForTesting(ColumnTracker tracker, byte[] table,
+    Put p) {
     IndexUpdate update = new IndexUpdate(tracker);
     update.setTable(table);
     update.setUpdate(p);
     return update;
   }
 
-  /**
-   * @return <tt>true</tt> if the necessary state for a valid index update has been set.
-   */
+  /** Returns <tt>true</tt> if the necessary state for a valid index update has been set. */
   public boolean isValid() {
     return this.tableName != null && this.update != null;
   }

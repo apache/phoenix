@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,26 +22,23 @@ import java.sql.SQLException;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * 
  * Iterates through tuples up to a limit
- *
- * 
  * @since 1.2
  */
-public class LimitingPeekingResultIterator extends LimitingResultIterator implements PeekingResultIterator {
-    
-    public LimitingPeekingResultIterator(PeekingResultIterator delegate, int limit) {
-        super(delegate, limit);
-    }
+public class LimitingPeekingResultIterator extends LimitingResultIterator
+  implements PeekingResultIterator {
 
-    
-    @Override
-    protected PeekingResultIterator getDelegate() {
-    	return (PeekingResultIterator) super.getDelegate();
-    }
-    
-	@Override
-	public Tuple peek() throws SQLException {
-		return getDelegate().peek();
-	}
+  public LimitingPeekingResultIterator(PeekingResultIterator delegate, int limit) {
+    super(delegate, limit);
+  }
+
+  @Override
+  protected PeekingResultIterator getDelegate() {
+    return (PeekingResultIterator) super.getDelegate();
+  }
+
+  @Override
+  public Tuple peek() throws SQLException {
+    return getDelegate().peek();
+  }
 }

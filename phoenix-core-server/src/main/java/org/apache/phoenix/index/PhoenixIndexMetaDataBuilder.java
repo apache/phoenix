@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -41,67 +41,81 @@ import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
 
 public class PhoenixIndexMetaDataBuilder {
-    private final RegionCoprocessorEnvironment env;
-    
-    PhoenixIndexMetaDataBuilder(RegionCoprocessorEnvironment env) {
-        this.env = env;
+  private final RegionCoprocessorEnvironment env;
+
+  PhoenixIndexMetaDataBuilder(RegionCoprocessorEnvironment env) {
+    this.env = env;
+  }
+
+  public PhoenixIndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp)
+    throws IOException {
+    IndexMetaDataCache indexMetaDataCache =
+      getIndexMetaDataCache(env, miniBatchOp.getOperation(0).getAttributesMap());
+    return new PhoenixIndexMetaData(indexMetaDataCache,
+      miniBatchOp.getOperation(0).getAttributesMap());
+  }
+
+  private static IndexMetaDataCache getIndexMetaDataCache(RegionCoprocessorEnvironment env,
+    Map<String, byte[]> attributes) throws IOException {
+    if (attributes == null) {
+      return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
-    
-    public PhoenixIndexMetaData getIndexMetaData(MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
-        IndexMetaDataCache indexMetaDataCache = getIndexMetaDataCache(env, miniBatchOp.getOperation(0).getAttributesMap());
-        return new PhoenixIndexMetaData(indexMetaDataCache, miniBatchOp.getOperation(0).getAttributesMap());
+    byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
+    if (uuid == null) {
+      return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
+    byte[] md = attributes.get(PhoenixIndexCodec.INDEX_PROTO_MD);
+    if (md == null) {
+      md = attributes.get(PhoenixIndexCodec.INDEX_MD);
+    }
+    if (md != null) {
+      boolean useProto = md != null;
+      byte[] txState = attributes.get(BaseScannerRegionObserverConstants.TX_STATE);
+      final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md, useProto);
+      byte[] clientVersionBytes = attributes.get(BaseScannerRegionObserverConstants.CLIENT_VERSION);
+      final int clientVersion = clientVersionBytes == null
+        ? ScanUtil.UNKNOWN_CLIENT_VERSION
+        : Bytes.toInt(clientVersionBytes);
+      final PhoenixTransactionContext txnContext =
+        TransactionFactory.getTransactionContext(txState, clientVersion);
+      return new IndexMetaDataCache() {
 
-    private static IndexMetaDataCache getIndexMetaDataCache(RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) throws IOException {
-        if (attributes == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
-        byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
-        if (uuid == null) { return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE; }
-        byte[] md = attributes.get(PhoenixIndexCodec.INDEX_PROTO_MD);
-        if (md == null) {
-            md = attributes.get(PhoenixIndexCodec.INDEX_MD);
-        }
-        if (md != null) {
-            boolean useProto = md != null;
-            byte[] txState = attributes.get(BaseScannerRegionObserverConstants.TX_STATE);
-            final List<IndexMaintainer> indexMaintainers = IndexMaintainer.deserialize(md, useProto);
-            byte[] clientVersionBytes = attributes.get(BaseScannerRegionObserverConstants.CLIENT_VERSION);
-            final int clientVersion = clientVersionBytes == null ? ScanUtil.UNKNOWN_CLIENT_VERSION : Bytes.toInt(clientVersionBytes);
-            final PhoenixTransactionContext txnContext = TransactionFactory.getTransactionContext(txState, clientVersion);
-            return new IndexMetaDataCache() {
-
-                @Override
-                public void close() throws IOException {}
-
-                @Override
-                public List<IndexMaintainer> getIndexMaintainers() {
-                    return indexMaintainers;
-                }
-
-                @Override
-                public PhoenixTransactionContext getTransactionContext() {
-                    return txnContext;
-                }
-
-                @Override
-                public int getClientVersion() {
-                    return clientVersion;
-                }
-
-            };
-        } else {
-            byte[] tenantIdBytes = attributes.get(PhoenixRuntime.TENANT_ID_ATTRIB);
-            ImmutableBytesPtr tenantId = tenantIdBytes == null ? null : new ImmutableBytesPtr(tenantIdBytes);
-            TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
-            IndexMetaDataCache indexCache = (IndexMetaDataCache)cache.getServerCache(new ImmutableBytesPtr(uuid));
-            if (indexCache == null) {
-                String msg = "key=" + ServerCacheClient.idToString(uuid) + " region=" + env.getRegion() + "host="
-                        + env.getServerName().getServerName();
-                SQLException e = new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_METADATA_NOT_FOUND).setMessage(msg)
-                        .build().buildException();
-                ClientUtil.throwIOException("Index update failed", e); // will not return
-            }
-            return indexCache;
+        @Override
+        public void close() throws IOException {
         }
 
+        @Override
+        public List<IndexMaintainer> getIndexMaintainers() {
+          return indexMaintainers;
+        }
+
+        @Override
+        public PhoenixTransactionContext getTransactionContext() {
+          return txnContext;
+        }
+
+        @Override
+        public int getClientVersion() {
+          return clientVersion;
+        }
+
+      };
+    } else {
+      byte[] tenantIdBytes = attributes.get(PhoenixRuntime.TENANT_ID_ATTRIB);
+      ImmutableBytesPtr tenantId =
+        tenantIdBytes == null ? null : new ImmutableBytesPtr(tenantIdBytes);
+      TenantCache cache = GlobalCache.getTenantCache(env, tenantId);
+      IndexMetaDataCache indexCache =
+        (IndexMetaDataCache) cache.getServerCache(new ImmutableBytesPtr(uuid));
+      if (indexCache == null) {
+        String msg = "key=" + ServerCacheClient.idToString(uuid) + " region=" + env.getRegion()
+          + "host=" + env.getServerName().getServerName();
+        SQLException e = new SQLExceptionInfo.Builder(SQLExceptionCode.INDEX_METADATA_NOT_FOUND)
+          .setMessage(msg).build().buildException();
+        ClientUtil.throwIOException("Index update failed", e); // will not return
+      }
+      return indexCache;
     }
+
+  }
 }

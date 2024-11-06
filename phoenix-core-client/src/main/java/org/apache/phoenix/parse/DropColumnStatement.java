@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,20 +22,21 @@ import java.util.List;
 import org.apache.phoenix.schema.PTableType;
 
 public class DropColumnStatement extends AlterTableStatement {
-    private final List<ColumnName> columnRefs;
-    private final boolean ifExists;
-    
-    protected DropColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnName> columnRefs, boolean ifExists) {
-        super(table, tableType);
-        this.columnRefs = columnRefs;
-        this.ifExists = ifExists;
-    }
+  private final List<ColumnName> columnRefs;
+  private final boolean ifExists;
 
-    public List<ColumnName> getColumnRefs() {
-        return columnRefs;
-    }
+  protected DropColumnStatement(NamedTableNode table, PTableType tableType,
+    List<ColumnName> columnRefs, boolean ifExists) {
+    super(table, tableType);
+    this.columnRefs = columnRefs;
+    this.ifExists = ifExists;
+  }
 
-    public boolean ifExists() {
-        return ifExists;
-    }
+  public List<ColumnName> getColumnRefs() {
+    return columnRefs;
+  }
+
+  public boolean ifExists() {
+    return ifExists;
+  }
 }

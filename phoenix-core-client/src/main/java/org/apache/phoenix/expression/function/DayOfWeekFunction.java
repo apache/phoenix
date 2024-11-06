@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,57 +31,49 @@ import org.joda.time.DateTime;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * Implementation of DayOfWeekFunction(Date/Timestamp)
- *
- * Returns an integer from 1 to 7. Each represents a day of the week as follows :
- * MONDAY = 1;
- * TUESDAY = 2;
- * WEDNESDAY = 3;
- * THURSDAY = 4;
- * FRIDAY = 5;
- * SATURDAY = 6;
- * SUNDAY = 7;
- *
+ * Implementation of DayOfWeekFunction(Date/Timestamp) Returns an integer from 1 to 7. Each
+ * represents a day of the week as follows : MONDAY = 1; TUESDAY = 2; WEDNESDAY = 3; THURSDAY = 4;
+ * FRIDAY = 5; SATURDAY = 6; SUNDAY = 7;
  */
-@BuiltInFunction(name=DayOfWeekFunction.NAME,
-        args={@Argument(allowedTypes={PTimestamp.class})})
+@BuiltInFunction(name = DayOfWeekFunction.NAME,
+    args = { @Argument(allowedTypes = { PTimestamp.class }) })
 public class DayOfWeekFunction extends DateScalarFunction {
-    public static final String NAME = "DAYOFWEEK";
+  public static final String NAME = "DAYOFWEEK";
 
-    public DayOfWeekFunction(){
+  public DayOfWeekFunction() {
 
+  }
+
+  public DayOfWeekFunction(List<Expression> children) {
+    super(children);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression arg = getChildren().get(0);
+    if (!arg.evaluate(tuple, ptr)) {
+      return false;
     }
-
-    public DayOfWeekFunction(List<Expression> children){
-        super(children);
+    if (ptr.getLength() == 0) {
+      return true;
     }
-    @Override
-    public String getName() {
-        return NAME;
-    }
+    long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
+    DateTime jodaDT = new DateTime(dateTime, GJChronology.getInstanceUTC());
+    int day = jodaDT.getDayOfWeek();
+    PDataType returnDataType = getDataType();
+    byte[] byteValue = new byte[returnDataType.getByteSize()];
+    returnDataType.getCodec().encodeInt(day, byteValue, 0);
+    ptr.set(byteValue);
+    return true;
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression arg = getChildren().get(0);
-        if (!arg.evaluate(tuple,ptr)) {
-            return false;
-        }
-        if (ptr.getLength() == 0) {
-            return true;
-        }
-        long dateTime = inputCodec.decodeLong(ptr, arg.getSortOrder());
-        DateTime jodaDT = new DateTime(dateTime, GJChronology.getInstanceUTC());
-        int day = jodaDT.getDayOfWeek();
-        PDataType returnDataType = getDataType();
-        byte[] byteValue = new byte[returnDataType.getByteSize()];
-        returnDataType.getCodec().encodeInt(day, byteValue, 0);
-        ptr.set(byteValue);
-        return true;
-    }
-
-
-    @Override
-    public PDataType getDataType() {
-        return PInteger.INSTANCE;
-    }
+  @Override
+  public PDataType getDataType() {
+    return PInteger.INSTANCE;
+  }
 }

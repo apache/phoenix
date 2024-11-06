@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,65 +20,63 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 
-import org.apache.phoenix.compile.ExplainPlanAttributes
-    .ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
 abstract public class LookAheadResultIterator implements PeekingResultIterator {
-    public static PeekingResultIterator wrap(final ResultIterator iterator) {
-        if (iterator instanceof PeekingResultIterator) {
-            return (PeekingResultIterator) iterator;
-        }
-        
-        return new LookAheadResultIterator() {
-
-            @Override
-            public void explain(List<String> planSteps) {
-                iterator.explain(planSteps);
-            }
-
-            @Override
-            public void explain(List<String> planSteps,
-                    ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-                iterator.explain(planSteps, explainPlanAttributesBuilder);
-            }
-
-            @Override
-            public void close() throws SQLException {
-                iterator.close();
-            }
-
-            @Override
-            protected Tuple advance() throws SQLException {
-                return iterator.next();
-            }
-        };
+  public static PeekingResultIterator wrap(final ResultIterator iterator) {
+    if (iterator instanceof PeekingResultIterator) {
+      return (PeekingResultIterator) iterator;
     }
-    
-    private final static Tuple UNINITIALIZED = ResultTuple.EMPTY_TUPLE;
-    private Tuple next = UNINITIALIZED;
-    
-    abstract protected Tuple advance() throws SQLException;
-    
-    private void init() throws SQLException {
-        if (next == UNINITIALIZED) {
-            next = advance();
-        }
+
+    return new LookAheadResultIterator() {
+
+      @Override
+      public void explain(List<String> planSteps) {
+        iterator.explain(planSteps);
+      }
+
+      @Override
+      public void explain(List<String> planSteps,
+        ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+        iterator.explain(planSteps, explainPlanAttributesBuilder);
+      }
+
+      @Override
+      public void close() throws SQLException {
+        iterator.close();
+      }
+
+      @Override
+      protected Tuple advance() throws SQLException {
+        return iterator.next();
+      }
+    };
+  }
+
+  private final static Tuple UNINITIALIZED = ResultTuple.EMPTY_TUPLE;
+  private Tuple next = UNINITIALIZED;
+
+  abstract protected Tuple advance() throws SQLException;
+
+  private void init() throws SQLException {
+    if (next == UNINITIALIZED) {
+      next = advance();
     }
-    
-    @Override
-    public Tuple next() throws SQLException {
-        init();
-        Tuple next = this.next;
-        this.next = advance();
-        return next;
-    }
-    
-    @Override
-    public Tuple peek() throws SQLException {
-        init();
-        return next;
-    }
+  }
+
+  @Override
+  public Tuple next() throws SQLException {
+    init();
+    Tuple next = this.next;
+    this.next = advance();
+    return next;
+  }
+
+  @Override
+  public Tuple peek() throws SQLException {
+    init();
+    return next;
+  }
 }

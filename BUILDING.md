@@ -59,12 +59,12 @@ Building from source
 On first setup, you may need to run `$ mvn install -DskipTests`
 to install the local jars. This is a side-effect of multi-module maven projects
 
-To re-generate the antlr based files:  
+To re-generate the antlr based files:
 `$ mvn process-sources`
 
-To build the jars and the assembly tarball:  
+To build the jars and the assembly tarball:
 `$ mvn package`
-and optionally, to just skip all the tests and build the jars:  
+and optionally, to just skip all the tests and build the jars:
 `$ mvn package -DskipTests`
 
 Note: javadocs are generated in target/apidocs
@@ -79,7 +79,7 @@ Phoenix, even within the same HBase minor release.
 By default, Phoenix will be built for the latest known patch level of the latest HBase 2.x
 minor release that Phoenix supports.
 
-You can specify the targeted HBase minor release by setting the `hbase.profile` system property for 
+You can specify the targeted HBase minor release by setting the `hbase.profile` system property for
 maven.
 
 You can also specify the exact HBase release to build Phoenix with by additionally
@@ -102,7 +102,7 @@ Use the m2e eclipse plugin and do Import->Maven Project and just pick the root '
 Running the tests
 -----------------
 
-All Unit Tests  
+All Unit Tests
 `$ mvn clean test`
 
 All Unit Tests and Integration tests (takes a few hours)
@@ -133,5 +133,5 @@ as well as each of the subprojects. (not every project has all reports)
 Generate Apache Web Site
 ------------------------
 
-checkout https://svn.apache.org/repos/asf/phoenix  
+checkout https://svn.apache.org/repos/asf/phoenix
 `$ build.sh`

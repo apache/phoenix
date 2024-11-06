@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,58 +22,53 @@ import java.sql.SQLException;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.util.SchemaUtil;
 
-
-
 /**
- * 
  * Node representing a subselect in the FROM clause of SQL
- *
- * 
  * @since 0.1
  */
 public class DerivedTableNode extends TableNode {
 
-    private final SelectStatement select;
+  private final SelectStatement select;
 
-    DerivedTableNode(String alias, SelectStatement select) {
-        super(SchemaUtil.normalizeIdentifier(alias));
-        this.select = select;
-    }
+  DerivedTableNode(String alias, SelectStatement select) {
+    super(SchemaUtil.normalizeIdentifier(alias));
+    this.select = select;
+  }
 
-    public SelectStatement getSelect() {
-        return select;
-    }
+  public SelectStatement getSelect() {
+    return select;
+  }
 
-    @Override
-    public <T> T accept(TableNodeVisitor<T> visitor) throws SQLException {
-        return visitor.visit(this);
-    }
+  @Override
+  public <T> T accept(TableNodeVisitor<T> visitor) throws SQLException {
+    return visitor.visit(this);
+  }
 
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        buf.append('(');
-        select.toSQL(resolver, buf);
-        buf.append(')');
-        buf.append(" " + (this.getAlias() == null ? "" : this.getAlias()));
-    }
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    buf.append('(');
+    select.toSQL(resolver, buf);
+    buf.append(')');
+    buf.append(" " + (this.getAlias() == null ? "" : this.getAlias()));
+  }
 
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((select == null) ? 0 : select.hashCode());
-        return result;
-    }
+  @Override
+  public int hashCode() {
+    final int prime = 31;
+    int result = 1;
+    result = prime * result + ((select == null) ? 0 : select.hashCode());
+    return result;
+  }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (obj == null) return false;
-        if (getClass() != obj.getClass()) return false;
-        DerivedTableNode other = (DerivedTableNode)obj;
-        if (select == null) {
-            if (other.select != null) return false;
-        } else if (!select.equals(other.select)) return false;
-        return true;
-    }
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj) return true;
+    if (obj == null) return false;
+    if (getClass() != obj.getClass()) return false;
+    DerivedTableNode other = (DerivedTableNode) obj;
+    if (select == null) {
+      if (other.select != null) return false;
+    } else if (!select.equals(other.select)) return false;
+    return true;
+  }
 }

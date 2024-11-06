@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,11 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.jdbc;
 
 import java.sql.SQLException;
 import java.sql.Statement;
+
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 /**
@@ -27,9 +27,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
  */
 public interface PhoenixMonitoredStatement extends Statement {
 
-    /**
-     * @return Operation Type of statement that has been executed or prepared for execution
-     */
-   Operation getUpdateOperation() throws SQLException;
+  /** Returns Operation Type of statement that has been executed or prepared for execution */
+  Operation getUpdateOperation() throws SQLException;
 
 }

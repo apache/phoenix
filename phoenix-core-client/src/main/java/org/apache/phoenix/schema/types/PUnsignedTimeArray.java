@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,73 +23,72 @@ import org.apache.phoenix.schema.SortOrder;
 
 public class PUnsignedTimeArray extends PArrayDataType<Time[]> {
 
-    public static final PUnsignedTimeArray INSTANCE = new PUnsignedTimeArray();
+  public static final PUnsignedTimeArray INSTANCE = new PUnsignedTimeArray();
 
-    private PUnsignedTimeArray() {
-        super("UNSIGNED_TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedTime.INSTANCE.getSqlType(),
-                PhoenixArray.class, null, 39);
+  private PUnsignedTimeArray() {
+    super("UNSIGNED_TIME ARRAY", PDataType.ARRAY_TYPE_BASE + PUnsignedTime.INSTANCE.getSqlType(),
+      PhoenixArray.class, null, 39);
+  }
+
+  @Override
+  public boolean isArrayType() {
+    return true;
+  }
+
+  @Override
+  public boolean isFixedWidth() {
+    return false;
+  }
+
+  @Override
+  public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
+    return compareTo(lhs, rhs);
+  }
+
+  @Override
+  public Integer getByteSize() {
+    return null;
+  }
+
+  @Override
+  public byte[] toBytes(Object object) {
+    return toBytes(object, SortOrder.ASC);
+  }
+
+  @Override
+  public byte[] toBytes(Object object, SortOrder sortOrder) {
+    return toBytes(object, PUnsignedTime.INSTANCE, sortOrder);
+  }
+
+  @Override
+  public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+    SortOrder sortOrder, Integer maxLength, Integer scale) {
+    return toObject(bytes, offset, length, PUnsignedTime.INSTANCE, sortOrder, maxLength, scale,
+      PUnsignedTime.INSTANCE);
+  }
+
+  @Override
+  public boolean isCoercibleTo(PDataType targetType) {
+    return isCoercibleTo(targetType, this);
+  }
+
+  @Override
+  public boolean isCoercibleTo(PDataType targetType, Object value) {
+    if (value == null) {
+      return true;
     }
-
-    @Override
-    public boolean isArrayType() {
-        return true;
-    }
-
-    @Override
-    public boolean isFixedWidth() {
+    PhoenixArray pArr = (PhoenixArray) value;
+    Object[] timeArr = (Object[]) pArr.array;
+    for (Object i : timeArr) {
+      if (!super.isCoercibleTo(PUnsignedTime.INSTANCE, i)) {
         return false;
+      }
     }
+    return true;
+  }
 
-    @Override
-    public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
-        return compareTo(lhs, rhs);
-    }
-
-    @Override
-    public Integer getByteSize() {
-        return null;
-    }
-
-    @Override
-    public byte[] toBytes(Object object) {
-        return toBytes(object, SortOrder.ASC);
-    }
-
-    @Override
-    public byte[] toBytes(Object object, SortOrder sortOrder) {
-        return toBytes(object, PUnsignedTime.INSTANCE, sortOrder);
-    }
-
-    @Override
-    public Object toObject(byte[] bytes, int offset, int length,
-            PDataType actualType, SortOrder sortOrder, Integer maxLength,
-            Integer scale) {
-        return toObject(bytes, offset, length, PUnsignedTime.INSTANCE, sortOrder, maxLength,
-                scale, PUnsignedTime.INSTANCE);
-    }
-
-    @Override
-    public boolean isCoercibleTo(PDataType targetType) {
-        return isCoercibleTo(targetType, this);
-    }
-
-    @Override
-    public boolean isCoercibleTo(PDataType targetType, Object value) {
-        if (value == null) {
-            return true;
-        }
-        PhoenixArray pArr = (PhoenixArray) value;
-        Object[] timeArr = (Object[]) pArr.array;
-        for (Object i : timeArr) {
-            if (!super.isCoercibleTo(PUnsignedTime.INSTANCE, i)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    @Override
-    public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-        return getSampleValue(PUnsignedTime.INSTANCE, arrayLength, maxLength);
-    }
+  @Override
+  public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+    return getSampleValue(PUnsignedTime.INSTANCE, arrayLength, maxLength);
+  }
 }

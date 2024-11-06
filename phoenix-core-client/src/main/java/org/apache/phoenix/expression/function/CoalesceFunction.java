@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,98 +32,94 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ExpressionUtil;
 
-
 /**
- *
- * Function used to provide an alternative value when the first argument is null.
- * Usage:
- * COALESCE(expr1,expr2)
- * If expr1 is not null, then it is returned, otherwise expr2 is returned.
- *
- * TODO: better bind parameter type matching, since arg2 must be coercible
- * to arg1. consider allowing a common base type?
- *
+ * Function used to provide an alternative value when the first argument is null. Usage:
+ * COALESCE(expr1,expr2) If expr1 is not null, then it is returned, otherwise expr2 is returned.
+ * TODO: better bind parameter type matching, since arg2 must be coercible to arg1. consider
+ * allowing a common base type?
  * @since 0.1
  */
-@BuiltInFunction(name=CoalesceFunction.NAME, args= {
-    @Argument(),
-    @Argument()} )
+@BuiltInFunction(name = CoalesceFunction.NAME, args = { @Argument(), @Argument() })
 public class CoalesceFunction extends ScalarFunction {
-    public static final String NAME = "COALESCE";
+  public static final String NAME = "COALESCE";
 
-    public CoalesceFunction() {
+  public CoalesceFunction() {
+  }
+
+  public CoalesceFunction(List<Expression> children) throws SQLException {
+    super(children);
+
+    Expression firstChild = children.get(0);
+    Expression secondChild = children.get(1);
+
+    if (ExpressionUtil.isConstant(secondChild)) { // is literal
+
+      ImmutableBytesWritable ptr = new ImmutableBytesPtr();
+      secondChild.evaluate(null, ptr);
+
+      if (
+        ptr.getLength() != 0 && !secondChild.getDataType().isCoercibleTo(firstChild.getDataType(),
+          secondChild.getDataType().toObject(ptr))
+      ) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH).setMessage(getName()
+          + " expected " + firstChild.getDataType() + ", but got " + secondChild.getDataType())
+          .build().buildException();
+      }
+    } else { // second parameter is expression
+      if (!secondChild.getDataType().isCoercibleTo(getDataType())) {
+        // cast explicitly
+        children.add(1, CoerceExpression.create(secondChild, firstChild.getDataType()));
+      }
     }
+  }
 
-    public CoalesceFunction(List<Expression> children) throws SQLException {
-        super(children);
-
-        Expression firstChild = children.get(0);
-        Expression secondChild = children.get(1);
-
-        if (ExpressionUtil.isConstant(secondChild)) { // is literal
-
-            ImmutableBytesWritable ptr = new ImmutableBytesPtr();
-            secondChild.evaluate(null, ptr);
-
-            if (ptr.getLength()!=0 && !secondChild.getDataType().isCoercibleTo(firstChild.getDataType(), secondChild.getDataType().toObject(ptr))) {
-                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
-                    .setMessage(getName() + " expected " + firstChild.getDataType() + ", but got " + secondChild.getDataType())
-                    .build().buildException();
-            }
-        } else { // second parameter is expression
-            if (!secondChild.getDataType().isCoercibleTo(getDataType())) {
-                // cast explicitly
-                children.add(1, CoerceExpression.create(secondChild, firstChild.getDataType()));
-            }
-        }
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    boolean evaluated = children.get(0).evaluate(tuple, ptr);
+    if (evaluated && ptr.getLength() > 0) {
+      return true;
     }
-
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        boolean evaluated = children.get(0).evaluate(tuple, ptr);
-        if (evaluated && ptr.getLength() > 0) {
-            return true;
-        }
-        if (evaluated || tuple.isImmutable()) {
-            Expression secondChild = children.get(1);
-            if (secondChild.evaluate(tuple, ptr)) {
-                // Coerce the type of the second child to the type of the first child
-                getDataType().coerceBytes(ptr, secondChild.getDataType(), secondChild.getSortOrder(), getSortOrder());
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public PDataType getDataType() {
-        return children.get(0).getDataType();
-    }
-
-    @Override
-    public Integer getMaxLength() {
-        Integer maxLength1 = children.get(0).getMaxLength();
-        if (maxLength1 != null) {
-            Integer maxLength2 = children.get(1).getMaxLength();
-            if (maxLength2 != null) {
-                return maxLength1 > maxLength2 ? maxLength1 : maxLength2;
-            }
-        }
-        return null;
-    }
-
-    @Override
-    public boolean isNullable() {
-        return children.get(0).isNullable() && children.get(1).isNullable();
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
-    }
-
-    @Override
-    public boolean requiresFinalEvaluation() {
+    if (evaluated || tuple.isImmutable()) {
+      Expression secondChild = children.get(1);
+      if (secondChild.evaluate(tuple, ptr)) {
+        // Coerce the type of the second child to the type of the first child
+        getDataType().coerceBytes(ptr, secondChild.getDataType(), secondChild.getSortOrder(),
+          getSortOrder());
         return true;
+      }
     }
+    return false;
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return children.get(0).getDataType();
+  }
+
+  @Override
+  public Integer getMaxLength() {
+    Integer maxLength1 = children.get(0).getMaxLength();
+    if (maxLength1 != null) {
+      Integer maxLength2 = children.get(1).getMaxLength();
+      if (maxLength2 != null) {
+        return maxLength1 > maxLength2 ? maxLength1 : maxLength2;
+      }
+    }
+    return null;
+  }
+
+  @Override
+  public boolean isNullable() {
+    return children.get(0).isNullable() && children.get(1).isNullable();
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
+  @Override
+  public boolean requiresFinalEvaluation() {
+    return true;
+  }
 }

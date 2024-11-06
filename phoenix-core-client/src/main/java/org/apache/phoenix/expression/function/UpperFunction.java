@@ -1,12 +1,13 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to you under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,73 +31,74 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.i18n.LocaleUtils;
 
-@FunctionParseNode.BuiltInFunction(name=UpperFunction.NAME,  args={
-        @FunctionParseNode.Argument(allowedTypes={PVarchar.class}),
-        @FunctionParseNode.Argument(allowedTypes={PVarchar.class}, defaultValue="null", isConstant=true)} )
+@FunctionParseNode.BuiltInFunction(name = UpperFunction.NAME,
+    args = { @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, defaultValue = "null",
+          isConstant = true) })
 public class UpperFunction extends ScalarFunction {
-    public static final String NAME = "UPPER";
+  public static final String NAME = "UPPER";
 
-    private Locale locale;
+  private Locale locale;
 
-    public UpperFunction() {
+  public UpperFunction() {
+  }
+
+  public UpperFunction(List<Expression> children) throws SQLException {
+    super(children);
+    initialize();
+  }
+
+  private void initialize() {
+    if (children.size() > 1) {
+      String localeISOCode = getLiteralValue(1, String.class);
+      locale = LocaleUtils.get().getLocaleByIsoCode(localeISOCode);
+    }
+  }
+
+  @Override
+  public void readFields(DataInput input) throws IOException {
+    super.readFields(input);
+    initialize();
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (!getStrExpression().evaluate(tuple, ptr)) {
+      return false;
     }
 
-    public UpperFunction(List<Expression> children) throws SQLException {
-        super(children);
-        initialize();
+    String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
+    if (sourceStr == null) {
+      return true;
     }
 
-    private void initialize() {
-        if (children.size() > 1) {
-            String localeISOCode = getLiteralValue(1, String.class);
-            locale = LocaleUtils.get().getLocaleByIsoCode(localeISOCode);
-        }
-    }
+    String resultStr = locale == null ? sourceStr.toUpperCase() : sourceStr.toUpperCase(locale);
 
-    @Override
-    public void readFields(DataInput input) throws IOException {
-        super.readFields(input);
-        initialize();
-    }
+    ptr.set(PVarchar.INSTANCE.toBytes(resultStr));
+    return true;
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!getStrExpression().evaluate(tuple, ptr)) {
-            return false;
-        }
+  @Override
+  public PDataType getDataType() {
+    return getStrExpression().getDataType();
+  }
 
-        String sourceStr = (String) PVarchar.INSTANCE.toObject(ptr, getStrExpression().getSortOrder());
-        if (sourceStr == null) {
-            return true;
-        }
+  @Override
+  public Integer getMaxLength() {
+    return getStrExpression().getMaxLength();
+  }
 
-        String resultStr = locale == null ? sourceStr.toUpperCase() : sourceStr.toUpperCase(locale);
+  @Override
+  public boolean isNullable() {
+    return getStrExpression().isNullable();
+  }
 
-        ptr.set(PVarchar.INSTANCE.toBytes(resultStr));
-        return true;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return getStrExpression().getDataType();
-    }
-
-    @Override
-    public Integer getMaxLength() {
-        return getStrExpression().getMaxLength();
-    }
-
-    @Override
-    public boolean isNullable() {
-        return getStrExpression().isNullable();
-    }
-
-    @Override
-    public String getName() {
-        return NAME;
-    }
-
-    private Expression getStrExpression() {
-        return children.get(0);
-    }
+  private Expression getStrExpression() {
+    return children.get(0);
+  }
 }

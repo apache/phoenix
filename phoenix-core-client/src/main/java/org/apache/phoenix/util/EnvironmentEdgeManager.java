@@ -1,5 +1,4 @@
 /*
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,9 +18,8 @@
 package org.apache.phoenix.util;
 
 /**
- * Manages a singleton instance of the environment edge. This class shall
- * implement static versions of the interface {@link EnvironmentEdge}, then
- * defer to the delegate on invocation.
+ * Manages a singleton instance of the environment edge. This class shall implement static versions
+ * of the interface {@link EnvironmentEdge}, then defer to the delegate on invocation.
  */
 public class EnvironmentEdgeManager {
   private static volatile EnvironmentEdge delegate = new DefaultEnvironmentEdge();
@@ -31,9 +29,7 @@ public class EnvironmentEdgeManager {
   }
 
   /**
-   * Retrieves the singleton instance of the {@link EnvironmentEdge} that is
-   * being managed.
-   *
+   * Retrieves the singleton instance of the {@link EnvironmentEdge} that is being managed.
    * @return the edge.
    */
   public static EnvironmentEdge getDelegate() {
@@ -41,20 +37,17 @@ public class EnvironmentEdgeManager {
   }
 
   /**
-   * Resets the managed instance to the default instance: {@link
-   * DefaultEnvironmentEdge}.
+   * Resets the managed instance to the default instance: {@link DefaultEnvironmentEdge}.
    */
   public static void reset() {
     injectEdge(new DefaultEnvironmentEdge());
   }
 
   /**
-   * Injects the given edge such that it becomes the managed entity. If null is
-   * passed to this method, the default type is assigned to the delegate.
-   *
-   * <b>Note: This is JVM global. Make sure to call reset() after the test.</b>
-   * See org.apache.hadoop.hbase.util.EnvironmentEdgeManager for other caveats
-   *
+   * Injects the given edge such that it becomes the managed entity. If null is passed to this
+   * method, the default type is assigned to the delegate. <b>Note: This is JVM global. Make sure to
+   * call reset() after the test.</b> See org.apache.hadoop.hbase.util.EnvironmentEdgeManager for
+   * other caveats
    * @param edge the new edge.
    */
   public static void injectEdge(EnvironmentEdge edge) {
@@ -67,9 +60,7 @@ public class EnvironmentEdgeManager {
   }
 
   /**
-   * Defers to the delegate and calls the
-   * {@link EnvironmentEdge#currentTime()} method.
-   *
+   * Defers to the delegate and calls the {@link EnvironmentEdge#currentTime()} method.
    * @return current time in millis according to the delegate.
    */
   public static long currentTimeMillis() {

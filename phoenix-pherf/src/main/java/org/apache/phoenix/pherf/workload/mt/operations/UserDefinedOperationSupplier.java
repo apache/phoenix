@@ -15,14 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.pherf.workload.mt.operations;
 
-import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
-import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.pherf.configuration.DataModel;
 import org.apache.phoenix.pherf.configuration.Scenario;
 import org.apache.phoenix.pherf.util.PhoenixUtil;
+import org.apache.phoenix.pherf.workload.mt.generators.TenantOperationInfo;
+import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 
@@ -31,21 +30,21 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  */
 public class UserDefinedOperationSupplier extends BaseOperationSupplier {
 
-    public UserDefinedOperationSupplier(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
-        super(phoenixUtil, model, scenario);
-    }
+  public UserDefinedOperationSupplier(PhoenixUtil phoenixUtil, DataModel model, Scenario scenario) {
+    super(phoenixUtil, model, scenario);
+  }
 
-    @Override
-    public Function<TenantOperationInfo, OperationStats> get() {
-        return new Function<TenantOperationInfo, OperationStats>() {
-            @Override
-            public OperationStats apply(final TenantOperationInfo input) {
-                Preconditions.checkNotNull(input);
-                // TODO : implement user defined operation invocation.
-                long startTime = EnvironmentEdgeManager.currentTimeMillis();
-                long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
-                return new OperationStats(input, startTime,0, 0, duration);
-            }
-        };
-    }
+  @Override
+  public Function<TenantOperationInfo, OperationStats> get() {
+    return new Function<TenantOperationInfo, OperationStats>() {
+      @Override
+      public OperationStats apply(final TenantOperationInfo input) {
+        Preconditions.checkNotNull(input);
+        // TODO : implement user defined operation invocation.
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        long duration = EnvironmentEdgeManager.currentTimeMillis() - startTime;
+        return new OperationStats(input, startTime, 0, 0, duration);
+      }
+    };
+  }
 }

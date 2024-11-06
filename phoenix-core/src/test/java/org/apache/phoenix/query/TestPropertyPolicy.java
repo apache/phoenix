@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,9 +32,10 @@ import org.apache.hadoop.conf.Configuration;
  */
 public class TestPropertyPolicy implements PropertyPolicy {
   final static Set<String> propertiesKeyDisAllowed =
-      Collections.unmodifiableSet(new HashSet<>(asList("DisallowedProperty")));
+    Collections.unmodifiableSet(new HashSet<>(asList("DisallowedProperty")));
 
-  @Override public void evaluate(Properties properties) throws PropertyNotAllowedException {
+  @Override
+  public void evaluate(Properties properties) throws PropertyNotAllowedException {
     final Properties offendingProperties = new Properties();
 
     for (Object k : properties.keySet()) {

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,62 +26,62 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.TableRef;
 
 public abstract class BaseMutationPlan implements MutationPlan {
-    private final StatementContext context;
-    private final Operation operation;
-    
-    public BaseMutationPlan(StatementContext context, Operation operation) {
-        this.context = context;
-        this.operation = operation;
-    }
-    
-    @Override
-    public Operation getOperation() {
-        return operation;
-    }
-    
-    @Override
-    public StatementContext getContext() {
-        return context;
-    }
+  private final StatementContext context;
+  private final Operation operation;
 
-    @Override
-    public ParameterMetaData getParameterMetaData() {
-        return context.getBindManager().getParameterMetaData();
-    }
+  public BaseMutationPlan(StatementContext context, Operation operation) {
+    this.context = context;
+    this.operation = operation;
+  }
 
-    @Override
-    public ExplainPlan getExplainPlan() throws SQLException {
-        return ExplainPlan.EMPTY_PLAN;
-    }
+  @Override
+  public Operation getOperation() {
+    return operation;
+  }
 
-    @Override
-    public TableRef getTargetRef() {
-        return context.getCurrentTable();
-    }
-    
-    @Override
-    public Set<TableRef> getSourceRefs() {
-        return Collections.emptySet();
-    }
+  @Override
+  public StatementContext getContext() {
+    return context;
+  }
 
-    @Override
-    public Long getEstimatedRowsToScan() throws SQLException {
-        return 0l;
-    }
+  @Override
+  public ParameterMetaData getParameterMetaData() {
+    return context.getBindManager().getParameterMetaData();
+  }
 
-    @Override
-    public Long getEstimatedBytesToScan() throws SQLException {
-        return 0l;
-    }
+  @Override
+  public ExplainPlan getExplainPlan() throws SQLException {
+    return ExplainPlan.EMPTY_PLAN;
+  }
 
-    @Override
-    public Long getEstimateInfoTimestamp() throws SQLException {
-        return 0l;
-    }
+  @Override
+  public TableRef getTargetRef() {
+    return context.getCurrentTable();
+  }
 
-    @Override
-    public QueryPlan getQueryPlan() {
-        return null;
-    }
+  @Override
+  public Set<TableRef> getSourceRefs() {
+    return Collections.emptySet();
+  }
+
+  @Override
+  public Long getEstimatedRowsToScan() throws SQLException {
+    return 0l;
+  }
+
+  @Override
+  public Long getEstimatedBytesToScan() throws SQLException {
+    return 0l;
+  }
+
+  @Override
+  public Long getEstimateInfoTimestamp() throws SQLException {
+    return 0l;
+  }
+
+  @Override
+  public QueryPlan getQueryPlan() {
+    return null;
+  }
 
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.expression.function;
 
 import java.util.List;
@@ -31,29 +30,31 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarbinaryArray;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayPrependFunction.NAME, nodeClass=ArrayModifierParseNode.class, args = {
-        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PBinaryArray.class, PVarbinaryArray.class})})
+@FunctionParseNode.BuiltInFunction(name = ArrayPrependFunction.NAME,
+    nodeClass = ArrayModifierParseNode.class,
+    args = { @FunctionParseNode.Argument(allowedTypes = { PVarbinary.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PBinaryArray.class, PVarbinaryArray.class }) })
 public class ArrayPrependFunction extends ArrayModifierFunction {
 
-    public static final String NAME = "ARRAY_PREPEND";
+  public static final String NAME = "ARRAY_PREPEND";
 
-    public ArrayPrependFunction() {
-    }
+  public ArrayPrependFunction() {
+  }
 
-    public ArrayPrependFunction(List<Expression> children) throws TypeMismatchException {
-        super(children);
-    }
+  public ArrayPrependFunction(List<Expression> children) throws TypeMismatchException {
+    super(children);
+  }
 
-    @Override
-    protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset,
-                                       byte[] arrayBytes, PDataType baseDataType, int arrayLength, Integer maxLength,
-                                       Expression arrayExp) {
-        return PArrayDataType.prependItemToArray(ptr, len, offset, arrayBytes, baseDataType, arrayLength, getMaxLength(), arrayExp.getSortOrder());
-    }
+  @Override
+  protected boolean modifierFunction(ImmutableBytesWritable ptr, int len, int offset,
+    byte[] arrayBytes, PDataType baseDataType, int arrayLength, Integer maxLength,
+    Expression arrayExp) {
+    return PArrayDataType.prependItemToArray(ptr, len, offset, arrayBytes, baseDataType,
+      arrayLength, getMaxLength(), arrayExp.getSortOrder());
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 }
