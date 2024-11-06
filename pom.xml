@@ -168,7 +168,7 @@
     <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
     <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
     <mvel2.version>2.5.2.Final</mvel2.version>
-    <spotless.version>2.43.0</spotless.version>
+    <spotless.version>2.30.0</spotless.version>
 
     <!-- Plugin options -->
     <skipParallelStatsEnabledTests>false</skipParallelStatsEnabledTests>
