@@ -164,7 +164,7 @@
     <!-- This overrides the property in the ASF parent project-->
     <version.maven-site-plugin>3.21.0</version.maven-site-plugin>
     <mvel2.version>2.5.2.Final</mvel2.version>
-    <spotless.version>2.43.0</spotless.version>
+    <spotless.version>2.30.0</spotless.version>
 
     <!-- Plugin options -->
     <skipParallelStatsEnabledTests>false</skipParallelStatsEnabledTests>
