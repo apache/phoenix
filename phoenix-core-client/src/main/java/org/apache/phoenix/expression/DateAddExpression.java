@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,57 +30,58 @@ import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PLong;
 
-
 public class DateAddExpression extends AddExpression {
-    static private final BigDecimal BD_MILLIS_IN_DAY = BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
-    
-    public DateAddExpression() {
-    }
+  static private final BigDecimal BD_MILLIS_IN_DAY =
+    BigDecimal.valueOf(QueryConstants.MILLIS_IN_DAY);
 
-    public DateAddExpression(List<Expression> children) {
-        super(children);
-    }
+  public DateAddExpression() {
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        long finalResult=0;
-        
-        for(int i=0;i<children.size();i++) {
-            if (!children.get(i).evaluate(tuple, ptr)) {
-                return false;
-            }
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            long value;
-            PDataType type = children.get(i).getDataType();
-            SortOrder sortOrder = children.get(i).getSortOrder();
-            if (type == PDecimal.INSTANCE) {
-                BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, type, sortOrder);
-                value = bd.multiply(BD_MILLIS_IN_DAY).longValue();
-            } else if (type.isCoercibleTo(PLong.INSTANCE)) {
-                value = type.getCodec().decodeLong(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY;
-            } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
-                value = (long)(type.getCodec().decodeDouble(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY);
-            } else {
-                value = type.getCodec().decodeLong(ptr, sortOrder);
-            }
-            finalResult += value;
-        }
-        byte[] resultPtr = new byte[getDataType().getByteSize()];
-        getDataType().getCodec().encodeLong(finalResult, resultPtr, 0);
-        ptr.set(resultPtr);
+  public DateAddExpression(List<Expression> children) {
+    super(children);
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    long finalResult = 0;
+
+    for (int i = 0; i < children.size(); i++) {
+      if (!children.get(i).evaluate(tuple, ptr)) {
+        return false;
+      }
+      if (ptr.getLength() == 0) {
         return true;
+      }
+      long value;
+      PDataType type = children.get(i).getDataType();
+      SortOrder sortOrder = children.get(i).getSortOrder();
+      if (type == PDecimal.INSTANCE) {
+        BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, type, sortOrder);
+        value = bd.multiply(BD_MILLIS_IN_DAY).longValue();
+      } else if (type.isCoercibleTo(PLong.INSTANCE)) {
+        value = type.getCodec().decodeLong(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY;
+      } else if (type.isCoercibleTo(PDouble.INSTANCE)) {
+        value =
+          (long) (type.getCodec().decodeDouble(ptr, sortOrder) * QueryConstants.MILLIS_IN_DAY);
+      } else {
+        value = type.getCodec().decodeLong(ptr, sortOrder);
+      }
+      finalResult += value;
     }
+    byte[] resultPtr = new byte[getDataType().getByteSize()];
+    getDataType().getCodec().encodeLong(finalResult, resultPtr, 0);
+    ptr.set(resultPtr);
+    return true;
+  }
 
-    @Override
-    public final PDataType getDataType() {
-        return PDate.INSTANCE;
-    }
+  @Override
+  public final PDataType getDataType() {
+    return PDate.INSTANCE;
+  }
 
-    @Override
-    public ArithmeticExpression clone(List<Expression> children) {
-        return new DateAddExpression(children);
-    }
+  @Override
+  public ArithmeticExpression clone(List<Expression> children) {
+    return new DateAddExpression(children);
+  }
 
 }

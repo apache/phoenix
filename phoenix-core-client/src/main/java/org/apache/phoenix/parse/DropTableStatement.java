@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,48 +21,48 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.PTableType;
 
 public class DropTableStatement extends MutableStatement {
-    private final TableName tableName;
-    private final boolean ifExists;
-    private final PTableType tableType;
-    private final boolean cascade;
-    private final boolean skipAddingParentColumns;
-    
+  private final TableName tableName;
+  private final boolean ifExists;
+  private final PTableType tableType;
+  private final boolean cascade;
+  private final boolean skipAddingParentColumns;
 
-    public DropTableStatement(TableName tableName, PTableType tableType, boolean ifExists, boolean cascade, boolean skipAddingParentColumns) {
-        this.tableName = tableName;
-        this.tableType = tableType;
-        this.ifExists = ifExists;
-        this.cascade = cascade;
-        this.skipAddingParentColumns = skipAddingParentColumns;
-    }
-    
-    @Override
-    public int getBindCount() {
-        return 0; // No binds for DROP
-    }
+  public DropTableStatement(TableName tableName, PTableType tableType, boolean ifExists,
+    boolean cascade, boolean skipAddingParentColumns) {
+    this.tableName = tableName;
+    this.tableType = tableType;
+    this.ifExists = ifExists;
+    this.cascade = cascade;
+    this.skipAddingParentColumns = skipAddingParentColumns;
+  }
 
-    public TableName getTableName() {
-        return tableName;
-    }
+  @Override
+  public int getBindCount() {
+    return 0; // No binds for DROP
+  }
 
-    public PTableType getTableType() {
-        return tableType;
-    }
+  public TableName getTableName() {
+    return tableName;
+  }
 
-    public boolean ifExists() {
-        return ifExists;
-    }
-    
-    public boolean cascade() {
-    	return cascade;
-    }
-    
-    @Override
-    public Operation getOperation() {
-        return Operation.DELETE;
-    }
+  public PTableType getTableType() {
+    return tableType;
+  }
 
-	public boolean getSkipAddingParentColumns() {
-		return skipAddingParentColumns;
-	}
+  public boolean ifExists() {
+    return ifExists;
+  }
+
+  public boolean cascade() {
+    return cascade;
+  }
+
+  @Override
+  public Operation getOperation() {
+    return Operation.DELETE;
+  }
+
+  public boolean getSkipAddingParentColumns() {
+    return skipAddingParentColumns;
+  }
 }

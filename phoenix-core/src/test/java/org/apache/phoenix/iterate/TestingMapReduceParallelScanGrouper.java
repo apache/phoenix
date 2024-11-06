@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,48 +17,48 @@
  */
 package org.apache.phoenix.iterate;
 
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.phoenix.compile.StatementContext;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.phoenix.compile.StatementContext;
 
 /**
  * ParallelScanGrouper implementation used for testing Phoenix-MapReduce Integration
  */
 public class TestingMapReduceParallelScanGrouper extends MapReduceParallelScanGrouper {
 
-    private static final AtomicInteger numCallsToGetRegionBoundaries = new AtomicInteger(0);
-    private static final TestingMapReduceParallelScanGrouper INSTANCE =
-            new TestingMapReduceParallelScanGrouper();
+  private static final AtomicInteger numCallsToGetRegionBoundaries = new AtomicInteger(0);
+  private static final TestingMapReduceParallelScanGrouper INSTANCE =
+    new TestingMapReduceParallelScanGrouper();
 
-    public static TestingMapReduceParallelScanGrouper getInstance() {
-        return INSTANCE;
-    }
+  public static TestingMapReduceParallelScanGrouper getInstance() {
+    return INSTANCE;
+  }
 
-    @Override
-    public List<HRegionLocation> getRegionBoundaries(StatementContext context,
-            byte[] tableName) throws SQLException {
-        List<HRegionLocation> regionLocations = super.getRegionBoundaries(context, tableName);
-        numCallsToGetRegionBoundaries.incrementAndGet();
-        return regionLocations;
-    }
+  @Override
+  public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName)
+    throws SQLException {
+    List<HRegionLocation> regionLocations = super.getRegionBoundaries(context, tableName);
+    numCallsToGetRegionBoundaries.incrementAndGet();
+    return regionLocations;
+  }
 
-    @Override
-    public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName,
-        byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException {
-        List<HRegionLocation> regionLocations =
-            super.getRegionBoundaries(context, tableName, startRegionBoundaryKey,
-                stopRegionBoundaryKey);
-        numCallsToGetRegionBoundaries.incrementAndGet();
-        return regionLocations;
-    }
+  @Override
+  public List<HRegionLocation> getRegionBoundaries(StatementContext context, byte[] tableName,
+    byte[] startRegionBoundaryKey, byte[] stopRegionBoundaryKey) throws SQLException {
+    List<HRegionLocation> regionLocations =
+      super.getRegionBoundaries(context, tableName, startRegionBoundaryKey, stopRegionBoundaryKey);
+    numCallsToGetRegionBoundaries.incrementAndGet();
+    return regionLocations;
+  }
 
-    public static int getNumCallsToGetRegionBoundaries() {
-        return numCallsToGetRegionBoundaries.get();
-    }
+  public static int getNumCallsToGetRegionBoundaries() {
+    return numCallsToGetRegionBoundaries.get();
+  }
 
-    public static void clearNumCallsToGetRegionBoundaries() {
-        numCallsToGetRegionBoundaries.set(0);
-    }
+  public static void clearNumCallsToGetRegionBoundaries() {
+    numCallsToGetRegionBoundaries.set(0);
+  }
 }

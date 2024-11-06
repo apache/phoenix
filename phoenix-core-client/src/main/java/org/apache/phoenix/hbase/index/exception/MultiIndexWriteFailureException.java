@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,15 +40,15 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
    * @param failures the tables to which the index write did not succeed
    */
   public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures,
-          boolean disableIndexOnFailure) {
-      super(disableIndexOnFailure);
-      this.failures = failures;
+    boolean disableIndexOnFailure) {
+    super(disableIndexOnFailure);
+    this.failures = failures;
   }
 
   public MultiIndexWriteFailureException(List<HTableInterfaceReference> failures,
-          boolean disableIndexOnFailure, Throwable cause) {
-      super(cause, disableIndexOnFailure);
-      this.failures = failures;
+    boolean disableIndexOnFailure, Throwable cause) {
+    super(cause, disableIndexOnFailure);
+    this.failures = failures;
   }
 
   /**
@@ -57,17 +57,18 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
    * @param message detail message
    */
   public MultiIndexWriteFailureException(String message) {
-      super(IndexWriteException.parseDisableIndexOnFailure(message));
-      Pattern p = Pattern.compile(FAILURE_MSG + "\\[(.*)\\]");
-      Matcher m = p.matcher(message);
-      if (m.find()) {
-          failures = Lists.newArrayList();
-          String tablesStr = m.group(1);
-          for (String tableName : tablesStr.split(",\\s")) {
-            HTableInterfaceReference tableRef = new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes(tableName)));
-            failures.add(tableRef);
-        }
+    super(IndexWriteException.parseDisableIndexOnFailure(message));
+    Pattern p = Pattern.compile(FAILURE_MSG + "\\[(.*)\\]");
+    Matcher m = p.matcher(message);
+    if (m.find()) {
+      failures = Lists.newArrayList();
+      String tablesStr = m.group(1);
+      for (String tableName : tablesStr.split(",\\s")) {
+        HTableInterfaceReference tableRef =
+          new HTableInterfaceReference(new ImmutableBytesPtr(Bytes.toBytes(tableName)));
+        failures.add(tableRef);
       }
+    }
   }
 
   public List<HTableInterfaceReference> getFailedTables() {
@@ -75,11 +76,11 @@ public class MultiIndexWriteFailureException extends IndexWriteException {
   }
 
   public void setFailedTables(List<HTableInterfaceReference> failedTables) {
-      this.failures = failedTables;
+    this.failures = failedTables;
   }
 
   @Override
-    public String getMessage() {
-        return MoreObjects.firstNonNull(super.getMessage(),"") + " " + FAILURE_MSG + failures;
-    }
+  public String getMessage() {
+    return MoreObjects.firstNonNull(super.getMessage(), "") + " " + FAILURE_MSG + failures;
+  }
 }

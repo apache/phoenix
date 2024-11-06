@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,59 +28,59 @@ import org.apache.phoenix.util.SizedUtil;
 
 public class PSchema implements PMetaDataEntity {
 
-    private final PName schemaName;
-    private PTableKey schemaKey;
-    private long timeStamp;
-    private int estimatedSize;
+  private final PName schemaName;
+  private PTableKey schemaKey;
+  private long timeStamp;
+  private int estimatedSize;
 
-    public PSchema(long timeStamp) { // For index delete marker
-        this.timeStamp = timeStamp;
-        this.schemaName = null;
-    }
+  public PSchema(long timeStamp) { // For index delete marker
+    this.timeStamp = timeStamp;
+    this.schemaName = null;
+  }
 
-    public PSchema(String schemaName) {
-        this(schemaName, HConstants.LATEST_TIMESTAMP);
-    }
+  public PSchema(String schemaName) {
+    this(schemaName, HConstants.LATEST_TIMESTAMP);
+  }
 
-    public PSchema(String schemaName, long timeStamp) {
-        this.schemaName = PNameFactory.newName(SchemaUtil.normalizeIdentifier(schemaName));
-        this.schemaKey = new PTableKey(null, this.schemaName.getString());
-        this.timeStamp = timeStamp;
-        this.estimatedSize = SizedUtil.INT_SIZE + SizedUtil.LONG_SIZE + PNameFactory.getEstimatedSize(this.schemaName);
-    }
+  public PSchema(String schemaName, long timeStamp) {
+    this.schemaName = PNameFactory.newName(SchemaUtil.normalizeIdentifier(schemaName));
+    this.schemaKey = new PTableKey(null, this.schemaName.getString());
+    this.timeStamp = timeStamp;
+    this.estimatedSize =
+      SizedUtil.INT_SIZE + SizedUtil.LONG_SIZE + PNameFactory.getEstimatedSize(this.schemaName);
+  }
 
-    public PSchema(PSchema schema) {
-        this(schema.getSchemaName().toString(), schema.getTimeStamp());
-    }
+  public PSchema(PSchema schema) {
+    this(schema.getSchemaName().toString(), schema.getTimeStamp());
+  }
 
-    public String getSchemaName() {
-        return schemaName == null ? null : schemaName.getString();
-    }
+  public String getSchemaName() {
+    return schemaName == null ? null : schemaName.getString();
+  }
 
-    public PTableKey getSchemaKey() {
-        return schemaKey;
-    }
+  public PTableKey getSchemaKey() {
+    return schemaKey;
+  }
 
-    public long getTimeStamp() {
-        return timeStamp;
-    }
+  public long getTimeStamp() {
+    return timeStamp;
+  }
 
-    public static PSchemaProtos.PSchema toProto(PSchema schema) {
-        PSchemaProtos.PSchema.Builder builder = PSchemaProtos.PSchema.newBuilder();
-        builder.setSchemaName(schema.getSchemaName());
-        builder.setTimeStamp(schema.getTimeStamp());
-        return builder.build();
-    }
+  public static PSchemaProtos.PSchema toProto(PSchema schema) {
+    PSchemaProtos.PSchema.Builder builder = PSchemaProtos.PSchema.newBuilder();
+    builder.setSchemaName(schema.getSchemaName());
+    builder.setTimeStamp(schema.getTimeStamp());
+    return builder.build();
+  }
 
-    public static PSchema createFromProto(PSchemaProtos.PSchema schema) {
-        long timeStamp = schema.getTimeStamp();
-        String schemaName = schema.getSchemaName();
-        return new PSchema(schemaName, timeStamp);
-    }
+  public static PSchema createFromProto(PSchemaProtos.PSchema schema) {
+    long timeStamp = schema.getTimeStamp();
+    String schemaName = schema.getSchemaName();
+    return new PSchema(schemaName, timeStamp);
+  }
 
-    public int getEstimatedSize() {
-        return estimatedSize;
-    }
+  public int getEstimatedSize() {
+    return estimatedSize;
+  }
 
 }
-

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,35 +23,33 @@ import org.apache.phoenix.schema.PColumn;
 
 /**
  * A ExpressionCompiler which does not pollute {@link StatementContext}
- *
  */
-public class StatelessExpressionCompiler extends ExpressionCompiler{
+public class StatelessExpressionCompiler extends ExpressionCompiler {
 
-    public StatelessExpressionCompiler(StatementContext context,
-            boolean resolveViewConstants) {
-        super(context, resolveViewConstants);
-    }
+  public StatelessExpressionCompiler(StatementContext context, boolean resolveViewConstants) {
+    super(context, resolveViewConstants);
+  }
 
-    public StatelessExpressionCompiler(StatementContext context,
-            GroupBy groupBy, boolean resolveViewConstants) {
-        super(context, groupBy, resolveViewConstants);
-    }
+  public StatelessExpressionCompiler(StatementContext context, GroupBy groupBy,
+    boolean resolveViewConstants) {
+    super(context, groupBy, resolveViewConstants);
+  }
 
-    public StatelessExpressionCompiler(StatementContext context, GroupBy groupBy) {
-        super(context, groupBy);
-    }
+  public StatelessExpressionCompiler(StatementContext context, GroupBy groupBy) {
+    super(context, groupBy);
+  }
 
-    public StatelessExpressionCompiler(StatementContext context) {
-        super(context);
-    }
+  public StatelessExpressionCompiler(StatementContext context) {
+    super(context);
+  }
 
-    @Override
-    protected Expression addExpression(Expression expression) {
-        return expression;
-    }
+  @Override
+  protected Expression addExpression(Expression expression) {
+    return expression;
+  }
 
-    @Override
-    protected void addColumn(PColumn column) {
+  @Override
+  protected void addColumn(PColumn column) {
 
-    }
+  }
 }

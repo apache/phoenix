@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,31 +21,31 @@ import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 
 public class DropSequenceStatement extends MutableStatement {
 
-    private final TableName sequenceName;
-    private final boolean ifExists;
-    private final int bindCount;
+  private final TableName sequenceName;
+  private final boolean ifExists;
+  private final int bindCount;
 
-    protected DropSequenceStatement(TableName sequenceName, boolean ifExists, int bindCount) {
-        this.sequenceName = sequenceName;
-        this.ifExists = ifExists;
-        this.bindCount = bindCount;
-    }
+  protected DropSequenceStatement(TableName sequenceName, boolean ifExists, int bindCount) {
+    this.sequenceName = sequenceName;
+    this.ifExists = ifExists;
+    this.bindCount = bindCount;
+  }
 
-    @Override
-    public int getBindCount() {
-        return bindCount;
-    }
+  @Override
+  public int getBindCount() {
+    return bindCount;
+  }
 
-    public TableName getSequenceName() {
-        return sequenceName;
-    }
+  public TableName getSequenceName() {
+    return sequenceName;
+  }
 
-    public boolean ifExists() {
-        return ifExists;
-    }
-    
-    @Override
-    public Operation getOperation() {
-        return Operation.DELETE;
-    }
+  public boolean ifExists() {
+    return ifExists;
+  }
+
+  @Override
+  public Operation getOperation() {
+    return Operation.DELETE;
+  }
 }

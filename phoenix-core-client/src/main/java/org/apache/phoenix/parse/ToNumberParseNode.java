@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
@@ -34,36 +33,38 @@ import org.apache.phoenix.schema.types.PTimestamp;
 
 public class ToNumberParseNode extends FunctionParseNode {
 
-    ToNumberParseNode(String name, List<ParseNode> children,
-            BuiltInFunctionInfo info) {
-        super(name, children, info);
-    }
+  ToNumberParseNode(String name, List<ParseNode> children, BuiltInFunctionInfo info) {
+    super(name, children, info);
+  }
 
-    @Override
-    public FunctionExpression create(List<Expression> children, StatementContext context) throws SQLException {
-        PDataType dataType = children.get(0).getDataType();
-        String formatString = (String)((LiteralExpression)children.get(1)).getValue(); // either date or number format string
-        Format formatter =  null;
-        FunctionArgumentType type;
-        
-        if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
-            if (formatString == null) {
-                formatString = context.getDateFormat();
-                formatter = context.getDateFormatter();
-            } else {
-                formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
-            }
-            type = FunctionArgumentType.TEMPORAL;
-        }
-        else if (dataType.isCoercibleTo(PChar.INSTANCE)) {
-            if (formatString != null) {
-                formatter = FunctionArgumentType.CHAR.getFormatter(formatString);
-            }
-            type = FunctionArgumentType.CHAR;
-        }
-        else {
-            throw new SQLException(dataType + " type is unsupported for TO_NUMBER().  Numeric and temporal types are supported.");
-        }
-        return new ToNumberFunction(children, type, formatString, formatter);
+  @Override
+  public FunctionExpression create(List<Expression> children, StatementContext context)
+    throws SQLException {
+    PDataType dataType = children.get(0).getDataType();
+    String formatString = (String) ((LiteralExpression) children.get(1)).getValue(); // either date
+                                                                                     // or number
+                                                                                     // format
+                                                                                     // string
+    Format formatter = null;
+    FunctionArgumentType type;
+
+    if (dataType.isCoercibleTo(PTimestamp.INSTANCE)) {
+      if (formatString == null) {
+        formatString = context.getDateFormat();
+        formatter = context.getDateFormatter();
+      } else {
+        formatter = FunctionArgumentType.TEMPORAL.getFormatter(formatString);
+      }
+      type = FunctionArgumentType.TEMPORAL;
+    } else if (dataType.isCoercibleTo(PChar.INSTANCE)) {
+      if (formatString != null) {
+        formatter = FunctionArgumentType.CHAR.getFormatter(formatString);
+      }
+      type = FunctionArgumentType.CHAR;
+    } else {
+      throw new SQLException(dataType
+        + " type is unsupported for TO_NUMBER().  Numeric and temporal types are supported.");
     }
+    return new ToNumberFunction(children, type, formatString, formatter);
+  }
 }

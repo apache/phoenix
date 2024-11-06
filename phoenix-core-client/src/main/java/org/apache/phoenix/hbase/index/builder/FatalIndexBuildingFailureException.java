@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,27 +18,23 @@
 package org.apache.phoenix.hbase.index.builder;
 
 /**
- * This exception should be thrown if we are unable to handle Index failure and want regionserver to go down to avoid
- * inconsistency
+ * This exception should be thrown if we are unable to handle Index failure and want regionserver to
+ * go down to avoid inconsistency
  */
 public class FatalIndexBuildingFailureException extends RuntimeException {
 
-    /**
-     * @param msg
-     *            reason for the failure
-     */
-    public FatalIndexBuildingFailureException(String msg) {
-        super(msg);
-    }
+  /**
+   * reason for the failure
+   */
+  public FatalIndexBuildingFailureException(String msg) {
+    super(msg);
+  }
 
-    /**
-     * @param msg
-     *            reason
-     * @param cause
-     *            underlying cause for the failure
-     */
-    public FatalIndexBuildingFailureException(String msg, Throwable cause) {
-        super(msg, cause);
-    }
+  /**
+   * reason underlying cause for the failure
+   */
+  public FatalIndexBuildingFailureException(String msg, Throwable cause) {
+    super(msg, cause);
+  }
 
 }

@@ -1,5 +1,4 @@
-/**
- *
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,10 +17,6 @@
  */
 package org.apache.hadoop.hbase.regionserver;
 
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellComparator;
-import org.apache.hadoop.hbase.KeyValue;
-
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.Iterator;
@@ -30,19 +25,22 @@ import java.util.SortedSet;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.KeyValue;
+
 /**
  * A {@link java.util.Set} of {@link KeyValue}s implemented on top of a
- * {@link java.util.concurrent.ConcurrentSkipListMap}.  Works like a
- * {@link java.util.concurrent.ConcurrentSkipListSet} in all but one regard:
- * An add will overwrite if already an entry for the added key.  In other words,
- * where CSLS does "Adds the specified element to this set if it is not already
- * present.", this implementation "Adds the specified element to this set EVEN
- * if it is already present overwriting what was there previous".  The call to
- * add returns true if no value in the backing map or false if there was an
- * entry with same key (though value may be different).
- * <p>Otherwise,
- * has same attributes as ConcurrentSkipListSet: e.g. tolerant of concurrent
- * get and set and won't throw ConcurrentModificationException when iterating.
+ * {@link java.util.concurrent.ConcurrentSkipListMap}. Works like a
+ * {@link java.util.concurrent.ConcurrentSkipListSet} in all but one regard: An add will overwrite
+ * if already an entry for the added key. In other words, where CSLS does "Adds the specified
+ * element to this set if it is not already present.", this implementation "Adds the specified
+ * element to this set EVEN if it is already present overwriting what was there previous". The call
+ * to add returns true if no value in the backing map or false if there was an entry with same key
+ * (though value may be different).
+ * <p>
+ * Otherwise, has same attributes as ConcurrentSkipListSet: e.g. tolerant of concurrent get and set
+ * and won't throw ConcurrentModificationException when iterating.
  */
 public class KeyValueSkipListSet implements NavigableSet<Cell> {
   private final ConcurrentNavigableMap<Cell, Cell> delegatee;
@@ -75,8 +73,7 @@ public class KeyValueSkipListSet implements NavigableSet<Cell> {
     return headSet(toElement, false);
   }
 
-  public NavigableSet<Cell> headSet(final Cell toElement,
-      boolean inclusive) {
+  public NavigableSet<Cell> headSet(final Cell toElement, boolean inclusive) {
     return new KeyValueSkipListSet(this.delegatee.headMap(toElement, inclusive));
   }
 
@@ -104,8 +101,8 @@ public class KeyValueSkipListSet implements NavigableSet<Cell> {
     throw new UnsupportedOperationException("Not implemented");
   }
 
-  public NavigableSet<Cell> subSet(Cell fromElement,
-      boolean fromInclusive, Cell toElement, boolean toInclusive) {
+  public NavigableSet<Cell> subSet(Cell fromElement, boolean fromInclusive, Cell toElement,
+    boolean toInclusive) {
     throw new UnsupportedOperationException("Not implemented");
   }
 
@@ -142,7 +139,7 @@ public class KeyValueSkipListSet implements NavigableSet<Cell> {
   }
 
   public boolean contains(Object o) {
-    //noinspection SuspiciousMethodCalls
+    // noinspection SuspiciousMethodCalls
     return this.delegatee.containsKey(o);
   }
 

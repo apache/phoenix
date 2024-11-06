@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,65 +32,63 @@ import org.apache.phoenix.util.PropertiesUtil;
  */
 public class ConnectionUtil {
 
-    /**
-     * Retrieve the configured input Connection.
-     * @param conf configuration containing connection information
-     * @return the configured input connection
-     */
-    public static Connection getInputConnection(final Configuration conf) throws SQLException {
-        Preconditions.checkNotNull(conf);
-        return getInputConnection(conf, new Properties());
-    }
+  /**
+   * Retrieve the configured input Connection.
+   * @param conf configuration containing connection information
+   * @return the configured input connection
+   */
+  public static Connection getInputConnection(final Configuration conf) throws SQLException {
+    Preconditions.checkNotNull(conf);
+    return getInputConnection(conf, new Properties());
+  }
 
-    /**
-     * Retrieve the configured input Connection.
-     * @param conf configuration containing connection information
-     * @param props custom connection properties
-     * @return the configured input connection
-     */
-    public static Connection getInputConnection(final Configuration conf, final Properties props)
-            throws SQLException {
-        String inputQuorum = PhoenixConfigurationUtilHelper.getInputCluster(conf);
-        if (inputQuorum != null) {
-            // This will not override the quorum set with setInputClusterUrl
-            Properties copyProps = PropertiesUtil.deepCopy(props);
-            copyProps.setProperty(HConstants.CLIENT_ZOOKEEPER_QUORUM, inputQuorum);
-            return DriverManager.getConnection(
-                PhoenixConfigurationUtilHelper.getInputClusterUrl(conf),
-                PropertiesUtil.combineProperties(copyProps, conf));
-        }
-        return DriverManager.getConnection(PhoenixConfigurationUtilHelper.getInputClusterUrl(conf),
-            PropertiesUtil.combineProperties(props, conf));
+  /**
+   * Retrieve the configured input Connection.
+   * @param conf  configuration containing connection information
+   * @param props custom connection properties
+   * @return the configured input connection
+   */
+  public static Connection getInputConnection(final Configuration conf, final Properties props)
+    throws SQLException {
+    String inputQuorum = PhoenixConfigurationUtilHelper.getInputCluster(conf);
+    if (inputQuorum != null) {
+      // This will not override the quorum set with setInputClusterUrl
+      Properties copyProps = PropertiesUtil.deepCopy(props);
+      copyProps.setProperty(HConstants.CLIENT_ZOOKEEPER_QUORUM, inputQuorum);
+      return DriverManager.getConnection(PhoenixConfigurationUtilHelper.getInputClusterUrl(conf),
+        PropertiesUtil.combineProperties(copyProps, conf));
     }
+    return DriverManager.getConnection(PhoenixConfigurationUtilHelper.getInputClusterUrl(conf),
+      PropertiesUtil.combineProperties(props, conf));
+  }
 
-    /**
-     * Create the configured output Connection.
-     * @param conf configuration containing the connection information
-     * @return the configured output connection
-     */
-    public static Connection getOutputConnection(final Configuration conf) throws SQLException {
-        return getOutputConnection(conf, new Properties());
-    }
+  /**
+   * Create the configured output Connection.
+   * @param conf configuration containing the connection information
+   * @return the configured output connection
+   */
+  public static Connection getOutputConnection(final Configuration conf) throws SQLException {
+    return getOutputConnection(conf, new Properties());
+  }
 
-    /**
-     * Create the configured output Connection.
-     * @param conf configuration containing the connection information
-     * @param props custom connection properties
-     * @return the configured output connection
-     */
-    public static Connection getOutputConnection(final Configuration conf, Properties props)
-            throws SQLException {
-        Preconditions.checkNotNull(conf);
-        String outputQuorum = PhoenixConfigurationUtilHelper.getOutputCluster(conf);
-        if (outputQuorum != null) {
-            // This will not override the quorum set with setInputClusterUrl
-            Properties copyProps = PropertiesUtil.deepCopy(props);
-            copyProps.setProperty(HConstants.CLIENT_ZOOKEEPER_QUORUM, outputQuorum);
-            return DriverManager.getConnection(
-                PhoenixConfigurationUtilHelper.getInputClusterUrl(conf),
-                PropertiesUtil.combineProperties(copyProps, conf));
-        }
-        return DriverManager.getConnection(PhoenixConfigurationUtilHelper.getOutputClusterUrl(conf),
-            PropertiesUtil.combineProperties(props, conf));
+  /**
+   * Create the configured output Connection.
+   * @param conf  configuration containing the connection information
+   * @param props custom connection properties
+   * @return the configured output connection
+   */
+  public static Connection getOutputConnection(final Configuration conf, Properties props)
+    throws SQLException {
+    Preconditions.checkNotNull(conf);
+    String outputQuorum = PhoenixConfigurationUtilHelper.getOutputCluster(conf);
+    if (outputQuorum != null) {
+      // This will not override the quorum set with setInputClusterUrl
+      Properties copyProps = PropertiesUtil.deepCopy(props);
+      copyProps.setProperty(HConstants.CLIENT_ZOOKEEPER_QUORUM, outputQuorum);
+      return DriverManager.getConnection(PhoenixConfigurationUtilHelper.getInputClusterUrl(conf),
+        PropertiesUtil.combineProperties(copyProps, conf));
     }
+    return DriverManager.getConnection(PhoenixConfigurationUtilHelper.getOutputClusterUrl(conf),
+      PropertiesUtil.combineProperties(props, conf));
+  }
 }

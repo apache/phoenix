@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,39 +32,39 @@ import org.slf4j.LoggerFactory;
 
 public class ZKBasedMasterElectionUtil {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ZKBasedMasterElectionUtil.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(ZKBasedMasterElectionUtil.class);
 
-    public static boolean acquireLock(ZKWatcher zooKeeperWatcher, String parentNode,
-            String lockName) throws KeeperException, InterruptedException {
-        // Create the parent node as Persistent
-        LOGGER.info("Creating the parent lock node:" + parentNode);
-        ZKUtil.createWithParents(zooKeeperWatcher, parentNode);
+  public static boolean acquireLock(ZKWatcher zooKeeperWatcher, String parentNode, String lockName)
+    throws KeeperException, InterruptedException {
+    // Create the parent node as Persistent
+    LOGGER.info("Creating the parent lock node:" + parentNode);
+    ZKUtil.createWithParents(zooKeeperWatcher, parentNode);
 
-        // Create the ephemeral node
-        String lockNode = parentNode + "/" + lockName;
-        String nodeValue = getHostName() + "_" + UUID.randomUUID().toString();
-        LOGGER.info("Trying to acquire the lock by creating node:" + lockNode + " value:" + nodeValue);
-        // Create the ephemeral node
-        try {
-            zooKeeperWatcher.getRecoverableZooKeeper().create(lockNode, Bytes.toBytes(nodeValue),
-                Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
-        } catch (KeeperException.NodeExistsException e) {
-            LOGGER.info("Could not acquire lock. Another process had already acquired the lock on Node "
-                    + lockName);
-            return false;
-        }
-        LOGGER.info("Obtained the lock :" + lockNode);
-        return true;
+    // Create the ephemeral node
+    String lockNode = parentNode + "/" + lockName;
+    String nodeValue = getHostName() + "_" + UUID.randomUUID().toString();
+    LOGGER.info("Trying to acquire the lock by creating node:" + lockNode + " value:" + nodeValue);
+    // Create the ephemeral node
+    try {
+      zooKeeperWatcher.getRecoverableZooKeeper().create(lockNode, Bytes.toBytes(nodeValue),
+        Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);
+    } catch (KeeperException.NodeExistsException e) {
+      LOGGER.info("Could not acquire lock. Another process had already acquired the lock on Node "
+        + lockName);
+      return false;
     }
+    LOGGER.info("Obtained the lock :" + lockNode);
+    return true;
+  }
 
-    private static String getHostName() {
-        String host = "";
-        try {
-            host = InetAddress.getLocalHost().getCanonicalHostName();
-        } catch (UnknownHostException e) {
-            LOGGER.error("UnknownHostException while trying to get the Local Host address : ", e);
-        }
-        return host;
+  private static String getHostName() {
+    String host = "";
+    try {
+      host = InetAddress.getLocalHost().getCanonicalHostName();
+    } catch (UnknownHostException e) {
+      LOGGER.error("UnknownHostException while trying to get the Local Host address : ", e);
     }
+    return host;
+  }
 
 }

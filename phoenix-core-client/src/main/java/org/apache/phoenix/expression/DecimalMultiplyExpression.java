@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,56 +28,54 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.util.NumberUtil;
 
-
 public class DecimalMultiplyExpression extends MultiplyExpression {
 
-    public DecimalMultiplyExpression() {
-    }
+  public DecimalMultiplyExpression() {
+  }
 
-    public DecimalMultiplyExpression(List<Expression> children) {
-        super(children);
-    }
+  public DecimalMultiplyExpression(List<Expression> children) {
+    super(children);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        BigDecimal result = null;
-        for (int i=0; i<children.size(); i++) {
-            Expression childExpr = children.get(i);
-            if (!childExpr.evaluate(tuple, ptr)) {
-                return false;
-            }
-            if (ptr.getLength() == 0) {
-                return true;
-            }
-            
-            PDataType childType = children.get(i).getDataType();
-            SortOrder childSortOrder = children.get(i).getSortOrder();
-            BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childType, childSortOrder);
-            
-            if (result == null) {
-                result = bd;
-            } else {
-                result = result.multiply(bd);
-            }
-        }
-        if (getMaxLength() != null || getScale() != null) {
-            result = NumberUtil.setDecimalWidthAndScale(result, getMaxLength(), getScale());
-        }
-        if (result == null) {
-            throw new DataExceedsCapacityException(
-                    PDecimal.INSTANCE, getMaxLength(), getScale(), null);
-        }
-        ptr.set(PDecimal.INSTANCE.toBytes(result));
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    BigDecimal result = null;
+    for (int i = 0; i < children.size(); i++) {
+      Expression childExpr = children.get(i);
+      if (!childExpr.evaluate(tuple, ptr)) {
+        return false;
+      }
+      if (ptr.getLength() == 0) {
         return true;
-    }
+      }
 
-    @Override
-    public PDataType getDataType() {
-        return PDecimal.INSTANCE;
-    }
+      PDataType childType = children.get(i).getDataType();
+      SortOrder childSortOrder = children.get(i).getSortOrder();
+      BigDecimal bd = (BigDecimal) PDecimal.INSTANCE.toObject(ptr, childType, childSortOrder);
 
-    @Override
-    public ArithmeticExpression clone(List<Expression> children) {
-        return new DecimalMultiplyExpression(children);
+      if (result == null) {
+        result = bd;
+      } else {
+        result = result.multiply(bd);
+      }
     }
+    if (getMaxLength() != null || getScale() != null) {
+      result = NumberUtil.setDecimalWidthAndScale(result, getMaxLength(), getScale());
+    }
+    if (result == null) {
+      throw new DataExceedsCapacityException(PDecimal.INSTANCE, getMaxLength(), getScale(), null);
+    }
+    ptr.set(PDecimal.INSTANCE.toBytes(result));
+    return true;
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return PDecimal.INSTANCE;
+  }
+
+  @Override
+  public ArithmeticExpression clone(List<Expression> children) {
+    return new DecimalMultiplyExpression(children);
+  }
 }

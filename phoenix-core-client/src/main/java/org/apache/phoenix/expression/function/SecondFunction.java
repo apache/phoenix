@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -32,53 +32,51 @@ import org.joda.time.DateTime;
 import org.joda.time.chrono.GJChronology;
 
 /**
- * 
- * Implementation of the Second() buildin. Input Date/Timestamp/Time.
- * Returns an integer from 0 to 59 representing the second component of time
- * 
+ * Implementation of the Second() buildin. Input Date/Timestamp/Time. Returns an integer from 0 to
+ * 59 representing the second component of time
  */
-@BuiltInFunction(name=SecondFunction.NAME, 
-args={@Argument(allowedTypes={PTimestamp.class})})
+@BuiltInFunction(name = SecondFunction.NAME,
+    args = { @Argument(allowedTypes = { PTimestamp.class }) })
 public class SecondFunction extends DateScalarFunction {
-    public static final String NAME = "SECOND";
+  public static final String NAME = "SECOND";
 
-    public SecondFunction() {
-    }
+  public SecondFunction() {
+  }
 
-    public SecondFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+  public SecondFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        Expression expression = getChildExpression();
-        if (!expression.evaluate(tuple, ptr)) {
-            return false;
-        }
-        if ( ptr.getLength() == 0) {
-            return true; //means null
-        }
-        long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
-        DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
-        int sec = dt.getSecondOfMinute();
-        PDataType returnType = getDataType();
-        byte[] byteValue = new byte[returnType.getByteSize()];
-        returnType.getCodec().encodeInt(sec, byteValue, 0);
-        ptr.set(byteValue);
-        return true;
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    Expression expression = getChildExpression();
+    if (!expression.evaluate(tuple, ptr)) {
+      return false;
     }
+    if (ptr.getLength() == 0) {
+      return true; // means null
+    }
+    long dateTime = inputCodec.decodeLong(ptr, expression.getSortOrder());
+    DateTime dt = new DateTime(dateTime, GJChronology.getInstanceUTC());
+    int sec = dt.getSecondOfMinute();
+    PDataType returnType = getDataType();
+    byte[] byteValue = new byte[returnType.getByteSize()];
+    returnType.getCodec().encodeInt(sec, byteValue, 0);
+    ptr.set(byteValue);
+    return true;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PInteger.INSTANCE;
-    }
+  @Override
+  public PDataType getDataType() {
+    return PInteger.INSTANCE;
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    private Expression getChildExpression() {
-        return children.get(0);
-    }
+  private Expression getChildExpression() {
+    return children.get(0);
+  }
 }

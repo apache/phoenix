@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import java.sql.SQLException;
 import java.util.List;
 
 import org.apache.phoenix.expression.Expression;
@@ -25,45 +24,36 @@ import org.apache.phoenix.parse.CeilParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.FunctionParseNode.Argument;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
-import org.apache.phoenix.schema.TypeMismatchException;
-import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PTimestamp;
-import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
 /**
- * 
  * Base class for built-in CEIL function.
- *
- * 
  * @since 3.0.0
  */
-@BuiltInFunction(name = CeilFunction.NAME,
-                 nodeClass = CeilParseNode.class,
-                 args = {
-                        @Argument(allowedTypes={PTimestamp.class, PDecimal.class}),
-                        @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
-                        @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
-                        },
-                 classType = FunctionParseNode.FunctionClassType.ABSTRACT,
-                 derivedFunctions = {CeilDateExpression.class, CeilTimestampExpression.class, CeilDecimalExpression.class}
-                )
+@BuiltInFunction(name = CeilFunction.NAME, nodeClass = CeilParseNode.class,
+    args = { @Argument(allowedTypes = { PTimestamp.class, PDecimal.class }),
+      @Argument(allowedTypes = { PVarchar.class, PInteger.class }, defaultValue = "null",
+          isConstant = true),
+      @Argument(allowedTypes = { PInteger.class }, defaultValue = "1", isConstant = true) },
+    classType = FunctionParseNode.FunctionClassType.ABSTRACT, derivedFunctions = {
+      CeilDateExpression.class, CeilTimestampExpression.class, CeilDecimalExpression.class })
 public abstract class CeilFunction extends ScalarFunction {
-    
-    public static final String NAME = "CEIL";
 
-    public CeilFunction() {}
-    
-    public CeilFunction(List<Expression> children) {
-        super(children);
-    }
-    
-    @Override
-    public String getName() {
-        return NAME;
-    }
-    
+  public static final String NAME = "CEIL";
+
+  public CeilFunction() {
+  }
+
+  public CeilFunction(List<Expression> children) {
+    super(children);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
 }

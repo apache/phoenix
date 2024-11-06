@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,40 +21,46 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 public class OffsetNode {
-    private final ParseNode node;
+  private final ParseNode node;
 
-    OffsetNode(ParseNode node) throws SQLException {
-        if(!(node instanceof BindParseNode || node instanceof LiteralParseNode || node instanceof ComparisonParseNode)) {
-            throw new SQLException("Bad Expression Passed To Offset, node of type" + node.getClass().getName());
-        }
-        this.node = node;
+  OffsetNode(ParseNode node) throws SQLException {
+    if (
+      !(node instanceof BindParseNode || node instanceof LiteralParseNode
+        || node instanceof ComparisonParseNode)
+    ) {
+      throw new SQLException(
+        "Bad Expression Passed To Offset, node of type" + node.getClass().getName());
     }
-    
-    public ParseNode getOffsetParseNode() {
-        return node;
-    }
+    this.node = node;
+  }
 
-    /**
-     * As we usually consider RVC as having multiple binds treat bind as Integer offset.
-     * @return true for Literal or Bind parse nodes.
-     */
-    public boolean isIntegerOffset() {
-        return (node instanceof BindParseNode) || (node instanceof LiteralParseNode);
-    }
-    
-    @Override
-    public String toString() {
-        return node.toString();
-    }
+  public ParseNode getOffsetParseNode() {
+    return node;
+  }
 
-    @Override public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        OffsetNode that = (OffsetNode) o;
-        return Objects.equals(node, that.node);
-    }
+  /**
+   * As we usually consider RVC as having multiple binds treat bind as Integer offset.
+   * @return true for Literal or Bind parse nodes.
+   */
+  public boolean isIntegerOffset() {
+    return (node instanceof BindParseNode) || (node instanceof LiteralParseNode);
+  }
 
-    @Override public int hashCode() {
-        return Objects.hash(node);
-    }
+  @Override
+  public String toString() {
+    return node.toString();
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+    OffsetNode that = (OffsetNode) o;
+    return Objects.equals(node, that.node);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(node);
+  }
 }

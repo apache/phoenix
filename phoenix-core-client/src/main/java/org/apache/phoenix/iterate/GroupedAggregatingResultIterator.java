@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,46 +25,34 @@ import org.apache.phoenix.expression.aggregator.Aggregators;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 
-
-
 /**
- * 
- * Result scanner that aggregates the row count value for rows with duplicate keys.
- * The rows from the backing result iterator must be in key sorted order.  For example,
- * given the following input:
- *   a  1
- *   a  2
- *   b  1
- *   b  3
- *   c  1
- * the following will be output:
- *   a  3
- *   b  4
- *   c  1
- *
- * 
+ * Result scanner that aggregates the row count value for rows with duplicate keys. The rows from
+ * the backing result iterator must be in key sorted order. For example, given the following input:
+ * a 1 a 2 b 1 b 3 c 1 the following will be output: a 3 b 4 c 1
  * @since 0.1
  */
 public class GroupedAggregatingResultIterator extends BaseGroupedAggregatingResultIterator {
 
-    public GroupedAggregatingResultIterator(PeekingResultIterator resultIterator, Aggregators aggregators) {
-        super(resultIterator, aggregators);
-    }
+  public GroupedAggregatingResultIterator(PeekingResultIterator resultIterator,
+    Aggregators aggregators) {
+    super(resultIterator, aggregators);
+  }
 
-    @Override
-    protected ImmutableBytesWritable getGroupingKey(Tuple tuple, ImmutableBytesWritable ptr) throws SQLException {
-        tuple.getKey(ptr);
-        return ptr;
-    }
+  @Override
+  protected ImmutableBytesWritable getGroupingKey(Tuple tuple, ImmutableBytesWritable ptr)
+    throws SQLException {
+    tuple.getKey(ptr);
+    return ptr;
+  }
 
-    @Override
-    protected Tuple wrapKeyValueAsResult(Cell keyValue) throws SQLException {
-        return new SingleKeyValueTuple(keyValue);
-    }
+  @Override
+  protected Tuple wrapKeyValueAsResult(Cell keyValue) throws SQLException {
+    return new SingleKeyValueTuple(keyValue);
+  }
 
-	@Override
-	public String toString() {
-		return "GroupedAggregatingResultIterator [resultIterator=" 
-		        + resultIterator + ", aggregators=" + aggregators + "]";
-	}
+  @Override
+  public String toString() {
+    return "GroupedAggregatingResultIterator [resultIterator=" + resultIterator + ", aggregators="
+      + aggregators + "]";
+  }
 }

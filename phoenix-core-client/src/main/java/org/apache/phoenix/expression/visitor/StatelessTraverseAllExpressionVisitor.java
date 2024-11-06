@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -51,149 +51,149 @@ import org.apache.phoenix.expression.function.SingleAggregateFunction;
 
 public class StatelessTraverseAllExpressionVisitor<E> extends TraverseAllExpressionVisitor<E> {
 
-    @Override
-    public E visitLeave(AndExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(AndExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(OrExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(OrExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(ScalarFunction node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(ScalarFunction node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(ComparisonExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(ComparisonExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(LikeExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(LikeExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(SingleAggregateFunction node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(SingleAggregateFunction node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(CaseExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(CaseExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(NotExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(NotExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(IsNullExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(IsNullExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(InListExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(InListExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visit(CorrelateVariableFieldAccessExpression node) {
-        return null;
-    }
+  @Override
+  public E visit(CorrelateVariableFieldAccessExpression node) {
+    return null;
+  }
 
-    @Override
-    public E visit(LiteralExpression node) {
-        return null;
-    }
+  @Override
+  public E visit(LiteralExpression node) {
+    return null;
+  }
 
-    @Override
-    public E visit(RowKeyColumnExpression node) {
-        return null;
-    }
+  @Override
+  public E visit(RowKeyColumnExpression node) {
+    return null;
+  }
 
-    @Override
-    public E visit(KeyValueColumnExpression node) {
-        return null;
-    }
-    
-    @Override
-    public E visit(SingleCellColumnExpression node) {
-        return null;
-    }
-    
-    @Override
-    public E visit(ProjectedColumnExpression node) {
-        return null;
-    }
+  @Override
+  public E visit(KeyValueColumnExpression node) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(AddExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visit(SingleCellColumnExpression node) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(SubtractExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visit(ProjectedColumnExpression node) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(MultiplyExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(AddExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(DivideExpression node, List<E> l) {
-        return null;
-    }
-    
-    @Override
-    public E visitLeave(StringConcatExpression node, List<E> l) {
-        return null;
-    }
-    
-    @Override
-    public E visitLeave(RowValueConstructorExpression node, List<E> l) {
-        return null;
-    }
-    
-    @Override
-    public E visitLeave(CoerceExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(SubtractExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(ArrayConstructorExpression node, List<E> l) {
-        return null;
-    }
-    
-    @Override
-    public E visitLeave(SingleCellConstructorExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(MultiplyExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(ModulusExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(DivideExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(ArrayAnyComparisonExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(StringConcatExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visitLeave(ArrayElemRefExpression node, List<E> l) {
-        return null;
-    }
+  @Override
+  public E visitLeave(RowValueConstructorExpression node, List<E> l) {
+    return null;
+  }
 
-    @Override
-    public E visit(SequenceValueExpression node) {
-        return null;
-    }
+  @Override
+  public E visitLeave(CoerceExpression node, List<E> l) {
+    return null;
+  }
+
+  @Override
+  public E visitLeave(ArrayConstructorExpression node, List<E> l) {
+    return null;
+  }
+
+  @Override
+  public E visitLeave(SingleCellConstructorExpression node, List<E> l) {
+    return null;
+  }
+
+  @Override
+  public E visitLeave(ModulusExpression node, List<E> l) {
+    return null;
+  }
+
+  @Override
+  public E visitLeave(ArrayAnyComparisonExpression node, List<E> l) {
+    return null;
+  }
+
+  @Override
+  public E visitLeave(ArrayElemRefExpression node, List<E> l) {
+    return null;
+  }
+
+  @Override
+  public E visit(SequenceValueExpression node) {
+    return null;
+  }
 
 }

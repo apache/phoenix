@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,18 +21,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when
- * making server-server remote RPCs to the region servers hosting Phoenix SYSTEM tables.
+ * {@link RpcControllerFactory} that should only be used when making server-server remote RPCs to
+ * the region servers hosting Phoenix SYSTEM tables.
  */
-public class ServerSideRPCControllerFactory  {
+public class ServerSideRPCControllerFactory {
 
-    protected final Configuration conf;
+  protected final Configuration conf;
 
-    public ServerSideRPCControllerFactory(Configuration conf) {
-        this.conf = conf;
-    }
+  public ServerSideRPCControllerFactory(Configuration conf) {
+    this.conf = conf;
+  }
 
-    public ServerToServerRpcController newController() {
-        return new ServerToServerRpcControllerImpl(this.conf);
-    }
+  public ServerToServerRpcController newController() {
+    return new ServerToServerRpcControllerImpl(this.conf);
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -39,11 +39,11 @@ public class TestIndexMemStore {
 
   @Test
   public void testCorrectOverwritting() throws Exception {
-    IndexMemStore store = new IndexMemStore(new DelegateComparator(new CellComparatorImpl()){
-        @Override
-        public int compare(Cell leftCell, Cell rightCell) {
-            return super.compare(leftCell, rightCell, true);
-        }
+    IndexMemStore store = new IndexMemStore(new DelegateComparator(new CellComparatorImpl()) {
+      @Override
+      public int compare(Cell leftCell, Cell rightCell) {
+        return super.compare(leftCell, rightCell, true);
+      }
     });
     long ts = 10;
     KeyValue kv = new KeyValue(row, family, qual, ts, Type.Put, val);
@@ -70,7 +70,6 @@ public class TestIndexMemStore {
   /**
    * We don't expect custom KeyValue creation, so we can't get into weird situations, where a
    * {@link Type#DeleteFamily} has a column qualifier specified.
-   * @throws Exception
    */
   @Test
   public void testExpectedOrdering() throws Exception {

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,6 +16,9 @@
  * limitations under the License.
  */
 package org.apache.phoenix.expression.function;
+
+import java.sql.Types;
+import java.util.List;
 
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Expression;
@@ -31,9 +34,6 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.json.JsonDataFormat;
 import org.apache.phoenix.util.json.JsonDataFormatFactory;
 
-import java.sql.Types;
-import java.util.List;
-
 /**
  * Built-in function for JSON_VALUE JSON_VALUE(<column_with_json/json_string>, <path> [returning
  * <type>]) Extracts a scalar JSON value—everything except object and array—and returns it as a
@@ -41,92 +41,90 @@ import java.util.List;
  * JSON_VALUE returns a string.
  */
 @FunctionParseNode.BuiltInFunction(name = JsonValueFunction.NAME,
-        nodeClass = JsonValueParseNode.class,
-        args = { @FunctionParseNode.Argument(allowedTypes = { PJson.class, PBson.class,
-                PVarbinary.class }),
-                @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
+    nodeClass = JsonValueParseNode.class,
+    args = {
+      @FunctionParseNode.Argument(allowedTypes = { PJson.class, PBson.class, PVarbinary.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }) })
 public class JsonValueFunction extends ScalarFunction {
 
-    public static final String NAME = "JSON_VALUE";
-    private final JsonDataFormat
-            jsonDataFormat =
-            JsonDataFormatFactory.getJsonDataFormat(JsonDataFormatFactory.DataFormat.BSON);
+  public static final String NAME = "JSON_VALUE";
+  private final JsonDataFormat jsonDataFormat =
+    JsonDataFormatFactory.getJsonDataFormat(JsonDataFormatFactory.DataFormat.BSON);
 
-    // This is called from ExpressionType newInstance
-    public JsonValueFunction() {
+  // This is called from ExpressionType newInstance
+  public JsonValueFunction() {
 
+  }
+
+  public JsonValueFunction(List<Expression> children) {
+    super(children);
+    Preconditions.checkNotNull(getJSONPathExpr());
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (!getColValExpr().evaluate(tuple, ptr)) {
+      return false;
+    }
+    if (ptr == null || ptr.getLength() == 0) {
+      return false;
     }
 
-    public JsonValueFunction(List<Expression> children) {
-        super(children);
-        Preconditions.checkNotNull(getJSONPathExpr());
+    // Column name or JSON string
+    Object top = PJson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
+
+    if (!getJSONPathExpr().evaluate(tuple, ptr)) {
+      return false;
     }
 
-    @Override
-    public String getName() {
-        return NAME;
+    if (ptr.getLength() == 0) {
+      return false;
     }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!getColValExpr().evaluate(tuple, ptr)) {
-            return false;
-        }
-        if (ptr == null || ptr.getLength() == 0) {
-            return false;
-        }
-
-        // Column name or JSON string
-        Object top = PJson.INSTANCE.toObject(ptr, getColValExpr().getSortOrder());
-
-        if (!getJSONPathExpr().evaluate(tuple, ptr)) {
-            return false;
-        }
-
-        if (ptr.getLength() == 0) {
-            return false;
-        }
-
-        String
-                jsonPathExprStr =
-                (String) PVarchar.INSTANCE.toObject(ptr, getJSONPathExpr().getSortOrder());
-        if (jsonPathExprStr == null) {
-            return false;
-        }
-
-        Object value = jsonDataFormat.getValue(top, jsonPathExprStr);
-        int valueType = jsonDataFormat.getValueType(top, jsonPathExprStr);
-        if (value != null) {
-            switch (valueType) {
-            case Types.INTEGER:
-            case Types.BOOLEAN:
-            case Types.DOUBLE:
-            case Types.VARCHAR:
-            case Types.BIGINT:
-            case Types.BINARY:
-            case Types.DATE:
-                ptr.set(PVarchar.INSTANCE.toBytes(String.valueOf(value)));
-                break;
-            default:
-                return false;
-            }
-        } else {
-            ptr.set(PVarchar.INSTANCE.toBytes(null));
-        }
-
-        return true;
+    String jsonPathExprStr =
+      (String) PVarchar.INSTANCE.toObject(ptr, getJSONPathExpr().getSortOrder());
+    if (jsonPathExprStr == null) {
+      return false;
     }
 
-    private Expression getColValExpr() {
-        return getChildren().get(0);
+    Object value = jsonDataFormat.getValue(top, jsonPathExprStr);
+    int valueType = jsonDataFormat.getValueType(top, jsonPathExprStr);
+    if (value != null) {
+      switch (valueType) {
+        case Types.INTEGER:
+        case Types.BOOLEAN:
+        case Types.DOUBLE:
+        case Types.VARCHAR:
+        case Types.BIGINT:
+        case Types.BINARY:
+        case Types.DATE:
+          ptr.set(PVarchar.INSTANCE.toBytes(String.valueOf(value)));
+          break;
+        default:
+          return false;
+      }
+    } else {
+      ptr.set(PVarchar.INSTANCE.toBytes(null));
     }
 
-    private Expression getJSONPathExpr() {
-        return getChildren().get(1);
-    }
+    return true;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PVarchar.INSTANCE;
-    }
+  private Expression getColValExpr() {
+    return getChildren().get(0);
+  }
+
+  private Expression getJSONPathExpr() {
+    return getChildren().get(1);
+  }
+
+  @Override
+  public PDataType getDataType() {
+    return PVarchar.INSTANCE;
+  }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,69 +28,79 @@ import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.*;
 
-@FunctionParseNode.BuiltInFunction(name = ArrayFillFunction.NAME, args = {
-        @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
-        @FunctionParseNode.Argument(allowedTypes = {PInteger.class})})
+@FunctionParseNode.BuiltInFunction(name = ArrayFillFunction.NAME,
+    args = { @FunctionParseNode.Argument(allowedTypes = { PVarbinary.class }),
+      @FunctionParseNode.Argument(allowedTypes = { PInteger.class }) })
 public class ArrayFillFunction extends ScalarFunction {
 
-    public static final String NAME = "ARRAY_FILL";
+  public static final String NAME = "ARRAY_FILL";
 
-    public ArrayFillFunction() {
-    }
+  public ArrayFillFunction() {
+  }
 
-    public ArrayFillFunction(List<Expression> children) throws TypeMismatchException {
-        super(children);
-    }
+  public ArrayFillFunction(List<Expression> children) throws TypeMismatchException {
+    super(children);
+  }
 
-    @Override
-    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-        if (!getElementExpr().evaluate(tuple, ptr)) {
-            return false;
-        }
-        Object element = getElementExpr().getDataType().toObject(ptr, getElementExpr().getSortOrder(), getElementExpr().getMaxLength(), getElementExpr().getScale());
-        if (!getLengthExpr().evaluate(tuple, ptr) || ptr.getLength() == 0) {
-            return false;
-        }
-        int length = (Integer) getLengthExpr().getDataType().toObject(ptr, getLengthExpr().getSortOrder(), getLengthExpr().getMaxLength(), getLengthExpr().getScale());
-        if (length <= 0) {
-            throw new IllegalArgumentException("Array length should be greater than 0");
-        }
-        Object[] elements = new Object[length];
-        Arrays.fill(elements, element);
-        PhoenixArray array = PDataType.instantiatePhoenixArray(getElementExpr().getDataType(), elements);
-        //When max length of a char array is not the max length of the element passed in
-        if (getElementExpr().getDataType().isFixedWidth() && getMaxLength() != null && !getMaxLength().equals(array.getMaxLength())) {
-            array = new PhoenixArray(array, getMaxLength());
-        }
-        ptr.set(((PArrayDataType) getDataType()).toBytes(array, getElementExpr().getDataType(), getElementExpr().getSortOrder()));
-        return true;
+  @Override
+  public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    if (!getElementExpr().evaluate(tuple, ptr)) {
+      return false;
     }
+    Object element = getElementExpr().getDataType().toObject(ptr, getElementExpr().getSortOrder(),
+      getElementExpr().getMaxLength(), getElementExpr().getScale());
+    if (!getLengthExpr().evaluate(tuple, ptr) || ptr.getLength() == 0) {
+      return false;
+    }
+    int length = (Integer) getLengthExpr().getDataType().toObject(ptr,
+      getLengthExpr().getSortOrder(), getLengthExpr().getMaxLength(), getLengthExpr().getScale());
+    if (length <= 0) {
+      throw new IllegalArgumentException("Array length should be greater than 0");
+    }
+    Object[] elements = new Object[length];
+    Arrays.fill(elements, element);
+    PhoenixArray array =
+      PDataType.instantiatePhoenixArray(getElementExpr().getDataType(), elements);
+    // When max length of a char array is not the max length of the element passed in
+    if (
+      getElementExpr().getDataType().isFixedWidth() && getMaxLength() != null
+        && !getMaxLength().equals(array.getMaxLength())
+    ) {
+      array = new PhoenixArray(array, getMaxLength());
+    }
+    ptr.set(((PArrayDataType) getDataType()).toBytes(array, getElementExpr().getDataType(),
+      getElementExpr().getSortOrder()));
+    return true;
+  }
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
+  @Override
+  public String getName() {
+    return NAME;
+  }
 
-    @Override
-    public PDataType getDataType() {
-        return PArrayDataType.fromTypeId(PDataType.ARRAY_TYPE_BASE + getElementExpr().getDataType().getSqlType());
-    }
+  @Override
+  public PDataType getDataType() {
+    return PArrayDataType
+      .fromTypeId(PDataType.ARRAY_TYPE_BASE + getElementExpr().getDataType().getSqlType());
+  }
 
-    @Override
-    public Integer getMaxLength() {
-        return getElementExpr().getDataType().getByteSize() == null ? getElementExpr().getMaxLength() : null;
-    }
+  @Override
+  public Integer getMaxLength() {
+    return getElementExpr().getDataType().getByteSize() == null
+      ? getElementExpr().getMaxLength()
+      : null;
+  }
 
-    @Override
-    public SortOrder getSortOrder() {
-        return children.get(0).getSortOrder();
-    }
+  @Override
+  public SortOrder getSortOrder() {
+    return children.get(0).getSortOrder();
+  }
 
-    public Expression getElementExpr() {
-        return children.get(0);
-    }
+  public Expression getElementExpr() {
+    return children.get(0);
+  }
 
-    public Expression getLengthExpr() {
-        return children.get(1);
-    }
+  public Expression getLengthExpr() {
+    return children.get(1);
+  }
 }

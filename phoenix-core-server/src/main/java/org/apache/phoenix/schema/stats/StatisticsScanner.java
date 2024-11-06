@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,168 +40,163 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * The scanner that does the scanning to collect the stats during major compaction.{@link DefaultStatisticsCollector}
+ * The scanner that does the scanning to collect the stats during major
+ * compaction.{@link DefaultStatisticsCollector}
  */
 public class StatisticsScanner implements InternalScanner {
-    private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsScanner.class);
-    private InternalScanner delegate;
-    private StatisticsWriter statsWriter;
-    private Region region;
-    private StatisticsCollector tracker;
-    private ImmutableBytesPtr family;
-    private final Configuration config;
-    private final RegionCoprocessorEnvironment env;
+  private static final Logger LOGGER = LoggerFactory.getLogger(StatisticsScanner.class);
+  private InternalScanner delegate;
+  private StatisticsWriter statsWriter;
+  private Region region;
+  private StatisticsCollector tracker;
+  private ImmutableBytesPtr family;
+  private final Configuration config;
+  private final RegionCoprocessorEnvironment env;
 
-    public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats, RegionCoprocessorEnvironment env,
-            InternalScanner delegate, ImmutableBytesPtr family) {
-        this.tracker = tracker;
-        this.statsWriter = stats;
-        this.delegate = delegate;
-        this.region = env.getRegion();
-        this.env = env;
-        this.family = family;
-        this.config = env.getConfiguration();
-        StatisticsCollectionRunTracker.getInstance(config).addCompactingRegion(region.getRegionInfo());
+  public StatisticsScanner(StatisticsCollector tracker, StatisticsWriter stats,
+    RegionCoprocessorEnvironment env, InternalScanner delegate, ImmutableBytesPtr family) {
+    this.tracker = tracker;
+    this.statsWriter = stats;
+    this.delegate = delegate;
+    this.region = env.getRegion();
+    this.env = env;
+    this.family = family;
+    this.config = env.getConfiguration();
+    StatisticsCollectionRunTracker.getInstance(config).addCompactingRegion(region.getRegionInfo());
+  }
+
+  @Override
+  public boolean next(List<Cell> result) throws IOException {
+    boolean ret = delegate.next(result);
+    updateStats(result);
+    return ret;
+  }
+
+  @Override
+  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+    return next(result);
+  }
+
+  /**
+   * Update the current statistics based on the lastest batch of key-values from the underlying
+   * scanner next batch of {@link KeyValue}s
+   */
+  private void updateStats(final List<Cell> results) throws IOException {
+    if (!results.isEmpty()) {
+      tracker.collectStatistics(results);
     }
+  }
 
+  @Override
+  public void close() throws IOException {
+    boolean async = getConfig().getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
+    StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
+    StatisticsScannerCallable callable = createCallable();
+    if (isConnectionClosed()) {
+      LOGGER.debug("Not updating table statistics because the server is stopping/stopped");
+      return;
+    }
+    if (!async) {
+      callable.call();
+    } else {
+      collectionTracker.runTask(callable);
+    }
+  }
+
+  // VisibleForTesting
+  StatisticsCollectionRunTracker getStatsCollectionRunTracker(Configuration c) {
+    return StatisticsCollectionRunTracker.getInstance(c);
+  }
+
+  Configuration getConfig() {
+    return config;
+  }
+
+  StatisticsWriter getStatisticsWriter() {
+    return statsWriter;
+  }
+
+  Region getRegion() {
+    return region;
+  }
+
+  Connection getConnection() {
+    return env.getConnection();
+  }
+
+  StatisticsScannerCallable createCallable() {
+    return new StatisticsScannerCallable();
+  }
+
+  StatisticsCollector getTracker() {
+    return tracker;
+  }
+
+  InternalScanner getDelegate() {
+    return delegate;
+  }
+
+  class StatisticsScannerCallable implements Callable<Void> {
     @Override
-    public boolean next(List<Cell> result) throws IOException {
-        boolean ret = delegate.next(result);
-        updateStats(result);
-        return ret;
-    }
+    public Void call() throws IOException {
+      IOException toThrow = null;
+      StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
+      final RegionInfo regionInfo = getRegion().getRegionInfo();
+      try {
+        // update the statistics table
+        // Just verify if this if fine
+        ArrayList<Mutation> mutations = new ArrayList<Mutation>();
 
-    @Override
-    public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
-        return next(result);
-    }
-
-    /**
-     * Update the current statistics based on the lastest batch of key-values from the underlying scanner
-     *
-     * @param results
-     *            next batch of {@link KeyValue}s
-     * @throws IOException 
-     */
-    private void updateStats(final List<Cell> results) throws IOException {
-        if (!results.isEmpty()) {
-            tracker.collectStatistics(results);
+        if (LOGGER.isDebugEnabled()) {
+          LOGGER.debug("Deleting the stats for the region " + regionInfo.getRegionNameAsString()
+            + " as part of major compaction");
         }
-    }
-
-    @Override
-    public void close() throws IOException {
-        boolean async = getConfig().getBoolean(COMMIT_STATS_ASYNC, DEFAULT_COMMIT_STATS_ASYNC);
-        StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
-        StatisticsScannerCallable callable = createCallable();
+        getStatisticsWriter().deleteStatsForRegion(region, tracker, family, mutations);
+        if (LOGGER.isDebugEnabled()) {
+          LOGGER.debug("Adding new stats for the region " + regionInfo.getRegionNameAsString()
+            + " as part of major compaction");
+        }
+        getStatisticsWriter().addStats(tracker, family, mutations, tracker.getGuidePostDepth());
+        if (LOGGER.isDebugEnabled()) {
+          LOGGER.debug("Committing new stats for the region " + regionInfo.getRegionNameAsString()
+            + " as part of major compaction");
+        }
+        getStatisticsWriter().commitStats(mutations, tracker);
+      } catch (IOException e) {
         if (isConnectionClosed()) {
-            LOGGER.debug("Not updating table statistics because the server is stopping/stopped");
-            return;
-        }
-        if (!async) {
-            callable.call();
+          LOGGER.debug("Ignoring error updating statistics because region is closing/closed");
         } else {
-            collectionTracker.runTask(callable);
+          LOGGER.error("Failed to update statistics table!", e);
+          toThrow = e;
         }
-    }
-
-    // VisibleForTesting
-    StatisticsCollectionRunTracker getStatsCollectionRunTracker(Configuration c) {
-        return StatisticsCollectionRunTracker.getInstance(c);
-    }
-
-    Configuration getConfig() {
-        return config;
-    }
-
-    StatisticsWriter getStatisticsWriter() {
-        return statsWriter;
-    }
-
-    Region getRegion() {
-        return region;
-    }
-    
-    Connection getConnection() {
-        return env.getConnection();
-    }
-
-    StatisticsScannerCallable createCallable() {
-        return new StatisticsScannerCallable();
-    }
-
-    StatisticsCollector getTracker() {
-        return tracker;
-    }
-
-    InternalScanner getDelegate() {
-        return delegate;
-    }
-
-    class StatisticsScannerCallable implements Callable<Void> {
-        @Override
-        public Void call() throws IOException {
-            IOException toThrow = null;
-            StatisticsCollectionRunTracker collectionTracker = getStatsCollectionRunTracker(config);
-            final RegionInfo regionInfo = getRegion().getRegionInfo();
-            try {
-                // update the statistics table
-                // Just verify if this if fine
-                ArrayList<Mutation> mutations = new ArrayList<Mutation>();
-
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Deleting the stats for the region "
-                            + regionInfo.getRegionNameAsString()
-                            + " as part of major compaction");
-                }
-                getStatisticsWriter().deleteStatsForRegion(region, tracker, family, mutations);
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Adding new stats for the region " +
-                            regionInfo.getRegionNameAsString()
-                            + " as part of major compaction");
-                }
-                getStatisticsWriter().addStats(tracker, family,
-                        mutations, tracker.getGuidePostDepth());
-                if (LOGGER.isDebugEnabled()) {
-                    LOGGER.debug("Committing new stats for the region " +
-                            regionInfo.getRegionNameAsString()
-                            + " as part of major compaction");
-                }
-                getStatisticsWriter().commitStats(mutations, tracker);
-            } catch (IOException e) {
-                if (isConnectionClosed()) {
-                    LOGGER.debug(
-                            "Ignoring error updating statistics because region is closing/closed");
-                } else {
-                    LOGGER.error("Failed to update statistics table!", e);
-                    toThrow = e;
-                }
-            } finally {
-                try {
-                    collectionTracker.removeCompactingRegion(regionInfo);
-                    getStatisticsWriter().close();// close the writer
-                    getTracker().close();// close the tracker
-                } catch (IOException e) {
-                    if (toThrow == null) toThrow = e;
-                    LOGGER.error("Error while closing the stats table", e);
-                } finally {
-                    // close the delegate scanner
-                    try {
-                        getDelegate().close();
-                    } catch (IOException e) {
-                        if (toThrow == null) toThrow = e;
-                        LOGGER.error("Error while closing the scanner", e);
-                    } finally {
-                        if (toThrow != null) { throw toThrow; }
-                    }
-                }
+      } finally {
+        try {
+          collectionTracker.removeCompactingRegion(regionInfo);
+          getStatisticsWriter().close();// close the writer
+          getTracker().close();// close the tracker
+        } catch (IOException e) {
+          if (toThrow == null) toThrow = e;
+          LOGGER.error("Error while closing the stats table", e);
+        } finally {
+          // close the delegate scanner
+          try {
+            getDelegate().close();
+          } catch (IOException e) {
+            if (toThrow == null) toThrow = e;
+            LOGGER.error("Error while closing the scanner", e);
+          } finally {
+            if (toThrow != null) {
+              throw toThrow;
             }
-            return null;
+          }
         }
+      }
+      return null;
     }
+  }
 
-    private boolean isConnectionClosed() {
-        return getConnection() == null || getConnection().isClosed() || getConnection().isAborted();
-    }
+  private boolean isConnectionClosed() {
+    return getConnection() == null || getConnection().isClosed() || getConnection().isAborted();
+  }
 
 }

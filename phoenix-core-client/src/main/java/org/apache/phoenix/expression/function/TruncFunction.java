@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,40 +31,33 @@ import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PVarchar;
 
 /**
- * 
- * Function used to bucketize date/time values by truncating them to
- * an even increment.  Usage:
+ * Function used to bucketize date/time values by truncating them to an even increment. Usage:
  * {@code TRUNC(<date/time col ref>,<'day'|'hour'|'minute'|'second'|'millisecond'>,[<optional integer multiplier>]) }
- * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10 minute rollup)
- * The function returns a {@link org.apache.phoenix.schema.types.PDate}
- *
- * 
+ * The integer multiplier is optional and is used to do rollups to a partial time unit (i.e. 10
+ * minute rollup) The function returns a {@link org.apache.phoenix.schema.types.PDate}
  * @since 0.1
  */
-@BuiltInFunction(name = TruncFunction.NAME,
-nodeClass = FloorParseNode.class,
-args = {
-       @Argument(allowedTypes={PTimestamp.class, PDecimal.class}),
-       @Argument(allowedTypes={PVarchar.class, PInteger.class}, defaultValue = "null", isConstant=true),
-       @Argument(allowedTypes={PInteger.class}, defaultValue="1", isConstant=true)
-       },
-classType = FunctionParseNode.FunctionClassType.ALIAS,
-derivedFunctions = {FloorFunction.class}
-)
+@BuiltInFunction(name = TruncFunction.NAME, nodeClass = FloorParseNode.class,
+    args = { @Argument(allowedTypes = { PTimestamp.class, PDecimal.class }),
+      @Argument(allowedTypes = { PVarchar.class, PInteger.class }, defaultValue = "null",
+          isConstant = true),
+      @Argument(allowedTypes = { PInteger.class }, defaultValue = "1", isConstant = true) },
+    classType = FunctionParseNode.FunctionClassType.ALIAS,
+    derivedFunctions = { FloorFunction.class })
 public abstract class TruncFunction extends ScalarFunction {
-    
-    public static final String NAME = "TRUNC";
 
-    public TruncFunction() {}
-    
-    public TruncFunction(List<Expression> children) throws SQLException {
-        super(children);
-    }
+  public static final String NAME = "TRUNC";
 
-    @Override
-    public String getName() {
-        return NAME;
-    }
-    
-    
+  public TruncFunction() {
+  }
+
+  public TruncFunction(List<Expression> children) throws SQLException {
+    super(children);
+  }
+
+  @Override
+  public String getName() {
+    return NAME;
+  }
+
 }

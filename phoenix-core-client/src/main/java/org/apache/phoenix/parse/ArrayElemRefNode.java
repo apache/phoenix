@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,25 +25,25 @@ import org.apache.phoenix.compile.ColumnResolver;
 
 public class ArrayElemRefNode extends CompoundParseNode {
 
-    public ArrayElemRefNode(List<ParseNode> parseNode) {
-        super(parseNode);
-    }
+  public ArrayElemRefNode(List<ParseNode> parseNode) {
+    super(parseNode);
+  }
 
-    @Override
-    public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
-        List<T> l = Collections.emptyList();
-        if (visitor.visitEnter(this)) {
-            l = acceptChildren(visitor);
-        }
-        return visitor.visitLeave(this, l);
+  @Override
+  public <T> T accept(ParseNodeVisitor<T> visitor) throws SQLException {
+    List<T> l = Collections.emptyList();
+    if (visitor.visitEnter(this)) {
+      l = acceptChildren(visitor);
     }
-    
-    @Override
-    public void toSQL(ColumnResolver resolver, StringBuilder buf) {
-        List<ParseNode> children = getChildren();
-        children.get(0).toSQL(resolver, buf);
-        buf.append('[');
-        children.get(1).toSQL(resolver, buf);
-        buf.append(']');
-    }
+    return visitor.visitLeave(this, l);
+  }
+
+  @Override
+  public void toSQL(ColumnResolver resolver, StringBuilder buf) {
+    List<ParseNode> children = getChildren();
+    children.get(0).toSQL(resolver, buf);
+    buf.append('[');
+    children.get(1).toSQL(resolver, buf);
+    buf.append(']');
+  }
 }

@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,177 +24,177 @@ import java.text.Format;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.StringUtil;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-
 public class PVarchar extends PDataType<String> {
 
-    public static final PVarchar INSTANCE = new PVarchar();
+  public static final PVarchar INSTANCE = new PVarchar();
 
-    private PVarchar() {
-        super("VARCHAR", Types.VARCHAR, String.class, null, 0);
+  private PVarchar() {
+    super("VARCHAR", Types.VARCHAR, String.class, null, 0);
+  }
+
+  @Override
+  public byte[] toBytes(Object object) {
+    // TODO: consider using avro UTF8 object instead of String
+    // so that we get get the size easily
+    if (object == null) {
+      return ByteUtil.EMPTY_BYTE_ARRAY;
     }
+    return Bytes.toBytes((String) object);
+  }
 
-    @Override
-    public byte[] toBytes(Object object) {
-        // TODO: consider using avro UTF8 object instead of String
-        // so that we get get the size easily
-        if (object == null) {
-            return ByteUtil.EMPTY_BYTE_ARRAY;
-        }
-        return Bytes.toBytes((String) object);
+  @Override
+  public int toBytes(Object object, byte[] bytes, int offset) {
+    if (object == null) {
+      return 0;
     }
+    byte[] b = toBytes(object); // TODO: no byte[] allocation: use CharsetEncoder
+    System.arraycopy(b, 0, bytes, offset, b.length);
+    return b.length;
+  }
 
-    @Override
-    public int toBytes(Object object, byte[] bytes, int offset) {
-        if (object == null) {
-            return 0;
-        }
-        byte[] b = toBytes(object); // TODO: no byte[] allocation: use CharsetEncoder
-        System.arraycopy(b, 0, bytes, offset, b.length);
-        return b.length;
+  @Override
+  public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+    SortOrder sortOrder, Integer maxLength, Integer scale) {
+    if (length == 0) {
+      return null;
     }
-
-    @Override
-    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
-            SortOrder sortOrder, Integer maxLength, Integer scale) {
-        if (length == 0) {
-            return null;
-        }
-        if (!actualType.isCoercibleTo(this)) {
-            throwConstraintViolationException(actualType, this);
-        }
-        if (sortOrder == SortOrder.DESC) {
-            bytes = SortOrder.invert(bytes, offset, length);
-            offset = 0;
-        }
-        return Bytes.toString(bytes, offset, length);
+    if (!actualType.isCoercibleTo(this)) {
+      throwConstraintViolationException(actualType, this);
     }
-
-    @Override
-    public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
-            SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType)
-            throws SQLException {
-        if (String.class.isAssignableFrom(jdbcType)) {
-            //We don't actually get here, we shortcut the String case in ResultSet
-            return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
-        }
-        throw newMismatchException(actualType, jdbcType);
+    if (sortOrder == SortOrder.DESC) {
+      bytes = SortOrder.invert(bytes, offset, length);
+      offset = 0;
     }
+    return Bytes.toString(bytes, offset, length);
+  }
 
-    @Override
-    public Object toObject(Object object, PDataType actualType) {
-        if (equalsAny(actualType, this, PChar.INSTANCE)) {
-            String s = (String) object;
-            return s == null || s.length() > 0 ? s : null;
-        } else if (equalsAny(actualType, PVarchar.INSTANCE)) {
-            if (object == null) {
-                return null;
-            }
-            return object.toString();
-        }
-        return throwConstraintViolationException(actualType, this);
+  @Override
+  public Object toObject(byte[] bytes, int offset, int length, PDataType actualType,
+    SortOrder sortOrder, Integer maxLength, Integer scale, Class jdbcType) throws SQLException {
+    if (String.class.isAssignableFrom(jdbcType)) {
+      // We don't actually get here, we shortcut the String case in ResultSet
+      return toObject(bytes, offset, length, actualType, sortOrder, maxLength, scale);
     }
+    throw newMismatchException(actualType, jdbcType);
+  }
 
-    @Override
-    public boolean isCoercibleTo(PDataType targetType) {
-        return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE,
-            PVarbinaryEncoded.INSTANCE);
-    }
-
-    @Override
-    public boolean isCoercibleTo(PDataType targetType, Object value) {
-        if (isCoercibleTo(targetType)) {
-            if (targetType.equals(PChar.INSTANCE)) {
-                return value != null;
-            }
-            return true;
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
-            SortOrder sortOrder, Integer maxLength, Integer scale,
-            Integer desiredMaxLength, Integer desiredScale) {
-        if (ptr.getLength() != 0 && desiredMaxLength != null) {
-            if (maxLength == null || maxLength > desiredMaxLength) {
-                if (value != null) { // Use value if provided
-                    maxLength = value.toString().length();
-                } else {
-                    coerceBytes(ptr, value, srcType, maxLength, scale, sortOrder, desiredMaxLength,
-                        desiredScale, sortOrder, true);
-                    maxLength = StringUtil
-                        .calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
-                }
-                return maxLength <= desiredMaxLength;
-            }
-        }
-        return true;
-    }
-
-    @Override
-    public boolean isFixedWidth() {
-        return false;
-    }
-
-    @Override
-    public int estimateByteSize(Object o) {
-        String value = (String) o;
-        return value == null ? 1 : value.length();
-    }
-
-    @Override
-    public Integer getByteSize() {
+  @Override
+  public Object toObject(Object object, PDataType actualType) {
+    if (equalsAny(actualType, this, PChar.INSTANCE)) {
+      String s = (String) object;
+      return s == null || s.length() > 0 ? s : null;
+    } else if (equalsAny(actualType, PVarchar.INSTANCE)) {
+      if (object == null) {
         return null;
+      }
+      return object.toString();
     }
+    return throwConstraintViolationException(actualType, this);
+  }
 
-    @Override
-    public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
-        if (lhs == rhs) {
-            return 0;
-        }
-        if (lhs == null) {
-            return -1;
-        }
-        if (rhs == null) {
-            return 1;
-        }
-        return ((String) lhs).compareTo((String) rhs);
+  @Override
+  public boolean isCoercibleTo(PDataType targetType) {
+    return equalsAny(targetType, this, PChar.INSTANCE, PVarbinary.INSTANCE, PBinary.INSTANCE,
+      PVarbinaryEncoded.INSTANCE);
+  }
+
+  @Override
+  public boolean isCoercibleTo(PDataType targetType, Object value) {
+    if (isCoercibleTo(targetType)) {
+      if (targetType.equals(PChar.INSTANCE)) {
+        return value != null;
+      }
+      return true;
     }
+    return false;
+  }
 
-    @Override
-    public Object toObject(String value) {
-        return value;
-    }
-
-    @Override
-    public boolean isBytesComparableWith(PDataType otherType) {
-        return super.isBytesComparableWith(otherType) || otherType == PChar.INSTANCE;
-    }
-
-    @Override
-    public String toStringLiteral(Object o, Format formatter) {
-        if (formatter != null) {
-            return "'" + formatter.format(o) + "'";
+  @Override
+  public boolean isSizeCompatible(ImmutableBytesWritable ptr, Object value, PDataType srcType,
+    SortOrder sortOrder, Integer maxLength, Integer scale, Integer desiredMaxLength,
+    Integer desiredScale) {
+    if (ptr.getLength() != 0 && desiredMaxLength != null) {
+      if (maxLength == null || maxLength > desiredMaxLength) {
+        if (value != null) { // Use value if provided
+          maxLength = value.toString().length();
+        } else {
+          coerceBytes(ptr, value, srcType, maxLength, scale, sortOrder, desiredMaxLength,
+            desiredScale, sortOrder, true);
+          maxLength =
+            StringUtil.calculateUTF8Length(ptr.get(), ptr.getOffset(), ptr.getLength(), sortOrder);
         }
-        return null == o ? String.valueOf(o) : "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
+        return maxLength <= desiredMaxLength;
+      }
     }
+    return true;
+  }
 
-    private char[] sampleChars = new char[1];
+  @Override
+  public boolean isFixedWidth() {
+    return false;
+  }
 
-    @Override
-    public Object getSampleValue(Integer maxLength, Integer arrayLength) {
-        Preconditions.checkArgument(maxLength == null || maxLength >= 0);
-        int length = maxLength != null ? maxLength : 1;
-        if (length != sampleChars.length) {
-            sampleChars = new char[length];
-        }
-        for (int i = 0; i < length; i++) {
-            sampleChars[i] = (char) (RANDOM.get().nextInt(Byte.MAX_VALUE-2) + 1);
-        }
-        return new String(sampleChars);
+  @Override
+  public int estimateByteSize(Object o) {
+    String value = (String) o;
+    return value == null ? 1 : value.length();
+  }
+
+  @Override
+  public Integer getByteSize() {
+    return null;
+  }
+
+  @Override
+  public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
+    if (lhs == rhs) {
+      return 0;
     }
+    if (lhs == null) {
+      return -1;
+    }
+    if (rhs == null) {
+      return 1;
+    }
+    return ((String) lhs).compareTo((String) rhs);
+  }
+
+  @Override
+  public Object toObject(String value) {
+    return value;
+  }
+
+  @Override
+  public boolean isBytesComparableWith(PDataType otherType) {
+    return super.isBytesComparableWith(otherType) || otherType == PChar.INSTANCE;
+  }
+
+  @Override
+  public String toStringLiteral(Object o, Format formatter) {
+    if (formatter != null) {
+      return "'" + formatter.format(o) + "'";
+    }
+    return null == o
+      ? String.valueOf(o)
+      : "'" + StringUtil.escapeStringConstant(o.toString()) + "'";
+  }
+
+  private char[] sampleChars = new char[1];
+
+  @Override
+  public Object getSampleValue(Integer maxLength, Integer arrayLength) {
+    Preconditions.checkArgument(maxLength == null || maxLength >= 0);
+    int length = maxLength != null ? maxLength : 1;
+    if (length != sampleChars.length) {
+      sampleChars = new char[length];
+    }
+    for (int i = 0; i < length; i++) {
+      sampleChars[i] = (char) (RANDOM.get().nextInt(Byte.MAX_VALUE - 2) + 1);
+    }
+    return new String(sampleChars);
+  }
 }

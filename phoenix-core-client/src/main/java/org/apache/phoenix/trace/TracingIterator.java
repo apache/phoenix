@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,45 +19,45 @@ package org.apache.phoenix.trace;
 
 import java.sql.SQLException;
 
+import org.apache.htrace.TraceScope;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.apache.htrace.TraceScope;
 
 /**
  * A simple iterator that closes the trace scope when the iterator is closed.
  */
 public class TracingIterator extends DelegateResultIterator {
 
-    private TraceScope scope;
-    private boolean started;
+  private TraceScope scope;
+  private boolean started;
 
-    /**
-     * @param scope a scope with a non-null span
-     * @param iterator delegate
-     */
-    public TracingIterator(TraceScope scope, ResultIterator iterator) {
-        super(iterator);
-        this.scope = scope;
+  /**
+   * @param scope    a scope with a non-null span
+   * @param iterator delegate
+   */
+  public TracingIterator(TraceScope scope, ResultIterator iterator) {
+    super(iterator);
+    this.scope = scope;
+  }
+
+  @Override
+  public void close() throws SQLException {
+    scope.close();
+    super.close();
+  }
+
+  @Override
+  public Tuple next() throws SQLException {
+    if (!started) {
+      scope.getSpan().addTimelineAnnotation("First request completed");
+      started = true;
     }
+    return super.next();
+  }
 
-    @Override
-    public void close() throws SQLException {
-        scope.close();
-        super.close();
-    }
-
-    @Override
-    public Tuple next() throws SQLException {
-        if (!started) {
-            scope.getSpan().addTimelineAnnotation("First request completed");
-            started = true;
-        }
-        return super.next();
-    }
-
-	@Override
-	public String toString() {
-		return "TracingIterator [scope=" + scope + ", started=" + started + "]";
-	}
+  @Override
+  public String toString() {
+    return "TracingIterator [scope=" + scope + ", started=" + started + "]";
+  }
 }

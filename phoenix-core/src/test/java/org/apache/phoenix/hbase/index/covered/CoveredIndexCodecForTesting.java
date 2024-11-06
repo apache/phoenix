@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,44 +26,46 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.hbase.index.BaseIndexCodec;
 
 /**
- * An {@link IndexCodec} for testing that allow you to specify the index updates/deletes, regardless of the current
- * tables' state.
+ * An {@link IndexCodec} for testing that allow you to specify the index updates/deletes, regardless
+ * of the current tables' state.
  */
 public class CoveredIndexCodecForTesting extends BaseIndexCodec {
 
-    private List<IndexUpdate> deletes = new ArrayList<IndexUpdate>();
-    private List<IndexUpdate> updates = new ArrayList<IndexUpdate>();
+  private List<IndexUpdate> deletes = new ArrayList<IndexUpdate>();
+  private List<IndexUpdate> updates = new ArrayList<IndexUpdate>();
 
-    public void addIndexDelete(IndexUpdate... deletes) {
-        this.deletes.addAll(Arrays.asList(deletes));
-    }
+  public void addIndexDelete(IndexUpdate... deletes) {
+    this.deletes.addAll(Arrays.asList(deletes));
+  }
 
-    public void addIndexUpserts(IndexUpdate... updates) {
-        this.updates.addAll(Arrays.asList(updates));
-    }
+  public void addIndexUpserts(IndexUpdate... updates) {
+    this.updates.addAll(Arrays.asList(updates));
+  }
 
-    public void clear() {
-        this.deletes.clear();
-        this.updates.clear();
-    }
+  public void clear() {
+    this.deletes.clear();
+    this.updates.clear();
+  }
 
-    @Override
-    public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey) {
-        return this.deletes;
-    }
+  @Override
+  public Iterable<IndexUpdate> getIndexDeletes(TableState state, IndexMetaData context,
+    byte[] regionStartKey, byte[] regionEndKey) {
+    return this.deletes;
+  }
 
-    @Override
-    public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context, byte[] regionStartKey, byte[] regionEndKey, boolean verified) {
-        return this.updates;
-    }
+  @Override
+  public Iterable<IndexUpdate> getIndexUpserts(TableState state, IndexMetaData context,
+    byte[] regionStartKey, byte[] regionEndKey, boolean verified) {
+    return this.updates;
+  }
 
-    @Override
-    public void initialize(Configuration conf, byte[] tableName) {
-        // noop
-    }
+  @Override
+  public void initialize(Configuration conf, byte[] tableName) {
+    // noop
+  }
 
-    @Override
-    public boolean isEnabled(Mutation m) {
-        return true;
-    }
+  @Override
+  public boolean isEnabled(Mutation m) {
+    return true;
+  }
 }

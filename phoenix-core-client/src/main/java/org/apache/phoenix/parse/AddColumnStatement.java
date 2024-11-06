@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,39 +21,44 @@ import java.util.List;
 
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PTableType;
-
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 
 public class AddColumnStatement extends AlterTableStatement {
-    private final List<ColumnDef> columnDefs;
-    private final boolean ifNotExists;
-    private final ListMultimap<String,Pair<String,Object>> props;
-    private final boolean cascade;
-    private final List<NamedNode> indexes;
+  private final List<ColumnDef> columnDefs;
+  private final boolean ifNotExists;
+  private final ListMultimap<String, Pair<String, Object>> props;
+  private final boolean cascade;
+  private final List<NamedNode> indexes;
 
-    protected AddColumnStatement(NamedTableNode table, PTableType tableType, List<ColumnDef> columnDefs, boolean ifNotExists, ListMultimap<String,Pair<String,Object>> props, boolean cascade, List<NamedNode> indexes) {
-        super(table, tableType);
-        this.columnDefs = columnDefs;
-        this.props = props == null ? ImmutableListMultimap.<String,Pair<String,Object>>of()  : props;
-        this.ifNotExists = ifNotExists;
-        this.cascade = cascade;
-        this.indexes = indexes;
-    }
+  protected AddColumnStatement(NamedTableNode table, PTableType tableType,
+    List<ColumnDef> columnDefs, boolean ifNotExists,
+    ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes) {
+    super(table, tableType);
+    this.columnDefs = columnDefs;
+    this.props = props == null ? ImmutableListMultimap.<String, Pair<String, Object>> of() : props;
+    this.ifNotExists = ifNotExists;
+    this.cascade = cascade;
+    this.indexes = indexes;
+  }
 
-    public List<ColumnDef> getColumnDefs() {
-        return columnDefs;
-    }
-    
-    public boolean ifNotExists() {
-        return ifNotExists;
-    }
+  public List<ColumnDef> getColumnDefs() {
+    return columnDefs;
+  }
 
-    public ListMultimap<String,Pair<String,Object>> getProps() {
-        return props;
-    }
+  public boolean ifNotExists() {
+    return ifNotExists;
+  }
 
-    public boolean isCascade() { return cascade; }
+  public ListMultimap<String, Pair<String, Object>> getProps() {
+    return props;
+  }
 
-    public List<NamedNode> getIndexes() { return indexes; }
+  public boolean isCascade() {
+    return cascade;
+  }
+
+  public List<NamedNode> getIndexes() {
+    return indexes;
+  }
 }

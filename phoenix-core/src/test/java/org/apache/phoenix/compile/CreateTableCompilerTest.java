@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -36,33 +36,35 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
 public class CreateTableCompilerTest extends BaseConnectionlessQueryTest {
-    @Test
-    public void testCreateTableWithDuplicateColumns() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
-            String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, DUPE INTEGER, DUPE INTEGER)";
-            conn.createStatement().execute(ddl);
-            fail();
-        } catch (ColumnAlreadyExistsException e) {
-            assertEquals("DUPE", e.getColumnName());
-        }
+  @Test
+  public void testCreateTableWithDuplicateColumns() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    try (PhoenixConnection conn =
+      DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+      String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, DUPE INTEGER, DUPE INTEGER)";
+      conn.createStatement().execute(ddl);
+      fail();
+    } catch (ColumnAlreadyExistsException e) {
+      assertEquals("DUPE", e.getColumnName());
     }
+  }
 
-    @Test
-    public void testCreateTableWithNoVerify() throws SQLException {
-        Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
-        try (PhoenixConnection conn = DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
-            String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, A INTEGER, B INTEGER) NOVERIFY";
-            boolean result = conn.createStatement().execute(ddl);
-            assertFalse(result);
-        }
+  @Test
+  public void testCreateTableWithNoVerify() throws SQLException {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    try (PhoenixConnection conn =
+      DriverManager.getConnection(getUrl(), props).unwrap(PhoenixConnection.class)) {
+      String ddl = "CREATE TABLE T (ID INTEGER PRIMARY KEY, A INTEGER, B INTEGER) NOVERIFY";
+      boolean result = conn.createStatement().execute(ddl);
+      assertFalse(result);
     }
+  }
 
-    @Test
-    public void testCreateTableWithNoVerifyValidateStmt() throws SQLException {
-        String ddl = "CREATE TABLE A (K VARCHAR PRIMARY KEY DESC) NOVERIFY";
-        CreateTableStatement stmt = (CreateTableStatement)new SQLParser((ddl)).parseStatement();
+  @Test
+  public void testCreateTableWithNoVerifyValidateStmt() throws SQLException {
+    String ddl = "CREATE TABLE A (K VARCHAR PRIMARY KEY DESC) NOVERIFY";
+    CreateTableStatement stmt = (CreateTableStatement) new SQLParser((ddl)).parseStatement();
 
-        assertTrue(stmt.isNoVerify());
-    }
+    assertTrue(stmt.isNoVerify());
+  }
 }

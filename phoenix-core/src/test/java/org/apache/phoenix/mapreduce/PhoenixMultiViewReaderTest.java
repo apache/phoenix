@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,70 +17,58 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.phoenix.mapreduce.util.ViewInfoTracker;
-import org.apache.phoenix.mapreduce.util.ViewInfoWritable;
-import org.junit.Test;
-import org.mockito.Mockito;
-
-import java.util.ArrayList;
-import java.util.List;
-
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.when;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.phoenix.mapreduce.util.ViewInfoTracker;
+import org.apache.phoenix.mapreduce.util.ViewInfoWritable;
+import org.junit.Test;
+import org.mockito.Mockito;
+
 public class PhoenixMultiViewReaderTest {
 
-    @Test
-    public void test() throws Exception {
-        String tenantId = "Tenant1";
-        String viewName = "viewName1";
-        long ttl = 1;
-        String indexTable = "indexTable";
-        String globalView = "globalView";
+  @Test
+  public void test() throws Exception {
+    String tenantId = "Tenant1";
+    String viewName = "viewName1";
+    long ttl = 1;
+    String indexTable = "indexTable";
+    String globalView = "globalView";
 
-        PhoenixMultiViewInputSplit mockInput = Mockito.mock(PhoenixMultiViewInputSplit.class);
-        TaskAttemptContext mockContext = Mockito.mock(TaskAttemptContext.class);
-        List<ViewInfoWritable> viewInfoTracker = new ArrayList<>();
-        viewInfoTracker.add(new ViewInfoTracker(
-                tenantId,
-                viewName,
-                ttl,
-                globalView,
-                false
-        ));
+    PhoenixMultiViewInputSplit mockInput = Mockito.mock(PhoenixMultiViewInputSplit.class);
+    TaskAttemptContext mockContext = Mockito.mock(TaskAttemptContext.class);
+    List<ViewInfoWritable> viewInfoTracker = new ArrayList<>();
+    viewInfoTracker.add(new ViewInfoTracker(tenantId, viewName, ttl, globalView, false));
 
-        viewInfoTracker.add(new ViewInfoTracker(
-                tenantId,
-                viewName,
-                ttl,
-                indexTable,
-                true
-        ));
-        when(mockInput.getViewInfoTrackerList()).thenReturn(viewInfoTracker);
-        PhoenixMultiViewReader phoenixMultiViewReader = new PhoenixMultiViewReader();
-        phoenixMultiViewReader.initialize(mockInput, mockContext);
+    viewInfoTracker.add(new ViewInfoTracker(tenantId, viewName, ttl, indexTable, true));
+    when(mockInput.getViewInfoTrackerList()).thenReturn(viewInfoTracker);
+    PhoenixMultiViewReader phoenixMultiViewReader = new PhoenixMultiViewReader();
+    phoenixMultiViewReader.initialize(mockInput, mockContext);
 
-        ViewInfoTracker viewInfoWritable;
-        assertTrue(phoenixMultiViewReader.nextKeyValue());
-        viewInfoWritable = (ViewInfoTracker)phoenixMultiViewReader.getCurrentValue();
-        assertEquals(tenantId, viewInfoWritable.getTenantId());
-        assertEquals(viewName, viewInfoWritable.getViewName());
-        assertEquals(ttl, viewInfoWritable.getTTL());
-        assertEquals(false, viewInfoWritable.isIndexRelation());
+    ViewInfoTracker viewInfoWritable;
+    assertTrue(phoenixMultiViewReader.nextKeyValue());
+    viewInfoWritable = (ViewInfoTracker) phoenixMultiViewReader.getCurrentValue();
+    assertEquals(tenantId, viewInfoWritable.getTenantId());
+    assertEquals(viewName, viewInfoWritable.getViewName());
+    assertEquals(ttl, viewInfoWritable.getTTL());
+    assertEquals(false, viewInfoWritable.isIndexRelation());
 
-        assertTrue(phoenixMultiViewReader.nextKeyValue());
-        viewInfoWritable = (ViewInfoTracker)phoenixMultiViewReader.getCurrentValue();
-        assertEquals(tenantId, viewInfoWritable.getTenantId());
-        assertEquals(viewName, viewInfoWritable.getViewName());
-        assertEquals(ttl, viewInfoWritable.getTTL());
-        assertEquals(true, viewInfoWritable.isIndexRelation());
+    assertTrue(phoenixMultiViewReader.nextKeyValue());
+    viewInfoWritable = (ViewInfoTracker) phoenixMultiViewReader.getCurrentValue();
+    assertEquals(tenantId, viewInfoWritable.getTenantId());
+    assertEquals(viewName, viewInfoWritable.getViewName());
+    assertEquals(ttl, viewInfoWritable.getTTL());
+    assertEquals(true, viewInfoWritable.isIndexRelation());
 
-        assertFalse(phoenixMultiViewReader.nextKeyValue());
-        viewInfoWritable = (ViewInfoTracker)phoenixMultiViewReader.getCurrentValue();
-        assertNull(phoenixMultiViewReader.getCurrentValue());
-    }
+    assertFalse(phoenixMultiViewReader.nextKeyValue());
+    viewInfoWritable = (ViewInfoTracker) phoenixMultiViewReader.getCurrentValue();
+    assertNull(phoenixMultiViewReader.getCurrentValue());
+  }
 }
