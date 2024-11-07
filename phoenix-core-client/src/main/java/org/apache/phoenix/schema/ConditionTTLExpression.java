@@ -24,6 +24,7 @@ import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCOD
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import org.apache.hadoop.hbase.Cell;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.IndexStatementRewriter;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
@@ -47,7 +49,6 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
 
 public class ConditionTTLExpression extends TTLExpression {
@@ -119,6 +120,25 @@ public class ConditionTTLExpression extends TTLExpression {
         // Conditional TTL is not sent as a scan attribute
         // Masking is implemented using query re-write
         return null;
+    }
+
+    public ParseNode parseExpression(PhoenixConnection connection, PTable table) throws SQLException {
+        ParseNode ttlCondition = SQLParser.parseCondition(this.ttlExpr);
+        return table.getType() != PTableType.INDEX ? ttlCondition :
+                rewriteForIndex(connection, table, ttlCondition);
+    }
+
+    private ParseNode rewriteForIndex(PhoenixConnection connection,
+                                      PTable index,
+                                      ParseNode ttlCondition) throws SQLException {
+        for (Map.Entry<PTableKey, Long> entry : index.getAncestorLastDDLTimestampMap().entrySet()) {
+            PTableKey parentKey = entry.getKey();
+            PTable parent = connection.getTable(parentKey);
+            ColumnResolver parentResolver = FromCompiler.getResolver(new TableRef(parent));
+            return IndexStatementRewriter.translate(ttlCondition, parentResolver);
+        }
+        // TODO: Fix exception
+        throw new SQLException("Parent not found");
     }
 
     /**

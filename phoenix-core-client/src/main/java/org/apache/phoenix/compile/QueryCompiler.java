@@ -791,18 +791,22 @@ public class QueryCompiler {
         PTable table = tableRef.getTable();
 
         TTLExpression ttlExpr = table.getTTL();
-        // Query has already been re-written for the base table so no need to re-write again
-        // for index
-        if (ttlExpr instanceof ConditionTTLExpression && table.getType() != PTableType.INDEX) {
-            ParseNode ttlCondition = SQLParser.parseCondition(ttlExpr.getTTLExpression());
-            ParseNode negateTTL = NODE_FACTORY.not(ttlCondition);
-            ParseNode where = select.getWhere();
-            if (where == null) {
-                where = negateTTL;
-            } else {
-                where = NODE_FACTORY.and(Arrays.asList(where, negateTTL));
+        if (ttlExpr instanceof ConditionTTLExpression) {
+            ConditionTTLExpression condTTLExpr = (ConditionTTLExpression)ttlExpr;
+            //TODO comment
+            boolean rewrite = table.getType() != PTableType.INDEX || dataPlans.isEmpty();
+            if (rewrite) {
+                PhoenixConnection conn = this.statement.getConnection();
+                ParseNode ttlCondition = condTTLExpr.parseExpression(conn, table);
+                ParseNode negateTTL = NODE_FACTORY.not(ttlCondition);
+                ParseNode where = select.getWhere();
+                if (where == null) {
+                    where = negateTTL;
+                } else {
+                    where = NODE_FACTORY.and(Arrays.asList(where, negateTTL));
+                }
+                select = NODE_FACTORY.select(select, where);
             }
-            select = NODE_FACTORY.select(select, where);
         }
 
         if (table.getType() == PTableType.CDC) {
