@@ -164,7 +164,7 @@ public class CDCQueryIT extends CDCBaseIT {
     private void checkIndexPartitionIdCount(Connection conn, String cdcName) throws Exception {
         // Verify that we can use retrieve partition ids
         ResultSet rs = conn.createStatement().executeQuery("SELECT PARTITION_ID() FROM "
-                + cdcName);
+                + cdcName + " ORDER BY PARTITION_ID()");
         int saltBuckets = tableSaltBuckets == null ? 1 : tableSaltBuckets;
         String[] partitionId = new String[saltBuckets];
         int[] countPerPartition = new int[saltBuckets];

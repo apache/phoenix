@@ -163,10 +163,12 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             TimeRange timeRange = scan.getTimeRange();
             scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
         }
-        byte[] cdcScan = scan.getAttribute(CDC_DATA_TABLE_DEF);
-        if (cdcScan != null) {
-            CDCUtil.setupScanForCDC(scan);
-            ScanUtil.adjustScanFilterForGlobalIndexRegionScanner(scan);
+        if (!scan.isRaw()) {
+            byte[] cdcScan = scan.getAttribute(CDC_DATA_TABLE_DEF);
+            if (cdcScan != null) {
+                CDCUtil.setupScanForCDC(scan);
+                ScanUtil.adjustScanFilterForGlobalIndexRegionScanner(scan);
+            }
         }
         if (isRegionObserverFor(scan)) {
             // For local indexes, we need to throw if out of region as we'll get inconsistent

@@ -283,9 +283,10 @@ public class QueryOptimizer {
             plans.add(dataPlan);
             hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes,
                     targetColumns, parallelIteratorFactory, plans);
-            if (hintedPlan != null ) {
+            if (hintedPlan != null) {
                 PTable index = hintedPlan.getTableRef().getTable();
-                // Ignore any index hint with a CDC index
+                // Ignore any index hint with a CDC index as it is a truncated index, it only
+                // includes index rows that changed within the max lookback window
                 if (!CDCUtil.isCDCIndex(index)) {
                     if (stopAtBestPlan && hintedPlan.isApplicable() && (
                             index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan,

@@ -388,8 +388,7 @@ public class IndexUtil {
                         regionStartKey = tableRegionLocation.getRegion().getStartKey();
                         regionEndkey = tableRegionLocation.getRegion().getEndKey();
                     }
-                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr,
-                            ts, regionStartKey, regionEndkey, false, null));
+                    indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts, regionStartKey, regionEndkey, false));
                 }
             }
             return indexMutations;

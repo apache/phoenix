@@ -29,8 +29,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import java.util.List;
 
 /**
- * Function to return the partition id which is the encoded data table region name. This function
- * is used only with CDC Indexes
+ * Function to return the partition id which is the encoded data table region name as the prefix
+ * of the CDC index row key. This function is used only with CDC Indexes
  */
 @BuiltInFunction(name = PartitionIdFunction.NAME,
         nodeClass= PartitionIdParseNode.class,
@@ -70,7 +70,6 @@ public class PartitionIdFunction extends ScalarFunction {
      */
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
-
         if (tuple == null) {
             return false;
         }
@@ -78,6 +77,7 @@ public class PartitionIdFunction extends ScalarFunction {
         if (ptr.getLength() < PARTITION_ID_LENGTH) {
             return false;
         }
+        // The partition id of a row is always the prefix of the row key
         ptr.set(ptr.get(), 0, PARTITION_ID_LENGTH);
         return true;
     }

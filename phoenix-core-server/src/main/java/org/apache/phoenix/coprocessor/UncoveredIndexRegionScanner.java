@@ -300,30 +300,32 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             put.add(cell);
         }
         if (indexMaintainer.isCDCIndex()) {
-            if (indexMaintainer.checkIndexRow(indexRowKey, dataRow.getRow(), put, viewConstants)
-                    && IndexUtil.getMaxTimestamp(put) == indexTimestamp) {
+            // A CDC index row key is PARTITION_ID() + PHOENIX_ROW_TIMESTAMP() + data row key. The
+            // only necessary check is the row timestamp check since the data row key is extracted
+            // from the index row key and PARTITION_ID() changes during region splits and merges
+            if (IndexUtil.getMaxTimestamp(put) == indexTimestamp) {
                 return true;
             }
-        } else {
-            if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
-                if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
-                    Mutation[] mutations;
-                    Put indexPut = new Put(indexRowKey);
-                    indexPut.addColumn(emptyCF, emptyCQ, indexTimestamp, QueryConstants.VERIFIED_BYTES);
-                    if ((EnvironmentEdgeManager.currentTimeMillis() - indexTimestamp) > ageThreshold) {
-                        Delete indexDelete = indexMaintainer.buildRowDeleteMutation(indexRowKey,
-                                IndexMaintainer.DeleteType.SINGLE_VERSION, indexTimestamp);
-                        mutations = new Mutation[]{indexPut, indexDelete};
-                    } else {
-                        mutations = new Mutation[]{indexPut};
-                    }
-                    region.batchMutate(mutations);
+        } else if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
+            if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
+                Mutation[] mutations;
+                Put indexPut = new Put(indexRowKey);
+                indexPut.addColumn(emptyCF, emptyCQ, indexTimestamp, QueryConstants.VERIFIED_BYTES);
+                if ((EnvironmentEdgeManager.currentTimeMillis() - indexTimestamp) > ageThreshold) {
+                    Delete indexDelete = indexMaintainer.buildRowDeleteMutation(indexRowKey,
+                            IndexMaintainer.DeleteType.SINGLE_VERSION, indexTimestamp);
+                    mutations = new Mutation[]{indexPut, indexDelete};
+                } else {
+                    mutations = new Mutation[]{indexPut};
                 }
-                return true;
+                region.batchMutate(mutations);
             }
+            return true;
         }
+        // This is not a valid index row
         if (indexMaintainer.isAgedEnough(IndexUtil.getMaxTimestamp(put), ageThreshold)) {
-            region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put), false));
+            region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put),
+                    false));
         }
         return false;
     }

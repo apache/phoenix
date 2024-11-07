@@ -1102,7 +1102,7 @@ public class IndexTool extends Configured implements Tool {
                 rs.getCurrentRow().getKey(dataRowKeyPtr);
                 // regionStart/EndKey only needed for local indexes, so we pass null
                 byte[] indexRowKey = maintainer.buildRowKey(getter, dataRowKeyPtr, null, null,
-                        rs.getCurrentRow().getValue(0).getTimestamp(), null);
+                        rs.getCurrentRow().getValue(0).getTimestamp());
                 histo.addValue(indexRowKey);
             }
             List<Bucket> buckets = histo.computeBuckets();

@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.index;
 
-import static org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 
 import java.io.ByteArrayInputStream;
@@ -44,6 +43,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -710,6 +710,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
 
     public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+            byte[] regionStartKey, byte[] regionEndKey, long ts)  {
+        return buildRowKey(valueGetter, rowKeyPtr, regionStartKey, regionEndKey, ts, null);
+    }
+    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
             byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName)  {
         if (isCDCIndex && encodedRegionName == null) {
             throw new IllegalArgumentException("Encoded region name is required for a CDC index");
@@ -793,6 +797,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 	dataSortOrder = expression.getSortOrder();
                     isNullable = expression.isNullable();
                     if (expression instanceof PartitionIdFunction) {
+                        if (i != 0) {
+                            throw new DoNotRetryIOException("PARTITION_ID() has to be the prefix "
+                            + "of the index row key!");
+                        } else if (!isCDCIndex) {
+                            throw new DoNotRetryIOException("PARTITION_ID() should be used only for"
+                                    + " CDC Indexes!");
+                        }
                         ptr.set(encodedRegionName);
                     } else {
                         expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
@@ -1013,7 +1024,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     public  byte[] getIndexRowKey(final Put dataRow) {
         ValueGetter valueGetter = new IndexUtil.SimpleValueGetter(dataRow);
         return buildRowKey(valueGetter, new ImmutableBytesWritable(dataRow.getRow()),
-                null, null, IndexUtil.getMaxTimestamp(dataRow), null);
+                null, null, IndexUtil.getMaxTimestamp(dataRow));
     }
     public boolean checkIndexRow(final byte[] indexRowKey, final Put dataRow) {
         if (!shouldPrepareIndexMutations(dataRow)) {
@@ -1247,6 +1258,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return indexRowKeySchema;
     }
 
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+            ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey,
+            byte[] regionEndKey, boolean verified) throws IOException {
+        return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
+                regionEndKey, verified, null);
+    }
     public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
             ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey,
             byte[] regionEndKey, boolean verified, byte[] encodedRegionName) throws IOException {
@@ -1559,7 +1576,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<Cell>emptyList(),
                 ts, null, null, encodedRegionName);
     }
-    
+
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState,
+            ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts,
+            byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+        return buildDeleteMutation(kvBuilder, oldState, dataRowKeyPtr, pendingUpdates, ts,
+                regionStartKey,regionEndKey, null);
+    }
     public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState,
             ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts,
             byte[] regionStartKey, byte[] regionEndKey, byte[] encodedRegionName) throws IOException {
