@@ -43,7 +43,7 @@ import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 
-public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
+public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
 
     private static void assertConditonTTL(Connection conn, String tableName, String ttlExpr) throws SQLException {
         TTLExpression expected = new ConditionTTLExpression(ttlExpr);

@@ -27,10 +27,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Date;
 import java.util.Properties;
 
-import org.apache.hadoop.hbase.KeepDeletedCells;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -38,13 +36,12 @@ import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledIT.class)
-public class ConditionalTTLExpressionIT extends ParallelStatsDisabledIT {
+public class ConditionTTLExpressionIT extends ParallelStatsDisabledIT {
 
     ManualEnvironmentEdge injectEdge;
 
