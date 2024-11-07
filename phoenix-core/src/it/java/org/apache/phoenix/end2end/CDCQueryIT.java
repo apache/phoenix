@@ -18,7 +18,11 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.iterate.RowKeyOrderedAggregateResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -137,6 +141,26 @@ public class CDCQueryIT extends CDCBaseIT {
         assertFalse(explainPlan.contains(cdcName));
     }
 
+    private boolean isDistinctPrefixFilterIncludedInFilterList(FilterList filterList) {
+        for (Filter filter : filterList.getFilters()) {
+            if (filter instanceof DistinctPrefixFilter) {
+                return true;
+            } else if (filter instanceof FilterList) {
+                return isDistinctPrefixFilterIncludedInFilterList((FilterList) filter);
+            }
+        }
+        return false;
+    }
+    private boolean isDistinctPrefixFilterIncluded(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null && filter instanceof DistinctPrefixFilter) {
+            return true;
+        } else if (filter instanceof FilterList) {
+                return isDistinctPrefixFilterIncludedInFilterList((FilterList) filter);
+        }
+        return false;
+    }
+
     private void checkIndexPartitionIdCount(Connection conn, String cdcName) throws Exception {
         // Verify that we can use retrieve partition ids
         ResultSet rs = conn.createStatement().executeQuery("SELECT PARTITION_ID() FROM "
@@ -161,13 +185,35 @@ public class CDCQueryIT extends CDCBaseIT {
         // it equals to the number of salt buckets
         assertEquals(saltBuckets, partitionIndex + 1);
 
+        rs = conn.createStatement().executeQuery("SELECT DISTINCT PARTITION_ID() FROM "
+                + cdcName);
+        assertTrue(rs.next());
+        partitionIndex = 0;
+        partitionId[partitionIndex] = rs.getString(1);
+        int rowCount = 1;
+        while (rs.next()) {
+            if (!partitionId[partitionIndex].equals(rs.getString(1))) {
+                partitionIndex++;
+                partitionId[partitionIndex] = rs.getString(1);
+                LOGGER.info("PARTITION_ID["+ partitionIndex + "] = " + partitionId[partitionIndex]);
+            }
+            rowCount++;
+        }
+        // Verify that the number of partitions equals to the number of table regions. In this case,
+        // it equals to the number of salt buckets
+        assertEquals(saltBuckets, partitionIndex + 1);
+        // Verified that we only got distinct partition ids
+        assertEquals(saltBuckets, rowCount);
+        //Verify that DistinctPrefixFilter is used to efficiently retrieve partition ids
+        assertTrue(isDistinctPrefixFilterIncluded(((PhoenixResultSet) rs).getContext().getScan()));
+
         // Verify that we can access data table mutations by partition id
         PreparedStatement statement = conn.prepareStatement(
                 getCDCQuery(cdcName, saltBuckets, partitionId));
         statement.setTimestamp(1, new Timestamp(1000));
         statement.setTimestamp(2,  new Timestamp(System.currentTimeMillis()));
         rs = statement.executeQuery();
-        int rowCount = 0;
+        rowCount = 0;
         while(rs.next()) {
             rowCount++;
             String id = rs.getString(1);
