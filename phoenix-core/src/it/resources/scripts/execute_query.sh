@@ -32,11 +32,17 @@ if [ -n $maven_home ]; then
    export PATH=$maven_home/bin:$PATH
 fi
 
+java -Djava.security.manager=allow -version &> /dev/null || error_code=$?
+if [ -z ${error_code+x} ]; then
+  security_manager='-Djava.security.manager=allow'
+fi
+
 mvn -B dependency:get -Dartifact=${client_group_id}:${client_artifact_id}:${client_version}
 mvn -B dependency:copy -Dartifact=${client_group_id}:${client_artifact_id}:${client_version} \
 -DoutputDirectory=$tmp_dir
 
 phoenix_client_jar=$tmp_dir/${client_artifact_id}-${client_version}.jar
-java -cp ".:$phoenix_client_jar" sqlline.SqlLine -d org.apache.phoenix.jdbc.PhoenixDriver \
--u jdbc:phoenix:$zk_url -n none -p none --color=false --fastConnect=true --outputformat=csv \
+java -cp ".:$phoenix_client_jar" $security_manager sqlline.SqlLine \
+-d org.apache.phoenix.jdbc.PhoenixDriver -u jdbc:phoenix:$zk_url -n none -p none \
+--color=false --fastConnect=true --outputformat=csv \
 --silent=true --verbose=false --isolation=TRANSACTION_READ_COMMITTED --run=$sqlfile &> $resultfile

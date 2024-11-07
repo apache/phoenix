@@ -495,6 +495,10 @@ public class MutationState implements SQLCloseable {
         return this.result;
     }
 
+    public void clearResult() {
+        this.result = null;
+    }
+
     private MultiRowMutationState getLastMutationBatch(Map<TableRef, List<MultiRowMutationState>> mutations, TableRef tableRef) {
         List<MultiRowMutationState> mutationBatches = mutations.get(tableRef);
         if (mutationBatches == null || mutationBatches.isEmpty()) {
@@ -839,6 +843,14 @@ public class MutationState implements SQLCloseable {
                     // Set the source of operation attribute.
                     for (Mutation mutation: rowMutations) {
                         mutation.setAttribute(SOURCE_OPERATION_ATTRIB, sourceOfDeleteBytes);
+                    }
+                }
+                if (this.returnResult != null) {
+                    if (this.returnResult == ReturnResult.ROW) {
+                        for (Mutation mutation : rowMutations) {
+                            mutation.setAttribute(PhoenixIndexBuilderHelper.RETURN_RESULT,
+                                    PhoenixIndexBuilderHelper.RETURN_RESULT_ROW);
+                        }
                     }
                 }
                 // The DeleteCompiler already generates the deletes for indexes, so no need to do it again

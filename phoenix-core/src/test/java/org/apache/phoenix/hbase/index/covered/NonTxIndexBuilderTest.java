@@ -46,6 +46,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
@@ -172,6 +173,10 @@ public class NonTxIndexBuilderTest extends BaseConnectionlessQueryTest {
                     }
                 }
                 return false; // indicate no more results
+            }
+
+            public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+                return next(result);
             }
         };
     }
