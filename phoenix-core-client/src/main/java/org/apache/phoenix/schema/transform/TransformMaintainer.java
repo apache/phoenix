@@ -468,7 +468,8 @@ public class TransformMaintainer extends IndexMaintainer {
     // Builds new table's rowkey using the old table's rowkey.
     // This method will change when we support rowkey related transforms
     @Override
-    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey, long ts)  {
+    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+            byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName)  {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean isNewTableSalted = nNewTableSaltBuckets > 0;
 
