@@ -1985,12 +1985,6 @@ public class MetaDataClient {
         List<String> indexProps = new ArrayList<>();
         // We do not want to replicate CDC indexes
         indexProps.add("REPLICATION_SCOPE=0");
-        if (dataTable.getType() != VIEW) {
-            // CDC indexes ignore the TTL value and do not keep the rows beyond the max lookback
-            // window. To simplify the TTL code, we just set the TTL value to forever for non-view
-            // CDC indexes
-            indexProps.add("PHOENIX_TTL=" + Long.MAX_VALUE);
-        }
         if (TableProperty.SALT_BUCKETS.getValue(tableProps) != null) {
             throw new SQLExceptionInfo.Builder(SALTING_NOT_ALLOWED_FOR_CDC).setTableName(
                     statement.getCdcObjName().getName()).build().buildException();
