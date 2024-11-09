@@ -672,10 +672,10 @@ public interface QueryConstants {
             PARTITION_ID + " VARCHAR NOT NULL," +
             // Non-PK columns
             PARENT_PARTITION_ID + " VARCHAR," +
-            PARTITION_START_TIME + " VARCHAR," +
-            PARTITION_END_TIME + " VARCHAR," +
-            PARTITION_START_KEY + " VARCHAR," +
-            PARTITION_END_KEY + " VARCHAR,\n" +
+            PARTITION_START_TIME + " BIGINT," +
+            PARTITION_END_TIME + " BIGINT," +
+            PARTITION_START_KEY + " VARBINARY_ENCODED," +
+            PARTITION_END_KEY + " VARBINARY_ENCODED,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
             TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "))\n" +
             HConstants.VERSIONS + "=%s,\n" +
