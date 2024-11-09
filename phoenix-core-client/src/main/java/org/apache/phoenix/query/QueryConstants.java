@@ -105,6 +105,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OLD_METADATA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_PARTITION_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_START_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_START_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
@@ -134,8 +140,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.START_WITH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STORE_NULLS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAM_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAM_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
@@ -640,4 +650,33 @@ public interface QueryConstants {
             + SYSTEM_TASK_SPLIT_POLICY_CLASSNAME + "',\n" +
             TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" +
             STORE_NULLS + "=" + Boolean.TRUE;
+
+    String CREATE_CDC_STREAM_STATUS_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+            SYSTEM_CDC_STREAM_STATUS_TABLE + "\"(\n" +
+            // PK columns
+            TABLE_NAME + " VARCHAR NOT NULL," +
+            STREAM_STATUS + " VARCHAR NOT NULL," +
+            STREAM_NAME + " VARCHAR,\n" +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+            TABLE_NAME + "," + STREAM_STATUS + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+            TRANSACTIONAL + "=" + Boolean.FALSE;
+
+    String CREATE_CDC_STREAM_METADATA = "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" +
+            SYSTEM_CDC_STREAM_TABLE + "\"(\n" +
+            // PK columns
+            TABLE_NAME + " VARCHAR NOT NULL," +
+            STREAM_NAME + " VARCHAR NOT NULL," +
+            PARTITION_ID + " VARCHAR NOT NULL," +
+            PARENT_PARTITION_ID + " VARCHAR," +
+            PARTITION_START_TIME + " VARCHAR," +
+            PARTITION_END_TIME + " VARCHAR," +
+            PARTITION_START_KEY + " VARCHAR," +
+            PARTITION_END_KEY + " VARCHAR,\n" +
+            "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
+            TABLE_NAME + "," + STREAM_NAME + "," + PARTITION_ID + "))\n" +
+            HConstants.VERSIONS + "=%s,\n" +
+            ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" +
+            TRANSACTIONAL + "=" + Boolean.FALSE;
 }

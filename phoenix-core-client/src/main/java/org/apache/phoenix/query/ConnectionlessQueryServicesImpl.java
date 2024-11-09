@@ -208,6 +208,14 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
         return setSystemDDLProperties(QueryConstants.CREATE_TRANSFORM_METADATA);
     }
 
+    protected String getCDCStreamStatusDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_STATUS_METADATA);
+    }
+
+    protected String getCDCStreamDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -472,6 +480,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices imple
                             .executeUpdate(getTransformDDL());
                 } catch (NewerTableAlreadyExistsException ignore) {
                 }
+                try {
+                    metaConnection.createStatement().executeUpdate(getCDCStreamStatusDDL());
+                } catch (TableAlreadyExistsException ignore) {}
+                try {
+                    metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+                } catch (TableAlreadyExistsException ignore) {}
             } catch (SQLException e) {
                 sqlE = e;
             } finally {
