@@ -656,6 +656,7 @@ public interface QueryConstants {
             // PK columns
             TABLE_NAME + " VARCHAR NOT NULL," +
             STREAM_STATUS + " VARCHAR NOT NULL," +
+            // Non-PK columns
             STREAM_NAME + " VARCHAR,\n" +
             "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" +
             TABLE_NAME + "," + STREAM_STATUS + "))\n" +
@@ -669,6 +670,7 @@ public interface QueryConstants {
             TABLE_NAME + " VARCHAR NOT NULL," +
             STREAM_NAME + " VARCHAR NOT NULL," +
             PARTITION_ID + " VARCHAR NOT NULL," +
+            // Non-PK columns
             PARENT_PARTITION_ID + " VARCHAR," +
             PARTITION_START_TIME + " VARCHAR," +
             PARTITION_END_TIME + " VARCHAR," +
