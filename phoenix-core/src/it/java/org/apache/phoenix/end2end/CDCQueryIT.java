@@ -18,8 +18,15 @@
 package org.apache.phoenix.end2end;
 
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
+import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.RowKeyOrderedAggregateResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
@@ -41,11 +48,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,31 +93,29 @@ public class CDCQueryIT extends CDCBaseIT {
     private final boolean forView;
     private final PTable.QualifierEncodingScheme encodingScheme;
     private final boolean multitenant;
-    private final Integer indexSaltBuckets;
     private final Integer tableSaltBuckets;
     private final boolean withSchemaName;
 
     public CDCQueryIT(Boolean forView,
                       PTable.QualifierEncodingScheme encodingScheme, boolean multitenant,
-                      Integer indexSaltBuckets, Integer tableSaltBuckets, boolean withSchemaName) {
+                      Integer tableSaltBuckets, boolean withSchemaName) {
         this.forView = forView;
         this.encodingScheme = encodingScheme;
         this.multitenant = multitenant;
-        this.indexSaltBuckets = indexSaltBuckets;
         this.tableSaltBuckets = tableSaltBuckets;
         this.withSchemaName = withSchemaName;
     }
 
     @Parameterized.Parameters(name = "forView={0}, encodingScheme={1}, " +
-            "multitenant={2}, indexSaltBuckets={3}, tableSaltBuckets={4} withSchemaName={5}")
+            "multitenant={2}, tableSaltBuckets={3}, withSchemaName={4}")
     public static synchronized Collection<Object[]> data() {
         return Arrays.asList(new Object[][] {
-                { Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null, Boolean.FALSE },
-                { Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null, Boolean.TRUE },
-                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, null, 4, Boolean.FALSE },
-                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 1, 2, Boolean.TRUE },
-                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, null, Boolean.FALSE },
-                { Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, null, Boolean.FALSE },
+                { Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, Boolean.FALSE },
+                { Boolean.FALSE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, Boolean.TRUE },
+                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, 4, Boolean.FALSE },
+                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.TRUE, 2, Boolean.TRUE },
+                { Boolean.FALSE, NON_ENCODED_QUALIFIERS, Boolean.FALSE, null, Boolean.FALSE },
+                { Boolean.TRUE, TWO_BYTE_QUALIFIERS, Boolean.FALSE, null, Boolean.FALSE },
         });
     }
 
@@ -135,6 +140,117 @@ public class CDCQueryIT extends CDCBaseIT {
         String explainPlan = QueryUtil.getExplainPlan(rs);
         assertFalse(explainPlan.contains(cdcName));
     }
+
+    private boolean isDistinctPrefixFilterIncludedInFilterList(FilterList filterList) {
+        for (Filter filter : filterList.getFilters()) {
+            if (filter instanceof DistinctPrefixFilter) {
+                return true;
+            } else if (filter instanceof FilterList) {
+                return isDistinctPrefixFilterIncludedInFilterList((FilterList) filter);
+            }
+        }
+        return false;
+    }
+    private boolean isDistinctPrefixFilterIncluded(Scan scan) {
+        Filter filter = scan.getFilter();
+        if (filter != null && filter instanceof DistinctPrefixFilter) {
+            return true;
+        } else if (filter instanceof FilterList) {
+                return isDistinctPrefixFilterIncludedInFilterList((FilterList) filter);
+        }
+        return false;
+    }
+
+    private void checkIndexPartitionIdCount(Connection conn, String cdcName) throws Exception {
+        // Verify that we can use retrieve partition ids
+        ResultSet rs = conn.createStatement().executeQuery("SELECT PARTITION_ID() FROM "
+                + cdcName + " ORDER BY PARTITION_ID()");
+        int saltBuckets = tableSaltBuckets == null ? 1 : tableSaltBuckets;
+        String[] partitionId = new String[saltBuckets];
+        int[] countPerPartition = new int[saltBuckets];
+        int partitionIndex = 0;
+        assertTrue(rs.next());
+        partitionId[partitionIndex] = rs.getString(1);
+        countPerPartition[partitionIndex]++;
+        LOGGER.info("PARTITION_ID["+ partitionIndex + "] = " + partitionId[partitionIndex]);
+        while (rs.next()) {
+            if (!partitionId[partitionIndex].equals(rs.getString(1))) {
+                partitionIndex++;
+                partitionId[partitionIndex] = rs.getString(1);
+                LOGGER.info("PARTITION_ID["+ partitionIndex + "] = " + partitionId[partitionIndex]);
+            }
+            countPerPartition[partitionIndex]++;
+        }
+        // Verify that the number of partitions equals to the number of table regions. In this case,
+        // it equals to the number of salt buckets
+        assertEquals(saltBuckets, partitionIndex + 1);
+
+        rs = conn.createStatement().executeQuery("SELECT DISTINCT PARTITION_ID() FROM "
+                + cdcName);
+        assertTrue(rs.next());
+        partitionIndex = 0;
+        partitionId[partitionIndex] = rs.getString(1);
+        int rowCount = 1;
+        while (rs.next()) {
+            if (!partitionId[partitionIndex].equals(rs.getString(1))) {
+                partitionIndex++;
+                partitionId[partitionIndex] = rs.getString(1);
+                LOGGER.info("PARTITION_ID["+ partitionIndex + "] = " + partitionId[partitionIndex]);
+            }
+            rowCount++;
+        }
+        // Verify that the number of partitions equals to the number of table regions. In this case,
+        // it equals to the number of salt buckets
+        assertEquals(saltBuckets, partitionIndex + 1);
+        // Verified that we only got distinct partition ids
+        assertEquals(saltBuckets, rowCount);
+        //Verify that DistinctPrefixFilter is used to efficiently retrieve partition ids
+        assertTrue(isDistinctPrefixFilterIncluded(((PhoenixResultSet) rs).getContext().getScan()));
+
+        // Verify that we can access data table mutations by partition id
+        PreparedStatement statement = conn.prepareStatement(
+                getCDCQuery(cdcName, saltBuckets, partitionId));
+        statement.setTimestamp(1, new Timestamp(1000));
+        statement.setTimestamp(2,  new Timestamp(System.currentTimeMillis()));
+        rs = statement.executeQuery();
+        rowCount = 0;
+        while(rs.next()) {
+            rowCount++;
+            String id = rs.getString(1);
+            int count = rs.getInt(2);
+            boolean found = false;
+            for (int i = 0; i < saltBuckets; i++) {
+                if (partitionId[i].equals(id) && count == countPerPartition[i]) {
+                    found = true;
+                    break;
+                }
+            }
+            assertTrue(found);
+        }
+        // Verify that partition id based queries are row key prefix queries
+        ResultIterator resultIterator = ((PhoenixResultSet) rs).getUnderlyingIterator();
+        assertTrue(resultIterator instanceof RowKeyOrderedAggregateResultIterator);
+        assertEquals(saltBuckets, rowCount);
+    }
+
+    private static String getCDCQuery(String cdcName, int saltBuckets,
+            String[] partitionId) {
+        StringBuilder query = new StringBuilder("SELECT PARTITION_ID(), Count(*) from ");
+        query.append(cdcName);
+        query.append(" WHERE PARTITION_ID() IN (");
+        for (int i = 0; i < saltBuckets - 1; i++) {
+            query.append("'");
+            query.append(partitionId[i]);
+            query.append("',");
+        }
+        query.append("'");
+        query.append(partitionId[saltBuckets - 1]);
+        query.append("')");
+        query.append(" AND PHOENIX_ROW_TIMESTAMP() >= ? AND PHOENIX_ROW_TIMESTAMP() < ?");
+        query.append(" Group By PARTITION_ID()");
+        return query.toString();
+    }
+
     @Test
     public void testSelectCDC() throws Exception {
         String cdcName, cdc_sql;
@@ -155,8 +271,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDC(conn, cdc_sql, encodingScheme,
-                        indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -177,16 +292,28 @@ public class CDCQueryIT extends CDCBaseIT {
                     "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
                             "\"CDC JSON\" FROM " + cdcFullName);
 
-            // Existence of CDC shouldn't cause the regular query path to fail.
+            // Existence of an CDC index hint shouldn't cause the regular query path to fail.
+            // Run the same query with a CDC index hit and without it and make sure we get the same
+            // result from both
             String uncovered_sql = "SELECT " + " /*+ INDEX(" + tableName + " " +
                     CDCUtil.getCDCIndexName(cdcName) + ") */ k, v1 FROM " + tableName;
             try (ResultSet rs = conn.createStatement().executeQuery(uncovered_sql)) {
                 assertTrue(rs.next());
+                assertEquals(2, rs.getInt(1));
+                assertEquals(201, rs.getInt(2));
+                assertTrue(rs.next());
                 assertEquals(3, rs.getInt(1));
                 assertEquals(300, rs.getInt(2));
+                assertFalse(rs.next());
+            }
+            uncovered_sql = "SELECT " + "  k, v1 FROM " + tableName;
+            try (ResultSet rs = conn.createStatement().executeQuery(uncovered_sql)) {
                 assertTrue(rs.next());
                 assertEquals(2, rs.getInt(1));
                 assertEquals(201, rs.getInt(2));
+                assertTrue(rs.next());
+                assertEquals(3, rs.getInt(1));
+                assertEquals(300, rs.getInt(2));
                 assertFalse(rs.next());
             }
 
@@ -210,19 +337,18 @@ public class CDCQueryIT extends CDCBaseIT {
                     datatableName, dataColumns, changes, new HashSet<>());
 
             HashMap<String, int[]> testQueries = new HashMap<String, int[]>() {{
-                put("SELECT 'dummy', k, \"CDC JSON\" FROM " + cdcFullName,
+                put("SELECT 'dummy', k, \"CDC JSON\" FROM " + cdcFullName
+                        + " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC, K ASC",
                         new int[]{1, 2, 3, 1, 1, 1, 1, 2, 1, 1, 1, 1});
-                put("SELECT PHOENIX_ROW_TIMESTAMP(), k, \"CDC JSON\" FROM " + cdcFullName +
-                        " ORDER BY k ASC", new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3});
-                put("SELECT PHOENIX_ROW_TIMESTAMP(), k, \"CDC JSON\" FROM " + cdcFullName +
-                        " ORDER BY k DESC", new int[]{3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
-                put("SELECT PHOENIX_ROW_TIMESTAMP(), k, \"CDC JSON\" FROM " + cdcFullName +
-                        " ORDER BY PHOENIX_ROW_TIMESTAMP() DESC",
-                        new int[]{1, 1, 1, 1, 2, 1, 1, 1, 1, 3, 2, 1});
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k, \"CDC JSON\" FROM " + cdcFullName
+                        + " ORDER BY k ASC", new int[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 3});
+                put("SELECT PHOENIX_ROW_TIMESTAMP(), k, \"CDC JSON\" FROM " + cdcFullName
+                        + " ORDER BY k DESC", new int[]{3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1});
             }};
             Map<String, String> dummyChange = new HashMap() {{
                 put(CDC_EVENT_TYPE, "dummy");
             }};
+
             for (Map.Entry<String, int[]> testQuery : testQueries.entrySet()) {
                 try (ResultSet rs = conn.createStatement().executeQuery(testQuery.getKey())) {
                     for (int i = 0; i < testQuery.getValue().length; ++i) {
@@ -278,7 +404,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -290,7 +416,7 @@ public class CDCQueryIT extends CDCBaseIT {
         long startTS = System.currentTimeMillis();
         Map<String, List<Set<ChangeRow>>> allBatches = new HashMap<>(tenantids.length);
         for (String tid: tenantids) {
-            allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 20, 5));
+            allBatches.put(tid, generateMutations(tenantId, startTS, pkColumns, dataColumns, 20, 5));
             applyMutations(COMMIT_SUCCESS, schemaName, tableName, datatableName, tid,
                     allBatches.get(tid), cdcName);
         }
@@ -318,6 +444,7 @@ public class CDCQueryIT extends CDCBaseIT {
                             "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName),
                     datatableName, dataColumns, changes, ALL_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
+            checkIndexPartitionIdCount(conn, cdcFullName);
         }
     }
 
@@ -342,7 +469,7 @@ public class CDCQueryIT extends CDCBaseIT {
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
 
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
         }
 
         String tenantId = multitenant ? "1000" : null;
@@ -368,13 +495,16 @@ public class CDCQueryIT extends CDCBaseIT {
                     "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," +
                             "\"CDC JSON\" FROM " + cdcFullName);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName),
+                    "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName
+                            + " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC"),
                     datatableName, dataColumns, changes, PRE_POST_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
-                            "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName),
+                    "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + cdcFullName
+                            + " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC"),
                     datatableName, dataColumns, changes, CHANGE_IMG);
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery("SELECT /*+ CDC_INCLUDE(CHANGE) */ " +
-                            "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName),
+                            "PHOENIX_ROW_TIMESTAMP(), K, \"CDC JSON\" FROM " + cdcFullName
+                            + " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC"),
                     datatableName, dataColumns, changes, CHANGE_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
@@ -413,7 +543,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName + " INCLUDE (change)";
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName,cdcName);
         }
 
@@ -426,7 +556,7 @@ public class CDCQueryIT extends CDCBaseIT {
         long startTS = System.currentTimeMillis();
         Map<String, List<Set<ChangeRow>>> allBatches = new HashMap<>(tenantids.length);
         for (String tid: tenantids) {
-            allBatches.put(tid, generateMutations(startTS, pkColumns, dataColumns, 20, 5));
+            allBatches.put(tid, generateMutations(tenantId, startTS, pkColumns, dataColumns, 20, 5));
             applyMutations(COMMIT_SUCCESS, schemaName, tableName, datatableName, tid,
                     allBatches.get(tid), cdcName);
         }
@@ -489,7 +619,7 @@ public class CDCQueryIT extends CDCBaseIT {
 
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
             conn.createStatement().execute("ALTER TABLE " + datatableName + " DROP COLUMN v0");
         }
 
@@ -514,7 +644,7 @@ public class CDCQueryIT extends CDCBaseIT {
         try (Connection conn = newConnection(tenantId)) {
             verifyChangesViaSCN(tenantId, conn.createStatement().executeQuery(
                             "SELECT /*+ CDC_INCLUDE(CHANGE) */ * FROM " + SchemaUtil.getTableName(
-                                    schemaName, cdcName)),
+                                    schemaName, cdcName) + " ORDER BY PHOENIX_ROW_TIMESTAMP() ASC"),
                     datatableName, dataColumns, changes, CHANGE_IMG);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
@@ -540,7 +670,7 @@ public class CDCQueryIT extends CDCBaseIT {
             }
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
             cdcIndexShouldNotBeUsedForDataTableQueries(conn, tableName, cdcName);
         }
 
@@ -603,7 +733,7 @@ public class CDCQueryIT extends CDCBaseIT {
             // Create a CDC table
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableFullName;
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
             // Check CDC index is active but empty
             String indexTableFullName = SchemaUtil.getTableName(schemaName,
                     CDCUtil.getCDCIndexName(cdcName));
@@ -677,7 +807,7 @@ public class CDCQueryIT extends CDCBaseIT {
             // Create a CDC table
             cdcName = generateUniqueName();
             cdc_sql = "CREATE CDC " + cdcName + " ON " + tableFullName;
-            createCDC(conn, cdc_sql, encodingScheme, indexSaltBuckets);
+            createCDC(conn, cdc_sql, encodingScheme);
             // Add rows
             long startTS = System.currentTimeMillis();
             List<ChangeRow> changes = generateChanges(startTS, tenantids, tableFullName,

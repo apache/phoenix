@@ -54,6 +54,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.NonAggregateRegionScannerFactory;
 import org.apache.phoenix.iterate.RegionScannerFactory;
@@ -62,6 +63,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.StaleRegionBoundaryCacheException;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -70,6 +72,7 @@ import org.apache.phoenix.schema.PTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.CDC_DATA_TABLE_DEF;
 import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 abstract public class BaseScannerRegionObserver implements RegionObserver {
@@ -159,6 +162,13 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         if (txnScn!=null) {
             TimeRange timeRange = scan.getTimeRange();
             scan.setTimeRange(timeRange.getMin(), Bytes.toLong(txnScn));
+        }
+        if (!scan.isRaw()) {
+            byte[] cdcScan = scan.getAttribute(CDC_DATA_TABLE_DEF);
+            if (cdcScan != null) {
+                CDCUtil.setupScanForCDC(scan);
+                ScanUtil.adjustScanFilterForGlobalIndexRegionScanner(scan);
+            }
         }
         if (isRegionObserverFor(scan)) {
             // For local indexes, we need to throw if out of region as we'll get inconsistent

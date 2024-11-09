@@ -286,11 +286,16 @@ public class QueryOptimizer {
                     targetColumns, parallelIteratorFactory, plans);
             if (hintedPlan != null) {
                 PTable index = hintedPlan.getTableRef().getTable();
-                if (stopAtBestPlan && hintedPlan.isApplicable() && (index.getIndexWhere() == null
-                        || isPartialIndexUsable(select, dataPlan, index))) {
-                    return Collections.singletonList(hintedPlan);
+                // Ignore any index hint with a CDC index as it is a truncated index, it only
+                // includes index rows that changed within the max lookback window
+                if (!CDCUtil.isCDCIndex(index)) {
+                    if (stopAtBestPlan && hintedPlan.isApplicable() && (
+                            index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan,
+                                    index))) {
+                        return Collections.singletonList(hintedPlan);
+                    }
+                    plans.add(0, hintedPlan);
                 }
-                plans.add(0, hintedPlan);
             }
         }
         

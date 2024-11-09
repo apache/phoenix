@@ -56,6 +56,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SALT_BUCKETS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 
 
@@ -379,6 +380,8 @@ public enum SQLExceptionCode {
             + " property is already defined in hierarchy for this entity"),
     VIEW_TTL_NOT_ENABLED(10961,"44A43", TTL +
             " property can not be set on views as phoenix.view.ttl.enabled is false"),
+    SALTING_NOT_ALLOWED_FOR_CDC(10962,"44A44", SALT_BUCKETS +
+            " property can not be set for CDC"),
 
     /** Sequence related */
     SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {

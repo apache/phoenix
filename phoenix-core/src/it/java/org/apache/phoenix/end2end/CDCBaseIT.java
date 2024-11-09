@@ -173,13 +173,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     }
 
     protected void createCDC(Connection conn, String cdc_sql) throws Exception {
-        createCDC(conn, cdc_sql, null, null);
+        createCDC(conn, cdc_sql, null);
     }
 
     protected void createCDC(Connection conn, String cdc_sql,
-            PTable.QualifierEncodingScheme encodingScheme, Integer nSaltBuckets) throws Exception {
+            PTable.QualifierEncodingScheme encodingScheme) throws Exception {
         // For CDC, multitenancy gets derived automatically via the parent table.
-        createTable(conn, cdc_sql, encodingScheme, false, nSaltBuckets, false, null);
+        createTable(conn, cdc_sql, encodingScheme, false, null, false, null);
     }
 
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,
@@ -297,9 +297,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         return changeRow;
     }
 
-    protected List<Set<ChangeRow>> generateMutations(long startTS, Map<String, String> pkColumns,
-                                                     Map<String, String> dataColumns,
-                                                     int nRows, int nBatches)
+    protected List<Set<ChangeRow>> generateMutations(String tenantId, long startTS, Map<String,
+            String> pkColumns, Map<String, String> dataColumns, int nRows, int nBatches)
     {
         Random rand = new Random();
         // Generate unique rows
@@ -336,11 +335,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                     }
                     ChangeRow changeRow;
                     if (isDelete) {
-                        changeRow = new ChangeRow(null, batchTS, rows.get(j), null);
+                        changeRow = new ChangeRow(tenantId, batchTS, rows.get(j), null);
                         gotDelete = true;
                     }
                     else {
-                        changeRow = new ChangeRow(null, batchTS, rows.get(j),
+                        changeRow = new ChangeRow(tenantId, batchTS, rows.get(j),
                                 generateSampleData(rand, dataColumns, true));
                     }
                     batch.add(changeRow);
@@ -637,16 +636,18 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     protected void verifyChangesViaSCN(String tenantId, ResultSet rs, String dataTableName,
                                        Map<String, String> dataColumns, List<ChangeRow> changes,
                                        Set<PTable.CDCChangeScope> changeScopes) throws Exception {
+        // CDC guarantees that the set of changes on a given row is delivered in the order of
+        // their change timestamps. That is why we need to convert the list of changes to
+        // a collection of per row list of changes
+        Map<Map<String, Object>, List<ChangeRow>> changeMap = new HashMap();
         Set<Map<String, Object>> deletedRows = new HashSet<>();
-        for (int i = 0, changenr = 0; i < changes.size(); ++i) {
-            ChangeRow changeRow = changes.get(i);
+        for (ChangeRow changeRow : changes) {
             if (tenantId != null && changeRow.getTenantID() != tenantId) {
                 continue;
             }
             if (changeRow.getChangeType() == CDC_DELETE_EVENT_TYPE) {
                 // Consecutive delete operations don't appear as separate events.
                 if (deletedRows.contains(changeRow.pks)) {
-                    ++changenr;
                     continue;
                 }
                 deletedRows.add(changeRow.pks);
@@ -654,14 +655,31 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
             else {
                 deletedRows.remove(changeRow.pks);
             }
-            String changeDesc = "Change " + changenr + ": " + changeRow;
-            assertTrue(changeDesc, rs.next());
+            List<ChangeRow> rowVersionList = changeMap.get(changeRow.pks);
+            if (rowVersionList == null) {
+                rowVersionList = new ArrayList<>();
+                changeMap.put(changeRow.pks, rowVersionList);
+            }
+            rowVersionList.add(changeRow);
+        }
+
+        while (rs.next()) {
+            Map<String, Object> pks = new HashMap<>();
+            for (Map.Entry<String, Object> pkCol: changes.get(0).pks.entrySet()) {
+                pks.put(pkCol.getKey(), rs.getObject(pkCol.getKey()));
+            }
+            ChangeRow changeRow = changeMap.get(pks).remove(0);
+            String changeDesc = "Change: " + changeRow;
             for (Map.Entry<String, Object> pkCol: changeRow.pks.entrySet()) {
-                assertEquals(changeDesc, pkCol.getValue(), rs.getObject(pkCol.getKey()));
+                if (!pkCol.getValue().equals(rs.getObject(pkCol.getKey()))) {
+                    assertEquals(changeDesc, pkCol.getValue(), rs.getObject(pkCol.getKey()));
+                }
             }
             Map<String, Object> cdcObj = mapper.reader(HashMap.class).readValue(
                     rs.getString(changeRow.pks.size()+2));
-            assertEquals(changeDesc, changeRow.getChangeType(), cdcObj.get(CDC_EVENT_TYPE));
+            if (!changeRow.getChangeType().equals(cdcObj.get(CDC_EVENT_TYPE))) {
+                assertEquals(changeDesc, changeRow.getChangeType(), cdcObj.get(CDC_EVENT_TYPE));
+            }
             if (cdcObj.containsKey(CDC_PRE_IMAGE)
                     && ! ((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
                     && changeScopes.contains(PTable.CDCChangeScope.PRE)) {
@@ -683,7 +701,11 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
                 assertEquals(changeDesc, postImage, fillInNulls(
                         (Map<String, Object>) cdcObj.get(CDC_POST_IMAGE), dataColumns.keySet()));
             }
-            ++changenr;
+        }
+
+        // Make sure that all the expected changes are returned by CDC
+        for (List<ChangeRow> rowVersionList : changeMap.values()) {
+            assertTrue(rowVersionList.isEmpty());
         }
     }
 

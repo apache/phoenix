@@ -43,6 +43,7 @@ import com.google.protobuf.InvalidProtocolBufferException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Durability;
@@ -67,6 +68,7 @@ import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.SingleCellConstructorExpression;
+import org.apache.phoenix.expression.function.PartitionIdFunction;
 import org.apache.phoenix.expression.visitor.KeyValueExpressionVisitor;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -183,7 +185,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             @Override
             public boolean apply(PTable index) {
                 return sendIndexMaintainer(index) && IndexUtil.isGlobalIndex(index)
-                        && dataTable.getImmutableStorageScheme() == index.getImmutableStorageScheme();
+                        && (dataTable.getImmutableStorageScheme() == index.getImmutableStorageScheme()
+                        && !CDCUtil.isCDCIndex(index));
             }
         });
     }
@@ -194,7 +197,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             public boolean apply(PTable index) {
                 return sendIndexMaintainer(index) && ((index.getIndexType() == IndexType.GLOBAL
                         && dataTable.getImmutableStorageScheme() != index.getImmutableStorageScheme())
-                        || index.getIndexType() == IndexType.LOCAL);
+                        || index.getIndexType() == IndexType.LOCAL || CDCUtil.isCDCIndex(index));
             }
         });
     }
@@ -706,10 +709,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         this.dataEncodingScheme = sc;
     }
 
-    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey, long ts)  {
+    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+            byte[] regionStartKey, byte[] regionEndKey, long ts)  {
+        return buildRowKey(valueGetter, rowKeyPtr, regionStartKey, regionEndKey, ts, null);
+    }
+    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+            byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName)  {
+        if (isCDCIndex && encodedRegionName == null) {
+            throw new IllegalArgumentException("Encoded region name is required for a CDC index");
+        }
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean prependRegionStartKey = isLocalIndex && regionStartKey != null;
-        boolean isIndexSalted = !isLocalIndex && nIndexSaltBuckets > 0;
+        boolean isIndexSalted = !isLocalIndex && !isCDCIndex && nIndexSaltBuckets > 0;
         int prefixKeyLength =
                 prependRegionStartKey ? (regionStartKey.length != 0 ? regionStartKey.length
                         : regionEndKey.length) : 0; 
@@ -785,7 +796,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 	dataColumnType = expression.getDataType();
                 	dataSortOrder = expression.getSortOrder();
                     isNullable = expression.isNullable();
-                	expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+                    if (expression instanceof PartitionIdFunction) {
+                        if (i != 0) {
+                            throw new DoNotRetryIOException("PARTITION_ID() has to be the prefix "
+                            + "of the index row key!");
+                        } else if (!isCDCIndex) {
+                            throw new DoNotRetryIOException("PARTITION_ID() should be used only for"
+                                    + " CDC Indexes!");
+                        }
+                        ptr.set(encodedRegionName);
+                    } else {
+                        expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+                    }
                 }
                 else {
                     Field field = dataRowKeySchema.getField(dataPkPosition[i]);
@@ -882,7 +904,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         int dataPosOffset = 0;
         int viewConstantsIndex = 0;
         try {
-            int indexPosOffset = !isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0;
+            int indexPosOffset = !isLocalIndex && !isCDCIndex && nIndexSaltBuckets > 0 ? 1 : 0;
             int maxRowKeyOffset = indexRowKeyPtr.getOffset() + indexRowKeyPtr.getLength();
             indexRowKeySchema.iterator(indexRowKeyPtr, ptr, indexPosOffset);
             if (isDataTableSalted) {
@@ -905,7 +927,8 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
                 indexPosOffset++;
                 dataPosOffset++;
             }
-            indexPosOffset = (!isLocalIndex && nIndexSaltBuckets > 0 ? 1 : 0) + (isMultiTenant ? 1 : 0) + (viewIndexId == null ? 0 : 1);
+            indexPosOffset = (!isLocalIndex && !isCDCIndex && nIndexSaltBuckets > 0 ? 1 : 0)
+                    + (isMultiTenant ? 1 : 0) + (viewIndexId == null ? 0 : 1);
             BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
             BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
             int trailingVariableWidthColumnNum = 0;
@@ -1003,14 +1026,33 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return buildRowKey(valueGetter, new ImmutableBytesWritable(dataRow.getRow()),
                 null, null, IndexUtil.getMaxTimestamp(dataRow));
     }
-    public boolean checkIndexRow(final byte[] indexRowKey,
-                                        final Put dataRow) {
+    public boolean checkIndexRow(final byte[] indexRowKey, final Put dataRow) {
         if (!shouldPrepareIndexMutations(dataRow)) {
             return false;
         }
         byte[] builtIndexRowKey = getIndexRowKey(dataRow);
         if (Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length,
                 indexRowKey, 0, indexRowKey.length) != 0) {
+            return false;
+        }
+        return true;
+    }
+
+    public  byte[] getIndexRowKey(final Put dataRow, byte[] encodedRegionName) {
+        ValueGetter valueGetter = new IndexUtil.SimpleValueGetter(dataRow);
+        return buildRowKey(valueGetter, new ImmutableBytesWritable(dataRow.getRow()),
+                null, null, IndexUtil.getMaxTimestamp(dataRow), encodedRegionName);
+    }
+
+    public boolean checkIndexRow(final byte[] indexRowKey, final byte[] dataRowKey,
+            final Put dataRow, final byte[][] viewConstants) {
+        if (!shouldPrepareIndexMutations(dataRow)) {
+            return false;
+        }
+        byte[] builtDataRowKey = buildDataRowKey(new ImmutableBytesWritable(indexRowKey),
+                viewConstants);
+        if (Bytes.compareTo(builtDataRowKey, 0, builtDataRowKey.length,
+                dataRowKey, 0, dataRowKey.length) != 0) {
             return false;
         }
         return true;
@@ -1216,8 +1258,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return indexRowKeySchema;
     }
 
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey, boolean verified) throws IOException {
-        byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+            ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey,
+            byte[] regionEndKey, boolean verified) throws IOException {
+        return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
+                regionEndKey, verified, null);
+    }
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+            ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey,
+            byte[] regionEndKey, boolean verified, byte[] encodedRegionName) throws IOException {
+        byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey,
+                regionEndKey, ts, encodedRegionName);
         return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey, regionEndKey,
                 indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
                 indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme, encodingScheme, dataEncodingScheme, verified);
@@ -1519,12 +1570,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
      * Used for immutable indexes that only index PK column values. In that case, we can handle a data row deletion,
      * since we can build the corresponding index row key.
      */
-    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ImmutableBytesWritable dataRowKeyPtr, long ts) throws IOException {
-        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<Cell>emptyList(), ts, null, null);
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder,
+            ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] encodedRegionName)
+            throws IOException {
+        return buildDeleteMutation(kvBuilder, null, dataRowKeyPtr, Collections.<Cell>emptyList(),
+                ts, null, null, encodedRegionName);
     }
-    
-    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState, ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts, byte[] regionStartKey, byte[] regionEndKey) throws IOException {
-        byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts);
+
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState,
+            ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts,
+            byte[] regionStartKey, byte[] regionEndKey) throws IOException {
+        return buildDeleteMutation(kvBuilder, oldState, dataRowKeyPtr, pendingUpdates, ts,
+                regionStartKey,regionEndKey, null);
+    }
+    public Delete buildDeleteMutation(KeyValueBuilder kvBuilder, ValueGetter oldState,
+            ImmutableBytesWritable dataRowKeyPtr, Collection<Cell> pendingUpdates, long ts,
+            byte[] regionStartKey, byte[] regionEndKey, byte[] encodedRegionName) throws IOException {
+        byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey,
+                ts, encodedRegionName);
         // Delete the entire row if any of the indexed columns changed
         DeleteType deleteType = null;
         if (oldState == null || (deleteType=getDeleteTypeOrNull(pendingUpdates)) != null || hasIndexedColumnChanged(oldState, pendingUpdates, ts)) { // Deleting the entire row

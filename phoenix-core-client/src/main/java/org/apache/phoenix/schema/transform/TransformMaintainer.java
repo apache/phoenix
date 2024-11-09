@@ -467,7 +467,9 @@ public class TransformMaintainer extends IndexMaintainer {
 
     // Builds new table's rowkey using the old table's rowkey.
     // This method will change when we support rowkey related transforms
-    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr, byte[] regionStartKey, byte[] regionEndKey, long ts)  {
+    @Override
+    public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+            byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName)  {
         ImmutableBytesWritable ptr = new ImmutableBytesWritable();
         boolean isNewTableSalted = nNewTableSaltBuckets > 0;
 
@@ -521,9 +523,12 @@ public class TransformMaintainer extends IndexMaintainer {
         }
     }
 
-    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter, ImmutableBytesWritable oldRowKeyPtr,
-                                   long ts, byte[] regionStartKey, byte[] regionEndKey, boolean verified) throws IOException {
-        byte[] newRowKey = this.buildRowKey(valueGetter, oldRowKeyPtr, regionStartKey, regionEndKey, ts);
+    @Override
+    public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+            ImmutableBytesWritable oldRowKeyPtr, long ts, byte[] regionStartKey,
+            byte[] regionEndKey, boolean verified, byte[] encodedRegionName) throws IOException {
+        byte[] newRowKey = this.buildRowKey(valueGetter, oldRowKeyPtr, regionStartKey, regionEndKey,
+                ts, encodedRegionName);
         return buildUpdateMutation(kvBuilder, valueGetter, oldRowKeyPtr, ts, regionStartKey, regionEndKey,
                 newRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
                 newTableEmptyKeyValueRef, newTableWALDisabled, oldTableImmutableStorageScheme, newTableImmutableStorageScheme,
