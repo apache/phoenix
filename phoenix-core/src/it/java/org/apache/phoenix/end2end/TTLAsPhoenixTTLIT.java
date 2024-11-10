@@ -24,18 +24,14 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.parse.ParseNode;
-import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TTLExpression;
-import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -43,7 +39,6 @@ import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
@@ -55,6 +50,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.TTL_ALREADY_DEFINED_
 import static org.apache.phoenix.exception.SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY;
 import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
+import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -163,10 +159,9 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
     public void  testCreateTableWithTTLWithDifferentColumnFamilies() throws  Exception {
         String tableName = generateUniqueName();
         String ttlExpr = "id = 'x' AND b.col2 = 7";
-        String quotedTTLExpr = "id = ''x'' AND b.col2 = 7"; // to retain single quotes in DDL
         int ttlValue = 86400;
         String ttl = (useExpression ?
-                String.format("'%s'", quotedTTLExpr) :
+                String.format("'%s'", retainSingleQuotes(ttlExpr)) :
                 String.valueOf(ttlValue));
         String ddl =
                 "create table IF NOT EXISTS  " + tableName + "  (" + " id char(1) NOT NULL,"

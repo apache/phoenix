@@ -18,9 +18,9 @@
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -108,12 +108,11 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
         String ddlTemplateWithTTL = ddlTemplate + " TTL = '%s'";
         String tableNoTTL = generateUniqueName();
         String tableWithTTL = generateUniqueName();
-        String quotedValue = "k1 > 5 AND col1 < ''zzzzzz''";
         String ttl = "k1 > 5 AND col1 < 'zzzzzz'";
         try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
             String ddl = String.format(ddlTemplate, tableNoTTL);
             conn.createStatement().execute(ddl);
-            ddl = String.format(ddlTemplateWithTTL, tableWithTTL, quotedValue);
+            ddl = String.format(ddlTemplateWithTTL, tableWithTTL, retainSingleQuotes(ttl));
             conn.createStatement().execute(ddl);
             assertConditonTTL(conn, tableWithTTL, ttl);
             String queryTemplate = "SELECT k1, k2, col1, col2 from %s where k1 > 3";
@@ -340,6 +339,25 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
             Scan scan = plan.getContext().getScan();
             Filter filter = scan.getFilter();
             assertEquals(filter.toString(), "NOT (TO_CHAR(\"V1\") = 'EXPIRED')");
+        }
+    }
+
+    @Test
+    public void testInListTTLExpr() throws Exception {
+        String ddlTemplate = "create table %s (id varchar not null primary key, " +
+                "col1 integer, col2 varchar)";
+        String ddlTemplateWithTTL = ddlTemplate + " TTL = '%s'";
+        String tableNoTTL = generateUniqueName();
+        String tableWithTTL = generateUniqueName();
+        String ttl = "col2 IN ('expired', 'cancelled')";
+        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+            String ddl = String.format(ddlTemplate, tableNoTTL);
+            conn.createStatement().execute(ddl);
+            ddl = String.format(ddlTemplateWithTTL, tableWithTTL, retainSingleQuotes(ttl));
+            conn.createStatement().execute(ddl);
+            assertConditonTTL(conn, tableWithTTL, ttl);
+            String queryTemplate = "select * from %s where id IN ('abc', 'fff')";
+            compareScanWithCondTTL(conn, tableNoTTL, tableWithTTL, queryTemplate, ttl);
         }
     }
 

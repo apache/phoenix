@@ -1452,4 +1452,16 @@ public class TestUtil {
         return Files.createTempDirectory(Paths.get(System.getProperty("java.io.tmpdir")), null);
     }
 
+    public static String retainSingleQuotes(String input) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < input.length(); ++i) {
+            char ch = input.charAt(i);
+            sb.append(ch);
+            if (ch == '\'') {
+                sb.append('\'');
+            }
+        }
+        return sb.toString();
+    }
+
 }
