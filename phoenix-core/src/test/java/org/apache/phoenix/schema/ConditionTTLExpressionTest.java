@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.schema;
 
+import static org.apache.phoenix.schema.PTableType.INDEX;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertArrayEquals;
@@ -80,6 +81,15 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
                                         String tableWithTTL,
                                         String queryTemplate,
                                         String ttl) throws SQLException {
+        compareScanWithCondTTL(conn, tableNoTTL, tableWithTTL, queryTemplate, ttl, false);
+    }
+
+    private void compareScanWithCondTTL(Connection conn,
+                                        String tableNoTTL,
+                                        String tableWithTTL,
+                                        String queryTemplate,
+                                        String ttl,
+                                        boolean useIndex) throws SQLException {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
         String query;
         // Modify the query by adding the cond ttl expression explicitly to the WHERE clause
@@ -92,11 +102,17 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
         }
         PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
         QueryPlan plan = pstmt.optimizeQuery();
+        if (useIndex) {
+            assertTrue(plan.getTableRef().getTable().getType() == INDEX);
+        }
         Scan scanNoTTL = plan.getContext().getScan();
         // now execute the same query with cond ttl expression implicitly used for masking
         query = String.format(queryTemplate, tableWithTTL);
         pstmt = new PhoenixPreparedStatement(pconn, query);
         plan = pstmt.optimizeQuery();
+        if (useIndex) {
+            assertTrue(plan.getTableRef().getTable().getType() == INDEX);
+        }
         Scan scanWithCondTTL = plan.getContext().getScan();
         assertScanConditionTTL(scanNoTTL, scanWithCondTTL);
     }
@@ -223,7 +239,7 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
             conn.createStatement().execute(ddl);
             assertTTL(conn, indexNoTTL, TTLExpression.TTL_EXPRESSION_NOT_DEFINED);
             assertConditonTTL(conn, indexWithTTL, ttl);
-            compareScanWithCondTTL(conn, tableNoTTL, tableWithTTL, queryTemplate, ttl);
+            compareScanWithCondTTL(conn, tableNoTTL, tableWithTTL, queryTemplate, ttl, true);
         }
     }
 
@@ -350,7 +366,7 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
         String tableNoTTL = generateUniqueName();
         String tableWithTTL = generateUniqueName();
         String ttl = "col2 IN ('expired', 'cancelled')";
-        try (Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
             String ddl = String.format(ddlTemplate, tableNoTTL);
             conn.createStatement().execute(ddl);
             ddl = String.format(ddlTemplateWithTTL, tableWithTTL, retainSingleQuotes(ttl));
@@ -358,6 +374,34 @@ public class ConditionTTLExpressionTest extends BaseConnectionlessQueryTest {
             assertConditonTTL(conn, tableWithTTL, ttl);
             String queryTemplate = "select * from %s where id IN ('abc', 'fff')";
             compareScanWithCondTTL(conn, tableNoTTL, tableWithTTL, queryTemplate, ttl);
+        }
+    }
+
+    @Test
+    public void testPartialIndex() throws Exception {
+        String ddlTemplate = "create table %s (id varchar not null primary key, " +
+                "col1 integer, col2 integer, col3 double, col4 varchar)";
+        String ddlTemplateWithTTL = ddlTemplate + " TTL = '%s'";
+        String tableNoTTL = generateUniqueName();
+        String tableWithTTL = generateUniqueName();
+        String indexTemplate = "create index %s on %s (col1) " +
+                "include (col2, col3, col4) where col1 > 50";
+        String indexNoTTL = generateUniqueName();
+        String indexWithTTL = generateUniqueName();
+        String ttl = "col2 > 100 AND col4='expired'";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = String.format(ddlTemplate, tableNoTTL);
+            conn.createStatement().execute(ddl);
+            ddl = String.format(ddlTemplateWithTTL, tableWithTTL, retainSingleQuotes(ttl));
+            conn.createStatement().execute(ddl);
+            assertConditonTTL(conn, tableWithTTL, ttl);
+            ddl = String.format(indexTemplate, indexNoTTL, tableNoTTL);
+            conn.createStatement().execute(ddl);
+            ddl = String.format(indexTemplate, indexWithTTL, tableWithTTL);
+            conn.createStatement().execute(ddl);
+            assertConditonTTL(conn, indexWithTTL, ttl);
+            String queryTemplate = "select * from %s where col1 > 60";
+            compareScanWithCondTTL(conn, tableNoTTL, tableWithTTL, queryTemplate, ttl, true);
         }
     }
 
