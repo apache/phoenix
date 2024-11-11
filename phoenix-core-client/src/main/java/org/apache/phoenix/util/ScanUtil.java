@@ -1476,8 +1476,6 @@ public class ScanUtil {
 
         if (context.getCDCTableRef() != null) {
             scan.setAttribute(CDC_DATA_TABLE_DEF, CDCTableInfo.toProto(context).toByteArray());
-            CDCUtil.setupScanForCDC(scan);
-            adjustScanFilterForGlobalIndexRegionScanner(scan);
         }
     }
 

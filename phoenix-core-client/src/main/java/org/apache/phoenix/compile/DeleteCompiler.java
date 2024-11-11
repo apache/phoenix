@@ -94,6 +94,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
 
@@ -1071,6 +1072,9 @@ public class DeleteCompiler {
     }
     
     private static boolean isMaintainedOnClient(PTable table) {
+        if (CDCUtil.isCDCIndex(table)) {
+            return false;
+        }
         // Test for not being local (rather than being GLOBAL) so that this doesn't fail
         // when tested with our projected table.
         return (table.getIndexType() != IndexType.LOCAL && (table.isTransactional() || table.isImmutableRows())) ||

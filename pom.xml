@@ -86,7 +86,7 @@
     <hbase-2.4.runtime.version>2.4.18</hbase-2.4.runtime.version>
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.runtime.version>2.5.10-hadoop3</hbase-2.5.runtime.version>
-    <hbase-2.6.runtime.version>2.6.0-hadoop3</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.1-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -123,7 +123,6 @@
     <snappy.version>0.5</snappy.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
-    <collections.version>3.2.2</collections.version>
     <jodatime.version>2.10.5</jodatime.version>
     <joni.version>2.1.31</joni.version>
     <omid.version>1.1.2</omid.version>
@@ -166,6 +165,7 @@
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
     <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
+    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
     <mvel2.version>2.5.2.Final</mvel2.version>
 
     <!-- Plugin options -->
@@ -491,6 +491,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
+          <version>${maven-shade-plugin.version}</version>
         </plugin>
         <plugin>
           <!-- Allows us to get the apache-ds bundle artifacts -->
@@ -555,6 +556,15 @@
                     <reason>Use commons lang 3</reason>
                     <bannedImports>
                       <bannedImport>org.apache.commons.lang.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>Commons collection is restricted</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.commons.collections.**</bannedImport>
+                      <!-- If you really need to use commons-collections 4, add as dependency and remove this ban -->
+                      <bannedImport>org.apache.commons.collections4.**</bannedImport>
                     </bannedImports>
                   </RestrictImports>
                   <RestrictImports>
@@ -1681,11 +1691,6 @@
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
         <version>${commons-codec.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>commons-collections</groupId>
-        <artifactId>commons-collections</artifactId>
-        <version>${collections.version}</version>
       </dependency>
       <!-- Update transitive dependency to a one without CVEs -->
       <dependency>

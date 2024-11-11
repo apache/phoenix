@@ -300,7 +300,14 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         for (Cell cell : dataRow.rawCells()) {
             put.add(cell);
         }
-        if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
+        if (indexMaintainer.isCDCIndex()) {
+            // A CDC index row key is PARTITION_ID() + PHOENIX_ROW_TIMESTAMP() + data row key. The
+            // only necessary check is the row timestamp check since the data row key is extracted
+            // from the index row key and PARTITION_ID() changes during region splits and merges
+            if (IndexUtil.getMaxTimestamp(put) == indexTimestamp) {
+                return true;
+            }
+        } else if (indexMaintainer.checkIndexRow(indexRowKey, put)) {
             if (IndexUtil.getMaxTimestamp(put) != indexTimestamp) {
                 Mutation[] mutations;
                 Put indexPut = new Put(indexRowKey);
@@ -316,8 +323,10 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             }
             return true;
         }
+        // This is not a valid index row
         if (indexMaintainer.isAgedEnough(IndexUtil.getMaxTimestamp(put), ageThreshold)) {
-            region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put), false));
+            region.delete(indexMaintainer.createDelete(indexRowKey, IndexUtil.getMaxTimestamp(put),
+                    false));
         }
         return false;
     }

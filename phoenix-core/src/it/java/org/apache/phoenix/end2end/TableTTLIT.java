@@ -315,6 +315,38 @@ public class TableTTLIT extends BaseTest {
             injectEdge.incrementValue(1000);
         }
     }
+
+    @Test
+    public void testMultipleRowsWithUpdatesMoreThanTTLApart() throws Exception {
+        // for the purpose of this test only considering cases when maxlookback is 0
+        if (tableLevelMaxLooback == null || tableLevelMaxLooback != 0) {
+            return;
+        }
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String tableName = generateUniqueName();
+            createTable(tableName);
+            long startTime = System.currentTimeMillis() + 1000;
+            startTime = (startTime / 1000) * 1000;
+            EnvironmentEdgeManager.injectEdge(injectEdge);
+            injectEdge.setValue(startTime);
+            updateRow(conn, tableName, "a1");
+            updateRow(conn, tableName, "a2");
+            updateRow(conn, tableName, "a3");
+            //advance the time to create a gap > TTL
+            injectEdge.incrementValue((ttl + 1) * 1000);
+            updateColumn(conn, tableName, "a1", 2, "col2");
+            updateColumn(conn, tableName, "a2", 3, "col3");
+            updateColumn(conn, tableName, "a3", 5, "col5");
+            conn.commit();
+            flush(TableName.valueOf(tableName));
+            majorCompact(TableName.valueOf(tableName));
+            String dql = "SELECT count(*) from " + tableName;
+            ResultSet rs = conn.createStatement().executeQuery(dql);
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1));
+        }
+    }
+
     private void flush(TableName table) throws IOException {
         Admin admin = getUtility().getAdmin();
         admin.flush(table);

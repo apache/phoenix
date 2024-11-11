@@ -30,6 +30,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PFloat;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ColumnInfo;
 import org.apache.phoenix.util.SchemaUtil;
@@ -213,7 +214,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testAlterDBOAddCascadeIndex() throws Exception {
         ColumnInfo [] columnArray =  {new ColumnInfo("new_column_1", PFloat.INSTANCE.getSqlType())};
-        ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType())};
+        ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PFloat.INSTANCE.getSqlType())};
 
         String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 FLOAT CASCADE INDEX " + indexNames.split(",")[0];
@@ -234,8 +235,8 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     public void testAlterDBOAddCascadeTwoColsOneIndex() throws Exception {
         ColumnInfo [] columnArray =  {new ColumnInfo("new_column_1", PFloat.INSTANCE.getSqlType()),
                 new ColumnInfo("new_column_2", PDouble.INSTANCE.getSqlType())};
-        ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType()),
-                new ColumnInfo("0:new_column_2", PDecimal.INSTANCE.getSqlType())};
+        ColumnInfo [] columnIndexArray =  {new ColumnInfo("0:new_column_1", PFloat.INSTANCE.getSqlType()),
+                new ColumnInfo("0:new_column_2", PDouble.INSTANCE.getSqlType())};
         String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ") + phoenixObjectName
                 + " ADD new_column_1 FLOAT, new_column_2 DOUBLE CASCADE INDEX " + indexNames.split(",")[0];
         conn.createStatement().execute(query);
@@ -255,7 +256,7 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     @Test
     public void testAlterDBOAddCascadeIndexes() throws Exception {
         ColumnInfo [] columnArray = {new ColumnInfo("new_column_1", PDouble.INSTANCE.getSqlType())};
-        ColumnInfo [] columnIndexArray = {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType())};
+        ColumnInfo [] columnIndexArray = {new ColumnInfo("0:new_column_1", PDouble.INSTANCE.getSqlType())};
         String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 DOUBLE CASCADE INDEX " + indexNames;
         conn.createStatement().execute(query);
@@ -275,8 +276,8 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
     public void testAlterDBOAddCascadeTwoColsTwoIndexes() throws Exception {
         ColumnInfo [] columnArray =  {new ColumnInfo("new_column_1", PFloat.INSTANCE.getSqlType()),
                 new ColumnInfo("new_column_2", PDouble.INSTANCE.getSqlType())};
-        ColumnInfo [] columIndexArray =  {new ColumnInfo("0:new_column_1", PDecimal.INSTANCE.getSqlType()),
-                new ColumnInfo("0:new_column_2", PDecimal.INSTANCE.getSqlType())};
+        ColumnInfo [] columIndexArray =  {new ColumnInfo("0:new_column_1", PFloat.INSTANCE.getSqlType()),
+                new ColumnInfo("0:new_column_2", PDouble.INSTANCE.getSqlType())};
 
         String query = "ALTER " + (isViewScenario ? "VIEW " : "TABLE ")
                 + phoenixObjectName + " ADD new_column_1 FLOAT, new_column_2 DOUBLE CASCADE INDEX " + indexNames;
@@ -379,6 +380,54 @@ public class AlterAddCascadeIndexIT extends ParallelStatsDisabledIT {
             assertDBODefinition(conn, fullIndexNameTwo, PTableType.INDEX, 3, columnIndexArray, true);
         }
 
+    }
+
+    @Test
+    public void testAlterTableCascadeIndexAllBigInt() throws Exception {
+        String schemaName = "S_"+generateUniqueName();
+        String tableName = "T_"+generateUniqueName();
+        String indexNameThree = "I_"+generateUniqueName();
+        String fullTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        String fullIndexNameThree = SchemaUtil.getQualifiedTableName(schemaName, indexNameThree);
+        String createTableQuery = "CREATE TABLE " + fullTableName + " (mykey INTEGER NOT NULL PRIMARY KEY, col1 BIGINT)";
+        String createIndexQuery = "CREATE INDEX " + indexNameThree + " ON " + fullTableName + " (col1)";
+
+        conn.createStatement().execute(createTableQuery);
+        conn.createStatement().execute(createIndexQuery);
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + fullTableName + "(mykey, col1) VALUES(1, 2)");
+        ps.executeUpdate();
+        conn.commit();
+
+        String alterTableQuery = "ALTER TABLE " + fullTableName + " ADD IF NOT EXISTS col3 BIGINT CASCADE INDEX ALL";
+        conn.createStatement().execute(alterTableQuery);
+
+        PreparedStatement pss = conn.prepareStatement("UPSERT INTO " + fullTableName + "(mykey, col1, col3) VALUES(6, 7, 8)");
+        pss.executeUpdate();
+        conn.commit();
+
+        ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + fullTableName);
+        rs.next();
+        assertEquals(1, rs.getInt(1));
+        assertEquals(2, rs.getLong(2));
+        rs.next();
+        assertEquals(6, rs.getInt(1));
+        assertEquals(7L, rs.getLong(2));
+        assertEquals(8L, rs.getLong(3));
+
+        rs = conn.createStatement().executeQuery("SELECT * FROM " + fullIndexNameThree);
+        rs.next();
+        assertEquals(2L, rs.getLong(1));
+        assertEquals(1, rs.getInt(2));
+        rs.next();
+        assertEquals(7L, rs.getLong(1));
+        assertEquals(6, rs.getInt(2));
+        assertEquals(8L, rs.getLong(3));
+
+        ColumnInfo[] columnArray = { new ColumnInfo("col3", PLong.INSTANCE.getSqlType()) };
+        ColumnInfo[] columnIndexArray = { new ColumnInfo("0:col3", PLong.INSTANCE.getSqlType()) };
+
+        assertDBODefinition(conn, fullTableName, PTableType.TABLE, 3, columnArray, false);
+        assertDBODefinition(conn, fullIndexNameThree, PTableType.INDEX, 3, columnIndexArray, false);
     }
 
     private void assertDBODefinition(Connection conn, String phoenixObjectName, PTableType pTableType, int baseColumnCount,  ColumnInfo [] columnInfo, boolean fail)
