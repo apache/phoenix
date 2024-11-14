@@ -109,6 +109,10 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
             }
         });
         Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+        conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
+        conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB,
+                Long.toString(Long.MAX_VALUE));
         hbaseTestUtil = new HBaseTestingUtility(conf);
         setUpConfigForMiniCluster(conf);
         conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
@@ -245,8 +249,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
                 // Open Connection Count : 1
                 // Open Internal Connection Count : 0
                 // Connection Throttled Count : 0
-                assertMetricValues(queryServiceName, 1, 0, 0);
-                assertHistogramMetricsForMutations(queryServiceName, 1, 0, 0, 0);
+                assertMetricValues(connQueryServiceName, 1, 0, 0);
+                assertHistogramMetricsForMutations(connQueryServiceName, 1, 0, 0, 0);
             }
         } catch (Exception e) {
             e.printStackTrace();
