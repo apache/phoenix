@@ -445,6 +445,11 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         }
     }
 
+    /**
+     * Test {@link ViewUtil#getViewIndexIds(PhoenixConnection, String, boolean)} for a table which is not view index and ensure it throws {@link IllegalArgumentException}
+     * @throws IOException
+     * @throws SQLException
+     */
     @Test(expected=IllegalArgumentException.class)
     public void testGetViewIndexIdsForNonViewIndexTable() throws IOException, SQLException {
         try (Connection conn = DriverManager.getConnection(getUrl())) {
