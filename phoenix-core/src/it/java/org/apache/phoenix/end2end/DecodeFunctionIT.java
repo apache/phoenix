@@ -27,6 +27,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -151,4 +152,26 @@ public class DecodeFunctionIT extends ParallelStatsDisabledIT {
             assertEquals(SQLExceptionCode.TYPE_MISMATCH.getErrorCode(), e.getErrorCode());
         }
 	}
+
+	@Test
+	public void testDecodeBase642() throws Exception {
+		Connection conn = DriverManager.getConnection(getUrl());
+
+		String testTable = generateUniqueName();
+		String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARCHAR)";
+
+		conn.createStatement().execute(ddl);
+
+		PreparedStatement ps =
+				conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, 'SGVsbG9QaG9lbml4')");
+		ps.execute();
+		conn.commit();
+
+		ResultSet rs = conn.createStatement().executeQuery("SELECT DECODE(data, 'BASE64') FROM " + testTable);
+		assertTrue(rs.next());
+		byte[] actualBytes = rs.getBytes(1);
+		assertTrue(Arrays.equals("HelloPhoenix".getBytes(), actualBytes));
+		assertFalse(rs.next());
+	}
+
 }
