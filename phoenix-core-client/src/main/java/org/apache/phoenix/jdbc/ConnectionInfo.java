@@ -59,6 +59,14 @@ public abstract class ConnectionInfo {
     protected static final boolean HAS_MASTER_REGISTRY;
     protected static final boolean HAS_RPC_REGISTRY;
 
+    private static final class ConfigurationHolder {
+        static final Configuration configuration = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+    }
+
+    private static Configuration getCachedConfiguration() {
+        return ConfigurationHolder.configuration;
+    }
+
     static {
         String version = VersionInfo.getVersion();
         if (VersionInfo.getMajorVersion(version) >= 3) {
@@ -107,14 +115,12 @@ public abstract class ConnectionInfo {
 
     public static ConnectionInfo createNoLogin(String url, ReadOnlyProps props, Properties info)
             throws SQLException {
-        Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        return create(url, conf, props, info, true);
+        return create(url, getCachedConfiguration(), props, info, true);
     }
 
     public static ConnectionInfo create(String url, ReadOnlyProps props, Properties info)
             throws SQLException {
-        Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        return create(url, conf, props, info);
+        return create(url, getCachedConfiguration(), props, info);
     }
 
     public static ConnectionInfo createNoLogin(String url, Configuration configuration,
