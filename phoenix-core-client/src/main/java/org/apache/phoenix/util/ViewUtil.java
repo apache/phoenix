@@ -906,8 +906,10 @@ public class ViewUtil {
     public static List<String> getViewIndexIds(final PhoenixConnection connection, final String tableName, final boolean includeTenantViewIndexes)
             throws IOException, SQLException {
         Preconditions.checkArgument(MetaDataUtil.isViewIndex(tableName));
-        List<String> viewIndexIdsString = new ArrayList<>();
-        PreparedStatement preparedStatement = connection.prepareStatement(getViewIndexIdsQuery(tableName, includeTenantViewIndexes));
+        final List<String> viewIndexIdsString = new ArrayList<>();
+        final String viewIndexIdsQuery = getViewIndexIdsQuery(tableName, includeTenantViewIndexes);
+        logger.info(String.format("Query to get view index ids for %s with includeTenantViewIndexes as %b is %s", tableName, includeTenantViewIndexes, viewIndexIdsQuery);
+        PreparedStatement preparedStatement = connection.prepareStatement(viewIndexIdsQuery);
         ResultSet resultSet = preparedStatement.executeQuery();
         while (resultSet.next()) {
             int viewIndexType = resultSet.getInt(2);
