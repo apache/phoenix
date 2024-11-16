@@ -738,10 +738,7 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
     }
 
     private void annotateAndCommit(UngroupedAggregateRegionObserver.MutationList mutations) throws IOException {
-        annotateDataMutations(mutations, scan);
-        if (isDelete || isUpsert) {
-            annotateDataMutationsWithExternalSchemaId(mutations, scan);
-        }
+        annotateMutations(mutations);
         ungroupedAggregateRegionObserver.commit(region, mutations, indexUUID, blockingMemStoreSize, indexMaintainersPtr, txState,
             targetHTable, useIndexProto, isPKChanging, clientVersionBytes);
         mutations.clear();
@@ -758,15 +755,24 @@ public class UngroupedAggregateRegionScanner extends BaseRegionScanner {
      */
     private Result annotateCommitAndReturnResult(
             UngroupedAggregateRegionObserver.MutationList mutations) throws IOException {
-        annotateDataMutations(mutations, scan);
-        if (isDelete || isUpsert) {
-            annotateDataMutationsWithExternalSchemaId(mutations, scan);
-        }
+        annotateMutations(mutations);
         Result result = ungroupedAggregateRegionObserver.commitWithResultReturned(mutations,
                 indexUUID, indexMaintainersPtr, txState, targetHTable,
                 useIndexProto, clientVersionBytes);
         mutations.clear();
         return result;
+    }
+
+    /**
+     * Annotate the give mutations as per the scan attributes.
+     *
+     * @param mutations The mutations that need to be annotated.
+     */
+    private void annotateMutations(UngroupedAggregateRegionObserver.MutationList mutations) {
+        annotateDataMutations(mutations, scan);
+        if (isDelete || isUpsert) {
+            annotateDataMutationsWithExternalSchemaId(mutations, scan);
+        }
     }
 
     @Override
