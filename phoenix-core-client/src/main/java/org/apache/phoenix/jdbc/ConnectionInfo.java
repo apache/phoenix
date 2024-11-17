@@ -59,12 +59,17 @@ public abstract class ConnectionInfo {
     protected static final boolean HAS_MASTER_REGISTRY;
     protected static final boolean HAS_RPC_REGISTRY;
 
-    private static final class ConfigurationHolder {
-        static final Configuration configuration = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-    }
+    private static volatile Configuration configuration;
 
-    private static Configuration getCachedConfiguration() {
-        return ConfigurationHolder.configuration;
+    public static Configuration getCachedConfiguration() {
+        if (configuration == null) {
+            synchronized (ConnectionInfo.class) {
+                if (configuration == null) {
+                    configuration = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                }
+            }
+        }
+        return configuration;
     }
 
     static {
@@ -488,15 +493,17 @@ public abstract class ConnectionInfo {
                                 LOGGER.info("Trying to connect to a secure cluster as {} "
                                         + "with keytab {}",
                                     principal, keytab);
+                                Configuration newConfig = HBaseFactoryProvider.getConfigurationFactory()
+                                        .getConfiguration();
                                 // We are intentionally changing the passed in Configuration object
                                 if (null != principal) {
-                                    config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+                                    newConfig.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
                                 }
                                 if (null != keytab) {
-                                    config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
+                                    newConfig.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
                                 }
-                                UserGroupInformation.setConfiguration(config);
-                                User.login(config, QueryServices.HBASE_CLIENT_KEYTAB,
+                                UserGroupInformation.setConfiguration(newConfig);
+                                User.login(newConfig, QueryServices.HBASE_CLIENT_KEYTAB,
                                     QueryServices.HBASE_CLIENT_PRINCIPAL, null);
                                 user = User.getCurrent();
                                 LOGGER.info("Successful login to secure cluster");
