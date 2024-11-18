@@ -386,6 +386,11 @@ public class DelegateTable implements PTable {
     }
 
     @Override
+    public boolean hasConditionTTL() {
+        return delegate.hasConditionTTL();
+    }
+
+    @Override
     public Long getLastDDLTimestamp() {
         return delegate.getLastDDLTimestamp();
     }

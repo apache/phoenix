@@ -52,6 +52,7 @@ import static org.apache.phoenix.schema.TTLExpression.TTL_EXPRESSION_NOT_DEFINED
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -128,6 +129,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             PTable table = conn.unwrap(PhoenixConnection.class).getTable(new PTableKey(null,
                     createTableWithOrWithOutTTLAsItsProperty(conn, false)));
             assertTTLValue(table, TTL_EXPRESSION_NOT_DEFINED);
+            assertFalse(table.hasConditionTTL());
         }
     }
 
@@ -138,6 +140,7 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT{
             PTable table = conn.unwrap(PhoenixConnection.class).
                     getTable(new PTableKey(null, tableName));
             assertTTLValue(table, defaultTTL);
+            assertTrue(table.hasConditionTTL() == useExpression);
             // Switch from cond ttl to value or vice versa
             String alterTTL = useExpression ? String.valueOf(DEFAULT_TTL_FOR_ALTER) :
                     String.format("'%s'", DEFAULT_TTL_EXPRESSION_FOR_ALTER);

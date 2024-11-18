@@ -790,9 +790,8 @@ public class QueryCompiler {
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
 
-        TTLExpression ttlExpr = table.getTTL();
-        if (ttlExpr instanceof ConditionTTLExpression) { // TODO CDC index
-            ConditionTTLExpression condTTLExpr = (ConditionTTLExpression)ttlExpr;
+        if (table.hasConditionTTL()) { // TODO CDC index
+            ConditionTTLExpression condTTLExpr = (ConditionTTLExpression)table.getTTL();
             // For non-index tables we have to re-write the WHERE clause by ANDing the condition
             // TTL expression. We can do it since the condition TTL expression always evaluates to
             // a BOOLEAN. For index tables we don't need to re-write since we first re-write

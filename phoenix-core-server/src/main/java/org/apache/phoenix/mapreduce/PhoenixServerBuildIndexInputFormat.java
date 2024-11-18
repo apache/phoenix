@@ -123,6 +123,13 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
                 Scan scan = plan.getContext().getScan();
                 ImmutableBytesWritable ptr = new ImmutableBytesWritable();
                 PTable pIndexTable = tableRef.getTable();
+                if (pIndexTable.hasConditionTTL()) {
+                    // For raw scans like Index rebuild don't use the condition ttl filter
+                    // because the filters don't handle delete markers. The only downside is
+                    // you will build some extra expired rows but those will be masked and purged
+                    // when compaction runs
+                    scan.setFilter(null);
+                }
                 PTable pDataTable = phoenixConnection.getTable(dataTableFullName);
                 IndexMaintainer.serialize(pDataTable, ptr, Collections.singletonList(pIndexTable), phoenixConnection);
                 scan.setAttribute(PhoenixIndexCodec.INDEX_NAME_FOR_IDX_MAINTAINER,

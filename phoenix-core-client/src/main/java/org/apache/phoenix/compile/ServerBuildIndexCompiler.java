@@ -108,6 +108,13 @@ public class ServerBuildIndexCompiler {
             Scan scan = plan.getContext().getScan();
             ImmutableBytesWritable ptr = new ImmutableBytesWritable();
             dataTable = tableRef.getTable();
+            if (dataTable.hasConditionTTL()) {
+                // For raw scans like Index rebuild don't use the condition ttl filter
+                // because the filters don't handle delete markers. The only downside is
+                // you will build some extra expired rows but those will be masked and purged
+                // when compaction runs
+                scan.setFilter(null);
+            }
             if (IndexUtil.isGlobalIndex(index)  &&  dataTable.isTransactional()) {
                 throw new IllegalArgumentException(
                         "ServerBuildIndexCompiler does not support global indexes on transactional tables");
