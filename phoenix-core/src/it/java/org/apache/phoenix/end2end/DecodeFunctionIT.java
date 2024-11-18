@@ -153,25 +153,25 @@ public class DecodeFunctionIT extends ParallelStatsDisabledIT {
         }
 	}
 
-	@Test
-	public void testDecodeBase642() throws Exception {
-		Connection conn = DriverManager.getConnection(getUrl());
+    @Test
+    public void testDecodeBase642() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
 
-		String testTable = generateUniqueName();
-		String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARCHAR)";
+        String testTable = generateUniqueName();
+        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARCHAR)";
 
-		conn.createStatement().execute(ddl);
+        conn.createStatement().execute(ddl);
 
-		PreparedStatement ps =
-				conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, 'SGVsbG9QaG9lbml4')");
-		ps.execute();
-		conn.commit();
+        PreparedStatement ps =
+                conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, 'SGVsbG9QaG9lbml4')");
+        ps.execute();
+        conn.commit();
 
-		ResultSet rs = conn.createStatement().executeQuery("SELECT DECODE(data, 'BASE64') FROM " + testTable);
-		assertTrue(rs.next());
-		byte[] actualBytes = rs.getBytes(1);
-		assertTrue(Arrays.equals("HelloPhoenix".getBytes(), actualBytes));
-		assertFalse(rs.next());
+        ResultSet rs = conn.createStatement().executeQuery("SELECT DECODE(data, 'BASE64') FROM " + testTable);
+        assertTrue(rs.next());
+        byte[] actualBytes = rs.getBytes(1);
+        assertTrue(Arrays.equals("HelloPhoenix".getBytes(), actualBytes));
+        assertFalse(rs.next());
 	}
 
 }

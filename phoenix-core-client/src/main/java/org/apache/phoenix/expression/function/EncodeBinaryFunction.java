@@ -16,8 +16,6 @@
  */
 package org.apache.phoenix.expression.function;
 
-import static org.apache.hadoop.hbase.util.Bytes.toHex;
-
 import java.sql.SQLException;
 import java.util.Base64;
 import java.util.List;
@@ -32,8 +30,10 @@ import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.tuple.Tuple;
 
+import static org.apache.hadoop.hbase.util.Bytes.toHex;
+
 /**
- * Encodes binary data into a string from various formats such as Hex, Base64, or HBase binary.
+ * Encodes binary data into a string to various formats such as Hex, Base64, or HBase binary.
  */
 @FunctionParseNode.BuiltInFunction(name = EncodeBinaryFunction.NAME, args = {
     @FunctionParseNode.Argument(allowedTypes = {PVarbinary.class}),
@@ -76,17 +76,17 @@ public class EncodeBinaryFunction extends ScalarFunction {
         String encodedString;
 
         switch (format) {
-            case HEX:
-                encodedString = toHex(bytesToEncode);
-                break;
-            case BASE64:
-                encodedString = Base64.getEncoder().encodeToString(bytesToEncode);
-                break;
-            case HBASE:
-                encodedString = Bytes.toStringBinary(bytesToEncode);
-                break;
-            default:
-                throw new IllegalDataException(getUnsupportedEncodeFormatMsg(encodingFormat));
+        case HEX:
+            encodedString = toHex(bytesToEncode);
+            break;
+        case BASE64:
+            encodedString = Base64.getEncoder().encodeToString(bytesToEncode);
+            break;
+        case HBASE:
+            encodedString = Bytes.toStringBinary(bytesToEncode);
+            break;
+        default:
+            throw new IllegalDataException(getUnsupportedEncodeFormatMsg(encodingFormat));
         }
 
         ptr.set(PVarchar.INSTANCE.toBytes(encodedString));

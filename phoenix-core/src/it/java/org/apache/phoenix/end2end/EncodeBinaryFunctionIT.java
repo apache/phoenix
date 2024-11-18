@@ -29,6 +29,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -36,42 +37,51 @@ import org.junit.experimental.categories.Category;
 @Category(ParallelStatsDisabledTest.class)
 public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
 
+    private static String testTable;
+    private static final byte[] originalBytes = "HelloPhoenix".getBytes();
+    private static final String encoded48String = "48656c6c6f50686f656e6978";
+    private static final String helloPhoenixString = "HelloPhoenix";
+    private static final String expectedBase64Chunk = "SGVsbG9QaG9lbml4";
+
+    @BeforeClass
+    public static void setUpBeforeClass() throws Exception {
+        Connection conn = DriverManager.getConnection(getUrl());
+        testTable = generateUniqueName();
+        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
+        conn.createStatement().execute(ddl);
+
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
+        ps.setBytes(1, originalBytes);
+        ps.execute();
+
+        PreparedStatement ps2 = conn.prepareStatement(
+                "UPSERT INTO " + testTable + " (id, data) VALUES (2, X'48656c6c6f50686f656e6978')");
+        ps2.execute();
+        conn.commit();
+        conn.close();
+    }
+
     @Test
     public void testEncodeHex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-
-        conn.createStatement().execute(ddl);
-
-        PreparedStatement ps = conn.prepareStatement(
-                "UPSERT INTO " + testTable + " (id, data) VALUES (1, X'48656c6c6f50686f656e6978')");
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable);
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=2");
         assertTrue(rs.next());
         String actualString = rs.getString(1);
-        assertEquals("48656c6c6f50686f656e6978", actualString);
+        assertEquals(encoded48String, actualString);
         assertFalse(rs.next());
     }
 
     @Test
     public void testMixedCaseHexDecoding() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-        conn.createStatement().execute(ddl);
 
-        PreparedStatement ps = conn.prepareStatement(
-                "UPSERT INTO " + testTable + " (id, data) VALUES (1, X'48656c6C6f50686F656e6978')");
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable);
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=2");
         assertTrue(rs.next());
-        assertEquals("48656c6c6f50686f656e6978", rs.getString(1));
+        String actualString = rs.getString(1);
+        assertEquals(encoded48String, actualString);
         assertFalse(rs.next());
     }
 
@@ -79,21 +89,11 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
     public void testEncodeBase64() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-
-        conn.createStatement().execute(ddl);
-
-        byte[] originalEncoded = "HelloPhoenix".getBytes();
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
-        ps.setBytes(1, originalEncoded);
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'BASE64') FROM " + testTable);
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'BASE64') FROM " + testTable + " WHERE ID=1");
         assertTrue(rs.next());
         String actualString = rs.getString(1);
-        assertEquals("SGVsbG9QaG9lbml4", actualString);
+        assertEquals(expectedBase64Chunk, actualString);
         assertFalse(rs.next());
     }
 
@@ -101,28 +101,23 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
     public void testLongBase64Decoding() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-        conn.createStatement().execute(ddl);
-
-        String base64Chunk = "HelloPhoenix";
         StringBuilder base64String = new StringBuilder();
         for (int i = 0; i < 20; i++) {
-            base64String.append(base64Chunk);
+            base64String.append(helloPhoenixString);
         }
 
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (3, ?)");
         ps.setBytes(1, base64String.toString().getBytes());
         ps.execute();
         conn.commit();
 
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'BASE64') FROM " + testTable);
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'BASE64') FROM " + testTable + " WHERE ID=3");
         assertTrue(rs.next());
 
-        String expactedBase64Chunk = "SGVsbG9QaG9lbml4";
         StringBuilder expectedString = new StringBuilder();
         for (int i = 0; i < 20; i++) {
-            expectedString.append(expactedBase64Chunk);
+            expectedString.append(expectedBase64Chunk);
         }
 
         String actualString = rs.getString(1);
@@ -134,31 +129,17 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
     public void testEncodeHBase() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
 
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-
-        conn.createStatement().execute(ddl);
-
-        byte[] originalEncoded = "HelloPhoenix".getBytes();
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
-        ps.setBytes(1, originalEncoded);
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'HBASE') FROM " + testTable);
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'HBASE') FROM " + testTable + " WHERE ID=1");
         assertTrue(rs.next());
         String actualString = rs.getString(1);
-        assertEquals("HelloPhoenix", actualString);
+        assertEquals(helloPhoenixString, actualString);
         assertFalse(rs.next());
     }
 
     @Test
     public void testInvalidDecodingFormat() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-
-        conn.createStatement().execute(ddl);
 
         try {
             conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'INVALIDFORMAT') FROM " + testTable);
@@ -171,20 +152,18 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testNullAndEmptyStringDecoding() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
 
-        conn.createStatement().execute(ddl);
-
-        ResultSet rs = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable);
+        ResultSet rs = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=-10");
         assertFalse(rs.next());
 
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
+        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (4, ?)");
         ps.setBytes(1, new byte[0]);
         ps.execute();
         conn.commit();
 
-        ResultSet rs2 = conn.createStatement().executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable);
+        ResultSet rs2 = conn.createStatement()
+                .executeQuery("SELECT ENCODE_BINARY(data, 'HEX') FROM " + testTable + " WHERE ID=4");
         assertTrue(rs2.next());
         String actualString = rs2.getString(1);
         assertEquals(null, actualString);
@@ -194,63 +173,35 @@ public class EncodeBinaryFunctionIT extends ParallelStatsDisabledIT {
     @Test
     public void testEncodeDecodeRoundHex() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-        conn.createStatement().execute(ddl);
 
-        byte[] originalEncoded = "HelloPhoenix".getBytes();
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
-        ps.setBytes(1, originalEncoded);
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement()
-                .executeQuery("SELECT DECODE_BINARY(ENCODE_BINARY(data, 'HEX'), 'HEX') FROM " + testTable);
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT DECODE_BINARY(ENCODE_BINARY(data, 'HEX'), 'HEX') FROM " + testTable + " WHERE ID=1");
         assertTrue(rs.next());
         byte[] roundTripEncoded = rs.getBytes(1);
-        assertTrue(Arrays.equals(originalEncoded, roundTripEncoded));
+        assertTrue(Arrays.equals(originalBytes, roundTripEncoded));
         assertFalse(rs.next());
     }
 
     @Test
     public void testEncodeDecodeRoundBase64() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-        conn.createStatement().execute(ddl);
 
-        byte[] originalEncoded = "HelloPhoenix".getBytes();
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
-        ps.setBytes(1, originalEncoded);
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement()
-                .executeQuery("SELECT DECODE_BINARY(ENCODE_BINARY(data, 'BASE64'), 'BASE64') FROM " + testTable);
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT DECODE_BINARY(ENCODE_BINARY(data, 'BASE64'), 'BASE64') FROM " + testTable + " WHERE ID=1");
         assertTrue(rs.next());
         byte[] roundTripEncoded = rs.getBytes(1);
-        assertTrue(Arrays.equals(originalEncoded, roundTripEncoded));
-        assertFalse(rs.next());
+        assertTrue(Arrays.equals(originalBytes, roundTripEncoded));
     }
 
     @Test
     public void testEncodeDecodeRoundHbase() throws Exception {
         Connection conn = DriverManager.getConnection(getUrl());
-        String testTable = generateUniqueName();
-        String ddl = "CREATE TABLE " + testTable + " (id INTEGER PRIMARY KEY, data VARBINARY)";
-        conn.createStatement().execute(ddl);
 
-        byte[] originalEncoded = "HelloPhoenix".getBytes();
-        PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + testTable + " (id, data) VALUES (1, ?)");
-        ps.setBytes(1, originalEncoded);
-        ps.execute();
-        conn.commit();
-
-        ResultSet rs = conn.createStatement()
-                .executeQuery("SELECT DECODE_BINARY(ENCODE_BINARY(data, 'HBASE'), 'HBASE') FROM " + testTable);
+        ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT DECODE_BINARY(ENCODE_BINARY(data, 'HBASE'), 'HBASE') FROM " + testTable + " WHERE ID=1");
         assertTrue(rs.next());
         byte[] roundTripEncoded = rs.getBytes(1);
-        assertTrue(Arrays.equals(originalEncoded, roundTripEncoded));
+        assertTrue(Arrays.equals(originalBytes, roundTripEncoded));
         assertFalse(rs.next());
     }
 }

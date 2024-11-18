@@ -59,7 +59,7 @@ public class DecodeFunction extends ScalarFunction {
 			return true; // expression was evaluated, but evaluated to null
 		}
 
-		String stringToDecode = (String) PVarchar.INSTANCE.toObject(ptr);
+        String stringToDecode = (String) PVarchar.INSTANCE.toObject(ptr);
 
 		Expression encodingExpression = getEncodingExpression();
 		if (!encodingExpression.evaluate(tuple, ptr)) {
@@ -71,24 +71,24 @@ public class DecodeFunction extends ScalarFunction {
 	        .setMessage("Missing bytes encoding").build().buildException());
 		}
 
-		PDataType type = encodingExpression.getDataType();
+        PDataType type = encodingExpression.getDataType();
 		String encoding = ((String) type.toObject(ptr)).toUpperCase();
 
 		byte out[];
 
 		EncodeFormat format = EncodeFormat.valueOf(encoding);
         switch (format) {
-            case HEX:
-                out = decodeHex(stringToDecode);
-                break;
-            case BASE64:
-				out = Base64.getDecoder().decode(stringToDecode);
-                break;
-            case HBASE:
-                out = Bytes.toBytesBinary(stringToDecode);
-                break;
-            default:
-        	    throw new IllegalDataException("Unsupported encoding \"" + encoding + "\"");
+        case HEX:
+            out = decodeHex(stringToDecode);
+            break;
+        case BASE64:
+            out = Base64.getDecoder().decode(stringToDecode);
+            break;
+        case HBASE:
+            out = Bytes.toBytesBinary(stringToDecode);
+            break;
+        default:
+            throw new IllegalDataException("Unsupported encoding \"" + encoding + "\"");
         }
 		ptr.set(out);
 
