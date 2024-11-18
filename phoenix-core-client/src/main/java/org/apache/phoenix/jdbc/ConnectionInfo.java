@@ -493,15 +493,8 @@ public abstract class ConnectionInfo {
                                 LOGGER.info("Trying to connect to a secure cluster as {} "
                                         + "with keytab {}",
                                     principal, keytab);
-                                Configuration newConfig = HBaseFactoryProvider.getConfigurationFactory()
-                                        .getConfiguration();
+                                final Configuration newConfig = getConfiguration(principal, keytab);
                                 // We are intentionally changing the passed in Configuration object
-                                if (null != principal) {
-                                    newConfig.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
-                                }
-                                if (null != keytab) {
-                                    newConfig.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
-                                }
                                 UserGroupInformation.setConfiguration(newConfig);
                                 User.login(newConfig, QueryServices.HBASE_CLIENT_KEYTAB,
                                     QueryServices.HBASE_CLIENT_PRINCIPAL, null);
@@ -521,6 +514,28 @@ public abstract class ConnectionInfo {
             } else {
                 LOGGER.debug("Principal and keytab not provided, not attempting Kerberos login");
             }
+        }
+
+        private Configuration getConfiguration( String principal, String keytab) {
+            final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            // Add QueryServices properties
+            for (Entry<String,String> entry : props) {
+                config.set(entry.getKey(), entry.getValue());
+            }
+            // Add any user-provided properties (via DriverManager)
+            if (info != null) {
+                for (Object key : info.keySet()) {
+                    config.set((String) key, info.getProperty((String) key));
+                }
+            }
+            // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
+            if (null != principal) {
+                config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+            }
+            if (null != keytab) {
+                config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
+            }
+            return config;
         }
 
         protected String normalizeHostsList(String quorum, Integer defaultPort)
