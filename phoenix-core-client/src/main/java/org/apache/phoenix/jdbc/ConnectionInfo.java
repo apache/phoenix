@@ -519,8 +519,10 @@ public abstract class ConnectionInfo {
         private Configuration getConfiguration( String principal, String keytab) {
             final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
             // Add QueryServices properties
-            for (Entry<String,String> entry : props) {
-                config.set(entry.getKey(), entry.getValue());
+            if (props != null) {
+                for (Entry<String,String> entry : props) {
+                    config.set(entry.getKey(), entry.getValue());
+                }
             }
             // Add any user-provided properties (via DriverManager)
             if (info != null) {
