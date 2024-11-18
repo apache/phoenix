@@ -48,6 +48,7 @@ public abstract class ParallelStatsEnabledIT extends BaseTest {
         props.put(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
         props.put(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
         props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(true));
+        props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
         setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
 
         TaskRegionEnvironment =
