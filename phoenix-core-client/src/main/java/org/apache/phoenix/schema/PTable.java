@@ -938,6 +938,11 @@ public interface PTable extends PMetaDataEntity {
     TTLExpression getTTL();
 
     /**
+     * @return Returns true if table has condition TTL set
+     */
+    boolean hasConditionTTL();
+
+    /**
      * @return the last timestamp at which this entity had its data shape created or modified (e
      * .g, create entity, adding or dropping a column. Not affected by changing table properties
      */

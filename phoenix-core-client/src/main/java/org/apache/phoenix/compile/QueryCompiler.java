@@ -23,18 +23,13 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUE
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
-import org.apache.phoenix.parse.HintNode;
-import org.apache.phoenix.parse.NamedTableNode;
-import org.apache.phoenix.parse.TerminalParseNode;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.schema.SortOrder;
-import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
@@ -60,6 +55,7 @@ import org.apache.phoenix.execute.UnionPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
+import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -68,8 +64,10 @@ import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.EqualParseNode;
+import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
+import org.apache.phoenix.parse.NamedTableNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
@@ -77,27 +75,30 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.parse.SubqueryParseNode;
 import org.apache.phoenix.parse.TableNode;
+import org.apache.phoenix.parse.TerminalParseNode;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.AmbiguousColumnException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
+import org.apache.phoenix.schema.ConditionTTLExpression;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
+import org.apache.phoenix.thirdparty.com.google.common.base.Optional;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ParseNodeUtil;
 import org.apache.phoenix.util.ParseNodeUtil.RewriteResult;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
-import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.hadoop.conf.Configuration;
-
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
 
 /**
@@ -786,6 +787,32 @@ public class QueryCompiler {
         ColumnResolver resolver = context.getResolver();
         TableRef tableRef = context.getCurrentTable();
         PTable table = tableRef.getTable();
+
+        if (table.hasConditionTTL()) { // TODO CDC index
+            ConditionTTLExpression condTTLExpr = (ConditionTTLExpression) table.getTTL();
+            // For non-index tables we have to re-write the WHERE clause by ANDing the condition
+            // TTL expression. We can do it since the condition TTL expression always evaluates to
+            // a BOOLEAN. For index tables we don't need to re-write since we first re-write
+            // the query for data table and later the optimizer will re-write for index tables.
+            // The only time we need to re-write the WHERE clause for index tables is when the
+            // query is run directly against the index tables in which case the dataPlans
+            // will be empty
+            boolean rewrite = table.getType() != PTableType.INDEX || dataPlans.isEmpty();
+            if (rewrite) {
+                PhoenixConnection conn = this.statement.getConnection();
+                // Takes care of translating data table column references
+                // to index table column references
+                ParseNode ttlCondition = condTTLExpr.parseExpression(conn, table);
+                ParseNode negateTTL = NODE_FACTORY.not(ttlCondition);
+                ParseNode where = select.getWhere();
+                if (where == null) {
+                    where = negateTTL;
+                } else {
+                    where = NODE_FACTORY.and(Arrays.asList(where, negateTTL));
+                }
+                select = NODE_FACTORY.select(select, where);
+            }
+        }
 
         if (table.getType() == PTableType.CDC) {
             List<AliasedNode> selectNodes = select.getSelect();

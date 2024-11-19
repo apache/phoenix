@@ -2469,6 +2469,11 @@ public class PTableImpl implements PTable {
         return ttl;
     }
 
+    @Override
+    public boolean hasConditionTTL() {
+        return ttl instanceof ConditionTTLExpression;
+    }
+
     @Override public boolean hasViewModifiedUpdateCacheFrequency() {
         return viewModifiedPropSet.get(VIEW_MODIFIED_UPDATE_CACHE_FREQUENCY_BIT_SET_POS);
     }

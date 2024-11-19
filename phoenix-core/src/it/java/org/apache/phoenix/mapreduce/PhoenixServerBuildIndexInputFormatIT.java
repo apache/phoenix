@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -31,16 +32,35 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Properties;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 @Category(ParallelStatsDisabledTest.class)
+@RunWith(Parameterized.class)
 public class PhoenixServerBuildIndexInputFormatIT  extends ParallelStatsDisabledIT {
+
+    private final boolean useExpression;
+
+    @Parameterized.Parameters(name = "useExpression={0}")
+    public static synchronized Collection<Boolean[]> data() {
+        return Arrays.asList(new Boolean[][]{
+                {false}, {true}
+        });
+    }
+
+    public PhoenixServerBuildIndexInputFormatIT(boolean useExpression) {
+        this.useExpression = useExpression;
+    }
 
     @Test
     public void testQueryPlanWithSource() throws Exception {
@@ -58,7 +78,8 @@ public class PhoenixServerBuildIndexInputFormatIT  extends ParallelStatsDisabled
         Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute("CREATE TABLE " + dataTableFullName
-                + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) ");
+                + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) " +
+                    (useExpression ? "TTL = 'VAL2 = -1'" : ""));
             conn.createStatement().execute(String.format(
                 "CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2)", indexTableName, dataTableFullName));
             conn.createStatement().execute("CREATE VIEW " + viewFullName +
@@ -105,5 +126,7 @@ public class PhoenixServerBuildIndexInputFormatIT  extends ParallelStatsDisabled
         } else {
             assertEquals(pIndexTable, actual);
         }
+        Scan scan = queryPlan.getContext().getScan();
+        assertNull(scan.getFilter());
     }
 }
