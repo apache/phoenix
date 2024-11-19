@@ -122,10 +122,11 @@ public class ConditionTTLExpression extends TTLExpression {
         return null;
     }
 
-    public ParseNode parseExpression(PhoenixConnection connection, PTable table) throws SQLException {
+    public ParseNode parseExpression(PhoenixConnection connection,
+                                     PTable table) throws SQLException {
         ParseNode ttlCondition = SQLParser.parseCondition(this.ttlExpr);
-        return table.getType() != PTableType.INDEX ? ttlCondition :
-                rewriteForIndex(connection, table, ttlCondition);
+        return table.getType() != PTableType.INDEX ? ttlCondition
+                : rewriteForIndex(connection, table, ttlCondition);
     }
 
     private ParseNode rewriteForIndex(PhoenixConnection connection,
