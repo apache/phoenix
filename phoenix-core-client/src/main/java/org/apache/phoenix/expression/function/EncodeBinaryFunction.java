@@ -25,10 +25,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.schema.tuple.Tuple;
 
 import static org.apache.hadoop.hbase.util.Bytes.toHex;
 

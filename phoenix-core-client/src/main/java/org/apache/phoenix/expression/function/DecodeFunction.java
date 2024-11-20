@@ -1,10 +1,11 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to you under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -59,7 +60,7 @@ public class DecodeFunction extends ScalarFunction {
 			return true; // expression was evaluated, but evaluated to null
 		}
 
-        String stringToDecode = (String) PVarchar.INSTANCE.toObject(ptr);
+		String stringToDecode = (String) PVarchar.INSTANCE.toObject(ptr);
 
 		Expression encodingExpression = getEncodingExpression();
 		if (!encodingExpression.evaluate(tuple, ptr)) {
@@ -71,25 +72,25 @@ public class DecodeFunction extends ScalarFunction {
 	        .setMessage("Missing bytes encoding").build().buildException());
 		}
 
-        PDataType type = encodingExpression.getDataType();
+		PDataType type = encodingExpression.getDataType();
 		String encoding = ((String) type.toObject(ptr)).toUpperCase();
 
 		byte out[];
 
 		EncodeFormat format = EncodeFormat.valueOf(encoding);
-        switch (format) {
-        case HEX:
-            out = decodeHex(stringToDecode);
-            break;
-        case BASE64:
-            out = Base64.getDecoder().decode(stringToDecode);
-            break;
-        case HBASE:
-            out = Bytes.toBytesBinary(stringToDecode);
-            break;
-        default:
-            throw new IllegalDataException("Unsupported encoding \"" + encoding + "\"");
-        }
+		switch (format) {
+			case HEX:
+				out = decodeHex(stringToDecode);
+				break;
+			case BASE64:
+				out = Base64.getDecoder().decode(stringToDecode);
+				break;
+			case HBASE:
+				out = Bytes.toBytesBinary(stringToDecode);
+				break;
+			default:
+				throw new IllegalDataException("Unsupported encoding \"" + encoding + "\"");
+		}
 		ptr.set(out);
 
 		return true;
