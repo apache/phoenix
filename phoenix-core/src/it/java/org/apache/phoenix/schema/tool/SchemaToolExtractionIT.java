@@ -633,6 +633,33 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         compareOrdinalPositions(indexName, newIndex);
     }
 
+    @Test
+    public void testSaltingWithOOOPKDefinitions() throws Exception {
+        String schemaName = generateUniqueName();
+        String tableName = generateUniqueName();
+        String fullTableName = SchemaUtil.getQualifiedTableName(schemaName, tableName);
+        // Order of definition of columns in create table is different from PK constraint
+        String ddl = "CREATE TABLE IF NOT EXISTS " + fullTableName +
+                "(ID1 CHAR(15) NOT NULL,\n" +
+                "ID2 INTEGER NOT NULL,\n" +
+                "TEXT VARCHAR,\n" +
+                "INT INTEGER,\n" +
+                "DOUBLE DECIMAL(12,3),\n" +
+                "CREATED_DATE DATE NOT NULL,\n" +
+                "TS TIMESTAMP\n" +
+                "CONSTRAINT PK PRIMARY KEY (ID1, ID2, CREATED_DATE))\n" +
+                "SALT_BUCKETS=16,MULTI_TENANT=true";
+
+        List<String> queries = new ArrayList();
+        queries.add(ddl);
+        String result = runSchemaExtractionTool(schemaName, tableName, null, queries);
+        String expected = "CREATE TABLE %s(ID1 CHAR(15) NOT NULL, ID2 INTEGER NOT NULL, TEXT VARCHAR, " +
+                "INT INTEGER, DOUBLE DECIMAL(12,3), CREATED_DATE DATE NOT NULL, TS TIMESTAMP " +
+                "CONSTRAINT PK PRIMARY KEY (ID1, ID2, CREATED_DATE)) " +
+                "IMMUTABLE_STORAGE_SCHEME='ONE_CELL_PER_COLUMN', SALT_BUCKETS=16, MULTI_TENANT=true";
+        Assert.assertEquals(String.format(expected, fullTableName), result);
+    }
+
     private Connection getTenantConnection(String url, String tenantId) throws SQLException {
         Properties props = new Properties();
         props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
@@ -671,7 +698,10 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
         if(conn!=null) {
             set.setConf(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration());
         }
-        set.run(args);
+        int ret = set.run(args);
+        if (ret != 0) {
+            throw new RuntimeException(String.format("Schema tool failed with error %d", ret));
+        }
         return set.getOutput();
     }
 
