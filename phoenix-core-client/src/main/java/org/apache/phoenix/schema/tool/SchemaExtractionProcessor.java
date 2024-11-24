@@ -517,7 +517,8 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
     private String getColumnInfoStringForTable(PTable table) {
         StringBuilder colInfo = new StringBuilder();
         List<PColumn> columns = table.getBucketNum() == null ? table.getColumns() : table.getColumns().subList(1, table.getColumns().size());
-        List<PColumn> pkColumns = table.getBucketNum() == null ? table.getPKColumns() : table.getColumns().subList(1, table.getPKColumns().size());
+        List<PColumn> pkColumns = table.getBucketNum() == null ? table.getPKColumns()
+                : table.getPKColumns().subList(1, table.getPKColumns().size());
 
         return getColumnInfoString(table, colInfo, columns, pkColumns);
     }
