@@ -66,6 +66,7 @@ public class PartitionIdFunction extends ScalarFunction {
         if (tuple == null) {
             return false;
         }
+        tuple.getKey(ptr);
         if (ptr.getLength() < PARTITION_ID_LENGTH) {
             return false;
         }
