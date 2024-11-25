@@ -3715,6 +3715,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         return setSystemDDLProperties(QueryConstants.CREATE_TRANSFORM_METADATA);
     }
 
+    protected String getCDCStreamStatusDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_STATUS_METADATA);
+    }
+
+    protected String getCDCStreamDDL() {
+        return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+    }
+
     private String setSystemDDLProperties(String ddl) {
         return String.format(ddl,
           props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB, QueryServicesOptions.DEFAULT_SYSTEM_MAX_VERSIONS),
@@ -4010,6 +4018,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         } catch (TableAlreadyExistsException ignore) {}
         try {
             metaConnection.createStatement().executeUpdate(getTransformDDL());
+        } catch (TableAlreadyExistsException ignore) {}
+        try {
+            metaConnection.createStatement().executeUpdate(getCDCStreamStatusDDL());
+        } catch (TableAlreadyExistsException ignore) {}
+        try {
+            metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
         } catch (TableAlreadyExistsException ignore) {}
     }
 
@@ -4647,6 +4661,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
         metaConnection = upgradeSystemTransform(metaConnection, systemTableToSnapshotMap);
         metaConnection = upgradeSystemLog(metaConnection, systemTableToSnapshotMap);
         metaConnection = upgradeSystemMutex(metaConnection);
+        metaConnection = upgradeSystemCDCStreamStatus(metaConnection);
+        metaConnection = upgradeSystemCDCStream(metaConnection);
 
         // As this is where the most time will be spent during an upgrade,
         // especially when there are large number of views.
@@ -4978,6 +4994,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices implement
             // writing. However, if need arises to perform significant
             // update, we should take snapshot just like other system tables.
             // e.g usages of takeSnapshotOfSysTable()
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemCDCStreamStatus(PhoenixConnection metaConnection)
+            throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(getCDCStreamStatusDDL());
+        } catch (TableAlreadyExistsException ignored) {
+        }
+        return metaConnection;
+    }
+
+    private PhoenixConnection upgradeSystemCDCStream(PhoenixConnection metaConnection)
+            throws SQLException {
+        try {
+            metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+        } catch (TableAlreadyExistsException ignored) {
         }
         return metaConnection;
     }
