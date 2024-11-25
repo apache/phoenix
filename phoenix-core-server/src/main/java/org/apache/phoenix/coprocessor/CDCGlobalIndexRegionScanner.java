@@ -35,8 +35,10 @@ import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.util.CDCChangeBuilder;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -104,7 +106,13 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                     indexToDataRowKeyMap.get(indexRowKey));
             Result dataRow = dataRows.get(dataRowKey);
-            Long changeTS = firstIndexCell.getTimestamp();
+            int phoenixRowTimestampFunctionOffset = 2 + (indexMaintainer.isMultiTenant() ? 1 : 0)
+                    + (indexMaintainer.getViewIndexId() != null ? 1 : 0);
+            ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+            indexMaintainer.getIndexRowKeySchema().iterator(firstIndexCell.getRowArray(),
+                    firstIndexCell.getRowOffset(), firstIndexCell.getRowLength(), ptr,
+                    phoenixRowTimestampFunctionOffset);
+            long changeTS = PLong.INSTANCE.getCodec().decodeLong(ptr, SortOrder.ASC);
             TupleProjector dataTableProjector = cdcDataTableInfo.getDataTableProjector();
             Expression[] expressions = dataTableProjector != null ?
                     dataTableProjector.getExpressions() : null;

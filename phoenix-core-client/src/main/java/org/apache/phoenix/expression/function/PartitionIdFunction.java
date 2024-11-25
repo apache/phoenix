@@ -20,6 +20,7 @@ package org.apache.phoenix.expression.function;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.PartitionIdParseNode;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -29,8 +30,8 @@ import org.apache.phoenix.schema.types.PDataType;
 import java.util.List;
 
 /**
- * Function to return the partition id which is the encoded data table region name as the prefix
- * of the CDC index row key. This function is used only with CDC Indexes
+ * Function to return the partition id which is the encoded data table region name.
+ * This function is used only with CDC Indexes
  */
 @BuiltInFunction(name = PartitionIdFunction.NAME,
         nodeClass= PartitionIdParseNode.class,
@@ -49,11 +50,6 @@ public class PartitionIdFunction extends ScalarFunction {
      */
     public PartitionIdFunction(List<Expression> children) {
         super(children);
-        if (!children.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "PartitionIdFunction should not have any child expression"
-            );
-        }
     }
 
     @Override
@@ -62,24 +58,20 @@ public class PartitionIdFunction extends ScalarFunction {
     }
 
     /**
-     * The evaluate method is called under the following conditions -
-     * 1. When PARTITION_ID() is evaluated in the projection list.
-     *
-     * 2. When PARTITION_ID() is evaluated in the backend as part of the where clause.
-     *
+     * Since partition id is part of the row key, this method is not called when PARTITION_ID()
+     * is used with an IN clause.
      */
     @Override
     public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
         if (tuple == null) {
             return false;
         }
-        tuple.getKey(ptr);
         if (ptr.getLength() < PARTITION_ID_LENGTH) {
             return false;
         }
-        // The partition id of a row is always the prefix of the row key
-        ptr.set(ptr.get(), 0, PARTITION_ID_LENGTH);
-        return true;
+        RowKeyColumnExpression partitionIdColumnExpression =
+                (RowKeyColumnExpression) children.get(0);
+        return partitionIdColumnExpression.evaluate(tuple, ptr);
     }
 
     @Override
@@ -101,5 +93,4 @@ public class PartitionIdFunction extends ScalarFunction {
     public Determinism getDeterminism() {
         return Determinism.PER_ROW;
     }
-
 }
