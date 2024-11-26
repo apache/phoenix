@@ -40,8 +40,10 @@ import java.util.Optional;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
+import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.expression.CaseExpression;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
@@ -85,7 +87,6 @@ import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
-import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
@@ -270,9 +271,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // passed MiniBatchOperationInProgress, like preWALAppend()
       private List<Mutation> originalMutations;
       private boolean hasAtomic;
-      private boolean hasDelete;
-      private boolean hasUncoveredIndex;
-      private boolean hasGlobalIndex;
+      private boolean hasRowDelete;
+      private boolean hasUncoveredIndex; // Has uncovered global indexes which are not CDC Indexes
+      private boolean hasGlobalIndex; // Covered global index
       private boolean hasLocalIndex;
       private boolean hasTransform;
       private boolean returnResult;
@@ -978,8 +979,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     /**
-     * Generate the index update for a data row from the mutation that are obtained by merging the previous data row
-     * state with the pending row mutation.
+     * Generate the index update for a data row from the mutation that are obtained by merging the
+     * previous data row state with the pending row mutation.
      */
     private void prepareIndexMutations(BatchMutateContext context, List<IndexMaintainer> maintainers, long ts)
             throws IOException {
@@ -1023,13 +1024,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                             QueryConstants.UNVERIFIED_BYTES);
                     context.indexUpdates.put(hTableInterfaceReference,
                             new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
-                    // Delete the current index row if the new index key is different than the current one
+                    // Delete the current index row if the new index key is different from the
+                    // current one and the index is not a CDC index
                     if (currentDataRowState != null) {
                         ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
                         byte[] indexRowKeyForCurrentDataRow = indexMaintainer
                                 .buildRowKey(currentDataRowVG, rowKeyPtr, null, null,
                                         ts, encodedRegionName);
-                        if (Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0) {
+                        if (!indexMaintainer.isCDCIndex()
+                                && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow)
+                                != 0) {
                             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
                                     IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
                             context.indexUpdates.put(hTableInterfaceReference,
@@ -1038,20 +1042,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                     }
                 } else if (currentDataRowState != null
                         && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)) {
-                    context.indexUpdates.put(hTableInterfaceReference,
-                            new Pair<Mutation, byte[]>(getDeleteIndexMutation(currentDataRowState,
-                                    indexMaintainer, ts, rowKeyPtr, encodedRegionName),
-                                    rowKeyPtr.get()));
                     if (indexMaintainer.isCDCIndex()) {
-                        // CDC Index needs two delete markers one for deleting the index row, and
-                        // the other for referencing the data table delete mutation with the
-                        // right index row key, that is, the index row key starting with ts
+                        // CDC Index needs two  a delete marker for referencing the data table
+                        // delete mutation with the right index row key, that is, the index row key
+                        // starting with ts
                         Put cdcDataRowState = new Put(currentDataRowState.getRow());
                         cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
                                 indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
                                 ByteUtil.EMPTY_BYTE_ARRAY);
                         context.indexUpdates.put(hTableInterfaceReference,
                                 new Pair<Mutation, byte[]>(getDeleteIndexMutation(cdcDataRowState,
+                                        indexMaintainer, ts, rowKeyPtr, encodedRegionName),
+                                        rowKeyPtr.get()));
+                    } else {
+                        context.indexUpdates.put(hTableInterfaceReference,
+                                new Pair<Mutation, byte[]>(getDeleteIndexMutation(currentDataRowState,
                                         indexMaintainer, ts, rowKeyPtr, encodedRegionName),
                                         rowKeyPtr.get()));
                     }
@@ -1061,10 +1066,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     /**
-     * This method prepares unverified index mutations which are applied to index tables before the data table is
-     * updated. In the three-phase update approach, in phase 1, the status of existing index rows is set to "unverified"
-     * (these rows will be deleted from the index table in phase 3), and/or new put mutations are added with the
-     * unverified status. In phase 2, data table mutations are applied. In phase 3, the status for an index table row is
+     * This method prepares unverified index mutations which are applied to index tables before
+     * the data table is updated. In the three-phase update approach, in phase 1, the status of
+     * existing index rows is set to "unverified" these rows will be deleted from the index table
+     * in phase 3), and/or new put mutations are added with the unverified status. In phase 2,
+     * data table mutations are applied. In phase 3, the status for an index table row is
      * either set to "verified" or the row is deleted.
      */
     private void preparePreIndexMutations(BatchMutateContext context,
@@ -1167,7 +1173,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-                                              BatchMutateContext context) {
+                                              BatchMutateContext context) throws IOException {
         for (int i = 0; i < miniBatchOp.size(); i++) {
             Mutation m = miniBatchOp.getOperation(i);
             if (this.builder.returnResult(m) && miniBatchOp.size() == 1) {
@@ -1175,11 +1181,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
                 context.hasAtomic = true;
-                if (context.hasDelete) {
+                if (context.hasRowDelete) {
                     return;
                 }
             } else if (m instanceof Delete) {
-                context.hasDelete = true;
+                CellScanner scanner = m.cellScanner();
+                if (m.isEmpty()) {
+                    context.hasRowDelete = true;
+                } else {
+                    while (scanner.advance()) {
+                        if (scanner.current().getType() == Cell.Type.DeleteFamily) {
+                            context.hasRowDelete = true;
+                            break;
+                        }
+                    }
+                }
             }
             if (context.hasAtomic || context.returnResult) {
                 return;
@@ -1296,7 +1312,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         identifyMutationTypes(miniBatchOp, context);
         context.populateOriginalMutations(miniBatchOp);
 
-        if (context.hasDelete) {
+        if (context.hasRowDelete) {
             // Need to add cell tags to Delete Marker before we do any index processing
             // since we add tags to tables which doesn't have indexes also.
             ServerIndexUtil.setDeleteAttributes(miniBatchOp);
@@ -1319,7 +1335,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             long start = EnvironmentEdgeManager.currentTimeMillis();
             context.dataRowStates = new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
             if (context.hasGlobalIndex || context.hasTransform || context.hasAtomic ||
-                    context.returnResult || context.hasDelete || (context.hasUncoveredIndex &&
+                    context.returnResult || context.hasRowDelete || (context.hasUncoveredIndex &&
                     isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))) {
                 getCurrentRowStates(c, context);
             }
