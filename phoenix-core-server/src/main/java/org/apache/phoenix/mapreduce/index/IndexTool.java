@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
@@ -985,10 +987,22 @@ public class IndexTool extends Configured implements Tool {
                             indexTable, qDataTable));
         }
         qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
+
         pIndexTable = connection.unwrap(PhoenixConnection.class).getTable(
             SchemaUtil.getQualifiedTableName(schemaName, indexTable));
+        if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+            pIndexTable = connection.unwrap(PhoenixConnection.class).getTable(
+                    SchemaUtil.getQualifiedTableName(schemaName, indexTable).replace(
+                        QueryConstants.NAME_SEPARATOR,
+                        QueryConstants.NAMESPACE_SEPARATOR));
+        }
+
         indexType = pIndexTable.getIndexType();
         qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+        if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+            qIndexTable = qIndexTable.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+        }
+
         if (IndexType.LOCAL.equals(indexType)) {
             isLocalIndexBuild = true;
             if (useSnapshot) {
