@@ -259,6 +259,7 @@ import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.DefaultConnectionLimiter;
 import org.apache.phoenix.log.LoggingConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
+import org.apache.phoenix.mapreduce.index.IndexToolTableUtil;
 import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
@@ -4434,6 +4435,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
     } catch (TableAlreadyExistsException ignore) {
     }
+    try {
+      // check if we have old PHOENIX_INDEX_TOOL tables
+      // move data to the new tables under System, or simply create the new tables
+      IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+    } catch (Exception ignore) {
+    }
   }
 
   /**
@@ -4935,6 +4942,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // can work
       // with SYSTEM Namespace
       createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+
+      try {
+        // check if we have old PHOENIX_INDEX_TOOL tables
+        // move data to the new tables under System, or simply create the new tables
+        IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+
+      } catch (Exception ignore) {}
 
       clearUpgradeRequired();
       success = true;
