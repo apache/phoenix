@@ -301,10 +301,12 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
             put.add(cell);
         }
         if (indexMaintainer.isCDCIndex()) {
-            // A CDC index row key is PARTITION_ID() + PHOENIX_ROW_TIMESTAMP() + data row key. The
-            // only necessary check is the row timestamp check since the data row key is extracted
-            // from the index row key and PARTITION_ID() changes during region splits and merges.
-            // If the scan is a raw scan, even the time check is not necessary for the CDC indexes
+            // A CDC index row key is [view index id] + [tenant id] + PARTITION_ID()
+            // + PHOENIX_ROW_TIMESTAMP() + data row key. The only necessary check is the row
+            // timestamp check since the data row key is extracted from the index row key and
+            // PARTITION_ID() changes during region splits and merges so we cannot check it.
+            // If the scan is a raw scan which is expected to be the case for CDC scans,
+            // even the time check is not necessary
             if (scan.isRaw() || IndexUtil.getMaxTimestamp(put) == indexTimestamp) {
                 return true;
             }
