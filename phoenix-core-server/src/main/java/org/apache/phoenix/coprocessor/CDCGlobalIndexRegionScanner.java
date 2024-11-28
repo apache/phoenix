@@ -99,20 +99,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
         if (indexRowIterator.hasNext()) {
             List<Cell> indexRow = indexRowIterator.next();
-            // firstCell: Picking the earliest cell in the index row so that
-            // timestamp of the cell and the row will be same.
-            Cell firstIndexCell = indexRow.get(indexRow.size() - 1);
-            byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(firstIndexCell);
+            Cell indexCell = indexRow.get(0);
+            byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(indexCell);
             ImmutableBytesPtr dataRowKey = new ImmutableBytesPtr(
                     indexToDataRowKeyMap.get(indexRowKey));
             Result dataRow = dataRows.get(dataRowKey);
-            int phoenixRowTimestampFunctionOffset = 2 + (indexMaintainer.isMultiTenant() ? 1 : 0)
-                    + (indexMaintainer.getViewIndexId() != null ? 1 : 0);
-            ImmutableBytesPtr ptr = new ImmutableBytesPtr();
-            indexMaintainer.getIndexRowKeySchema().iterator(firstIndexCell.getRowArray(),
-                    firstIndexCell.getRowOffset(), firstIndexCell.getRowLength(), ptr,
-                    phoenixRowTimestampFunctionOffset);
-            long changeTS = PLong.INSTANCE.getCodec().decodeLong(ptr, SortOrder.ASC);
+            long changeTS = indexCell.getTimestamp();
             TupleProjector dataTableProjector = cdcDataTableInfo.getDataTableProjector();
             Expression[] expressions = dataTableProjector != null ?
                     dataTableProjector.getExpressions() : null;
@@ -198,9 +190,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                         }
                     }
                     if (changeBuilder.isNonEmptyEvent()) {
-                        Result cdcRow = getCDCImage(indexRowKey, firstIndexCell);
+                        Result cdcRow = getCDCImage(indexRowKey, indexCell);
                         if (cdcRow != null && tupleProjector != null) {
-                            if (firstIndexCell.getType() == Cell.Type.DeleteFamily) {
+                            if (indexCell.getType() == Cell.Type.DeleteFamily) {
                                 // result is of type EncodedColumnQualiferCellsList for queries with
                                 // Order by clause. It fails when Delete Family cell is added to it
                                 // as it expects column qualifier bytes which is not available.
@@ -208,13 +200,13 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                                 result.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY)
                                         .setRow(indexRowKey)
                                         .setFamily(ImmutableBytesPtr.cloneCellFamilyIfNecessary(
-                                                firstIndexCell))
+                                                indexCell))
                                         .setQualifier(indexMaintainer.getEmptyKeyValueQualifier())
-                                        .setTimestamp(firstIndexCell.getTimestamp())
+                                        .setTimestamp(indexCell.getTimestamp())
                                         .setType(Cell.Type.Put)
                                         .setValue(EMPTY_BYTE_ARRAY).build());
                             } else {
-                                result.add(firstIndexCell);
+                                result.add(indexCell);
                             }
                             IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow),
                                     tupleProjector, ptr);
