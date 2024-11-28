@@ -19,27 +19,18 @@ package org.apache.phoenix.mapreduce.index;
 
 import org.apache.hadoop.hbase.Cell;
 
-import org.apache.hadoop.hbase.TableExistsException;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.IndexToolVerificationResult;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.ByteUtil;
 import org.slf4j.Logger;
@@ -58,7 +49,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     private Table indexTable;
     public static final String ROW_KEY_SEPARATOR = "|";
     public static final byte[] ROW_KEY_SEPARATOR_BYTE = Bytes.toBytes(ROW_KEY_SEPARATOR);
-    public final static String RESULT_TABLE_NAME = "PHOENIX_INDEX_TOOL_RESULT";
+    public final static String RESULT_TABLE_NAME = IndexToolTableUtil.SYSTEM_RESULT_TABLE_NAME;
     public final static byte[] RESULT_TABLE_NAME_BYTES = Bytes.toBytes(RESULT_TABLE_NAME);
     public final static byte[] RESULT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
     public final static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
@@ -163,26 +154,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
     }
 
     public void createResultTable(Connection connection) throws IOException, SQLException {
-        ConnectionQueryServices queryServices = connection.unwrap(PhoenixConnection.class).getQueryServices();
-        try (Admin admin = queryServices.getAdmin()) {
-            TableName resultTableName = TableName.valueOf(RESULT_TABLE_NAME);
-            if (!admin.tableExists(resultTableName)) {
-                ColumnFamilyDescriptor columnDescriptor =
-                    ColumnFamilyDescriptorBuilder
-                        .newBuilder(RESULT_TABLE_COLUMN_FAMILY)
-                        .setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL)
-                        .build();
-                TableDescriptor tableDescriptor =
-                    TableDescriptorBuilder.newBuilder(resultTableName)
-                        .setColumnFamily(columnDescriptor).build();
-                try {
-                    admin.createTable(tableDescriptor);
-                } catch (TableExistsException e) {
-                    LOGGER.warn("Table exists, ignoring", e);
-                }
-                resultTable = admin.getConnection().getTable(resultTableName);
-            }
-        }
+        resultTable = IndexToolTableUtil.createResultTable(connection);
     }
 
     private static byte[] generatePartialResultTableRowKey(long ts, byte[] indexTableName) {
