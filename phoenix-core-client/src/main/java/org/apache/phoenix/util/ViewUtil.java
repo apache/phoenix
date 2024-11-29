@@ -897,7 +897,7 @@ public class ViewUtil {
     /**
      * Retrieves the list of unique view index ids from SYSTEM.CATALOG for a given view index table
      * @param connection - Phoenix Connection
-     * @param tableName - name of the view index table for which view index ids need to be retrieved
+     * @param tableName - physical table name (having prefix {@link MetaDataUtil#VIEW_INDEX_TABLE_PREFIX} of the view index table for which view index ids need to be retrieved
      * @param includeTenantViewIndexes - true if tenant view indexes to be included otherwise false
      * @return - list of view index ids
      * @throws IOException
@@ -908,7 +908,7 @@ public class ViewUtil {
         Preconditions.checkArgument(MetaDataUtil.isViewIndex(tableName));
         final List<String> viewIndexIdsString = new ArrayList<>();
         final String viewIndexIdsQuery = getViewIndexIdsQuery(tableName, includeTenantViewIndexes);
-        logger.info(String.format("Query to get view index ids for %s with includeTenantViewIndexes as %b is %s", tableName, includeTenantViewIndexes, viewIndexIdsQuery);
+        logger.info(String.format("Query to get view index ids for %s with includeTenantViewIndexes as %b is %s", tableName, includeTenantViewIndexes, viewIndexIdsQuery));
         PreparedStatement preparedStatement = connection.prepareStatement(viewIndexIdsQuery);
         ResultSet resultSet = preparedStatement.executeQuery();
         while (resultSet.next()) {

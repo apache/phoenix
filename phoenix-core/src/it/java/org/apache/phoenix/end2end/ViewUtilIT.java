@@ -26,10 +26,7 @@ import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TableViewFinderResult;
-import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.ViewUtil;
+import org.apache.phoenix.util.*;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -464,7 +461,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testGetViewIndexIdsWithSchema() throws SQLException, IOException {
-        testGetViewIndexIds(true);
+        testGetViewIndexIds(generateUniqueName());
     }
 
     /**
@@ -474,7 +471,7 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
      */
     @Test
     public void testGetViewIndexIdsWithoutSchema() throws SQLException, IOException {
-        testGetViewIndexIds(false);
+        testGetViewIndexIds(null);
     }
 
     /**
@@ -484,15 +481,14 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
      * 3. Create 2 tenant views (tenantViewName1 & tenantViewName2) and 3 tenant view indexes (1 on tenantViewName1 & 2 on tenantViewName2)
      * 4. Get view index ids EXCLUDING tenant view indexes and ensure the count is 5 (5 global view indexes)
      * 5. Get view index ids INCLUDING tenant view indexes and ensure the count is 8 (5 global view index + 3 tenant view indexes)
-     * @param includeSchema - if schema needs to be added while creating the table
+     * @param schemaPrefix - schema name for the table, it can be null if no schema is to be used
      * @throws IOException
      * @throws SQLException
      */
-    private void testGetViewIndexIds(boolean includeSchema) throws IOException, SQLException {
-        final String schemaPrefix = (includeSchema ? (generateUniqueName() + ".") : "");
-        final String tableName = schemaPrefix + generateUniqueName();
-        final String globalViewName1 = schemaPrefix + generateUniqueName();
-        final String globalViewName2 = schemaPrefix + generateUniqueName();
+    private void testGetViewIndexIds(String schemaPrefix) throws IOException, SQLException {
+        final String tableName = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String globalViewName1 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String globalViewName2 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
         final String globalViewIndex11 = generateUniqueName() + "_INDEX11";
         final String globalViewIndex12 = generateUniqueName() + "_INDEX12";
         final String globalViewIndex21 = generateUniqueName() + "_INDEX21";
@@ -502,8 +498,8 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
         final String tenantId = generateUniqueName();
         Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
         tenantProps.setProperty(TENANT_ID_ATTRIB, tenantId);
-        final String tenantViewName1 = schemaPrefix + generateUniqueName();
-        final String tenantViewName2 = schemaPrefix + generateUniqueName();
+        final String tenantViewName1 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
+        final String tenantViewName2 = SchemaUtil.getTableName(schemaPrefix, generateUniqueName());
         final String tenantViewIndex11 = generateUniqueName() + "_INDEX11";
         final String tenantViewIndex21 = generateUniqueName() + "_INDEX21";
         final String tenantViewIndex22 = generateUniqueName() + "_INDEX22";
@@ -541,11 +537,11 @@ public class ViewUtilIT extends ParallelStatsDisabledIT {
             }
 
             // Get view indexes ids only for global view indexes (excluding tenant view indexes)
-            List<String> list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), "_IDX_" + tableName, false);
+            List<String> list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), false);
             assertEquals(5, list.size());
 
             // Get view indexes ids for both global and tenant view indexes
-            list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), "_IDX_" + tableName, true);
+            list = ViewUtil.getViewIndexIds(conn.unwrap(PhoenixConnection.class), MetaDataUtil.getViewIndexPhysicalName(tableName), true);
             assertEquals(8, list.size());
         }
     }
