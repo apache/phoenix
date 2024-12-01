@@ -59,6 +59,19 @@ public abstract class ConnectionInfo {
     protected static final boolean HAS_MASTER_REGISTRY;
     protected static final boolean HAS_RPC_REGISTRY;
 
+    private static volatile Configuration configuration;
+
+    public static Configuration getCachedConfiguration() {
+        if (configuration == null) {
+            synchronized (ConnectionInfo.class) {
+                if (configuration == null) {
+                    configuration = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+                }
+            }
+        }
+        return configuration;
+    }
+
     static {
         String version = VersionInfo.getVersion();
         if (VersionInfo.getMajorVersion(version) >= 3) {
@@ -107,14 +120,12 @@ public abstract class ConnectionInfo {
 
     public static ConnectionInfo createNoLogin(String url, ReadOnlyProps props, Properties info)
             throws SQLException {
-        Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        return create(url, conf, props, info, true);
+        return create(url, getCachedConfiguration(), props, info, true);
     }
 
     public static ConnectionInfo create(String url, ReadOnlyProps props, Properties info)
             throws SQLException {
-        Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-        return create(url, conf, props, info);
+        return create(url, getCachedConfiguration(), props, info);
     }
 
     public static ConnectionInfo createNoLogin(String url, Configuration configuration,
@@ -482,15 +493,10 @@ public abstract class ConnectionInfo {
                                 LOGGER.info("Trying to connect to a secure cluster as {} "
                                         + "with keytab {}",
                                     principal, keytab);
+                                final Configuration newConfig = getConfiguration(principal, keytab);
                                 // We are intentionally changing the passed in Configuration object
-                                if (null != principal) {
-                                    config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
-                                }
-                                if (null != keytab) {
-                                    config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
-                                }
-                                UserGroupInformation.setConfiguration(config);
-                                User.login(config, QueryServices.HBASE_CLIENT_KEYTAB,
+                                UserGroupInformation.setConfiguration(newConfig);
+                                User.login(newConfig, QueryServices.HBASE_CLIENT_KEYTAB,
                                     QueryServices.HBASE_CLIENT_PRINCIPAL, null);
                                 user = User.getCurrent();
                                 LOGGER.info("Successful login to secure cluster");
@@ -508,6 +514,30 @@ public abstract class ConnectionInfo {
             } else {
                 LOGGER.debug("Principal and keytab not provided, not attempting Kerberos login");
             }
+        }
+
+        private Configuration getConfiguration( String principal, String keytab) {
+            final Configuration config = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
+            // Add QueryServices properties
+            if (props != null) {
+                for (Entry<String,String> entry : props) {
+                    config.set(entry.getKey(), entry.getValue());
+                }
+            }
+            // Add any user-provided properties (via DriverManager)
+            if (info != null) {
+                for (Object key : info.keySet()) {
+                    config.set((String) key, info.getProperty((String) key));
+                }
+            }
+            // Set the principal and keytab if provided from the URL (overriding those provided in Properties)
+            if (null != principal) {
+                config.set(QueryServices.HBASE_CLIENT_PRINCIPAL, principal);
+            }
+            if (null != keytab) {
+                config.set(QueryServices.HBASE_CLIENT_KEYTAB, keytab);
+            }
+            return config;
         }
 
         protected String normalizeHostsList(String quorum, Integer defaultPort)
