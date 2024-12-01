@@ -826,9 +826,11 @@ public class DeleteIT extends ParallelStatsDisabledIT {
             allowServerSideMutations);
         try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
             conn.createStatement().execute(ddl);
-            Statement stmt = conn.createStatement();
-            for (int i = 0; i < numRecords ; i++) {
-                stmt.executeUpdate("UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + i + ",'value')");
+            String command = "UPSERT INTO " + tableName + " (pk1, v1) VALUES (" + ? + ",'value')"
+			PreparedStatement preStmt = conn.prepareStatement(command);  
+            for (int i = 0; i < numRecords ; i++) {                
+				preStmt.setBigDecimal(1, new BigDecimal(i));
+				preStmt.executeUpdate();
             }
             conn.commit();
             conn.setAutoCommit(autoCommit);
