@@ -22,6 +22,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCH
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_NOT_DEFINED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_TASK_TABLE;
@@ -135,6 +136,7 @@ import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.schema.PTableType.VIEW;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
+import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -2039,7 +2041,55 @@ public class MetaDataClient {
         createTableInternal(tableStatement, null, dataTable, null, null, null, null,
                 null, null, false, null,
                 null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
+        // for now, only track stream partition metadata for tables, TODO: updatable views
+        if (PTableType.TABLE.equals(dataTable.getType())) {
+            updateStreamPartitionMetadata(dataTableFullName);
+        }
         return new MutationState(0, 0, connection);
+    }
+
+    /**
+     * Trigger CDC Stream Partition metadata bootstrap for the given table in the background.
+     * Mark status as ENABLING in SYSTEM.CDC_STREAM_STATUS and add {@link CdcStreamPartitionMetadataTask}
+     * to SYSTEM.TASK which updates partition metadata based on table regions.
+     */
+    private void updateStreamPartitionMetadata(String tableName) throws SQLException {
+        long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTableNoCache(tableName));
+        String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
+        PreparedStatement ps = connection.prepareStatement(streamStatusSQL);
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcIndexTimestamp);
+        ps.setString(1, tableName);
+        ps.setString(2, streamName);
+        ps.setString(3, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
+        ps.executeUpdate();
+        connection.commit();
+
+        try {
+            List<Mutation> sysTaskUpsertMutations = Task.getMutationsForAddTask(
+                    new SystemTaskParams.SystemTaskParamsBuilder()
+                    .setConn(connection)
+                    .setTaskType(PTable.TaskType.CDC_STREAM_PARTITION)
+                    .setTableName(tableName) //give full table name
+                    .setSchemaName(streamName) // use schemaName to pass streamName
+                    .build());
+            byte[] rowKey = sysTaskUpsertMutations
+                    .get(0).getRow();
+            MetaDataProtocol.MetaDataMutationResult metaDataMutationResult =
+                    Task.taskMetaDataCoprocessorExec(connection, rowKey,
+                            new TaskMetaDataServiceCallBack(sysTaskUpsertMutations));
+            if (MetaDataProtocol.MutationCode.UNABLE_TO_UPSERT_TASK.equals(
+                    metaDataMutationResult.getMutationCode())) {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_UPSERT_TASK)
+                        .setSchemaName(SYSTEM_SCHEMA_NAME)
+                        .setTableName(SYSTEM_TASK_TABLE).build().buildException();
+            }
+        } catch (IOException ioe) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNABLE_TO_UPSERT_TASK)
+                    .setRootCause(ioe)
+                    .setMessage(ioe.getMessage())
+                    .setSchemaName(SYSTEM_SCHEMA_NAME)
+                    .setTableName(SYSTEM_TASK_TABLE).build().buildException();
+        }
     }
 
     /**

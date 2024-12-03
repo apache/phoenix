@@ -209,7 +209,8 @@ public interface PTable extends PMetaDataEntity {
     public enum TaskType {
         DROP_CHILD_VIEWS((byte)1),
         INDEX_REBUILD((byte)2),
-        TRANSFORM_MONITOR((byte)3);
+        TRANSFORM_MONITOR((byte)3),
+        CDC_STREAM_PARTITION((byte)4);
 
         private final byte[] byteValue;
         private final byte serializedValue;
