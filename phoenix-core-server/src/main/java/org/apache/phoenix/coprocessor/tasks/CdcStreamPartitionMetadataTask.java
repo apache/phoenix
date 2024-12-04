@@ -18,6 +18,8 @@
 
 package org.apache.phoenix.coprocessor.tasks;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -35,6 +37,8 @@ import java.util.List;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT;
 
 /**
  * Task to bootstrap partition metadata when CDC is enabled on a table.
@@ -53,13 +57,18 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
 
     @Override
     public TaskRegionObserver.TaskResult run(Task.TaskRecord taskRecord) {
+        Configuration conf = HBaseConfiguration.create(env.getConfiguration());
+        Configuration configuration = HBaseConfiguration.addHbaseResources(conf);
+        int getTableRegionsTimeout = configuration.getInt(PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT,
+                DEFAULT_PHOENIX_STREAMS_GET_TABLE_REGIONS_TIMEOUT);
         PhoenixConnection pconn = null;
         String tableName = taskRecord.getTableName();
         String streamName = taskRecord.getSchemaName();
         Timestamp timestamp = taskRecord.getTimeStamp();
         try {
             pconn = QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
-            List<HRegionLocation> tableRegions = pconn.getQueryServices().getAllTableRegions(tableName.getBytes());
+            List<HRegionLocation> tableRegions = pconn.getQueryServices().getAllTableRegions(
+                    tableName.getBytes(), getTableRegionsTimeout);
             upsertPartitionMetadata(pconn, tableName, streamName, tableRegions);
             updateStreamStatus(pconn, tableName, streamName);
             return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
