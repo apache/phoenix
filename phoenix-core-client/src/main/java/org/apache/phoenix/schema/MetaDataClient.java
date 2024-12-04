@@ -2054,7 +2054,7 @@ public class MetaDataClient {
      * to SYSTEM.TASK which updates partition metadata based on table regions.
      */
     private void updateStreamPartitionMetadata(String tableName) throws SQLException {
-        long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTableNoCache(tableName));
+        long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTable(tableName));
         String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
         PreparedStatement ps = connection.prepareStatement(streamStatusSQL);
         String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcIndexTimestamp);

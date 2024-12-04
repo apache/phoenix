@@ -171,12 +171,11 @@ public class CDCUtil {
     }
 
     public static long getCDCCreationTimestamp(PTable table) {
-        long ts = 0;
         for (PTable index : table.getIndexes()) {
             if (CDCUtil.isCDCIndex(index)) {
-                ts = index.getTimeStamp();
+                return index.getTimeStamp();
             }
         }
-        return ts;
+        return -1;
     }
 }
