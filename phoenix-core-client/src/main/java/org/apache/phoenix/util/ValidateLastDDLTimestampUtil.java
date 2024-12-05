@@ -28,7 +28,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.exception.StaleMetadataCacheException;
 import org.apache.phoenix.jdbc.PhoenixConnection;

@@ -20,7 +20,7 @@ package org.apache.phoenix.end2end;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
-import org.apache.hadoop.hbase.util.ByteStringer;
+import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
