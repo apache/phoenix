@@ -2008,7 +2008,10 @@ public class MetaDataClient {
             }
             throw e;
         }
-
+        // for now, only track stream partition metadata for tables, TODO: updatable views
+        if (PTableType.TABLE.equals(dataTable.getType())) {
+            updateStreamPartitionMetadata(dataTableFullName);
+        }
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
         List<ColumnDefInPkConstraint> pkColumnDefs = new ArrayList<>();
@@ -2041,10 +2044,6 @@ public class MetaDataClient {
         createTableInternal(tableStatement, null, dataTable, null, null, null, null,
                 null, null, false, null,
                 null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
-        // for now, only track stream partition metadata for tables, TODO: updatable views
-        if (PTableType.TABLE.equals(dataTable.getType())) {
-            updateStreamPartitionMetadata(dataTableFullName);
-        }
         return new MutationState(0, 0, connection);
     }
 
@@ -2056,13 +2055,14 @@ public class MetaDataClient {
     private void updateStreamPartitionMetadata(String tableName) throws SQLException {
         long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTable(tableName));
         String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
-        PreparedStatement ps = connection.prepareStatement(streamStatusSQL);
         String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcIndexTimestamp);
-        ps.setString(1, tableName);
-        ps.setString(2, streamName);
-        ps.setString(3, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
-        ps.executeUpdate();
-        connection.commit();
+        try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
+            ps.setString(1, tableName);
+            ps.setString(2, streamName);
+            ps.setString(3, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
+            ps.executeUpdate();
+            connection.commit();
+        }
 
         try {
             List<Mutation> sysTaskUpsertMutations = Task.getMutationsForAddTask(

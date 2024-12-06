@@ -95,31 +95,33 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
 
     private void updateStreamStatus(PhoenixConnection pconn, String tableName, String streamName)
             throws SQLException {
-        PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_STATUS_UPSERT_SQL);
-        ps.setString(1, tableName);
-        ps.setString(2, streamName);
-        ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
-        ps.executeUpdate();
-        pconn.commit();
-        LOGGER.info("Marked stream {} for table {} as ENABLED", streamName, tableName);
+        try (PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_STATUS_UPSERT_SQL)) {
+            ps.setString(1, tableName);
+            ps.setString(2, streamName);
+            ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
+            ps.executeUpdate();
+            pconn.commit();
+            LOGGER.info("Marked stream {} for table {} as ENABLED", streamName, tableName);
+        }
     }
 
     private void upsertPartitionMetadata(PhoenixConnection pconn, String tableName,
                                          String streamName, List<HRegionLocation> tableRegions)
             throws SQLException {
-        PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_PARTITION_UPSERT_SQL);
-        for (HRegionLocation tableRegion : tableRegions) {
-            RegionInfo ri = tableRegion.getRegionInfo();
-            ps.setString(1, tableName);
-            ps.setString(2, streamName);
-            ps.setString(3, ri.getEncodedName());
-            ps.setLong(4, ri.getRegionId());
-            ps.setBytes(5, ri.getStartKey());
-            ps.setBytes(6, ri.getEndKey());
-            ps.executeUpdate();
+        try (PreparedStatement ps = pconn.prepareStatement(CDC_STREAM_PARTITION_UPSERT_SQL)) {
+            for (HRegionLocation tableRegion : tableRegions) {
+                RegionInfo ri = tableRegion.getRegionInfo();
+                ps.setString(1, tableName);
+                ps.setString(2, streamName);
+                ps.setString(3, ri.getEncodedName());
+                ps.setLong(4, ri.getRegionId());
+                ps.setBytes(5, ri.getStartKey());
+                ps.setBytes(6, ri.getEndKey());
+                ps.executeUpdate();
+            }
+            pconn.commit();
+            LOGGER.info("Upserted {} partition metadata rows for table : {}, stream: {}",
+                    tableRegions.size(), tableName, streamName);
         }
-        pconn.commit();
-        LOGGER.info("Upserted {} partition metadata rows for table : {}, stream: {}",
-                tableRegions.size(), tableName, streamName);
     }
 }
