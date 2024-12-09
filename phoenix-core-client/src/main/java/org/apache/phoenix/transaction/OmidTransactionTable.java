@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CompareOperator;
-import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.Delete;
@@ -165,7 +164,7 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
         return TableName.valueOf(name);
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public boolean[] existsAll(List<Get> gets) throws IOException {
         throw new UnsupportedOperationException();
     }
@@ -186,13 +185,13 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier,
             byte[] value, Put put) throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier,
             byte[] value, Delete delete) throws IOException {
         throw new UnsupportedOperationException();
@@ -256,42 +255,42 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
         throw new UnsupportedOperationException();
     }
 
-    @Override
+  //No @Override for HBase 3 compatibility
     public int getOperationTimeout() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public int getRpcTimeout() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public void setOperationTimeout(int arg0) {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public void setRpcTimeout(int arg0) {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public int getWriteRpcTimeout() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public void setWriteRpcTimeout(int writeRpcTimeout) {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public int getReadRpcTimeout() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public void setReadRpcTimeout(int readRpcTimeout) {
         throw new UnsupportedOperationException();
     }
@@ -306,19 +305,19 @@ public class OmidTransactionTable extends CompatOmidTransactionTable implements 
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public boolean checkAndPut(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value, Put put)
             throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public boolean checkAndDelete(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
             Delete delete) throws IOException {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    //No @Override for HBase 3 compatibility
     public boolean checkAndMutate(byte[] row, byte[] family, byte[] qualifier, CompareOperator op, byte[] value,
             RowMutations mutation) throws IOException {
         throw new UnsupportedOperationException();

@@ -25,7 +25,6 @@ import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.RowMutations;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.Table.CheckAndMutateBuilder;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 
 public abstract class CompatOmidTransactionTable implements Table {
@@ -34,11 +33,6 @@ public abstract class CompatOmidTransactionTable implements Table {
 
     public CompatOmidTransactionTable(Table hTable) {
         this.hTable = hTable;
-    }
-
-    @Override
-    public HTableDescriptor getTableDescriptor() throws IOException {
-        return hTable.getTableDescriptor();
     }
 
     @Override
