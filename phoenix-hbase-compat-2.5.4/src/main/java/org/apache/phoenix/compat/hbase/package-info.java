@@ -14,17 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/**
+ * This package contains compatibility classes for bridging differences
+ * between different versions of HBase.
+ */
 package org.apache.phoenix.compat.hbase;
-
-import com.google.protobuf.ByteString;
-
-// This has different signature in the HBase 2 and 3 modules
-// This only comes together after the maven-replacer plugin relocates all protobuf code.
-public class ByteStringer {
-
-    private ByteStringer() { }
-
-    public static ByteString wrap(final byte[] array) {
-        return org.apache.hadoop.hbase.util.ByteStringer.wrap(array);
-    }
-}

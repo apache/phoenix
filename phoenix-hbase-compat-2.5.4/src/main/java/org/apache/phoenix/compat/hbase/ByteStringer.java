@@ -21,6 +21,9 @@ import com.google.protobuf.ByteString;
 // This has different signature in the HBase 2 and 3 modules
 // This only comes together after the maven-replacer plugin relocates all protobuf code.
 public class ByteStringer {
+
+    private ByteStringer() { }
+
     public static ByteString wrap(final byte[] array) {
         return org.apache.hadoop.hbase.util.ByteStringer.wrap(array);
     }
