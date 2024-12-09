@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.expression.aggregator;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -33,7 +34,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.SizedUtil;
-import org.iq80.snappy.Snappy;
+import org.xerial.snappy.Snappy;
 
 /**
  * Server side Aggregator which will aggregate data and find distinct values with number of occurrences for each.
@@ -108,8 +109,12 @@ public class DistinctValueWithCountServerAggregator extends BaseAggregator {
             // The size for the map serialization is above the threshold. We will do the Snappy compression here.
             byte[] compressed = new byte[COMPRESS_MARKER.length + Snappy.maxCompressedLength(buffer.length)];
             System.arraycopy(COMPRESS_MARKER, 0, compressed, 0, COMPRESS_MARKER.length);
-            int compressedLen = Snappy.compress(buffer, 1, buffer.length - 1, compressed, COMPRESS_MARKER.length);
-            ptr.set(compressed, 0, compressedLen + 1);
+            try {
+                int compressedLen = Snappy.compress(buffer, 1, buffer.length - 1, compressed, COMPRESS_MARKER.length);
+                ptr.set(compressed, 0, compressedLen + 1);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
             return true;
         }
         ptr.set(buffer, 0, offset);

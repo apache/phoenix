@@ -33,10 +33,10 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.xerial.snappy.Snappy;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
-import org.iq80.snappy.Snappy;
 
 /**
  * Client side Aggregator which will aggregate data and find distinct values with number of occurrences for each.
@@ -66,7 +66,7 @@ public abstract class DistinctValueWithCountClientAggregator extends BaseAggrega
                 if (Bytes.equals(ptr.get(), ptr.getOffset(), 1, DistinctValueWithCountServerAggregator.COMPRESS_MARKER,
                         0, 1)) {
                     // This reads the uncompressed length from the front of the compressed input
-                    int uncompressedLength = Snappy.getUncompressedLength(ptr.get(), ptr.getOffset() + 1);
+                    int uncompressedLength = Snappy.uncompressedLength(ptr.get(), ptr.getOffset() + 1, ptr.getLength() - 1);
                     byte[] uncompressed = new byte[uncompressedLength];
                     // This will throw CorruptionException, a RuntimeException if the snappy data is invalid.
                     // We're making a RuntimeException out of a checked IOException below so assume it's ok
