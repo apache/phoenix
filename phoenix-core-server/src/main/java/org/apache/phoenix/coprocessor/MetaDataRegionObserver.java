@@ -677,7 +677,8 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
     public static boolean tableRegionsOnline(Configuration conf, PTable table) {
         try (Connection hcon = ConnectionFactory.createConnection(conf)) {
             Admin admin = hcon.getAdmin();
-            List<RegionInfo> regionInfos = admin.getRegions(TableName.valueOf(table.getPhysicalName().getBytes()));
+            List<RegionInfo> regionInfos = admin.getRegions(TableName.valueOf(
+                    table.getPhysicalName().getBytes()));
             // This makes Number of Regions RPC calls sequentially.
             // For large tables this can be slow.
             for (RegionInfo regionInfo : regionInfos) {
@@ -692,7 +693,8 @@ public class MetaDataRegionObserver implements RegionObserver,RegionCoprocessor 
                     // very hard (needs reflection, or a bridge class in the same package),
                     // and it's not necessary for checking the RS liveness
                 } catch (IOException e) {
-                    LOGGER.debug("Cannot get region " + regionInfo.getEncodedName() + " info due to error:" + e);
+                    LOGGER.debug("Cannot get region " + regionInfo.getEncodedName()
+                            + " info due to error:" + e);
                     return false;
                 }
             }
