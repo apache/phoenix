@@ -24,12 +24,16 @@ import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.task.ServerTask;
+import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -72,8 +76,30 @@ public class CdcStreamPartitionMetadataTask extends BaseTask  {
             upsertPartitionMetadata(pconn, tableName, streamName, tableRegions);
             updateStreamStatus(pconn, tableName, streamName);
             return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SUCCESS, "");
+        } catch (SQLException e) {
+            try {
+                // Update task status to RETRY so that it is retried
+                ServerTask.addTask(new SystemTaskParams.SystemTaskParamsBuilder()
+                        .setConn(pconn)
+                        .setTaskType(taskRecord.getTaskType())
+                        .setSchemaName(taskRecord.getSchemaName())
+                        .setTableName(taskRecord.getTableName())
+                        .setTaskStatus(PTable.TaskStatus.RETRY.toString())
+                        .setStartTs(taskRecord.getTimeStamp())
+                        .setEndTs(null)
+                        .build());
+                LOGGER.error("Marking task as RETRY. " +
+                        "SQLException while bootstrapping CDC Stream Partition Metadata for "
+                        + taskRecord.getTableName() + " and timestamp " + timestamp.toString(), e);
+                return null;
+            } catch (IOException ioe) {
+                LOGGER.error("Unable to mark task as RETRY. " +
+                        "SQLException while bootstrapping CDC Stream Partition Metadata for "
+                        + taskRecord.getTableName() + " and timestamp " + timestamp.toString(), e);
+                return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL, e.toString());
+            }
         } catch (Throwable t) {
-            LOGGER.error("Exception while bootstrapping CDC Stream Partition Metadata for "
+            LOGGER.error("Marking task as FAIL. Exception while bootstrapping CDC Stream Partition Metadata for "
                     + taskRecord.getTableName() + " and timestamp " + timestamp.toString(), t);
             return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL, t.toString());
         } finally {

@@ -1968,12 +1968,12 @@ public class MetaDataClient {
                 dataTableFullName =
                 SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
                         statement.getDataTable().getTableName());
+        String cdcObjName = statement.getCdcObjName().getName();
 
-        // for now, only track stream partition metadata for tables, TODO: updatable views
-        if (PTableType.TABLE.equals(dataTable.getType())) {
-            updateStreamPartitionMetadata(dataTableFullName);
+        if (isStreamEnabled(dataTableFullName)) {
+            throw new SQLExceptionInfo.Builder(CDC_STREAM_ALREADY_ENABLED).setTableName(
+                    dataTableFullName).build().buildException();
         }
-
         Map<String, Object> tableProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size());
         Map<String, Object> commonFamilyProps = Maps.newHashMapWithExpectedSize(
@@ -1986,7 +1986,7 @@ public class MetaDataClient {
         String
                 createIndexSql =
                 "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
-                        + CDCUtil.getCDCIndexName(statement.getCdcObjName().getName())
+                        + CDCUtil.getCDCIndexName(cdcObjName)
                         + " ON " + dataTableFullName + " ("
                         + PartitionIdFunction.NAME + "(), " + PhoenixRowTimestampFunction.NAME
                         + "()) ASYNC";
@@ -1995,7 +1995,7 @@ public class MetaDataClient {
         indexProps.add("REPLICATION_SCOPE=0");
         if (TableProperty.SALT_BUCKETS.getValue(tableProps) != null) {
             throw new SQLExceptionInfo.Builder(SALTING_NOT_ALLOWED_FOR_CDC).setTableName(
-                    statement.getCdcObjName().getName()).build().buildException();
+                    cdcObjName).build().buildException();
         }
         indexProps.add("SALT_BUCKETS=0");
         Object columnEncodedBytes = TableProperty.COLUMN_ENCODED_BYTES.getValue(tableProps);
@@ -2008,9 +2008,8 @@ public class MetaDataClient {
                 pstmt.execute(createIndexSql);
             } catch (SQLException e) {
             if (e.getErrorCode() == TABLE_ALREADY_EXIST.getErrorCode()) {
-                throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(
-                        statement.getCdcObjName().getName()).setRootCause(
-                                e).build().buildException();
+                throw new SQLExceptionInfo.Builder(TABLE_ALREADY_EXIST).setTableName(cdcObjName)
+                        .setRootCause(e).build().buildException();
             }
             throw e;
         }
@@ -2039,13 +2038,17 @@ public class MetaDataClient {
             tableProps.put(TableProperty.MULTI_TENANT.getPropertyName(), Boolean.TRUE);
         }
         CreateTableStatement tableStatement = FACTORY.createTable(
-                FACTORY.table(dataTable.getSchemaName().getString(), statement.getCdcObjName().getName()),
+                FACTORY.table(dataTable.getSchemaName().getString(), cdcObjName),
                 null, columnDefs, FACTORY.primaryKey(null, pkColumnDefs),
                 Collections.emptyList(), PTableType.CDC, statement.isIfNotExists(), null, null,
                 statement.getBindCount(), null);
         createTableInternal(tableStatement, null, dataTable, null, null, null, null,
                 null, null, false, null,
                 null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
+        // for now, only track stream partition metadata for tables, TODO: updatable views
+        if (PTableType.TABLE == dataTable.getType()) {
+            updateStreamPartitionMetadata(dataTableFullName, cdcObjName);
+        }
         return new MutationState(0, 0, connection);
     }
 
@@ -2054,31 +2057,18 @@ public class MetaDataClient {
      * Mark status as ENABLING in SYSTEM.CDC_STREAM_STATUS and add {@link CdcStreamPartitionMetadataTask}
      * to SYSTEM.TASK which updates partition metadata based on table regions.
      */
-    private void updateStreamPartitionMetadata(String tableName) throws SQLException {
-        // check if stream is already enabled for this table
-        String query = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
-                + " WHERE TABLE_NAME = ? AND STREAM_STATUS IN (?, ?)";
-        try (PreparedStatement ps = connection.prepareStatement(query)) {
-            ps.setString(1, tableName);
-            ps.setString(2, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
-            ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                throw new SQLExceptionInfo.Builder(CDC_STREAM_ALREADY_ENABLED).setTableName(
-                        tableName).build().buildException();
-            }
-        }
-
+    private void updateStreamPartitionMetadata(String tableName, String cdcObjName) throws SQLException {
         // create Stream with ENABLING status
         long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTable(tableName));
         String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
-        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcIndexTimestamp);
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcObjName, cdcIndexTimestamp);
         try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
             ps.setString(1, tableName);
             ps.setString(2, streamName);
             ps.setString(3, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
             ps.executeUpdate();
             connection.commit();
+            LOGGER.info("Marked stream {} for table {} as ENABLING", streamName, tableName);
         }
 
         // insert task to update partition metadata for stream
@@ -2107,6 +2097,19 @@ public class MetaDataClient {
                     .setMessage(ioe.getMessage())
                     .setSchemaName(SYSTEM_SCHEMA_NAME)
                     .setTableName(SYSTEM_TASK_TABLE).build().buildException();
+        }
+    }
+
+    private boolean isStreamEnabled(String tableName) throws SQLException {
+        // check if a stream is already enabled for this table
+        String query = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
+                + " WHERE TABLE_NAME = ? AND STREAM_STATUS IN (?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(query)) {
+            ps.setString(1, tableName);
+            ps.setString(2, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
+            ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
+            ResultSet rs = ps.executeQuery();
+            return rs.next();
         }
     }
 
@@ -4010,11 +4013,22 @@ public class MetaDataClient {
         String schemaName = statement.getTableName().getSchemaName();
         String cdcTableName = statement.getCdcObjName().getName();
         String parentTableName = statement.getTableName().getTableName();
+        String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
+        // Mark CDC Stream as Disabled
+        long cdcIndexTimestamp = connection.getTable(indexName).getTimeStamp();
+        String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT, parentTableName, cdcTableName, cdcIndexTimestamp);
+        try (PreparedStatement ps = connection.prepareStatement(streamStatusSQL)) {
+            ps.setString(1, parentTableName);
+            ps.setString(2, streamName);
+            ps.setString(3, CDCUtil.CdcStreamStatus.DISABLED.getSerializedValue());
+            ps.executeUpdate();
+            connection.commit();
+            LOGGER.info("Marked stream {} for table {} as DISABLED", streamName, parentTableName);
+        }
         // Dropping the virtual CDC Table
         dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
                 false, false);
-
-        String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
         // Dropping the uncovered index associated with the CDC Table
         try {
             return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,

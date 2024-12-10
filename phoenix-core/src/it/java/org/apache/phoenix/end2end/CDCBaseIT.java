@@ -182,6 +182,10 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
         createTable(conn, cdc_sql, encodingScheme, false, null, false, null);
     }
 
+    protected void dropCDC(Connection conn, String cdcName, String tableName) throws SQLException {
+        conn.createStatement().execute("DROP CDC " + cdcName + " ON " + tableName);
+    }
+
     protected void assertCDCState(Connection conn, String cdcName, String expInclude,
                                   int idxType) throws SQLException {
         try (ResultSet rs = conn.createStatement().executeQuery("SELECT cdc_include FROM " +

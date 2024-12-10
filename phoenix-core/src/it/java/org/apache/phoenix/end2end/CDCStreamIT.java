@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryServices;
@@ -45,6 +46,7 @@ import java.util.Map;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.util.CDCUtil.CDC_STREAM_NAME_FORMAT;
+import static org.junit.Assert.assertEquals;
 
 @Category(ParallelStatsDisabledTest.class)
 public class CDCStreamIT extends CDCBaseIT {
@@ -78,8 +80,7 @@ public class CDCStreamIT extends CDCBaseIT {
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
                         + " v2 DATE)");
         createCDC(conn, cdc_sql, null);
-        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName,
-                CDCUtil.getCDCCreationTimestamp(conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
+        String streamName = getStreamName(conn, tableName, cdcName);
 
         // stream should be in ENABLING state
         assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLING);
@@ -91,7 +92,7 @@ public class CDCStreamIT extends CDCBaseIT {
         task.run();
 
         // stream should be in ENABLED state and metadata is populated for every table region
-        assertPartitionMetadata(conn, tableName, streamName);
+        assertPartitionMetadata(conn, tableName, cdcName);
         assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLED);
     }
 
@@ -105,6 +106,7 @@ public class CDCStreamIT extends CDCBaseIT {
                 "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
                         + " v2 DATE)");
         createCDC(conn, cdc_sql, null);
+        String streamName = getStreamName(conn, tableName, cdcName);
 
         // stream exists in ENABLING status
         String cdcName2 = generateUniqueName();
@@ -114,6 +116,7 @@ public class CDCStreamIT extends CDCBaseIT {
             Assert.fail("Only one CDC entity is allowed per table");
         } catch (SQLException e) {
             // expected
+            assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
         }
 
         // run task to populate partitions and enable stream
@@ -128,7 +131,24 @@ public class CDCStreamIT extends CDCBaseIT {
             Assert.fail("Only one CDC entity is allowed per table");
         } catch (SQLException e) {
             // expected
+            assertEquals(SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED.getErrorCode(), e.getErrorCode());
         }
+
+        //drop cdc
+        dropCDC(conn, cdcName, tableName);
+        assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
+
+        //create new CDC
+        String cdcName3 = generateUniqueName();
+        String cdc_sql3 = "CREATE CDC " + cdcName3 + " ON " + tableName;
+        createCDC(conn, cdc_sql3, null);
+        streamName = getStreamName(conn, tableName, cdcName3);
+        assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLING);
+    }
+
+    private String getStreamName(Connection conn, String tableName, String cdcName) throws SQLException {
+        return String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName, CDCUtil.getCDCCreationTimestamp(
+                        conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
     }
 
     private void assertStreamStatus(Connection conn, String tableName, String streamName,
@@ -140,8 +160,10 @@ public class CDCStreamIT extends CDCBaseIT {
         Assert.assertEquals(status.getSerializedValue(), rs.getString(1));
     }
 
-    private void assertPartitionMetadata(Connection conn, String tableName, String streamName)
+    private void assertPartitionMetadata(Connection conn, String tableName, String cdcName)
             throws SQLException {
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcName,
+                CDCUtil.getCDCCreationTimestamp(conn.unwrap(PhoenixConnection.class).getTableNoCache(tableName)));
         List<HRegionLocation> tableRegions
                 = conn.unwrap(PhoenixConnection.class).getQueryServices().getAllTableRegions(tableName.getBytes());
         for (HRegionLocation tableRegion : tableRegions) {
