@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CDC_STREAM_ALREADY_ENABLED;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
@@ -1963,6 +1964,15 @@ public class MetaDataClient {
         ColumnResolver resolver = FromCompiler.getResolver(NamedTableNode.create(statement.getDataTable()), connection);
         TableRef tableRef = resolver.getTables().get(0);
         PTable dataTable = tableRef.getTable();
+        String
+                dataTableFullName =
+                SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
+                        statement.getDataTable().getTableName());
+
+        // for now, only track stream partition metadata for tables, TODO: updatable views
+        if (PTableType.TABLE.equals(dataTable.getType())) {
+            updateStreamPartitionMetadata(dataTableFullName);
+        }
 
         Map<String, Object> tableProps = Maps.newHashMapWithExpectedSize(
                 statement.getProps().size());
@@ -1973,10 +1983,6 @@ public class MetaDataClient {
         Properties props = connection.getClientInfo();
         props.put(INDEX_CREATE_DEFAULT_STATE, "ACTIVE");
 
-        String
-                dataTableFullName =
-                SchemaUtil.getTableName(statement.getDataTable().getSchemaName(),
-                        statement.getDataTable().getTableName());
         String
                 createIndexSql =
                 "CREATE UNCOVERED INDEX " + (statement.isIfNotExists() ? "IF NOT EXISTS " : "")
@@ -2007,10 +2013,6 @@ public class MetaDataClient {
                                 e).build().buildException();
             }
             throw e;
-        }
-        // for now, only track stream partition metadata for tables, TODO: updatable views
-        if (PTableType.TABLE.equals(dataTable.getType())) {
-            updateStreamPartitionMetadata(dataTableFullName);
         }
         List<PColumn> pkColumns = dataTable.getPKColumns();
         List<ColumnDef> columnDefs = new ArrayList<>();
@@ -2053,6 +2055,21 @@ public class MetaDataClient {
      * to SYSTEM.TASK which updates partition metadata based on table regions.
      */
     private void updateStreamPartitionMetadata(String tableName) throws SQLException {
+        // check if stream is already enabled for this table
+        String query = "SELECT STREAM_NAME FROM " + SYSTEM_CDC_STREAM_STATUS_NAME
+                + " WHERE TABLE_NAME = ? AND STREAM_STATUS IN (?, ?)";
+        try (PreparedStatement ps = connection.prepareStatement(query)) {
+            ps.setString(1, tableName);
+            ps.setString(2, CDCUtil.CdcStreamStatus.ENABLING.getSerializedValue());
+            ps.setString(3, CDCUtil.CdcStreamStatus.ENABLED.getSerializedValue());
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                throw new SQLExceptionInfo.Builder(CDC_STREAM_ALREADY_ENABLED).setTableName(
+                        tableName).build().buildException();
+            }
+        }
+
+        // create Stream with ENABLING status
         long cdcIndexTimestamp = CDCUtil.getCDCCreationTimestamp(connection.getTable(tableName));
         String streamStatusSQL = "UPSERT INTO " + SYSTEM_CDC_STREAM_STATUS_NAME + " VALUES (?, ?, ?)";
         String streamName = String.format(CDC_STREAM_NAME_FORMAT, tableName, cdcIndexTimestamp);
@@ -2064,6 +2081,7 @@ public class MetaDataClient {
             connection.commit();
         }
 
+        // insert task to update partition metadata for stream
         try {
             List<Mutation> sysTaskUpsertMutations = Task.getMutationsForAddTask(
                     new SystemTaskParams.SystemTaskParamsBuilder()

@@ -95,6 +95,42 @@ public class CDCStreamIT extends CDCBaseIT {
         assertStreamStatus(conn, tableName, streamName, CDCUtil.CdcStreamStatus.ENABLED);
     }
 
+    @Test
+    public void testOnlyOneStreamAllowed() throws Exception {
+        Connection conn = newConnection();
+        String tableName = generateUniqueName();
+        String cdcName = generateUniqueName();
+        String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+        conn.createStatement().execute(
+                "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER,"
+                        + " v2 DATE)");
+        createCDC(conn, cdc_sql, null);
+
+        // stream exists in ENABLING status
+        String cdcName2 = generateUniqueName();
+        String cdc_sql2 = "CREATE CDC " + cdcName2 + " ON " + tableName;
+        try {
+            createCDC(conn, cdc_sql2, null);
+            Assert.fail("Only one CDC entity is allowed per table");
+        } catch (SQLException e) {
+            // expected
+        }
+
+        // run task to populate partitions and enable stream
+        TaskRegionObserver.SelfHealingTask task =
+                new TaskRegionObserver.SelfHealingTask(
+                        TaskRegionEnvironment, QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS);
+        task.run();
+
+        // stream exists in ENABLED status
+        try {
+            createCDC(conn, cdc_sql2, null);
+            Assert.fail("Only one CDC entity is allowed per table");
+        } catch (SQLException e) {
+            // expected
+        }
+    }
+
     private void assertStreamStatus(Connection conn, String tableName, String streamName,
                                     CDCUtil.CdcStreamStatus status) throws SQLException {
         ResultSet rs = conn.createStatement().executeQuery("SELECT STREAM_STATUS FROM "
