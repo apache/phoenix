@@ -51,8 +51,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ResultUtil;
 import org.apache.phoenix.util.SizedUtil;
 import org.apache.phoenix.util.TupleUtil;
-import org.iq80.snappy.CorruptionException;
-import org.iq80.snappy.Snappy;
+import org.xerial.snappy.Snappy;
 
 public class HashCacheFactory implements ServerCacheFactory {
 
@@ -71,12 +70,11 @@ public class HashCacheFactory implements ServerCacheFactory {
     public Closeable newCache(ImmutableBytesWritable cachePtr, byte[] txState, MemoryChunk chunk, boolean useProtoForIndexMaintainer, int clientVersion) throws SQLException {
         try {
             // This reads the uncompressed length from the front of the compressed input
-            int uncompressedLen = Snappy.getUncompressedLength(cachePtr.get(), cachePtr.getOffset());
+            int uncompressedLen = Snappy.uncompressedLength(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength());
             byte[] uncompressed = new byte[uncompressedLen];
-            Snappy.uncompress(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength(),
-                uncompressed, 0);
+            Snappy.uncompress(cachePtr.get(), cachePtr.getOffset(), cachePtr.getLength(), uncompressed, 0);
             return new HashCacheImpl(uncompressed, chunk, clientVersion);
-        } catch (CorruptionException e) {
+        } catch (IOException e) {
             throw ClientUtil.parseServerException(e);
         }
     }
